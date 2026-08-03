@@ -1,0 +1,19 @@
+[Unit]
+Description=CRM Streamlit web interface
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=<SSH_USER>
+Group=<SSH_USER>
+WorkingDirectory=/opt/CRM_Streamlit
+EnvironmentFile=/opt/CRM_Streamlit/.env
+Environment=PYTHONUNBUFFERED=1
+Environment=PYTHONPATH=/opt/CRM_Streamlit:/opt/pythonProject89
+ExecStart=/opt/CRM_Streamlit/.venv/bin/python -m streamlit run app.py --server.port 8504 --server.address 0.0.0.0 --server.headless true --browser.gatherUsageStats false
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

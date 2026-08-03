@@ -1,0 +1,91 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <style>
+    * { box-sizing: border-box; }
+    html, body {
+      margin: 0;
+      padding: 0;
+      background: transparent;
+      font-family: "Source Sans Pro", system-ui, sans-serif;
+    }
+    #list {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+    .card {
+      border: 1px solid #D5D5D5;
+      border-radius: 8px;
+      background: #fff;
+      cursor: pointer;
+      user-select: none;
+    }
+    .card:hover {
+      box-shadow: 0 2px 10px rgba(32, 102, 176, 0.22);
+      border-color: #2066B0;
+    }
+    .card.flash {
+      border-color: #2066B0;
+      box-shadow: 0 0 0 2px rgba(32, 102, 176, 0.35);
+    }
+  </style>
+</head>
+<body>
+  <div id="list"></div>
+  <script>
+    function sendMsg(type, data) {
+      window.parent.postMessage(
+        Object.assign({ isStreamlitMessage: true, type: type }, data),
+        "*"
+      );
+    }
+
+    function attachDblClick(el, objectKey) {
+      let clickTimer = null;
+      el.onclick = function (e) {
+        e.preventDefault();
+        e.stopPropagation();
+        if (!objectKey) return;
+        if (clickTimer === null) {
+          clickTimer = setTimeout(function () { clickTimer = null; }, 350);
+          return;
+        }
+        clearTimeout(clickTimer);
+        clickTimer = null;
+        el.classList.add("flash");
+        sendMsg("streamlit:setComponentValue", { value: objectKey, dataType: "json" });
+      };
+    }
+
+    function renderCards(args) {
+      const list = document.getElementById("list");
+      list.innerHTML = "";
+      const cards = Array.isArray(args.cards) ? args.cards : [];
+      cards.forEach(function (c) {
+        const el = document.createElement("div");
+        el.className = "card";
+        el.innerHTML = c.html || "";
+        el.title = "Двойной клик — подробнее";
+        attachDblClick(el, c.key || "");
+        list.appendChild(el);
+      });
+      const fallback = Number(args.height) || 0;
+      const measured = list.scrollHeight + 12;
+      const h = Math.max(120, fallback, measured);
+      sendMsg("streamlit:setFrameHeight", { height: h });
+    }
+
+    sendMsg("streamlit:componentReady", { apiVersion: 1 });
+
+    window.addEventListener("message", function (event) {
+      const data = event.data;
+      if (!data || !data.isStreamlitMessage) return;
+      if (data.type === "streamlit:render") {
+        renderCards(data.args || {});
+      }
+    });
+  </script>
+</body>
+</html>

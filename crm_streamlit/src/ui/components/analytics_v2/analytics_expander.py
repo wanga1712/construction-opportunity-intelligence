@@ -1,0 +1,22 @@
+"""Блок аналитики для аналитического контура v2."""
+from __future__ import annotations
+
+import pandas as pd
+import streamlit as st
+
+from src.ui.components.analytics_v2.mock_data import CHARTS
+
+
+def render_analytics_expander() -> None:
+    """Рисуем блок графиков только под карточками."""
+    with st.expander("Аналитика по текущей выборке"):
+        col1, col2, col3 = st.columns(3)
+        with col1:
+            st.caption("По стадиям")
+            st.bar_chart(pd.DataFrame(CHARTS["stages"]).set_index("label"))
+        with col2:
+            st.caption("По уровням")
+            st.bar_chart(pd.DataFrame(CHARTS["levels"]).set_index("label"))
+        with col3:
+            st.caption("По категориям")
+            st.bar_chart(pd.DataFrame(CHARTS["categories"]).set_index("label"))

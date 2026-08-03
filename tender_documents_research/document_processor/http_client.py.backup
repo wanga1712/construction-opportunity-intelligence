@@ -1,0 +1,340 @@
+import os
+import re
+from pathlib import Path
+from typing import Optional
+from urllib.parse import parse_qs, unquote, urljoin, urlsplit
+
+import requests
+
+
+class HttpFileClient:
+    """
+    Отвечает за скачивание файлов по HTTP/HTTPS (прямое скачивание, через прокси, разбор HTML вложений).
+    Также включает утилиты для работы с именами файлов.
+    """
+    def __init__(self, proxy_url: Optional[str], proxy_mode: Optional[str], logger):
+        self.proxy_url = proxy_url
+        self.proxy_mode = proxy_mode
+        self.logger = logger
+        self.session = self._create_download_session()
+
+    def _create_download_session(self) -> requests.Session:
+        session = requests.Session()
+        try:
+            from requests.adapters import HTTPAdapter
+            from urllib3.util import ssl_
+
+            class SSLAdapter(HTTPAdapter):
+                def init_poolmanager(self, *args, **kwargs):
+                    # Forcing SECLEVEL=1 to allow legacy certs/ciphers (common for zakupki.gov.ru)
+                    ctx = ssl_.create_urllib3_context()
+                    try:
+                        ctx.set_ciphers('DEFAULT@SECLEVEL=1')
+                    except Exception:
+                        pass
+                    ctx.check_hostname = False
+                    kwargs['ssl_context'] = ctx
+                    return super(SSLAdapter, self).init_poolmanager(*args, **kwargs)
+
+            adapter = SSLAdapter()
+            session.mount("https://", adapter)
+        except Exception as e:
+            self.logger.warning(f"Could not create SSLAdapter: {e}")
+        return session
+
+    def try_download_direct(self, task_dir: Path, url: str, suggested_filename: Optional[str] = None) -> Optional[Path]:
+        try:
+            # Нейтральный User-Agent
+            headers = {
+                "User-Agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+                "Accept": "*/*",
+                "Accept-Encoding": "gzip, deflate, br",
+                "Connection": "keep-alive",
+            }
+            self.logger.debug(f"Прямое скачивание: {url}")
+            
+            with self.session.get(url, headers=headers, timeout=180, stream=True, verify=False) as response:
+                if not response.ok:
+                    self.logger.warning(f"Прямой запрос вернул код {response.status_code}")
+                    return None
+                
+                # Базовая проверка на HTML, если ожидаем файл
+                ct = (response.headers.get("Content-Type") or "").lower()
+                url_path = url.split("?", 1)[0].lower()
+                if "text/html" in ct and not url_path.endswith(".html"):
+                    cl_header = response.headers.get("Content-Length")
+                    if cl_header is not None and int(cl_header) < 50000:
+                        self.logger.warning(f"Вероятно, вернулась страница вместо файла (Content-Type: {ct}, Content-Length: {cl_header})")
+                        return None
+
+                filename = self.sanitize_name(suggested_filename) if suggested_filename else self._resolve_filename(url, response.headers)
+                local_path = task_dir / filename
+                with local_path.open("wb") as f:
+                    for chunk in response.iter_content(chunk_size=8192):
+                        if chunk:
+                            f.write(chunk)
+            return local_path
+        except Exception as e:
+            self.logger.warning(f"Ошибка прямого скачивания: {e}")
+            return None
+
+    def try_download_with_proxy(self, task_dir: Path, url: str, suggested_filename: Optional[str] = None) -> Optional[Path]:
+        if not self.proxy_url:
+            return None
+        try:
+            headers = {}
+            host = self.extract_host(url)
+            if host:
+                headers["Host"] = host
+            mode = (self.proxy_mode or "endpoint").lower()
+            if mode in ("http", "proxy", "http_proxy"):
+                self.logger.debug(f"Скачивание через HTTP-прокси: {self.proxy_url}")
+                proxies = {"http": self.proxy_url, "https": self.proxy_url}
+                with requests.get(url, headers=headers, timeout=60, stream=True, proxies=proxies) as response:
+                    if not response.ok:
+                        self.logger.warning(f"HTTP-прокси ответ: {response.status_code}")
+                        return None
+                    filename = self.sanitize_name(suggested_filename) if suggested_filename else self._resolve_filename(url, response.headers)
+                    local_path = task_dir / filename
+                    with local_path.open("wb") as f:
+                        for chunk in response.iter_content(chunk_size=8192):
+                            if chunk:
+                                f.write(chunk)
+                return local_path
+            elif mode in ("reverse", "revproxy", "reverse_proxy"):
+                parts = urlsplit(url)
+                path_and_query = parts.path or "/"
+                if parts.query:
+                    path_and_query = f"{path_and_query}?{parts.query}"
+                target = f"{self.proxy_url.rstrip('/')}{path_and_query}"
+                self.logger.debug(f"Скачивание через reverse-прокси: {target}")
+                with requests.get(target, headers=headers, timeout=60, stream=True) as response:
+                    if not response.ok:
+                        self.logger.warning(f"Reverse-прокси ответ: {response.status_code}")
+                        return None
+                    filename = self._resolve_filename(url, response.headers)
+                    local_path = task_dir / filename
+                    with local_path.open("wb") as f:
+                        for chunk in response.iter_content(chunk_size=8192):
+                            if chunk:
+                                f.write(chunk)
+                return local_path
+            else:
+                self.logger.debug(f"Скачивание через endpoint-прокси: {self.proxy_url}")
+                with requests.get(self.proxy_url, params={"url": url}, headers=headers, timeout=60, stream=True) as response:
+                    if not response.ok:
+                        self.logger.warning(f"Endpoint-прокси ответ: {response.status_code}")
+                        return None
+                    filename = self._resolve_filename(url, response.headers)
+                    local_path = task_dir / filename
+                    with local_path.open("wb") as f:
+                        for chunk in response.iter_content(chunk_size=8192):
+                            if chunk:
+                                f.write(chunk)
+                return local_path
+        except Exception:
+            return None
+
+    def download_html_and_follow(self, task_dir: Path, page_url: str) -> Optional[Path]:
+        try:
+            headers = {
+                "User-Agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+                "Accept": "*/*",
+                "Accept-Encoding": "gzip, deflate, br",
+            }
+            self.logger.debug(f"Загрузка HTML страницы: {page_url}")
+            with requests.get(page_url, headers=headers, timeout=60, verify=False) as resp:
+                if not resp.ok:
+                    self.logger.warning(f"HTML страница недоступна: {resp.status_code}")
+                    return None
+                html = resp.text or ""
+        except Exception:
+            return None
+
+        candidates: list[str] = []
+        try:
+            for m in re.finditer(r'href=["\\\'](?P<h>[^"\\\']+)["\\\']', html, flags=re.IGNORECASE):
+                href = m.group("h")
+                if not href:
+                    continue
+                low = href.lower()
+                if any(s in low for s in ("/filestore/public/1.0/download/", "/filestore/", "/download/")) and not low.endswith(".html"):
+                    candidates.append(urljoin(page_url, href))
+            if not candidates:
+                for m in re.finditer(r'href=["\\\'](?P<h>[^"\\\']+)["\\\']', html, flags=re.IGNORECASE):
+                    href = m.group("h")
+                    if not href:
+                        continue
+                    low = href.lower()
+                    if any(low.endswith(ext) for ext in (".pdf", ".doc", ".docx", ".xls", ".xlsx", ".zip")):
+                        candidates.append(urljoin(page_url, href))
+        except Exception:
+            candidates = []
+
+        if not candidates:
+            self.logger.debug("Не найдено ссылок на вложения в HTML")
+            return None
+
+        for cand in candidates[:5]:
+            self.logger.debug(f"Пробую вложение: {cand}")
+            host = self.extract_host(cand) or ""
+            if "zakupki.gov.ru" in host and "/filestore/public/1.0/download/" in cand:
+                path = self.try_download_with_proxy(task_dir, cand)
+                if path: return path
+            path = self.try_download_direct(task_dir, cand)
+            if path: return path
+            path = self.try_download_with_proxy(task_dir, cand)
+            if path: return path
+        return None
+
+    def is_proxy_alive(self) -> bool:
+        """Проверяет доступен ли прокси-сервер (stunnel)."""
+        if not self.proxy_url:
+            return True
+        try:
+            from urllib.parse import urlparse
+            import socket
+            parsed = urlparse(self.proxy_url)
+            host = parsed.hostname or "127.0.0.1"
+            port = parsed.port or 8080
+            with socket.create_connection((host, port), timeout=3):
+                return True
+        except Exception as e:
+            self.logger.warning(f"Proxy check failed: {e}")
+            return False
+
+    def extract_host(self, url: str) -> Optional[str]:
+        try:
+            without_scheme = url.split("://", 1)[1]
+            host_port = without_scheme.split("/", 1)[0]
+            return host_port
+        except Exception:
+            return None
+
+    def _resolve_filename(self, url: str, headers: dict) -> str:
+        cd = headers.get("Content-Disposition") or headers.get("content-disposition")
+        if cd:
+            lower = cd.lower()
+            if "filename*=" in lower:
+                try:
+                    val = cd.split("filename*=", 1)[1].split(";", 1)[0].strip().strip('"').strip("'")
+                    if val.lower().startswith("utf-8''"):
+                        val = val[7:]
+                    name = unquote(val)
+                    if name and not self._looks_mojibake(name):
+                        return name
+                except Exception:
+                    pass
+            parts = cd.split(";")
+            for p in parts:
+                p = p.strip()
+                if p.lower().startswith("filename="):
+                    name = p.split("=", 1)[1].strip().strip('\"')
+                    if name:
+                        if not self._looks_mojibake(name):
+                            return name
+                        base_ext = os.path.splitext(name)[1]
+                        if base_ext:
+                            uid = self._extract_uid(url) or ""
+                            return f"file_{uid}{base_ext}" if uid else f"file{base_ext}"
+        ct = headers.get("Content-Type") or headers.get("content-type") or ""
+        ext = ""
+        if "application/pdf" in ct:
+            ext = ".pdf"
+        elif "application/vnd.openxmlformats-officedocument.wordprocessingml.document" in ct:
+            ext = ".docx"
+        elif "application/msword" in ct:
+            ext = ".doc"
+        elif "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" in ct:
+            ext = ".xlsx"
+        elif "text/html" in ct:
+            ext = ".html"
+        tail = url.split("/")[-1] or "file"
+        if "?" in tail:
+            tail = tail.split("?", 1)[0]
+        if not tail:
+            tail = "file"
+        if ext and not tail.endswith(ext):
+            tail = tail + ext
+        if self._looks_mojibake(tail):
+            uid = self._extract_uid(url) or ""
+            base = f"file_{uid}" if uid else "file"
+            tail = base + ext if ext else base
+        return tail
+
+    def _looks_mojibake(self, s: str) -> bool:
+        bad = ["Ð", "Ñ", "\ufffd"]
+        return any(ch in s for ch in bad)
+
+    def _extract_uid(self, url: str) -> Optional[str]:
+        try:
+            qs = urlsplit(url).query
+            params = parse_qs(qs)
+            v = params.get("uid")
+            if v and v[0]:
+                return v[0]
+        except Exception:
+            return None
+        return None
+
+    def predict_filename(self, url: str) -> str:
+        tail = url.split("/")[-1] or "file"
+        if "?" in tail:
+            tail = tail.split("?", 1)[0]
+        if not tail:
+            tail = "file"
+        return tail
+
+    def sanitize_name(self, name: str) -> str:
+        """
+        Очистка имени файла (допускает точки, подчеркивания, но убирает спецсимволы).
+        Используется для файлов.
+        """
+        if not name:
+            return "unknown_file"
+        
+        # 1. Заменяем стандартные запрещенные символы и расширенный набор спецсимволов
+        forbidden_chars = [
+            "/", "\\", ":", "*", "?", "<", ">", "|", '"',
+            "+", "%", "#", "&", "{", "}", "[", "]", "=", ";", ",", "'", "@", "!", "$", "`", "^"
+        ]
+        
+        cleaned = name
+        for char in forbidden_chars:
+            cleaned = cleaned.replace(char, "_")
+        
+        # 2. Убираем управляющие символы (0-31)
+        cleaned = "".join(ch for ch in cleaned if ord(ch) >= 32)
+        
+        # 3. Убираем скобки и тильды (по запросу пользователя)
+        cleaned = cleaned.replace("(", "_").replace(")", "_").replace("~", "_")
+        
+        # 4. Убираем двойные подчеркивания
+        while "__" in cleaned:
+            cleaned = cleaned.replace("__", "_")
+            
+        cleaned = cleaned.strip(" ._")
+        
+        if not cleaned:
+            return "unknown_file"
+            
+        # 5. Ограничиваем длину
+        if len(cleaned) > 200:
+            base, ext = os.path.splitext(cleaned)
+            if len(ext) > 10: 
+                ext = ""
+            limit = 200 - len(ext)
+            cleaned = base[:limit] + ext
+            
+        return cleaned
+
+    def sanitize_folder_name(self, name: str) -> str:
+        """
+        Строгая очистка для имен папок (контрактов/реестров).
+        Оставляет ТОЛЬКО буквы и цифры.
+        Совместимо с логикой file_enhancer._sanitize_contract.
+        """
+        if not name:
+            return "unknown"
+        return "".join(ch for ch in str(name) if ch.isalnum())
+
