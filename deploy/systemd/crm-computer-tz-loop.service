@@ -1,0 +1,22 @@
+[Unit]
+Description=CRM computer TZ daemon (continuous loop)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=sergey
+WorkingDirectory=/opt/CRM_Streamlit
+EnvironmentFile=-/opt/CRM_Streamlit/.env
+Environment=PYTHONPATH=/opt/CRM_Streamlit:/opt/pythonProject89:/opt/tender_documents_research
+Environment=TENDER_DOCS_RESEARCH_ROOT=/opt/tender_documents_research
+Environment=COMPUTER_TZ_STRICT_ONLY=1
+ExecStart=/opt/CRM_Streamlit/.venv/bin/python /opt/CRM_Streamlit/scripts/computer_tz_daemon.py --loop --interval 300 --only-open --limit 25 --strict-tz-only
+Restart=always
+RestartSec=20
+Nice=8
+MemoryMax=8G
+CPUQuota=250%
+
+[Install]
+WantedBy=multi-user.target

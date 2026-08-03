@@ -1,0 +1,27 @@
+[Unit]
+Description=Tender documents worker 3 (open/new registries)
+Wants=network-online.target
+After=network-online.target amneziawg-worker.service
+RequiresMountsFor=/data
+
+[Service]
+Type=simple
+User=sergey
+Group=sergey
+WorkingDirectory=/opt/tender_documents_research
+EnvironmentFile=/opt/tender_documents_research/.env
+EnvironmentFile=/etc/tender-docs-db.env
+EnvironmentFile=/etc/tender-docs-worker-open-3.env
+ExecStart=/opt/tender_documents_research/.venv/bin/python -m document_processor.daemon
+Restart=on-failure
+RestartSec=25
+TimeoutStopSec=120
+KillSignal=SIGTERM
+Nice=5
+MemoryMax=6G
+CPUQuota=200%
+LimitNOFILE=65536
+UMask=0027
+
+[Install]
+WantedBy=multi-user.target

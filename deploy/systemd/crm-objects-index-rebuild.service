@@ -1,0 +1,13 @@
+[Unit]
+Description=CRM objects index rebuild
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=sergey
+WorkingDirectory=/opt/CRM_Streamlit
+EnvironmentFile=-/opt/CRM_Streamlit/.env
+Environment=PYTHONPATH=/opt/CRM_Streamlit:/opt/pythonProject89:/opt/tender_documents_research
+ExecStart=/opt/CRM_Streamlit/.venv/bin/python /opt/CRM_Streamlit/scripts/rebuild_objects_index.py
+Nice=10

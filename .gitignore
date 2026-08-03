@@ -1,0 +1,26 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+.venv/
+venv/
+*.egg-info/
+
+# Env файлы с реальными паролями (используй *.template)
+*.env
+!*.env.template
+
+# Логи и временные файлы
+*.log
+*.tmp
+/tmp/
+*.bak*
+
+# IDE
+.idea/
+.vscode/
+*.swp
+
+# OS
+.DS_Store
+Thumbs.db

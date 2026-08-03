@@ -1,0 +1,17 @@
+[Unit]
+Description=CRM AI object precompute batch
+After=network-online.target ollama.service crm-streamlit.service
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=sergey
+Group=sergey
+WorkingDirectory=/opt/CRM_Streamlit
+EnvironmentFile=/opt/CRM_Streamlit/.env
+Environment=PYTHONUNBUFFERED=1
+Environment=PYTHONPATH=/opt/CRM_Streamlit:/opt/pythonProject89
+ExecStart=/opt/CRM_Streamlit/.venv/bin/python scripts/ai_precompute_objects.py --limit 25 --max-seconds 900
+
+[Install]
+WantedBy=multi-user.target
