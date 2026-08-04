@@ -108,14 +108,22 @@ class DocumentProcessorDaemon:
             self.queue_manager, self.morning_boost, self.logger
         )
 
+        from .priority_recalculator import PriorityRecalculator
+        self.priority_recalculator = PriorityRecalculator(
+            db=self.db,
+            logger=self.logger,
+            required_workdays=int(os.getenv("REQUIRED_WORKDAYS", "2")),
+            batch_size=int(os.getenv("PRIORITY_RECALC_BATCH", "500")),
+        )
+        self._last_full_recalc_date: Optional[str] = None
+        self._last_crm_bridge_ts: float = 0.0
+
         try:
             self.maintenance.apply_cpu_limits()
         except Exception:
             pass
             
         self.maintenance.reset_stale_tasks()
-        self._consecutive_errors = 0
-        self._last_no_links_check_date = None
         
         try:
             if os.getenv("CLEAN_PREVIOUS_RUN_DATA") == "1":
@@ -151,6 +159,41 @@ class DocumentProcessorDaemon:
         self.logger.info("=== Старт цикла демона ===")
         print("run_once_start", flush=True)
 
+        # ---- CRM → queue bridge (every hour, or first run) -----------------
+        import time as _time
+        crm_bridge_interval = int(os.getenv("CRM_BRIDGE_INTERVAL_SEC", "3600"))
+        if os.getenv("ENABLE_CRM_BRIDGE", "1") == "1":
+            if _time.monotonic() - self._last_crm_bridge_ts >= crm_bridge_interval:
+                try:
+                    from .crm_queue_bridge import CrmQueueBridge
+                    bridge = CrmQueueBridge(self.db, self.logger)
+                    bridge.run()
+                    self._last_crm_bridge_ts = _time.monotonic()
+                except Exception as exc:
+                    self.logger.error(f"[crm_bridge] Ошибка: {exc}", exc_info=True)
+        # ---------------------------------------------------------------------
+
+        # ---- Priority recalculation ----------------------------------------
+        # Full daily sweep at 06:00 (once per calendar day)
+        try:
+            today_str = datetime.now().strftime("%Y-%m-%d")
+            current_hour = datetime.now().hour
+            if current_hour >= 6 and self._last_full_recalc_date != today_str:
+                self.logger.info("[recalc] Ежедневный пересчёт приоритетов (06:00)...")
+                print("priority_recalc_start", flush=True)
+                n = self.priority_recalculator.run_full_sweep(force=False)
+                self._last_full_recalc_date = today_str
+                self.logger.info(f"[recalc] Готово, обновлено {n} задач")
+                print(f"priority_recalc_done: {n}", flush=True)
+            else:
+                # Fast sweep: only rows due for recalc (next_priority_recalc_at <= NOW())
+                n = self.priority_recalculator.run_full_sweep(force=False)
+                if n:
+                    self.logger.info(f"[recalc] Быстрый пересчёт: {n} задач")
+        except Exception as exc:
+            self.logger.error(f"[recalc] Ошибка пересчёта приоритетов: {exc}", exc_info=True)
+        # -----------------------------------------------------------------------
+
         try:
             if os.getenv("REQUEUE_ERRORS") == "1":
                 n = self.maintenance.requeue_error_tasks()
@@ -158,17 +201,6 @@ class DocumentProcessorDaemon:
                     self.logger.info(f"Переочередили задач со статусом error: {n}")
         except Exception as _:
             pass
-
-        try:
-            from datetime import datetime
-            today = datetime.now().date()
-            if self._last_no_links_check_date != today:
-                n = self.maintenance.requeue_no_links_with_links()
-                if n:
-                    self.logger.info(f"no_links -> pending (появились ссылки): {n}")
-                self._last_no_links_check_date = today
-        except Exception as _e:
-            self.logger.error(f"requeue_no_links check error: {_e}")
 
         try:
             q_rows = self.db.execute_query(
@@ -237,7 +269,6 @@ class DocumentProcessorDaemon:
                     msg = f"[{task_id}] Download done: {len(files)} files"
                     self.logger.info(msg)
                     print(msg, flush=True)
-                    self._consecutive_errors = 0
                 except NoDocumentLinksError as exc:
                     message = str(exc)
                     self.logger.warning(f"[{task_id}] {message}")
@@ -250,19 +281,6 @@ class DocumentProcessorDaemon:
                     self.logger.error(msg, exc_info=True)
                     print(msg, flush=True)
                     files = []
-                    skip_processing = True
-                    self._consecutive_errors += 1
-                    if self._consecutive_errors >= 3:
-                        alert = (
-                            f"[worker {self.worker_id}] "
-                            f"{self._consecutive_errors} ошибок скачивания подряд: {exc}"
-                        )
-                        self.logger.warning(f"DOWNLOAD_ALERT: {alert}")
-                        self.maintenance.create_daemon_alert("download_error", alert)
-                    try:
-                        self.queue_manager.mark_error(task_id, msg[:500])
-                    except Exception:
-                        pass
                 pending_future = None
                 pending_task = None
             else:
@@ -274,7 +292,6 @@ class DocumentProcessorDaemon:
                     msg = f"[{task_id}] Download done: {len(files)} files"
                     self.logger.info(msg)
                     print(msg, flush=True)
-                    self._consecutive_errors = 0
                 except NoDocumentLinksError as exc:
                     message = str(exc)
                     self.logger.warning(f"[{task_id}] {message}")
@@ -287,19 +304,6 @@ class DocumentProcessorDaemon:
                     self.logger.error(msg, exc_info=True)
                     print(msg, flush=True)
                     files = []
-                    skip_processing = True
-                    self._consecutive_errors += 1
-                    if self._consecutive_errors >= 3:
-                        alert = (
-                            f"[worker {self.worker_id}] "
-                            f"{self._consecutive_errors} ошибок скачивания подряд: {exc}"
-                        )
-                        self.logger.warning(f"DOWNLOAD_ALERT: {alert}")
-                        self.maintenance.create_daemon_alert("download_error", alert)
-                    try:
-                        self.queue_manager.mark_error(task_id, msg[:500])
-                    except Exception:
-                        pass
 
             # Запускаем скачивание СЛЕДУЮЩЕЙ задачи в фоне (пока парсим текущую)
             next_idx = i + 1
