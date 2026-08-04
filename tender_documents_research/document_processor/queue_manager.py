@@ -22,11 +22,6 @@ class QueueManager:
         self.source_tables = self._filter_source_tables(self.priority.all_tables_ordered())
         self.populate_limit = int(os.getenv("QUEUE_POPULATE_LIMIT", "10"))
         self.sales_window_days = int(os.getenv("SALES_WINDOW_MIN_DAYS", "90"))
-        # Для НОВЫХ (open): не ближе чем N дней до end_date, в очереди — самые ближайшие.
-        try:
-            self.open_min_days_to_end = max(0, int(os.getenv("OPEN_TENDERS_MIN_DAYS_TO_END", "3")))
-        except ValueError:
-            self.open_min_days_to_end = 3
 
 
     @staticmethod
@@ -136,14 +131,9 @@ class QueueManager:
             )
         """
 
-    def _is_open_registry(self, table: str) -> bool:
-        """Новые (open) реестры — не awarded/completed/unclear/commission."""
-        return self.priority.is_high_priority(table)
-
     def _populate_debug(self, table: str, limit_rows: int) -> int:
         params: List[object] = [table, table, limit_rows]
-        end_date_filter = self._date_filter_sql(table, "t")
-        order_sql = self._populate_order_sql(table, "t")
+        end_date_filter = self._new_tenders_end_date_filter(table, "t")
         sql = f"""
             WITH inserted AS (
                 INSERT INTO document_processing_queue (contract_reg_number, table_source, status)
@@ -157,8 +147,7 @@ class QueueManager:
                 )
                 {end_date_filter}
                 {self._queue_fz_dedup_sql("t.contract_number", table)}
-                ORDER BY {order_sql}
-                ON CONFLICT (contract_reg_number) DO NOTHING
+                ORDER BY COALESCE(t.start_date, t.end_date) DESC NULLS LAST
                 LIMIT %s
                 RETURNING id
             )
@@ -175,58 +164,38 @@ class QueueManager:
             return rows[0][0], rows[0][1]
         return None, None
 
-    def _date_filter_sql(self, table: str, alias: str = "t") -> str:
+    def _new_tenders_end_date_filter(self, table: str, alias: str = "t") -> str:
         """
-        Open (новые): end_date >= today + OPEN_TENDERS_MIN_DAYS_TO_END (default 3).
-        Awarded: продажное окно по COALESCE(delivery_end_date, end_date) >= today + 90d.
+        Продажное окно для постановки в очередь документов.
+
+        Для open-таблиц: подача должна быть ещё открыта (end_date >= сегодня),
+        чтобы закрытые тендеры не занимали очередь открытых воркеров — они уйдут
+        сами в awarded и будут обработаны там.
+        Для awarded-таблиц: только продажное окно (delivery_end_date).
         """
-        if self._is_open_registry(table):
-            days = self.open_min_days_to_end
-            return (
-                f" AND {alias}.end_date IS NOT NULL"
-                f" AND {alias}.end_date::date >= (CURRENT_DATE + INTERVAL '{days} days')"
-            )
         days = self.sales_window_days
+        is_awarded = "_awarded" in table
+        if is_awarded:
+            return (
+                f" AND COALESCE({alias}.delivery_end_date, {alias}.end_date) IS NOT NULL"
+                f" AND COALESCE({alias}.delivery_end_date, {alias}.end_date)::date "
+                f">= (CURRENT_DATE - INTERVAL '{days} days')"
+            )
+        # open table: подача ещё не закрыта
         return (
-            f" AND COALESCE({alias}.delivery_end_date, {alias}.end_date) IS NOT NULL"
+            f" AND {alias}.end_date IS NOT NULL"
+            f" AND {alias}.end_date::date >= CURRENT_DATE"
             f" AND COALESCE({alias}.delivery_end_date, {alias}.end_date)::date "
             f">= (CURRENT_DATE + INTERVAL '{days} days')"
         )
 
-    def _populate_order_sql(self, table: str, alias: str = "t") -> str:
-        """Open: ближайший end_date первым. Awarded: свежие по дате старта."""
-        if self._is_open_registry(table):
-            return f"{alias}.end_date ASC NULLS LAST, {alias}.id DESC"
-        return f"COALESCE({alias}.start_date, {alias}.end_date) DESC NULLS LAST, {alias}.id DESC"
-
-    def _date_filter_horizon_label(self, table: str) -> str:
-        if self._is_open_registry(table):
-            return f", open_end_date>=+{self.open_min_days_to_end}d nearest-first"
-        return f", sales_window>={self.sales_window_days}d"
-
-    # backward-compatible alias used by older tests
-    def _new_tenders_end_date_filter(self, table: str, alias: str = "t") -> str:
-        return self._date_filter_sql(table, alias)
-
     def purge_lost_sales_window(self) -> int:
-        """Снимает pending вне окна: open — по end_date; awarded — по 90д продаже."""
+        """Снимает pending-задачи, которые уже вне продажного окна."""
         tables = [t for t in self.source_tables if t.startswith("reestr_contract_")]
         if not tables:
             return 0
         parts = []
         for table in tables:
-            if self._is_open_registry(table):
-                lost_pred = f"""
-                    t.end_date IS NULL
-                    OR t.end_date::date
-                       < (CURRENT_DATE + INTERVAL '{self.open_min_days_to_end} days')
-                """
-            else:
-                lost_pred = f"""
-                    COALESCE(t.delivery_end_date, t.end_date) IS NULL
-                    OR COALESCE(t.delivery_end_date, t.end_date)::date
-                       < (CURRENT_DATE + INTERVAL '{self.sales_window_days} days')
-                """
             parts.append(
                 f"""
                 SELECT q.id
@@ -234,7 +203,12 @@ class QueueManager:
                 JOIN {table} t ON t.contract_number = q.contract_reg_number
                 WHERE q.status = 'pending'
                   AND q.table_source = '{table}'
-                  AND ({lost_pred})
+                  AND q.queue_lane != 'crm_active_hot'
+                  AND (
+                    COALESCE(t.delivery_end_date, t.end_date) IS NULL
+                    OR COALESCE(t.delivery_end_date, t.end_date)::date
+                       < (CURRENT_DATE + INTERVAL '{self.sales_window_days} days')
+                  )
                 """
             )
         sql = f"""
@@ -253,104 +227,76 @@ class QueueManager:
             sql,
             (
                 STATUS_SALES_WINDOW_EXPIRED,
-                (
-                    f"window_expired: open<{self.open_min_days_to_end}d to end_date "
-                    f"or awarded sales_window<{self.sales_window_days}d"
-                ),
+                f"sales_window_expired: меньше {self.sales_window_days} дней до окончания",
             ),
             fetch=True,
         ) or []
         count = len(rows)
         if count:
-            self.logger.info(f"[queue] снято задач вне окна: {count}")
+            self.logger.info(f"[queue] снято задач вне продажного окна: {count}")
         return count
 
-    def _okpd_join_sql(self) -> str:
+    @staticmethod
+    def _okpd_prefix_filter_sql(prefixes: list[str], alias: str = "t", mode: str = "exclude") -> str:
         """
-        ОКПД пользователя: все коды user_id (все категории: стройка/проектирование/компы).
-        category_id в user_search_settings — UI-якорь, не ограничивает populate.
+        Returns SQL fragment for cand CTE WHERE clause.
+        mode='exclude': AND NOT EXISTS (... WHERE okpd LIKE prefix%)
+        mode='only':    AND EXISTS     (... WHERE okpd LIKE prefix%)
         """
+        if not prefixes:
+            return ""
+        like_parts = " OR ".join(
+            f"cco_pf.main_code LIKE '{p}%%' OR cco_pf.sub_code LIKE '{p}%%'"
+            for p in prefixes
+        )
+        exists_kw = "NOT EXISTS" if mode == "exclude" else "EXISTS"
+        return f"""
+            AND {exists_kw} (
+                SELECT 1 FROM collection_codes_okpd cco_pf
+                WHERE cco_pf.id = {alias}.okpd_id
+                  AND ({like_parts})
+            )"""
+
+    def _populate_with_filters(self, table: str, limit_rows: int) -> int:
+        ignore_okpd = os.getenv("IGNORE_OKPD_FILTER") == "1"
         use_prefix = os.getenv("OKPD_MATCH_PREFIX") == "1"
-        if use_prefix:
-            return """JOIN okpd_from_users ofu ON ofu.user_id = uss.user_id
+        exclude_okpd = [p.strip() for p in os.getenv("EXCLUDE_OKPD_PREFIXES", "").split(",") if p.strip()]
+        only_okpd    = [p.strip() for p in os.getenv("OKPD_ONLY_PREFIXES", "").split(",") if p.strip()]
+
+        if ignore_okpd:
+            okpd_join = ""
+        else:
+            if use_prefix:
+                okpd_join = """JOIN okpd_from_users ofu ON ofu.category_id = uss.category_id
                     JOIN collection_codes_okpd cco ON cco.id = t.okpd_id
                                                   AND (cco.main_code LIKE ofu.okpd_code || '%%'
                                                        OR cco.sub_code LIKE ofu.okpd_code || '%%')"""
-        return """JOIN okpd_from_users ofu ON ofu.user_id = uss.user_id
+            else:
+                okpd_join = """JOIN okpd_from_users ofu ON ofu.category_id = uss.category_id
                     JOIN collection_codes_okpd cco ON cco.id = t.okpd_id
                                                   AND (cco.main_code = ofu.okpd_code
                                                        OR cco.sub_code = ofu.okpd_code)"""
 
-    def _populate_with_filters(self, table: str, limit_rows: int) -> int:
-        ignore_okpd = os.getenv("IGNORE_OKPD_FILTER") == "1"
-        okpd_join = "" if ignore_okpd else self._okpd_join_sql()
+        okpd_exclude_sql = self._okpd_prefix_filter_sql(exclude_okpd, alias="t", mode="exclude")
+        okpd_only_sql    = self._okpd_prefix_filter_sql(only_okpd,    alias="t", mode="only")
 
-        end_date_filter = self._date_filter_sql(table, "t")
-        order_sql = self._populate_order_sql(table, "t")
-        cand_ord_expr = (
-            "t.end_date"
-            if self._is_open_registry(table)
-            else "COALESCE(t.start_date, t.end_date)"
-        )
-        horizon = self._date_filter_horizon_label(table)
-        msg = f"[populate] {table}: ignore_okpd={ignore_okpd}, limit={limit_rows}{horizon}"
+        end_date_filter = self._new_tenders_end_date_filter(table, "t")
+        horizon = ""
+        if end_date_filter:
+            try:
+                horizon = f", sales_window>={self.sales_window_days}d"
+            except ValueError:
+                horizon = f", sales_window>={self.sales_window_days}d"
+        extra_flags = ""
+        if exclude_okpd:
+            extra_flags += f", exclude_okpd={exclude_okpd}"
+        if only_okpd:
+            extra_flags += f", only_okpd={only_okpd}"
+        msg = f"[populate] {table}: ignore_okpd={ignore_okpd}, limit={limit_rows}{horizon}{extra_flags}"
         self.logger.info(msg)
         print(f" -> {msg} ... ", end="", flush=True)
 
-        # Open: один запрос с ORDER BY end_date ASC — иначе батчи по id портят «ближайшие первые».
-        if self._is_open_registry(table):
-            params: List[object] = [table, table, limit_rows]
-            sql = f"""
-                WITH cand AS (
-                    SELECT DISTINCT ON (t.contract_number)
-                           t.contract_number,
-                           {cand_ord_expr} AS ord
-                    FROM {table} t
-                    WHERE TRUE
-                      {end_date_filter}
-                      AND EXISTS (
-                        SELECT 1
-                        FROM user_search_settings uss
-                        {okpd_join}
-                        WHERE
-                            (uss.region_id IS NULL OR uss.region_id = t.region_id)
-                            AND NOT EXISTS (
-                                SELECT 1
-                                FROM stop_words_names swn
-                                WHERE swn.user_id = uss.user_id
-                                  AND t.auction_name ILIKE '%%' || swn.stop_word || '%%'
-                            )
-                    )
-                    ORDER BY t.contract_number, ord ASC NULLS LAST
-                ),
-                inserted AS (
-                    INSERT INTO document_processing_queue (contract_reg_number, table_source, status)
-                    SELECT c.contract_number, %s, 'pending'
-                    FROM cand c
-                    WHERE NOT EXISTS (
-                        SELECT 1
-                        FROM document_processing_queue q
-                        WHERE q.contract_reg_number = c.contract_number
-                          AND q.table_source = %s
-                    )
-                    {self._queue_fz_dedup_sql("c.contract_number", table)}
-                    ORDER BY c.ord ASC NULLS LAST
-                    ON CONFLICT (contract_reg_number) DO NOTHING
-                    LIMIT %s
-                    RETURNING id
-                )
-                SELECT COUNT(*) FROM inserted;
-            """
-            try:
-                rows = self.db.execute_query(sql, tuple(params), fetch=True)
-                total_added = rows[0][0] if rows else 0
-            except Exception as e:
-                self.logger.error(f"[populate] {table}: ошибка {e}")
-                total_added = 0
-            print(f"OK (added {total_added})", flush=True)
-            return total_added
-
-        # Awarded / прочее: батчевый обход по id
+        # Батчевый обход по диапазонам ID чтобы не падать по таймауту на больших таблицах
         batch_size = int(os.getenv("POPULATE_BATCH_SIZE", "2000"))
         min_id, max_id = self._get_table_id_range(table)
         if min_id is None:
@@ -363,16 +309,23 @@ class QueueManager:
         while current_id <= max_id and total_added < limit_rows:
             batch_end = current_id + batch_size - 1
             remaining = limit_rows - total_added
-            params = [table, table, remaining]
+            # params order matches the INSERT placeholders:
+            # %s(table_source), %s(table for awarded check), %s(table for class check),
+            # %s(table for dedup), %s(LIMIT)
+            params: List[object] = [table, table, table, table, remaining]
 
             sql = f"""
                 WITH cand AS (
                     SELECT DISTINCT ON (t.contract_number)
                            t.contract_number,
-                           {cand_ord_expr} AS ord
+                           COALESCE(t.start_date, t.end_date) AS ord,
+                           t.end_date                          AS sub_end,
+                           t.initial_price                     AS price
                     FROM {table} t
                     WHERE t.id BETWEEN {current_id} AND {batch_end}
                       {end_date_filter}
+                      {okpd_exclude_sql}
+                      {okpd_only_sql}
                       AND EXISTS (
                         SELECT 1
                         FROM user_search_settings uss
@@ -389,8 +342,35 @@ class QueueManager:
                     ORDER BY t.contract_number, ord DESC NULLS LAST
                 ),
                 inserted AS (
-                    INSERT INTO document_processing_queue (contract_reg_number, table_source, status)
-                    SELECT c.contract_number, %s, 'pending'
+                    INSERT INTO document_processing_queue (
+                        contract_reg_number, table_source, status,
+                        submission_end_at, initial_price,
+                        queue_type, priority_class, priority_score,
+                        remaining_workdays, deadline_slack,
+                        priority_model_version, priority_calculated_at,
+                        next_priority_recalc_at
+                    )
+                    SELECT
+                        c.contract_number,
+                        %s,
+                        'pending',
+                        c.sub_end,
+                        c.price,
+                        -- Initial queue_type: awarded rows go to award_transition
+                        CASE WHEN %s LIKE '%%_awarded%%' THEN 'award_transition'
+                             WHEN c.sub_end IS NOT NULL AND c.sub_end < NOW() THEN 'historical'
+                             ELSE 'commercial_normal'
+                        END,
+                        -- Initial priority_class: closed → P4, else P2 (recalc fixes it)
+                        CASE WHEN %s LIKE '%%_awarded%%' THEN 4
+                             WHEN c.sub_end IS NOT NULL AND c.sub_end < NOW() THEN 4
+                             ELSE 2
+                        END,
+                        0,   -- priority_score recalculated by daily sweep
+                        NULL, NULL,
+                        'v1_formula',
+                        NOW(),
+                        NOW() + INTERVAL '5 minutes'  -- recalc shortly after insert
                     FROM cand c
                     WHERE NOT EXISTS (
                         SELECT 1
@@ -400,8 +380,8 @@ class QueueManager:
                     )
                     {self._queue_fz_dedup_sql("c.contract_number", table)}
                     ORDER BY c.ord DESC NULLS LAST
-                    ON CONFLICT (contract_reg_number) DO NOTHING
                     LIMIT %s
+                    ON CONFLICT (contract_reg_number) DO NOTHING
                     RETURNING id
                 )
                 SELECT COUNT(*) FROM inserted;
@@ -415,6 +395,7 @@ class QueueManager:
                     self.logger.info(f"[populate] {table} ids {current_id}-{batch_end}: добавлено {added}")
             except Exception as e:
                 self.logger.error(f"[populate] {table} ids {current_id}-{batch_end}: ошибка {e}")
+                # Продолжаем со следующим батчем
 
             current_id = batch_end + 1
 
@@ -489,10 +470,6 @@ class QueueManager:
             where_extra += " AND table_source = %s"
             extra_params.append(force_table)
 
-        claim_filter, claim_params = self._claim_table_filter_sql()
-        where_extra += claim_filter
-        extra_params.extend(claim_params)
-
         from document_processor.queue_claim import claim_batch_ids
 
         if not force_contract:
@@ -502,25 +479,104 @@ class QueueManager:
                 self.logger.warning(f"[queue] soft_reclassify skipped: {exc}")
             self.purge_lost_sales_window()
 
+        queue_lanes = self._resolve_worker_lanes(worker_id)
+
+        # Apply table_source filter when NOT using lane routing (general workers).
+        # Exception: when QUEUE_TABLE_SOURCES is set AND OKPD_ONLY_PREFIXES is set
+        # (computer workers) — apply table_source filter even with lane routing
+        # to prevent taking commission_work or other unlisted sources.
+        okpd_only = bool(os.getenv("OKPD_ONLY_PREFIXES", "").strip())
+        if queue_lanes is None or (self.allowed_table_sources and okpd_only):
+            claim_filter, claim_params = self._claim_table_filter_sql()
+            where_extra += claim_filter
+            extra_params.extend(claim_params)
+
         rows = claim_batch_ids(
             db_execute=self.db.execute_query,
             worker_id=worker_id,
             batch_size=batch_size,
-            priority_case=self.priority.sql_order_case(),
+            priority_case=self.priority.sql_order_case(),  # kept for compat
             where_extra=where_extra,
             extra_params=extra_params,
+            queue_lanes=queue_lanes,
         )
         result: List[Dict[str, str]] = []
         for row in rows:
-            result.append(
-                {
-                    "id": row[0],
-                    "contract_reg_number": row[1],
-                    "table_source": row[2],
-                }
+            result.append({
+                "id":                  row[0],
+                "contract_reg_number": row[1],
+                "table_source":        row[2],
+                "queue_lane":          row[3] if len(row) > 3 else None,
+                "priority_class":      row[4] if len(row) > 4 else None,
+                "priority_score":      row[5] if len(row) > 5 else None,
+            })
+        if result:
+            lane_summary = ", ".join(
+                f"{r.get('queue_lane','?')}(P{r.get('priority_class','?')}·{r.get('priority_score','?')})"
+                for r in result
             )
-        self.logger.info(f"[get_next_batch] worker_id={worker_id}: получено {len(result)} задач")
+            self.logger.info(
+                f"[get_next_batch] worker_id={worker_id}: {len(result)} задач [{lane_summary}]"
+            )
+        else:
+            self.logger.info(f"[get_next_batch] worker_id={worker_id}: задач нет")
         return result
+
+    def _resolve_worker_lanes(self, worker_id: int) -> Optional[List[str]]:
+        """
+        Resolve which queue_lanes this worker should claim.
+
+        Env QUEUE_LANES overrides everything (comma-separated).
+        Env QUEUE_LANES_FLEX=1 enables flex mode:
+          if crm_active_hot or open_active tasks exist → take those;
+          otherwise fall back to awarded_recent / historical_awarded.
+
+        Default logic by table source:
+          - awarded-only workers → awarded_recent, historical_awarded
+          - open workers         → crm_active_hot, open_active
+          - no restriction       → crm_active_hot, open_active (daemon takes all)
+        """
+        # Explicit override
+        raw = (os.getenv("QUEUE_LANES") or "").strip()
+        if raw:
+            lanes = [l.strip() for l in raw.split(",") if l.strip()]
+            if lanes:
+                return lanes
+
+        # Flex mode (worker 17 pattern)
+        if os.getenv("QUEUE_LANES_FLEX") == "1":
+            return self._flex_lanes()
+
+        # Default: awarded-only vs open
+        if self.allowed_table_sources and all("_awarded" in t for t in self.allowed_table_sources):
+            return ["awarded_recent", "historical_awarded"]
+
+        return ["crm_active_hot", "open_active"]
+
+    def _flex_lanes(self) -> List[str]:
+        """
+        Flex: prefer open/CRM lanes, fall back to awarded if empty.
+        Returns lanes that have at least one pending task; if none, returns awarded.
+        """
+        try:
+            rows = self.db.execute_query(
+                "tender_monitor",
+                """
+                SELECT queue_lane, COUNT(*) AS cnt
+                FROM document_processing_queue
+                WHERE status = 'pending'
+                  AND queue_lane IN ('crm_active_hot', 'open_active', 'awarded_recent', 'historical_awarded')
+                GROUP BY queue_lane
+                """,
+                fetch=True,
+            ) or []
+            counts = {r[0]: int(r[1]) for r in rows}
+        except Exception:
+            counts = {}
+
+        if counts.get("crm_active_hot", 0) > 0 or counts.get("open_active", 0) > 0:
+            return ["crm_active_hot", "open_active"]
+        return ["awarded_recent", "historical_awarded"]
 
     def mark_completed(self, task_id: int) -> None:
         sql = """

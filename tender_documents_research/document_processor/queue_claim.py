@@ -1,18 +1,34 @@
-"""Выбор задач очереди: новые в приоритете, fair-share для backfill."""
+"""
+Queue claim: lane-based ordering.
+
+Lane priority (lower = higher):
+  crm_active_hot=1  open_active=2  awarded_recent=3  retry=4  historical_awarded=5
+
+Within a lane: priority_score DESC → submission_end_at ASC → id ASC
+"""
 
 from __future__ import annotations
 
 import os
 from typing import List, Optional, Sequence, Tuple
 
+LANE_RANK_SQL = """
+    CASE q.queue_lane
+        WHEN 'crm_active_hot'    THEN 1
+        WHEN 'open_active'       THEN 2
+        WHEN 'awarded_recent'    THEN 3
+        WHEN 'retry'             THEN 4
+        WHEN 'historical_awarded' THEN 5
+        ELSE 6
+    END
+"""
+
 
 def reprocess_enrich_predicate_sql() -> str:
-    # %% — экранирование для psycopg2 при наличии params
     return "COALESCE(error_message, '') LIKE 'reprocess_enrich:%%'"
 
 
 def backfill_slots(batch_size: int) -> int:
-    """Сколько слотов батча отдать reprocess_enrich (остальное — обычные pending)."""
     try:
         slots = int(os.getenv("BACKFILL_SLOTS", "1"))
     except ValueError:
@@ -27,59 +43,60 @@ def claim_batch_ids(
     db_execute,
     worker_id: int,
     batch_size: int,
-    priority_case: str,
+    priority_case: str,       # kept for API compat, not used in ORDER BY
     where_extra: str,
     extra_params: Sequence[object],
+    queue_lanes: Optional[Sequence[str]] = None,
 ) -> List[Tuple]:
     """
-    Забирает pending: сначала обычные (новые/приоритетные),
-    затем до backfill_slots() задач reprocess_enrich.
+    Claim pending tasks ordered by lane rank → priority_score → deadline.
+    queue_lanes restricts which lanes this worker handles.
     """
     slots = backfill_slots(batch_size)
     normal_limit = batch_size - slots
     repr_pred = reprocess_enrich_predicate_sql()
 
+    lane_filter, lane_params = _lane_filter(queue_lanes)
+
     claimed: List[Tuple] = []
+
     if normal_limit > 0:
-        claimed.extend(
-            _claim(
-                db_execute=db_execute,
-                worker_id=worker_id,
-                limit=normal_limit,
-                priority_case=priority_case,
-                where_extra=where_extra + f" AND NOT ({repr_pred})",
-                extra_params=extra_params,
-            )
-        )
+        claimed.extend(_claim(
+            db_execute=db_execute,
+            worker_id=worker_id,
+            limit=normal_limit,
+            where_extra=where_extra + f" AND NOT ({repr_pred})" + lane_filter,
+            extra_params=list(extra_params) + lane_params,
+        ))
 
     remaining = batch_size - len(claimed)
     if remaining > 0 and slots > 0:
-        claimed.extend(
-            _claim(
-                db_execute=db_execute,
-                worker_id=worker_id,
-                limit=remaining,
-                priority_case=priority_case,
-                where_extra=where_extra + f" AND ({repr_pred})",
-                extra_params=extra_params,
-            )
-        )
+        claimed.extend(_claim(
+            db_execute=db_execute,
+            worker_id=worker_id,
+            limit=remaining,
+            where_extra=where_extra + f" AND ({repr_pred})" + lane_filter,
+            extra_params=list(extra_params) + lane_params,
+        ))
 
-    # Если reprocess не было — добираем обычными до batch_size
     remaining = batch_size - len(claimed)
     if remaining > 0:
-        claimed.extend(
-            _claim(
-                db_execute=db_execute,
-                worker_id=worker_id,
-                limit=remaining,
-                priority_case=priority_case,
-                where_extra=where_extra + f" AND NOT ({repr_pred})",
-                extra_params=extra_params,
-            )
-        )
+        claimed.extend(_claim(
+            db_execute=db_execute,
+            worker_id=worker_id,
+            limit=remaining,
+            where_extra=where_extra + f" AND NOT ({repr_pred})" + lane_filter,
+            extra_params=list(extra_params) + lane_params,
+        ))
 
     return claimed
+
+
+def _lane_filter(lanes: Optional[Sequence[str]]) -> tuple[str, list]:
+    if not lanes:
+        return "", []
+    placeholders = ", ".join(["%s"] * len(lanes))
+    return f" AND q.queue_lane IN ({placeholders})", list(lanes)
 
 
 def _claim(
@@ -87,32 +104,16 @@ def _claim(
     db_execute,
     worker_id: int,
     limit: int,
-    priority_case: str,
     where_extra: str,
     extra_params: Sequence[object],
 ) -> List[Tuple]:
     if limit <= 0:
         return []
     params: List[object] = [worker_id, worker_id, *list(extra_params), limit]
-    # Сначала учитываем AI-приоритет из crm_docs_priority_hints (если есть),
-    # затем штатный приоритет очереди и свежесть задач.
-    ai_order_sql = """
-                CASE
-                    WHEN to_regclass('public.crm_docs_priority_hints') IS NULL THEN 0
-                    ELSE COALESCE((
-                        SELECT h.ai_priority_score
-                        FROM crm_docs_priority_hints h
-                        WHERE h.contract_number = q.contract_reg_number
-                          AND h.registry_type = q.table_source
-                        ORDER BY h.updated_at DESC
-                        LIMIT 1
-                    ), 0)
-                END DESC
-    """.strip()
     sql = f"""
         UPDATE document_processing_queue
-        SET status = 'processing',
-            worker_id = %s,
+        SET status     = 'processing',
+            worker_id  = %s,
             started_at = NOW()
         WHERE id IN (
             SELECT q.id
@@ -121,11 +122,13 @@ def _claim(
               AND (q.worker_id IS NULL OR q.worker_id = %s)
               {where_extra}
             ORDER BY
-                {ai_order_sql},
-                {priority_case},
-                q.id DESC
+                {LANE_RANK_SQL} ASC,
+                q.priority_score DESC,
+                q.submission_end_at ASC NULLS LAST,
+                q.id ASC
             LIMIT %s
+            FOR UPDATE SKIP LOCKED
         )
-        RETURNING id, contract_reg_number, table_source
+        RETURNING id, contract_reg_number, table_source, queue_lane, priority_class, priority_score
     """
     return list(db_execute(sql, tuple(params), fetch=True) or [])
