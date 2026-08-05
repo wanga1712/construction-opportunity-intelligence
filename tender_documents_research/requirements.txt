@@ -1,0 +1,12 @@
+psutil
+python-dotenv
+psycopg2-binary
+requests
+openpyxl
+PyPDF2
+pdfplumber
+python-docx
+loguru
+rapidfuzz
+pdf2image
+pytesseract

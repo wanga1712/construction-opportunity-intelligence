@@ -190,12 +190,29 @@ class QueueManager:
         )
 
     def purge_lost_sales_window(self) -> int:
-        """Снимает pending-задачи, которые уже вне продажного окна."""
+        """Снимает pending-задачи, которые уже вне продажного окна.
+
+        Для awarded-таблиц: окно = delivery_end_date (или end_date) >= today + sales_window_days.
+        Для open-таблиц: НЕ снимать, если подача ещё открыта (submission_end_at >= CURRENT_DATE).
+        Логика: open-тендеры не имеют delivery_end_date — проверяем submission_end_at в dpq.
+        """
         tables = [t for t in self.source_tables if t.startswith("reestr_contract_")]
         if not tables:
             return 0
         parts = []
         for table in tables:
+            is_awarded = "_awarded" in table
+            if is_awarded:
+                # Awarded: проверяем только delivery_end_date / end_date (неизменная логика)
+                open_submission_guard = ""
+            else:
+                # Open: не трогать, если подача ещё не истекла по submission_end_at
+                open_submission_guard = (
+                    "AND NOT ("
+                    "  q.submission_end_at IS NOT NULL"
+                    "  AND q.submission_end_at >= CURRENT_DATE"
+                    ")"
+                )
             parts.append(
                 f"""
                 SELECT q.id
@@ -204,6 +221,7 @@ class QueueManager:
                 WHERE q.status = 'pending'
                   AND q.table_source = '{table}'
                   AND q.queue_lane != 'crm_active_hot'
+                  {open_submission_guard}
                   AND (
                     COALESCE(t.delivery_end_date, t.end_date) IS NULL
                     OR COALESCE(t.delivery_end_date, t.end_date)::date
