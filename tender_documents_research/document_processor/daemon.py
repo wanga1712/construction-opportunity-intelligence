@@ -31,7 +31,6 @@ from .search_profile_config import load_search_profiles
 
 from .task_pipeline import NoDocumentLinksError, TaskPipeline
 from .daemon_maintenance import DaemonMaintenance
-from .task_completion import can_complete_tender_files
 
 
 class DocumentProcessorDaemon:
@@ -342,29 +341,46 @@ class DocumentProcessorDaemon:
                 tender_id = self.pipeline.resolve_tender_id(
                     contract_reg_number, table_source
                 )
-                db_ok = True
+                rows = []
+                status_read_failed = False
                 if tender_id is not None:
-                    rows = self.downloader.registry.list_file_statuses(
-                        tender_id, table_source
-                    )
-                    db_ok = can_complete_tender_files(rows)
+                    try:
+                        rows = self.downloader.registry.list_file_statuses(
+                            tender_id, table_source, raise_on_error=True
+                        )
+                    except Exception as status_exc:
+                        status_read_failed = True
+                        self.logger.error(
+                            f"[{task_id}] completion status read failed: "
+                            f"{type(status_exc).__name__}"
+                        )
 
-                if proc_result.needs_requeue or not db_ok:
-                    self.queue_manager.mark_requeue_pending(
-                        task_id, proc_result.summary_message() or "incomplete"
+                decision = proc_result.apply_completion(
+                    self.queue_manager,
+                    task_id,
+                    rows,
+                    status_read_failed=status_read_failed,
+                    task_eligible=tender_id is not None,
+                )
+
+                if not decision.allowed:
+                    self.logger.warning(
+                        f"[{task_id}] completion blocked: "
+                        f"policy={decision.policy_version} "
+                        f"reasons={decision.blocking_reasons} "
+                        f"statuses={decision.observed_statuses}"
                     )
-                    self.logger.info(
-                        f"[{task_id}] Задача возвращена в очередь: "
-                        f"{proc_result.summary_message()}"
-                    )
-                    print(" PENDING_RESUME", flush=True)
-                elif proc_result.retryable_error_files:
-                    self.queue_manager.mark_error(
-                        task_id, proc_result.summary_message()
-                    )
-                    print(f" ERROR: {proc_result.summary_message()}", flush=True)
+                    if "document_error_memory" in decision.blocking_reasons or (
+                        "document_retryable_error" in decision.blocking_reasons
+                    ):
+                        print(" ERROR: completion blocked", flush=True)
+                    else:
+                        self.logger.info(
+                            f"[{task_id}] Задача возвращена в очередь: "
+                            f"{proc_result.summary_message()}"
+                        )
+                        print(" PENDING_RESUME", flush=True)
                 else:
-                    self.queue_manager.mark_completed(task_id)
                     self.logger.info(f"[{task_id}] Задача завершена успешно")
                     print(" DONE", flush=True)
             except Exception as exc:

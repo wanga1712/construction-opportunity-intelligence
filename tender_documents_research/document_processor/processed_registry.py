@@ -99,7 +99,13 @@ class ProcessedRegistry:
         except Exception as e:
             self.logger.error(f"Error in mark_file_status for {file_name}: {e}")
 
-    def list_file_statuses(self, tender_id: int, table_source: str) -> List[Tuple[str, str]]:
+    def list_file_statuses(
+        self,
+        tender_id: int,
+        table_source: str,
+        *,
+        raise_on_error: bool = False,
+    ) -> List[Tuple[str, str]]:
         sql = """
             SELECT file_name, status
             FROM processed_documents
@@ -112,6 +118,8 @@ class ProcessedRegistry:
             return [(str(r[0]), str(r[1])) for r in rows]
         except Exception as e:
             self.logger.error(f"list_file_statuses error: {e}")
+            if raise_on_error:
+                raise
             return []
 
     def mark_pending_resume(
