@@ -112,6 +112,12 @@ class MatchRepository:
             except Exception:
                 pass
 
+        # Внутрибатчевая семантическая дедупликация:
+        # один уникальный (keyword, display_text) на match — одна запись.
+        # Устраняет тысячи строк с одинаковым текстом ячейки из больших смет,
+        # где keyword встречается в каждой строке одного раздела.
+        seen_in_batch: set[tuple[str, str]] = set()
+
         for m in matches:
             try:
                 matched_line_text = m.get("matched_line") or ""
@@ -123,7 +129,17 @@ class MatchRepository:
                 # Дедупликация: один keyword на одной строке таблицы — одна запись.
                 # Раньше dedup шёл только по matched_text и схлопывал одинаковые
                 # позиции из разных разделов сметы (эталон 0172200002525000537).
-                dedup_text = matched_cell_text or matched_line_text
+                # Prefer matched_display_text (shown in CRM) as the semantic key;
+                # fall back to raw matched_cell_text if display text not set.
+                matched_display = m.get("matched_display_text") or ""
+                dedup_text = matched_display or matched_cell_text or matched_line_text
+                batch_key = (keyword, dedup_text)
+                if batch_key in seen_in_batch:
+                    self.logger.debug(
+                        f"save_matches: batch dedup skip '{keyword}' (same text) in {file_name}"
+                    )
+                    continue
+                seen_in_batch.add(batch_key)
                 if keyword and line_number > 0:
                     try:
                         existing = self.db.execute_query(
