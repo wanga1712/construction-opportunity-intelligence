@@ -4,6 +4,7 @@ from typing import List, Dict, Optional, Sequence
 from database_work.database_connection import DatabaseManager
 from utils.logger_config import get_logger
 
+from .completion_guard import CompletionGuardDecision, evaluate_completion_guard
 from .queue_priority import QueuePriorityPolicy
 
 
@@ -596,7 +597,30 @@ class QueueManager:
             return ["crm_active_hot", "open_active"]
         return ["awarded_recent", "historical_awarded"]
 
-    def mark_completed(self, task_id: int) -> None:
+    def mark_completed(
+        self,
+        task_id: int,
+        *,
+        status_rows: Sequence[tuple] | None = None,
+        retryable_failure: bool = False,
+        status_read_failed: bool = False,
+        task_eligible: bool = True,
+    ) -> CompletionGuardDecision:
+        decision = evaluate_completion_guard(
+            status_rows,
+            retryable_failure=retryable_failure,
+            status_read_failed=status_read_failed,
+            task_eligible=task_eligible,
+        )
+        if not decision.allowed:
+            logger = getattr(self, "logger", None)
+            if logger is not None:
+                logger.warning(
+                    f"[{task_id}] completion blocked: policy={decision.policy_version} "
+                    f"reasons={decision.blocking_reasons} "
+                    f"statuses={decision.observed_statuses}"
+                )
+            return decision
         sql = """
             UPDATE document_processing_queue
             SET status = 'completed',
@@ -604,6 +628,7 @@ class QueueManager:
             WHERE id = %s
         """
         self.db.execute_query(sql, (task_id,))
+        return decision
 
     def mark_no_links(self, task_id: int, message: str) -> None:
         sql = """
