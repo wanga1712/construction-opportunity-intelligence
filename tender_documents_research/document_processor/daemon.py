@@ -97,7 +97,7 @@ class DocumentProcessorDaemon:
         self.failed_uploads_dir.mkdir(parents=True, exist_ok=True)
         
         # Подключение вынесенных модулей
-        self.maintenance = DaemonMaintenance(self.db, self.worker_id, self.memory_limit_bytes, self.logger)
+        self.maintenance = DaemonMaintenance(getattr(self, "s13_backend", None), self.db, self.worker_id, self.memory_limit_bytes, self.logger)
         self.maintenance.set_downloader(self.downloader)
         
         self.pipeline = TaskPipeline(
