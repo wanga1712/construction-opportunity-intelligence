@@ -1,4 +1,4 @@
-﻿import os
+import os
 from typing import List, Dict, Optional, Sequence
 
 from database_work.database_connection import DatabaseManager
@@ -15,9 +15,15 @@ STATUS_SALES_WINDOW_EXPIRED = "sales_window_expired"
 
 
 class QueueManager:
-    def __init__(self, db: Optional[DatabaseManager] = None) -> None:
-        self.db = db or DatabaseManager()
-        self.logger = get_logger()
+    """
+    Manages document processing queue operations.
+    Delegates to QueueRepository.
+    """
+    def __init__(self, processing_backend, db, logger=None):
+        self.logger = logger or get_logger()
+        self.backend = processing_backend
+        self.repo = self.backend.queue
+        self.db = db
         self.priority = QueuePriorityPolicy()
         self.allowed_table_sources = self._parse_table_sources_env()
         self.source_tables = self._filter_source_tables(self.priority.all_tables_ordered())
@@ -473,24 +479,14 @@ class QueueManager:
             stop_after_first=stop_after_first,
         )
 
-    def get_next_batch(
+    def _get_next_batch(
         self,
         worker_id: int,
         batch_size: int,
         force_contract: Optional[str] = None,
         force_table: Optional[str] = None,
     ) -> List[Dict[str, str]]:
-        where_extra = ""
-        extra_params: List[object] = []
-        if force_contract:
-            where_extra += " AND contract_reg_number = %s"
-            extra_params.append(force_contract)
-        if force_table:
-            where_extra += " AND table_source = %s"
-            extra_params.append(force_table)
-
-        from document_processor.queue_claim import claim_batch_ids
-
+        """Internal helper to get batch from repository."""
         if not force_contract:
             try:
                 self.soft_reclassify_pending()
@@ -498,27 +494,22 @@ class QueueManager:
                 self.logger.warning(f"[queue] soft_reclassify skipped: {exc}")
             self.purge_lost_sales_window()
 
-        queue_lanes = self._resolve_worker_lanes(worker_id)
-
-        # Apply table_source filter when NOT using lane routing (general workers).
-        # Exception: when QUEUE_TABLE_SOURCES is set AND OKPD_ONLY_PREFIXES is set
-        # (computer workers) — apply table_source filter even with lane routing
-        # to prevent taking commission_work or other unlisted sources.
-        okpd_only = bool(os.getenv("OKPD_ONLY_PREFIXES", "").strip())
-        if queue_lanes is None or (self.allowed_table_sources and okpd_only):
-            claim_filter, claim_params = self._claim_table_filter_sql()
-            where_extra += claim_filter
-            extra_params.extend(claim_params)
-
-        rows = claim_batch_ids(
-            db_execute=self.db.execute_query,
+        return self.repo.claim_batch(
             worker_id=worker_id,
             batch_size=batch_size,
-            priority_case=self.priority.sql_order_case(),  # kept for compat
-            where_extra=where_extra,
-            extra_params=extra_params,
-            queue_lanes=queue_lanes,
+            force_contract=force_contract,
+            force_table=force_table,
+            queue_lanes=self._resolve_worker_lanes(worker_id)
         )
+
+    def get_next_batch(
+        self,
+        worker_id: int,
+        batch_size: int,
+        force_contract: Optional[str] = None,
+        force_table: Optional[str] = None,
+    ) -> List[Dict[str, str]]:
+        rows = self._get_next_batch(worker_id, batch_size, force_contract, force_table)
         result: List[Dict[str, str]] = []
         for row in rows:
             result.append({
@@ -621,16 +612,9 @@ class QueueManager:
                     f"statuses={decision.observed_statuses}"
                 )
             return decision
-        sql = """
-            UPDATE document_processing_queue
-            SET status = 'completed',
-                completed_at = NOW()
-            WHERE id = %s
-        """
-        self.db.execute_query(sql, (task_id,))
+        self.repo.mark_task_completed(task_id)
         return decision
 
-    def mark_no_links(self, task_id: int, message: str) -> None:
         sql = """
             UPDATE document_processing_queue
             SET status = 'no_links',

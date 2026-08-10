@@ -15,7 +15,7 @@ import os
 from dataclasses import dataclass
 from typing import Optional
 
-from .s13_queue import S13V2QueueBackend
+from .queue_repository import QueueRepository, S13V2QueueRepository, LegacyQueueRepository
 from .s13_results import S13V2ResultStore
 from .state_repository import ProcessingStateRepository, LegacyStateRepository, S13V2StateRepository
 
@@ -23,7 +23,7 @@ from .state_repository import ProcessingStateRepository, LegacyStateRepository, 
 @dataclass
 class ProcessingBackend:
     """Holds queue, result, and state backends."""
-    queue: object
+    queue: QueueRepository
     results: object
     state: ProcessingStateRepository
 
@@ -35,15 +35,16 @@ def create_processing_backend(backend_name: str, db=None) -> ProcessingBackend:
     """
     if backend_name == "S13_V2":
         dsn = _load_s13_dsn()
-        queue_backend = S13V2QueueBackend(dsn)
+        queue_repo = S13V2QueueRepository(dsn)
         result_store = S13V2ResultStore(dsn)
         state_repo = S13V2StateRepository(dsn, pipeline_generation="S13_V2")
-        _verify_s13_connection(queue_backend)
-        return ProcessingBackend(queue=queue_backend, results=result_store, state=state_repo)
+        _verify_s13_connection(queue_repo)
+        return ProcessingBackend(queue=queue_repo, results=result_store, state=state_repo)
 
     # Legacy fallback
     state_repo = LegacyStateRepository(db, db_alias='tender_monitor')
-    return ProcessingBackend(queue=None, results=None, state=state_repo)
+    queue_repo = LegacyQueueRepository(db, db_alias='tender_monitor')
+    return ProcessingBackend(queue=queue_repo, results=None, state=state_repo)
 
 def _load_s13_dsn() -> dict:
     return {
@@ -55,10 +56,10 @@ def _load_s13_dsn() -> dict:
     }
 
 
-def _verify_s13_connection(queue_backend: S13V2QueueBackend) -> None:
+def _verify_s13_connection(queue_repo: S13V2QueueRepository) -> None:
     """FAIL FAST: raise RuntimeError if S13 DB is unreachable."""
     try:
-        queue_backend.verify_connection()
+        queue_repo._get_conn() # Verify connection implicitly
     except Exception as exc:
         raise RuntimeError(
             f"[FATAL] PROCESSING_BACKEND=S13_V2 but document_intelligence "

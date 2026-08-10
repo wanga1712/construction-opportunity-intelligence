@@ -13,7 +13,8 @@ class DaemonMaintenance:
     - контроль расходов памяти
     """
 
-    def __init__(self, db, worker_id: int, memory_limit_bytes: int, logger):
+    def __init__(self, processing_backend, db, worker_id: int, memory_limit_bytes: int, logger):
+        self.backend = processing_backend
         self.db = db
         self.worker_id = worker_id
         self.memory_limit_bytes = memory_limit_bytes
@@ -28,70 +29,34 @@ class DaemonMaintenance:
         """При запуске откатывает зависшие задачи своего воркера из processing → pending."""
         try:
             minutes = int(os.getenv("STALE_TASK_MINUTES", "60"))
-            # 1. Сброс задач в очереди
-            sql_queue = f"""
-                UPDATE document_processing_queue
-                SET status = 'pending', worker_id = NULL, started_at = NULL
-                WHERE status = 'processing'
-                  AND (
-                        worker_id = %s
-                     OR (started_at IS NOT NULL AND started_at < NOW() - INTERVAL '{minutes} minutes')
-                  )
-            """
-            self.db.execute_query("tender_monitor", sql_queue, (self.worker_id,))
             
-            # 2. Сброс статусов файлов в processed_documents
+            # 1. Сброс задач в очереди
+            self.backend.queue.reset_stale(stale_minutes=minutes, worker_id=self.worker_id)
+            
+            # 2. Сброс статусов файлов в processed_documents (или file_processing_state)
             try:
-                if self.downloader:
+                if self.downloader and hasattr(self.downloader, 'registry'):
                     self.downloader.registry._ensure_processed_table() # на всякий случай
-                # Удаляем только зависшие processing; pending_resume не трогаем
-                sql_files = f"""
-                    DELETE FROM processed_documents
-                    WHERE status = 'processing'
-                      AND (
-                            worker_id = %s
-                         OR (started_at IS NOT NULL AND started_at < NOW() - INTERVAL '{minutes} minutes')
-                      )
-                """
-                self.db.execute_query("tender_monitor", sql_files, (self.worker_id,))
+                self.backend.state.reset_stale(worker_id=self.worker_id)
             except Exception as e:
-                self.logger.error(f"Ошибка сброса processed_documents: {e}")
-
+                self.logger.warning(f"Ошибка сброса обработанных файлов: {e}")
+                
             self.logger.info(f"[worker {self.worker_id}] Зависшие задачи и файлы сброшены")
         except Exception as e:
-            self.logger.error(f"_reset_stale_tasks error: {e}")
+            self.logger.error(f"Failed to reset stale tasks: {e}")
 
     def requeue_error_tasks(self) -> Optional[int]:
         """Переводит задачи со статусом error → pending для повторной попытки."""
         try:
-            sql = """
-                WITH upd AS (
-                    UPDATE document_processing_queue
-                    SET status = 'pending', worker_id = NULL, started_at = NULL
-                    WHERE status = 'error'
-                    RETURNING id
-                )
-                SELECT COUNT(*) FROM upd
-            """
-            rows = self.db.execute_query("tender_monitor", sql, fetch=True) or []
-            return int(rows[0][0]) if rows else 0
+            return self.backend.queue.requeue_error_tasks()
         except Exception as e:
             self.logger.error(f"_requeue_error_tasks error: {e}")
             return None
 
     def cleanup_previous_run_data(self) -> None:
         try:
-            for sql in (
-                "DELETE FROM tender_document_match_details",
-                "DELETE FROM tender_document_matches",
-                "DELETE FROM processed_documents",
-                "TRUNCATE TABLE document_processing_queue",
-            ):
-                try:
-                    self.db.execute_query("tender_monitor", sql)
-                except Exception:
-                    pass
-        except Exception:
+            self.backend.queue.cleanup_previous_run_data()
+        except Exception as e:
             pass
 
     def apply_cpu_limits(self) -> None:

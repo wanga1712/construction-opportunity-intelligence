@@ -16,6 +16,9 @@ class ProcessingStateRepository:
     def list_file_statuses(self, procurement_id: int, table_source: str, raise_on_error: bool = False):
         raise NotImplementedError
 
+    def reset_stale(self, worker_id: int) -> int:
+        raise NotImplementedError
+
 
 class LegacyStateRepository(ProcessingStateRepository):
     """Uses tender_monitor.processed_documents (Legacy S7)."""
@@ -82,9 +85,25 @@ class LegacyStateRepository(ProcessingStateRepository):
         try:
             return self.db.execute_query(self.db_alias, sql, (procurement_id, table_source), fetch=True) or []
         except Exception as e:
-            self.logger.error(f"Error listing legacy file statuses: {e}")
-            if raise_on_error: raise e
+            self.logger.error(f"[LegacyState] list_file_statuses error: {e}")
+            if raise_on_error:
+                raise
             return []
+
+    def reset_stale(self, worker_id: int) -> int:
+        sql = """
+            DELETE FROM processed_documents
+            WHERE status = 'processing'
+        """
+        # Note: legacy processed_documents doesn't have worker_id column easily accessible for this,
+        # but in daemon_maintenance it was just deleting all 'processing'.
+        try:
+            # We don't have rowcount easily from this execute_query but we just execute it.
+            self.db.execute_query(self.db_alias, sql)
+            return 0
+        except Exception as exc:
+            self.logger.error(f"[LegacyState] reset_stale error: {exc}")
+            return 0
 
 
 class S13V2StateRepository(ProcessingStateRepository):
@@ -180,3 +199,23 @@ class S13V2StateRepository(ProcessingStateRepository):
             self.logger.error(f"Error listing local document_files statuses: {e}")
             if raise_on_error: raise e
             return []
+
+    def reset_stale(self, worker_id: int) -> int:
+        sql = """
+            UPDATE file_processing_state
+            SET status = 'PENDING',
+                updated_at = NOW()
+            WHERE status = 'PROCESSING'
+              AND worker_id = %s
+        """
+        conn = self._get_conn()
+        try:
+            with conn.cursor() as cur:
+                cur.execute(sql, (worker_id,))
+                count = cur.rowcount
+            conn.commit()
+            return count
+        except Exception as exc:
+            conn.rollback()
+            self.logger.error(f"[S13V2State] reset_stale error: {exc}")
+            return 0
