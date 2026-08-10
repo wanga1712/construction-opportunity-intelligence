@@ -14,14 +14,14 @@ class S13V2TaskPersistenceService:
     Ensures that queue updates, files, results, matches, details, and evidence
     are committed atomically, avoiding partial state.
     """
-    def __init__(self, local_db_pool):
-        self.db_pool = local_db_pool
+    def __init__(self, db: DatabaseManager):
+        self.db = db
 
     def persist_task_result(self, result: TaskProcessResult):
         """
         Persist the full object graph of a TaskProcessResult atomically.
         """
-        conn = self.db_pool.getconn()
+        conn = self.db.get_connection('document_intelligence')
         try:
             with conn.cursor() as cursor:
                 # 1. Select for update to ensure we own the task and it's PROCESSING
@@ -38,7 +38,7 @@ class S13V2TaskPersistenceService:
                     conn.rollback()
                     return
 
-                if row[0] != 'PROCESSING':
+                if row[0] not in ('PROCESSING', 'processing'):
                     logger.warning(f"Queue task {result.queue_id} is in status {row[0]}, expected PROCESSING.")
                     conn.rollback()
                     return
@@ -62,51 +62,63 @@ class S13V2TaskPersistenceService:
                         # Insert document_processing_results
                         cursor.execute("""
                             INSERT INTO document_processing_results
-                            (queue_id, procurement_id, file_id, parser_type, status, extracted_pages, extracted_sheets, extracted_rows, pipeline_generation)
+                            (queue_id, procurement_id, file_id, status, pages_processed, sheets_processed, rows_extracted, matches_found, pipeline_generation)
                             VALUES (%s, %s, %s, %s, %s, %s, %s, %s, 'S13_V2')
                             RETURNING id
                         """, (
                             result.queue_id, result.procurement_id, file_id,
-                            'S13_V2_PARSER', 'SUCCESS', file_res.pages, file_res.sheets, file_res.rows
+                            'COMPLETED', file_res.pages, file_res.sheets, file_res.rows, sum(m.match_count for m in file_res.matches)
                         ))
                         result_id = cursor.fetchone()[0]
 
                         # Persist matches and details
-                        for match in file_res.matches:
+                        # Match rows correspond to file-level aggregates here. 
+                        # In the new schema, category_code moved to details, so match is just an aggregate container.
+                        # Wait, the old match table had category_code. If we don't have it, we insert one match per file and then all details under it.
+                        
+                        # Calculate total match count and max score for this file
+                        file_matches = [m for m in file_res.matches if m.category_code != "processed"]
+                        if file_matches:
+                            total_matches = sum(m.match_count for m in file_matches)
+                            max_score = max(m.score for m in file_matches)
+                            
                             cursor.execute("""
                                 INSERT INTO document_matches
-                                (queue_id, procurement_id, file_id, result_id, category_code, match_count, score, pipeline_generation)
-                                VALUES (%s, %s, %s, %s, %s, %s, %s, 'S13_V2')
+                                (queue_id, procurement_id, file_id, result_id, match_count, score, pipeline_generation)
+                                VALUES (%s, %s, %s, %s, %s, %s, 'S13_V2')
                                 RETURNING id
                             """, (
                                 result.queue_id, result.procurement_id, file_id, result_id,
-                                match.category_code, match.match_count, match.score
+                                total_matches, max_score
                             ))
                             match_id = cursor.fetchone()[0]
 
-                            for detail in match.details:
-                                cursor.execute("""
-                                    INSERT INTO document_match_details
-                                    (match_id, procurement_id, category_code, subcategory_code, matched_term, term_type, score, row_data, page_or_sheet, row_number, context_before, context_after, pipeline_generation)
-                                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, 'S13_V2')
-                                """, (
-                                    match_id, result.procurement_id, detail.category_code, detail.subcategory_code,
-                                    detail.matched_term, detail.term_type, detail.score,
-                                    json.dumps(detail.row_data), detail.page_or_sheet, detail.row_number,
-                                    json.dumps(detail.context_before), json.dumps(detail.context_after)
-                                ))
+                            for match in file_matches:
+                                for detail in match.details:
+                                    cursor.execute("""
+                                        INSERT INTO document_match_details
+                                        (match_id, procurement_id, category_code, subcategory_code, matched_term, term_type, score, row_data, page_or_sheet, row_number, context_before, context_after, pipeline_generation)
+                                        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, 'S13_V2')
+                                    """, (
+                                        match_id, result.procurement_id, detail.category_code, detail.subcategory_code,
+                                        detail.matched_term, detail.term_type, detail.score,
+                                        json.dumps(detail.row_data), detail.page_or_sheet, detail.row_number,
+                                        json.dumps(detail.context_before), json.dumps(detail.context_after)
+                                    ))
 
                 # 3. Persist Evidence
                 for ev in result.evidence:
+                    if ev.category_code == "processed":
+                        continue
                     cursor.execute("""
                         INSERT INTO document_evidence
-                        (procurement_id, queue_id, match_id, category_code, evidence_score, match_count, next_stage, pipeline_generation)
-                        VALUES (%s, %s, NULL, %s, %s, %s, %s, 'S13_V2')
+                        (procurement_id, queue_id, category_code, evidence_score, match_count, next_stage, pipeline_generation)
+                        VALUES (%s, %s, %s, %s, %s, %s, 'S13_V2')
                         ON CONFLICT (procurement_id, category_code, pipeline_generation)
                         DO UPDATE SET
                             evidence_score = EXCLUDED.evidence_score,
-                            match_count = EXCLUDED.match_count,
-                            updated_at = NOW()
+                            match_count = EXCLUDED.match_count
+                            
                     """, (
                         result.procurement_id, result.queue_id, ev.category_code,
                         ev.evidence_score, ev.match_count, ev.next_stage
@@ -117,20 +129,20 @@ class S13V2TaskPersistenceService:
                     UPDATE document_processing_queue
                     SET status = %s, completed_at = NOW(), last_error = %s
                     WHERE id = %s
-                """, (result.outcome.value, result.error_message, result.queue_id))
+                """, (result.outcome.value if hasattr(result.outcome, 'value') else result.outcome, result.error_message, result.queue_id))
 
             conn.commit()
-            logger.info(f"Task {result.queue_id} successfully persisted with outcome {result.outcome.value}.")
+            logger.info(f"Task {result.queue_id} successfully persisted with outcome {result.outcome}.")
         except Exception as e:
             conn.rollback()
             logger.error(f"Failed to persist task {result.queue_id}: {e}", exc_info=True)
             self.mark_failed(result.queue_id, str(e))
             raise
         finally:
-            self.db_pool.putconn(conn)
+            self.db.return_connection('document_intelligence', conn)
 
     def mark_failed(self, queue_id: int, error_msg: str):
-        fail_conn = self.db_pool.getconn()
+        fail_conn = self.db.get_connection('document_intelligence')
         try:
             with fail_conn.cursor() as cursor:
                 cursor.execute("""
@@ -143,4 +155,4 @@ class S13V2TaskPersistenceService:
             fail_conn.rollback()
             logger.error(f"Failed to mark queue {queue_id} as FAILED: {e}", exc_info=True)
         finally:
-            self.db_pool.putconn(fail_conn)
+            self.db.return_connection('document_intelligence', fail_conn)
