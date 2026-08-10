@@ -89,38 +89,10 @@ class DaemonMaintenance:
 
     def requeue_no_links_with_links(self) -> int:
         """Сбрасывает no_links -> pending для 44-fz контрактов, у которых появились ссылки."""
-        sql = """
-            WITH has_links AS (
-                SELECT DISTINCT q.id
-                FROM document_processing_queue q
-                WHERE q.status = 'no_links'
-                  AND q.table_source LIKE '%44%'
-                  AND (
-                    EXISTS (
-                        SELECT 1 FROM links_documentation_44_fz l
-                        WHERE l.contract_number = q.contract_reg_number
-                    )
-                    OR EXISTS (
-                        SELECT 1 FROM links_documentation_44_fz l
-                        WHERE l.contract_id IN (
-                            SELECT r.id FROM reestr_contract_44_fz r WHERE r.contract_number = q.contract_reg_number
-                            UNION ALL
-                            SELECT r.id FROM reestr_contract_44_fz_awarded r WHERE r.contract_number = q.contract_reg_number
-                        )
-                    )
-                  )
-            ),
-            updated AS (
-                UPDATE document_processing_queue
-                SET status = 'pending', worker_id = NULL, started_at = NULL, error_message = NULL
-                WHERE id IN (SELECT id FROM has_links)
-                RETURNING id
-            )
-            SELECT COUNT(*) FROM updated
-        """
         try:
-            rows = self.db.execute_query("tender_monitor", sql, fetch=True) or []
-            return int(rows[0][0]) if rows else 0
+            if hasattr(self.backend.queue, 'requeue_no_links_with_links'):
+                return self.backend.queue.requeue_no_links_with_links()
+            return 0
         except Exception as e:
             self.logger.error(f"requeue_no_links_with_links error: {e}")
             return 0
