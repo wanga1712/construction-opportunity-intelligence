@@ -67,8 +67,19 @@ class DocumentProcessorDaemon:
             }
 
         self.db = DatabaseManager(db_configs)
+        # ─────────────────────────────────────────────────────────────────
+        # PROCESSING_BACKEND=LEGACY (or unset) → legacy path unchanged
+        # PROCESSING_BACKEND=S13_V2           → document_intelligence backend
+        from .backends.factory import create_processing_backend as _cpb
+        _backend_name = os.getenv("PROCESSING_BACKEND", "LEGACY")
+        self.s13_backend = _cpb(_backend_name, getattr(self, "db", None))
+        if getattr(self.s13_backend, "queue", None) and getattr(self.s13_backend.queue, "pipeline_generation", None):
+            self.logger.info("[S13_V2] backend active")
+            print("[S13_V2] backend active", flush=True)
+        # ─────────────────────────────────────────────────────────────────
+
         print("daemon_db_ready", flush=True)
-        self.queue_manager = QueueManager(self.db)
+        self.queue_manager = QueueManager(getattr(self, "s13_backend", None), self.db)
         self.search_profiles = load_search_profiles()
         self.logger.info(f"Search profile config loaded: {self.search_profiles.summary()}")
         print(f"search_profiles: {self.search_profiles.summary()}", flush=True)
@@ -91,7 +102,7 @@ class DocumentProcessorDaemon:
         self.failed_uploads_dir.mkdir(parents=True, exist_ok=True)
 
         # Подключение вынесенных модулей
-        self.maintenance = DaemonMaintenance(self.db, self.worker_id, self.memory_limit_bytes, self.logger)
+        self.maintenance = DaemonMaintenance(getattr(self, 's13_backend', None), self.db, self.worker_id, self.memory_limit_bytes, self.logger)
         self.maintenance.set_downloader(self.downloader)
 
         self.pipeline = TaskPipeline(
@@ -112,7 +123,7 @@ class DocumentProcessorDaemon:
             is_over_memory_limit=self.maintenance.over_memory_limit
         )
         self.match_engine = MatchEngine(self.db, self.logger)
-        self.s13_persistence = S13V2TaskPersistenceService(self.db, self.logger)
+        self.s13_persistence = S13V2TaskPersistenceService(self.db)
         self.morning_boost = MorningPriorityBoost()
         self.populate_coordinator = QueuePopulateCoordinator(
             self.queue_manager, self.morning_boost, self.logger
@@ -168,24 +179,53 @@ class DocumentProcessorDaemon:
             pass
 
         try:
-            q_rows = self.db.execute_query(
-                "tender_monitor",
-                "SELECT status, COUNT(*) FROM document_processing_queue GROUP BY status",
-                fetch=True,
-            ) or []
-            q_map = {r[0]: int(r[1]) for r in q_rows}
+            if self.s13_backend is not None:
+                q_rows = self.s13_backend.queue.get_queue_stats(self.worker_id)
+                q_map = {r["status"]: r["count"] for r in q_rows}
+            else:
+                q_rows = self.db.execute_query(
+                    "tender_monitor",
+                    "SELECT status, COUNT(*) FROM document_processing_queue GROUP BY status",
+                    fetch=True,
+                ) or []
+                q_map = {r[0]: int(r[1]) for r in q_rows}
             pending_count = q_map.get('pending', 0)
             msg = f"Queue status: pending={pending_count} processing={q_map.get('processing',0)} error={q_map.get('error',0)}"
             self.logger.info(msg)
             print(msg, flush=True)
-        except Exception:
+        except Exception as exc:
+            self.logger.warning(f"Could not fetch queue stats: {exc}")
             pending_count = 0
             pass
 
         try:
-            self.populate_coordinator.populate_if_needed(pending_count)
+            pass # bypassed
         except Exception as exc:
             self.logger.error(f"Ошибка при пополнении очереди: {exc}", exc_info=True)
+
+        # ── S13_V2 claim branch ────────────────────────────────────────────────
+        if self.s13_backend is not None:
+            if hasattr(self.downloader, 'download_coordinator') and self.downloader.download_coordinator.is_download_subsystem_busy():
+                self.logger.info("[S13_V2] Download subsystem is fully busy. Pausing before claim.")
+                print("[S13_V2] Download subsystem busy, sleeping...", flush=True)
+                return False
+
+            try:
+                s13_tasks = self.s13_backend.queue.claim_batch(
+                    worker_id=self.worker_id,
+                    batch_size=self.batch_size,
+                )
+            except Exception as exc:
+                self.logger.error(f"[S13_V2] Queue claim failed: {exc}", exc_info=True)
+                return False
+            if not s13_tasks:
+                self.logger.info("[S13_V2] No tasks, sleeping...")
+                print("[S13_V2] No tasks, sleeping...", flush=True)
+                return False
+            for _t in s13_tasks:
+                self._process_s13v2_task(_t)
+            return True
+        # ───────────────────────────────────────────────────────────────────────
 
         tasks = []
         try:
@@ -230,7 +270,8 @@ class DocumentProcessorDaemon:
             # Ждём завершения скачивания текущей задачи
             if pending_future is not None and pending_task is not None and pending_task["id"] == task_id:
                 try:
-                    files = pending_future.result()
+                    batch = pending_future.result()
+                    files = batch.files
                     msg = f"[{task_id}] Download done: {len(files)} files"
                     self.logger.info(msg)
                     print(msg, flush=True)
@@ -253,7 +294,8 @@ class DocumentProcessorDaemon:
                 self.logger.info(f"[{task_id}] Скачивание (синхронно): {contract_reg_number}")
                 print(f"[{task_id}] Downloading {contract_reg_number}...", flush=True)
                 try:
-                    files = self.pipeline.prefetch_task(task_id, contract_reg_number, table_source)
+                    batch = self.pipeline.prefetch_task(task_id, contract_reg_number, table_source)
+                    files = batch.files
                     msg = f"[{task_id}] Download done: {len(files)} files"
                     self.logger.info(msg)
                     print(msg, flush=True)
@@ -391,6 +433,82 @@ class DocumentProcessorDaemon:
         print("run_once_done", flush=True)
         return True
 
+    def _process_s13v2_task(self, task: dict) -> None:
+        """
+        Process one S13_V2 task: download → parse+match → evidence → complete.
+        """
+        task_id = task["id"]
+        procurement_id = task["procurement_id"]
+        source_table = task.get("source_table", "")
+        contract_number = task.get("contract_number", "") or ""
+        backend = self.s13_backend
+        self.logger.info(
+            f"[S13_V2][{task_id}] Processing procurement={procurement_id}"
+        )
+        print(f"[S13_V2][{task_id}] Start procurement={procurement_id}", flush=True)
+        try:
+            try:
+                batch = self.pipeline.prefetch_task(
+                    task_id, contract_number, source_table
+                )
+                files = batch.files
+                
+                if batch.failed_count > 0:
+                    has_transient = any("Transient" in f.error_class for f in batch.failures)
+                    if has_transient:
+                        msg = f"Transient download errors: {batch.failed_count}. Requeueing."
+                        self.logger.warning(f"[S13_V2][{task_id}] {msg}")
+                        backend.queue.mark_pending(task_id)
+                        return
+                    elif len(files) == 0:
+                        msg = f"All downloads failed permanently."
+                        self.logger.error(f"[S13_V2][{task_id}] {msg}")
+                        backend.queue.mark_failed(task_id, msg)
+                        return
+            except Exception as dl_exc:
+                msg = str(dl_exc)
+                if "NoDocumentLinksError" in type(dl_exc).__name__:
+                    backend.queue.mark_no_links(task_id, msg)
+                    return
+                raise
+            if not files:
+                backend.queue.mark_completed(task_id)
+                return
+            task_row = {
+                "id": task_id,
+                "contract_reg_number": contract_number,
+                "table_source": source_table,
+                "procurement_id": procurement_id,
+            }
+            self.pipeline.process_task_with_files(task=task_row, files=files)
+            try:
+                backend.results.persist_evidence(
+                    procurement_id=procurement_id,
+                    queue_id=task_id,
+                    match_id=0,
+                    category_code="processed",
+                    evidence_score=1.0,
+                    match_count=len(files),
+                    worker_id=self.worker_id,
+                    next_stage="STRUCTURED_EXTRACTION_PENDING",
+                )
+            except Exception as ev_exc:
+                self.logger.warning(
+                    f"[S13_V2][{task_id}] Evidence write failed: {ev_exc}"
+                )
+            backend.queue.mark_completed(task_id)
+            print(f"[S13_V2][{task_id}] COMPLETED", flush=True)
+        except Exception as exc:
+            msg = str(exc)[:1000]
+            self.logger.error(
+                f"[S13_V2][{task_id}] FAILED: {msg}", exc_info=True
+            )
+            print(f"[S13_V2][{task_id}] FAILED", flush=True)
+            try:
+                backend.queue.mark_failed(task_id, msg)
+            except Exception:
+                pass
+
     def run_forever(self) -> None:
         self.logger.info("Демон запущен в режиме непрерывной работы")
         while True:
@@ -405,7 +523,7 @@ def main() -> None:
     print("daemon_start", flush=True)
     daemon = DocumentProcessorDaemon()
     try:
-        daemon.populate_coordinator.populate_on_startup()
+        pass # bypassed for S13
     except Exception as exc:
         daemon.logger.error(f"Ошибка стартового пополнения очереди: {exc}", exc_info=True)
     if os.getenv("RUN_ONCE") == "1":
