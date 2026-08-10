@@ -267,7 +267,7 @@ class ProcessedRegistry:
             wid = int(os.getenv("WORKER_ID", "0"))
         except Exception:
             wid = 0
-            
+
         sql = """
             INSERT INTO processed_documents (tender_id, table_source, file_name, status, is_interesting, error_message, worker_id, worker_host, started_at, finished_at)
             VALUES (%s, %s, %s, %s, %s, %s, %s, %s, NOW(), NOW())
@@ -277,9 +277,9 @@ class ProcessedRegistry:
                           error_message = EXCLUDED.error_message,
                           finished_at = NOW()
         """
-        
+
         status = 'error' if error_message else 'completed'
-        
+
         try:
             self.db.execute_query(self.db_alias, sql, (tender_id, table_source, file_name, status, is_interesting, error_message, wid, host))
             if status == STATUS_COMPLETED and not error_message:

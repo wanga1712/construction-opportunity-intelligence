@@ -30,15 +30,18 @@ from .search_profile_config import load_search_profiles
 
 
 from .task_pipeline import NoDocumentLinksError, TaskPipeline
+from .pipelines.s13_v2_pipeline import S13V2Pipeline
 from .daemon_maintenance import DaemonMaintenance
-
+from .task_completion import can_complete_tender_files
+from .match_engine import MatchEngine
+from .backends.s13_persistence import S13V2TaskPersistenceService
 
 class DocumentProcessorDaemon:
     def __init__(self, db_configs: Optional[dict] = None):
         # Load env from .env in project root
         root_env = Path(__file__).parent.parent / ".env"
         load_dotenv(dotenv_path=root_env)
-        
+
         # Load env from database_work/db_credintials.env
         env_path = Path(__file__).parent.parent / "database_work" / "db_credintials.env"
         load_dotenv(dotenv_path=env_path)
@@ -65,14 +68,6 @@ class DocumentProcessorDaemon:
 
         self.db = DatabaseManager(db_configs)
         print("daemon_db_ready", flush=True)
-
-        from .backends.factory import create_processing_backend as _cpb
-        _backend_name = os.getenv("PROCESSING_BACKEND", "LEGACY")
-        self.backend = _cpb(_backend_name, db=self.db)
-        if _backend_name == "S13_V2":
-            self.logger.info("[S13_V2] backend active")
-            print("[S13_V2] backend active", flush=True)
-
         self.queue_manager = QueueManager(self.db)
         self.search_profiles = load_search_profiles()
         self.logger.info(f"Search profile config loaded: {self.search_profiles.summary()}")
@@ -80,7 +75,6 @@ class DocumentProcessorDaemon:
         self.downloader = Downloader(
             base_dir=Path(os.getenv("DOCUMENT_DOWNLOAD_DIR", "downloads")),
             db=self.db,
-            state_repo=self.backend.state,
         )
         self.parser_factory = ParserFactory()
         print("daemon_init_before_matcher", flush=True)
@@ -92,14 +86,14 @@ class DocumentProcessorDaemon:
         self.sleep_seconds = int(os.getenv("DAEMON_SLEEP_SECONDS", "5"))
         self.memory_limit_bytes = int(os.getenv("MEMORY_LIMIT_BYTES", str(4 * 1024 ** 3)))
         self.temp_max_bytes = int(os.getenv("TEMP_DIR_MAX_BYTES", str(30 * 1024 ** 3)))
-        
+
         self.failed_uploads_dir = Path(os.getenv("FAILED_UPLOADS_DIR", "failed_uploads"))
         self.failed_uploads_dir.mkdir(parents=True, exist_ok=True)
-        
+
         # Подключение вынесенных модулей
-        self.maintenance = DaemonMaintenance(getattr(self, "s13_backend", None), self.db, self.worker_id, self.memory_limit_bytes, self.logger)
+        self.maintenance = DaemonMaintenance(self.db, self.worker_id, self.memory_limit_bytes, self.logger)
         self.maintenance.set_downloader(self.downloader)
-        
+
         self.pipeline = TaskPipeline(
             db=self.db,
             downloader=self.downloader,
@@ -111,28 +105,26 @@ class DocumentProcessorDaemon:
             logger=self.logger,
             is_over_memory_limit=self.maintenance.over_memory_limit
         )
+        self.s13_pipeline = S13V2Pipeline(
+            parser_factory=self.parser_factory,
+            downloader=self.downloader,
+            logger=self.logger,
+            is_over_memory_limit=self.maintenance.over_memory_limit
+        )
+        self.match_engine = MatchEngine(self.db, self.logger)
+        self.s13_persistence = S13V2TaskPersistenceService(self.db, self.logger)
         self.morning_boost = MorningPriorityBoost()
         self.populate_coordinator = QueuePopulateCoordinator(
             self.queue_manager, self.morning_boost, self.logger
         )
 
-        from .priority_recalculator import PriorityRecalculator
-        self.priority_recalculator = PriorityRecalculator(
-            db=self.db,
-            logger=self.logger,
-            required_workdays=int(os.getenv("REQUIRED_WORKDAYS", "2")),
-            batch_size=int(os.getenv("PRIORITY_RECALC_BATCH", "500")),
-        )
-        self._last_full_recalc_date: Optional[str] = None
-        self._last_crm_bridge_ts: float = 0.0
-
         try:
             self.maintenance.apply_cpu_limits()
         except Exception:
             pass
-            
+
         self.maintenance.reset_stale_tasks()
-        
+
         try:
             if os.getenv("CLEAN_PREVIOUS_RUN_DATA") == "1":
                 self.maintenance.cleanup_previous_run_data()
@@ -153,7 +145,6 @@ class DocumentProcessorDaemon:
                 print(f"CRITICAL: OCR enabled but dependencies missing: {e}", flush=True)
                 raise
 
-        # ── Backend already initialized above ──
         print("daemon_init_done", flush=True)
 
     # ------------------------------------------------------------------
@@ -168,41 +159,6 @@ class DocumentProcessorDaemon:
         self.logger.info("=== Старт цикла демона ===")
         print("run_once_start", flush=True)
 
-        # ---- CRM → queue bridge (every hour, or first run) -----------------
-        import time as _time
-        crm_bridge_interval = int(os.getenv("CRM_BRIDGE_INTERVAL_SEC", "3600"))
-        if os.getenv("ENABLE_CRM_BRIDGE", "1") == "1":
-            if _time.monotonic() - self._last_crm_bridge_ts >= crm_bridge_interval:
-                try:
-                    from .crm_queue_bridge import CrmQueueBridge
-                    bridge = CrmQueueBridge(self.db, self.logger)
-                    bridge.run()
-                    self._last_crm_bridge_ts = _time.monotonic()
-                except Exception as exc:
-                    self.logger.error(f"[crm_bridge] Ошибка: {exc}", exc_info=True)
-        # ---------------------------------------------------------------------
-
-        # ---- Priority recalculation ----------------------------------------
-        # Full daily sweep at 06:00 (once per calendar day)
-        try:
-            today_str = datetime.now().strftime("%Y-%m-%d")
-            current_hour = datetime.now().hour
-            if current_hour >= 6 and self._last_full_recalc_date != today_str:
-                self.logger.info("[recalc] Ежедневный пересчёт приоритетов (06:00)...")
-                print("priority_recalc_start", flush=True)
-                n = self.priority_recalculator.run_full_sweep(force=False)
-                self._last_full_recalc_date = today_str
-                self.logger.info(f"[recalc] Готово, обновлено {n} задач")
-                print(f"priority_recalc_done: {n}", flush=True)
-            else:
-                # Fast sweep: only rows due for recalc (next_priority_recalc_at <= NOW())
-                n = self.priority_recalculator.run_full_sweep(force=False)
-                if n:
-                    self.logger.info(f"[recalc] Быстрый пересчёт: {n} задач")
-        except Exception as exc:
-            self.logger.error(f"[recalc] Ошибка пересчёта приоритетов: {exc}", exc_info=True)
-        # -----------------------------------------------------------------------
-
         try:
             if os.getenv("REQUEUE_ERRORS") == "1":
                 n = self.maintenance.requeue_error_tasks()
@@ -212,15 +168,12 @@ class DocumentProcessorDaemon:
             pass
 
         try:
-            if os.getenv("PROCESSING_BACKEND") == "S13_V2":
-                q_map = self.backend.queue.get_queue_stats() if hasattr(self.backend.queue, 'get_queue_stats') else {}
-            else:
-                q_rows = self.db.execute_query(
-                    "tender_monitor",
-                    "SELECT status, COUNT(*) FROM document_processing_queue GROUP BY status",
-                    fetch=True,
-                ) or []
-                q_map = {r[0]: int(r[1]) for r in q_rows}
+            q_rows = self.db.execute_query(
+                "tender_monitor",
+                "SELECT status, COUNT(*) FROM document_processing_queue GROUP BY status",
+                fetch=True,
+            ) or []
+            q_map = {r[0]: int(r[1]) for r in q_rows}
             pending_count = q_map.get('pending', 0)
             msg = f"Queue status: pending={pending_count} processing={q_map.get('processing',0)} error={q_map.get('error',0)}"
             self.logger.info(msg)
@@ -233,25 +186,6 @@ class DocumentProcessorDaemon:
             self.populate_coordinator.populate_if_needed(pending_count)
         except Exception as exc:
             self.logger.error(f"Ошибка при пополнении очереди: {exc}", exc_info=True)
-
-        # ── S13_V2 claim branch ────────────────────────────────────────────────
-        if os.getenv("PROCESSING_BACKEND") == "S13_V2":
-            try:
-                s13_tasks = self.backend.queue.claim_batch(
-                    worker_id=self.worker_id,
-                    batch_size=self.batch_size,
-                )
-            except Exception as exc:
-                self.logger.error(f"[S13_V2] Queue claim failed: {exc}", exc_info=True)
-                return False
-            if not s13_tasks:
-                self.logger.info("[S13_V2] No tasks, sleeping...")
-                print("[S13_V2] No tasks, sleeping...", flush=True)
-                return False
-            for _t in s13_tasks:
-                self._process_s13v2_task(_t)
-            return True
-        # ───────────────────────────────────────────────────────────────────────
 
         tasks = []
         try:
@@ -367,54 +301,57 @@ class DocumentProcessorDaemon:
 
             try:
                 self.logger.info(f"[{task_id}] Начало обработки задачи: {contract_reg_number}")
-                proc_result = self.pipeline.process_task_with_files(
-                    task_id, contract_reg_number, table_source, files
-                )
-                tender_id = self.pipeline.resolve_tender_id(
-                    contract_reg_number, table_source
-                )
-                rows = []
-                status_read_failed = False
-                if tender_id is not None:
-                    try:
-                        rows = self.backend.state.list_file_statuses(
-                            tender_id, table_source, raise_on_error=True
-                        )
-                    except Exception as status_exc:
-                        status_read_failed = True
-                        self.logger.error(
-                            f"[{task_id}] completion status read failed: "
-                            f"{type(status_exc).__name__}"
-                        )
 
-                decision = proc_result.apply_completion(
-                    self.queue_manager,
-                    task_id,
-                    rows,
-                    status_read_failed=status_read_failed,
-                    task_eligible=tender_id is not None,
-                )
-
-                if not decision.allowed:
-                    self.logger.warning(
-                        f"[{task_id}] completion blocked: "
-                        f"policy={decision.policy_version} "
-                        f"reasons={decision.blocking_reasons} "
-                        f"statuses={decision.observed_statuses}"
+                if task.get("pipeline_generation") == "S13_V2":
+                    proc_result = self.s13_pipeline.process_task(
+                        queue_id=task_id,
+                        procurement_id=task["procurement_id"],
+                        contract_reg_number=contract_reg_number,
+                        table_source=table_source,
+                        files=files,
+                        match_engine=self.match_engine
                     )
-                    if "document_error_memory" in decision.blocking_reasons or (
-                        "document_retryable_error" in decision.blocking_reasons
-                    ):
-                        print(" ERROR: completion blocked", flush=True)
+
+                    if proc_result.outcome == "FAILED":
+                        self.queue_manager.mark_error(task_id, proc_result.error_message)
+                        print(f" ERROR: {proc_result.error_message}", flush=True)
                     else:
+                        self.s13_persistence.save_result(proc_result)
+                        self.logger.info(f"[{task_id}] S13_V2 Задача завершена успешно (atomically persisted)")
+                        print(" DONE (S13_V2)", flush=True)
+                else:
+                    # Legacy execution path
+                    proc_result = self.pipeline.process_task_with_files(
+                        task_id, contract_reg_number, table_source, files
+                    )
+                    tender_id = self.pipeline.resolve_tender_id(
+                        contract_reg_number, table_source
+                    )
+                    db_ok = True
+                    if tender_id is not None:
+                        rows = self.downloader.registry.list_file_statuses(
+                            tender_id, table_source
+                        )
+                        db_ok = can_complete_tender_files(rows)
+
+                    if proc_result.needs_requeue or not db_ok:
+                        self.queue_manager.mark_requeue_pending(
+                            task_id, proc_result.summary_message() or "incomplete"
+                        )
                         self.logger.info(
                             f"[{task_id}] Задача возвращена в очередь: "
                             f"{proc_result.summary_message()}"
                         )
                         print(" PENDING_RESUME", flush=True)
-                else:
-                    self.logger.info(f"[{task_id}] Задача завершена успешно")
-                    print(" DONE", flush=True)
+                    elif proc_result.retryable_error_files:
+                        self.queue_manager.mark_error(
+                            task_id, proc_result.summary_message()
+                        )
+                        print(f" ERROR: {proc_result.summary_message()}", flush=True)
+                    else:
+                        self.queue_manager.mark_completed(task_id)
+                        self.logger.info(f"[{task_id}] Задача завершена успешно")
+                        print(" DONE", flush=True)
             except Exception as exc:
                 message = str(exc)
                 if "Не удалось скачать ни один документ" in message:
@@ -453,68 +390,6 @@ class DocumentProcessorDaemon:
         download_executor.shutdown(wait=True)
         print("run_once_done", flush=True)
         return True
-
-    def _process_s13v2_task(self, task: dict) -> None:
-        """
-        Process one S13_V2 task: download → parse+match → evidence → complete.
-        """
-        task_id = task["id"]
-        procurement_id = task["procurement_id"]
-        source_table = task.get("source_table", "")
-        contract_number = task.get("contract_number", "") or ""
-        backend = self.backend
-        self.logger.info(
-            f"[S13_V2][{task_id}] Processing procurement={procurement_id}"
-        )
-        print(f"[S13_V2][{task_id}] Start procurement={procurement_id}", flush=True)
-        try:
-            try:
-                files = self.pipeline.prefetch_task(
-                    task_id, contract_number, source_table
-                )
-            except Exception as dl_exc:
-                msg = str(dl_exc)
-                if "NoDocumentLinksError" in type(dl_exc).__name__:
-                    backend.queue.mark_no_links(task_id, msg)
-                    return
-                raise
-            if not files:
-                backend.queue.mark_completed(task_id)
-                return
-            task_row = {
-                "id": task_id,
-                "contract_reg_number": contract_number,
-                "table_source": source_table,
-                "procurement_id": procurement_id,
-            }
-            self.pipeline.process_task_with_files(task_id, contract_number, source_table, files)
-            try:
-                backend.results.persist_evidence(
-                    procurement_id=procurement_id,
-                    queue_id=task_id,
-                    match_id=0,
-                    category_code="processed",
-                    evidence_score=1.0,
-                    match_count=len(files),
-                    worker_id=self.worker_id,
-                    next_stage="STRUCTURED_EXTRACTION_PENDING",
-                )
-            except Exception as ev_exc:
-                self.logger.warning(
-                    f"[S13_V2][{task_id}] Evidence write failed: {ev_exc}"
-                )
-            backend.queue.mark_completed(task_id)
-            print(f"[S13_V2][{task_id}] COMPLETED", flush=True)
-        except Exception as exc:
-            msg = str(exc)[:1000]
-            self.logger.error(
-                f"[S13_V2][{task_id}] FAILED: {msg}", exc_info=True
-            )
-            print(f"[S13_V2][{task_id}] FAILED", flush=True)
-            try:
-                backend.queue.mark_failed(task_id, msg)
-            except Exception:
-                pass
 
     def run_forever(self) -> None:
         self.logger.info("Демон запущен в режиме непрерывной работы")

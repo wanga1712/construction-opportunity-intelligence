@@ -29,10 +29,10 @@ class DaemonMaintenance:
         """При запуске откатывает зависшие задачи своего воркера из processing → pending."""
         try:
             minutes = int(os.getenv("STALE_TASK_MINUTES", "60"))
-            
+
             # 1. Сброс задач в очереди
             self.backend.queue.reset_stale(stale_minutes=minutes, worker_id=self.worker_id)
-            
+
             # 2. Сброс статусов файлов в processed_documents (или file_processing_state)
             try:
                 if self.downloader and hasattr(self.downloader, 'registry'):
@@ -40,7 +40,7 @@ class DaemonMaintenance:
                 self.backend.state.reset_stale(worker_id=self.worker_id)
             except Exception as e:
                 self.logger.warning(f"Ошибка сброса обработанных файлов: {e}")
-                
+
             self.logger.info(f"[worker {self.worker_id}] Зависшие задачи и файлы сброшены")
         except Exception as e:
             self.logger.error(f"Failed to reset stale tasks: {e}")

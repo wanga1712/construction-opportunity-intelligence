@@ -19,34 +19,34 @@ class ArchiveExtractor:
         import os
         if not name:
             return "unknown_file"
-        
+
         forbidden_chars = [
             "/", "\\", ":", "*", "?", "<", ">", "|", '"',
             "+", "%", "#", "&", "{", "}", "[", "]", "=", ";", ",", "'", "@", "!", "$", "`", "^"
         ]
-        
+
         cleaned = name
         for char in forbidden_chars:
             cleaned = cleaned.replace(char, "_")
-            
+
         cleaned = "".join(ch for ch in cleaned if ord(ch) >= 32)
         cleaned = cleaned.replace("(", "_").replace(")", "_").replace("~", "_")
-        
+
         while "__" in cleaned:
             cleaned = cleaned.replace("__", "_")
-            
+
         cleaned = cleaned.strip(" ._")
-        
+
         if not cleaned:
             return "unknown_file"
-            
+
         if len(cleaned) > 200:
             base, ext = os.path.splitext(cleaned)
-            if len(ext) > 10: 
+            if len(ext) > 10:
                 ext = ""
             limit = 200 - len(ext)
             cleaned = base[:limit] + ext
-            
+
         return cleaned
 
     def is_archive(self, path: Path) -> bool:
@@ -71,7 +71,7 @@ class ArchiveExtractor:
         Части .r01, .r02 и т.д., а также .part2.rar, .part3.rar — не точки входа."""
         suffix = path.suffix.lower()
         name = path.name.lower()
-        
+
         # Проверка для нового формата именования WinRAR (.partN.rar)
         if ".part" in name and name.endswith(".rar"):
             # Точкой входа считается только part1.rar (или part01.rar и т.д.)
@@ -152,7 +152,7 @@ class ArchiveExtractor:
         if depth > MAX_DEPTH:
             self.logger.warning(f"Достигнут лимит глубины вложенности архивов ({MAX_DEPTH}): {archive_path.name}")
             return []
-        
+
         if archive_path.suffix.lower() == ".zip":
             raw = self._extract_zip_and_collect(archive_path, dest_dir)
         elif self._is_rar_entry_point(archive_path):

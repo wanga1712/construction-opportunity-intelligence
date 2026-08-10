@@ -16,7 +16,6 @@ from dataclasses import dataclass
 from typing import Optional
 
 from .queue_repository import QueueRepository, S13V2QueueRepository, LegacyQueueRepository
-from .s13_results import S13V2ResultStore
 from .state_repository import ProcessingStateRepository, LegacyStateRepository, S13V2StateRepository
 
 
@@ -36,7 +35,7 @@ def create_processing_backend(backend_name: str, db=None) -> ProcessingBackend:
     if backend_name == "S13_V2":
         dsn = _load_s13_dsn()
         queue_repo = S13V2QueueRepository(dsn)
-        result_store = S13V2ResultStore(dsn)
+        result_store = None
         state_repo = S13V2StateRepository(dsn, pipeline_generation="S13_V2")
         _verify_s13_connection(queue_repo)
         return ProcessingBackend(queue=queue_repo, results=result_store, state=state_repo)

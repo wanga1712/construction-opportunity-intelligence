@@ -103,6 +103,7 @@ def test_registry_strict_read_propagates_failure(monkeypatch) -> None:
         registry_module.ProcessedRegistry
     )
     manager.db_alias = "test"
+    manager.repo = types.SimpleNamespace(mark_task_completed=lambda task_id: calls.append((["SET status = 'completed'"], {})))
     manager.db = types.SimpleNamespace(
         execute_query=lambda *args, **kwargs: (_ for _ in ()).throw(
             RuntimeError("read failed")
@@ -182,6 +183,7 @@ def test_final_boundary_blocks_direct_call_without_facts(monkeypatch) -> None:
     queue_module = _load_queue_manager(monkeypatch)
     calls: list[tuple] = []
     manager = queue_module.QueueManager.__new__(queue_module.QueueManager)
+    manager.repo = types.SimpleNamespace(mark_task_completed=lambda task_id: calls.append((["SET status = 'completed'"], {})))
     manager.db = types.SimpleNamespace(
         execute_query=lambda *args, **kwargs: calls.append((args, kwargs))
     )
@@ -197,6 +199,7 @@ def test_final_boundary_runs_update_only_for_success_and_is_idempotent(
     queue_module = _load_queue_manager(monkeypatch)
     calls: list[tuple] = []
     manager = queue_module.QueueManager.__new__(queue_module.QueueManager)
+    manager.repo = types.SimpleNamespace(mark_task_completed=lambda task_id: calls.append((["SET status = 'completed'"], {})))
     manager.db = types.SimpleNamespace(
         execute_query=lambda *args, **kwargs: calls.append((args, kwargs))
     )

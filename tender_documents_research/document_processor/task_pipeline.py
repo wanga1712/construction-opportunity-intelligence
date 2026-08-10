@@ -12,7 +12,6 @@ from document_processor.resume_constants import max_resume_attempts
 from document_processor.task_completion import can_complete_tender_files
 from document_processor.task_result import TaskProcessResult
 from document_processor.registry_contract_locator import RegistryContractLocator
-from document_processor.contract_classifier import ContractClassifier
 
 
 class NoDocumentLinksError(RuntimeError):
@@ -52,7 +51,6 @@ class TaskPipeline:
         self.logger = logger
         self.is_over_memory_limit = is_over_memory_limit
         self.contract_locator = RegistryContractLocator(db, "tender_monitor", logger)
-        self.classifier = ContractClassifier(db, logger)
 
     def resolve_tender_id(self, contract_reg_number: str, table_source: str) -> Optional[int]:
         try:
@@ -169,11 +167,6 @@ class TaskPipeline:
         files: list[Path],
     ) -> TaskProcessResult:
         self.logger.info(f"[{task_id}] Получено файлов: {len(files)}")
-        try:
-            category_scores = self.classifier.classify(contract_reg_number, table_source)
-        except Exception as _clf_exc:
-            self.logger.warning(f"[{task_id}] classifier error: {_clf_exc}")
-            category_scores = {}
         if not files:
             tender_id = self.resolve_tender_id(contract_reg_number, table_source)
             if tender_id is not None:
@@ -248,7 +241,7 @@ class TaskPipeline:
                         if became_error:
                             if text:
                                 matches = self.matcher.process_text(
-                                    text, line_meta=line_meta, category_scores=category_scores
+                                    text, line_meta=line_meta
                                 )
                                 if matches:
                                     self.matcher.save_matches(
@@ -270,7 +263,7 @@ class TaskPipeline:
                         result.pending_resume_files.append(path.name)
 
                     if text:
-                        matches = self.matcher.process_text(text, line_meta=line_meta, category_scores=category_scores)
+                        matches = self.matcher.process_text(text, line_meta=line_meta)
                         if matches and tender_id is not None:
                             self.matcher.save_matches(
                                 tender_id,
@@ -294,7 +287,7 @@ class TaskPipeline:
                     )
                     matches = []
                 else:
-                    matches = self.matcher.process_text(text, line_meta=line_meta, category_scores=category_scores)
+                    matches = self.matcher.process_text(text, line_meta=line_meta)
 
                 if not matches:
                     if tender_id is not None:
@@ -399,3 +392,4 @@ class TaskPipeline:
                     )
 
         return result
+

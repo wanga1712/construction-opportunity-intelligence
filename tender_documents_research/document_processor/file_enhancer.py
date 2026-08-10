@@ -25,7 +25,7 @@ class FileEnhancer:
         contract_safe = self._sanitize_contract(contract_number)
         if not contract_safe:
             return file_path
-        
+
         # Check if already prefixed
         if file_path.name.startswith(f"{contract_safe}_"):
             return file_path

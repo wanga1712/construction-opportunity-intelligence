@@ -28,7 +28,7 @@ class Downloader:
     def __init__(self, base_dir: Optional[Path] = None, db: Optional[DatabaseManager] = None, db_alias: str = "tender_monitor", state_repo=None):
         self.base_dir = base_dir or Path("downloads")
         self.base_dir.mkdir(parents=True, exist_ok=True)
-        
+
         if db is None:
             db_configs = {
                 "tender_monitor": {
@@ -40,27 +40,27 @@ class Downloader:
                 }
             }
             db = DatabaseManager(db_configs)
-        
+
         self.db = db
         self.db_alias = db_alias
         self.logger = get_logger()
-        
+
         # Инициализация подмодулей
         proxy_url = os.getenv("DOCUMENT_PROXY_URL")
         proxy_mode = os.getenv("DOCUMENT_PROXY_MODE", "endpoint")
         self.http_client = HttpFileClient(proxy_url, proxy_mode, self.logger)
-        
+
         self.archive_extractor = ArchiveExtractor(self.logger)
-        
+
         yandex_token = os.getenv("YANDEX_DISK_TOKEN")
         yandex_webdav_user = os.getenv("YANDEX_DISK_WEBDAV_USER")
         yandex_webdav_password = os.getenv("YANDEX_DISK_WEBDAV_PASSWORD")
         yandex_path_template = os.getenv("YANDEX_DISK_PATH_TEMPLATE", "{base}/{registry_type}/{contract_number}")
         self.yandex_client = YandexDiskClient(
-            yandex_token, yandex_webdav_user, yandex_webdav_password, 
+            yandex_token, yandex_webdav_user, yandex_webdav_password,
             yandex_path_template, self.logger, self.http_client
         )
-        
+
         self.state_repo = state_repo
         self.contract_locator = RegistryContractLocator(self.db, self.db_alias, self.logger)
         self.links_loader = DocumentationLinksLoader(self.db, self.db_alias)
@@ -138,17 +138,17 @@ class Downloader:
     def download_and_extract(self, task_id: int, links: List[Tuple[str, Optional[str]]], registry_type: Optional[str] = None, contract_number: Optional[str] = None, table_source: Optional[str] = None) -> List[Path]:
         task_dir = self.base_dir / str(task_id)
         task_dir.mkdir(parents=True, exist_ok=True)
-        
+
         try:
             max_links = int(os.getenv("DOCUMENT_MAX_LINKS", "0"))
         except Exception:
             max_links = 0
         effective_links = links[:max_links] if max_links and max_links > 0 else links
         self.logger.info(f"[{task_id}] Начинаю скачивание {len(effective_links)} ссылок")
-        
+
         raw_files: List[Path] = []
         remote_dir, safe_prefix = self.yandex_client.build_remote_dir_and_prefix(registry_type, contract_number, None)
-        
+
         tender_id: Optional[int] = None
         if table_source and contract_number:
             tender_id = self.contract_locator.resolve_tender_id(contract_number, table_source)
@@ -157,7 +157,7 @@ class Downloader:
             max_workers = int(os.getenv("DOWNLOAD_PARALLEL", "4"))
         except ValueError:
             max_workers = 4
-            
+
         # Этап 1: скачиваем ВСЕ файлы (без распаковки)
         with ThreadPoolExecutor(max_workers=max_workers) as executor:
             futures = []
@@ -167,7 +167,7 @@ class Downloader:
                     task_id, task_dir, url, db_file_name,
                     tender_id, table_source, remote_dir, safe_prefix
                 ))
-            
+
             for future in as_completed(futures):
                 try:
                     result_files = future.result()
@@ -225,34 +225,34 @@ class Downloader:
         import re
         suffix = path.suffix.lower()
         name = path.name.lower()
-        
+
         # Старый формат (.r01, .r02...)
         if re.match(r'^\.r\d{2,}$', suffix):
             return True
-            
+
         # Новый формат (.partN.rar)
         if ".part" in name and name.endswith(".rar"):
             # Если это .part1.rar (или part01.rar), то это НЕ "часть" в контексте пропуска, а точка входа
             is_entry = bool(re.search(r'\.part0*1\.rar$', name))
             return not is_entry
-            
+
         return False
 
     def _process_single_link(self, task_id: int, task_dir: Path, url: str, db_file_name: Optional[str],
                              tender_id: Optional[int], table_source: Optional[str],
                              remote_dir: Optional[str], safe_prefix: Optional[str]) -> List[Path]:
         self.logger.debug(f"[{task_id}] Обработка ссылки: {url} (имя из БД: {db_file_name})")
-        
+
         url_derived_name = self.http_client.sanitize_name(self.http_client.predict_filename(url))
         safe_predicted = self.http_client.sanitize_name(db_file_name) if db_file_name else url_derived_name
-        
+
         import hashlib
         url_hash = hashlib.sha256(url.encode('utf-8')).hexdigest()
-        
+
         if tender_id is not None and table_source and self.state_repo:
             status_row = self.state_repo.get_file_status(tender_id, table_source, safe_predicted, url_hash)
             current_status = status_row[0] if status_row else None
-            
+
             # S13_V2 uses UPPERCASE, Legacy uses lowercase for processing. Normalize here for checks.
             check_status = current_status.upper() if current_status else None
             if check_status == "PROCESSING":
@@ -276,7 +276,7 @@ class Downloader:
 
         ok_file: Optional[Path] = None
         is_rar_part = self._is_rar_part(Path(safe_predicted))
-        
+
         # Use DB filename if available as the suggested filename for download
         suggested_name_for_download = self.http_client.sanitize_name(db_file_name) if db_file_name else None
 
@@ -286,7 +286,7 @@ class Downloader:
             if local_path is None:
                 self.logger.warning(f"[{task_id}] Не удалось скачать: {url}")
                 continue
-            
+
             if tender_id is not None and table_source and self.state_repo:
                 # We use the legacy string "processing" which S13_V2 should handle or map, or we pass what state_repo expects.
                 # Since state_repo interface doesn't strictly define enums, let's pass "PROCESSING".
@@ -294,7 +294,7 @@ class Downloader:
                 # However, previous code passed "processing" directly. We will pass "PROCESSING".
                 # For S13_V2, document_files CHECK constraint expects 'PENDING', 'COMPLETED', 'FAILED', 'SKIPPED'.
                 # Wait! `document_files` doesn't have 'PROCESSING'. The download_status only has 4 values.
-                # So in S13_V2, we might not need to mark it as processing at the file level? 
+                # So in S13_V2, we might not need to mark it as processing at the file level?
                 # Let's check the schema for document_files. It has PENDING, COMPLETED, FAILED, SKIPPED.
                 # So we should pass 'PENDING' if we just want to mark it as starting? No, if it's downloading, there's no PROCESSING.
                 # If backend is S13_V2, maybe mark it as something else or just skip this.
@@ -317,7 +317,7 @@ class Downloader:
                     self.logger.debug(f"[{task_id}] Файл переименован (URL → БД): {safe_predicted}")
                 except Exception:
                     pass
-            
+
             ok_file = local_path
             break
 
@@ -336,12 +336,12 @@ class Downloader:
         """
         host = self.http_client.extract_host(url) or ""
         is_zakupki_filestore = "zakupki.gov.ru" in host and "/filestore/public/1.0/download/" in url
-        
+
         # Задержка между запросами
         download_delay = float(os.getenv("DOWNLOAD_DELAY_SECONDS", "2.0"))
         max_retries = max(1, int(os.getenv("MAX_DOWNLOAD_RETRIES", "2")))
         bypass_proxy = os.getenv("BYPASS_PROXY_FOR_LARGE_FILES", "true").lower() == "true"
-        
+
         proxy_url = os.getenv("DOCUMENT_PROXY_URL")
         proxy_mode = (os.getenv("DOCUMENT_PROXY_MODE") or "endpoint").lower()
         use_reverse_proxy = proxy_mode in ("reverse", "revproxy", "reverse_proxy")
@@ -370,10 +370,10 @@ class Downloader:
                         return direct
                 except Exception as e:
                     self.logger.warning(f"Прямое скачивание неуспешно (попытка {attempt + 1}): {e}")
-                
+
                 if attempt < max_retries - 1:
                     time.sleep(download_delay * (attempt + 1))
-        
+
         # Стратегия 2: Через прокси (только для небольших файлов)
         max_proxy_size = int(os.getenv("MAX_PROXY_FILE_SIZE", "10485760"))
 
@@ -390,7 +390,7 @@ class Downloader:
             verify = self.http_client._get_verify_param()
             head_response = self.http_client.session.head(url, timeout=10, allow_redirects=True, headers=headers, verify=verify)
             content_length = head_response.headers.get("Content-Length")
-            
+
             if content_length and int(content_length) > max_proxy_size:
                 self.logger.info(f"Файл слишком большой для прокси ({content_length} байт), пропускаем прокси")
             else:
@@ -401,7 +401,7 @@ class Downloader:
                     return path
         except Exception as e:
             self.logger.warning(f"Ошибка при скачивании через прокси: {e}")
-        
+
         # Стратегия 3: HTML страницы и редиректы
         time.sleep(download_delay)
         if url.lower().endswith(".html") or "download.html" in url.lower() or url.split("?", 1)[0].lower().endswith(".html"):
@@ -413,7 +413,7 @@ class Downloader:
                     return html_path
             except Exception as e:
                 self.logger.warning(f"Ошибка обработки HTML: {e}")
-        
+
         # Стратегия 4: Последняя попытка прямого скачивания
         if not bypass_proxy:  # Если еще не пробовали
             try:
@@ -424,7 +424,7 @@ class Downloader:
                     return direct_final
             except Exception as e:
                 self.logger.warning(f"Финальное прямое скачивание неуспешно: {e}")
-        
+
         self.logger.error(f"❌ Не удалось скачать файл: {url}")
         return None
 

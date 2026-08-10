@@ -104,7 +104,7 @@ class YandexDiskClient:
             current += "/" + part
             safe_current = self._quote_path(current)
             url = self._webdav_url(safe_current)
-            
+
             exists = False
             for attempt_prop in range(3):
                 try:
@@ -129,7 +129,7 @@ class YandexDiskClient:
                     except Exception:
                         pass
                 time.sleep(1)
-                
+
             if exists:
                 continue
 
@@ -155,7 +155,7 @@ class YandexDiskClient:
                     except Exception:
                         pass
                 time.sleep(1)
-                
+
             if not created and not exists:
                 try:
                     self.logger.error(f"Не удалось создать директорию WebDAV {url} после 3 попыток")
@@ -215,7 +215,7 @@ class YandexDiskClient:
         file_size = local_path.stat().st_size
         # Timeout: connect 30s, read: min 300s (5 min), or 1s per 10KB (conservative)
         read_timeout = max(300, file_size // 10000)
-        
+
         self.logger.info(f"WebDAV upload start: {local_path.name} -> {url} (size={file_size}, read_timeout={read_timeout})")
 
         for attempt in range(2):
@@ -224,11 +224,11 @@ class YandexDiskClient:
                 with requests.Session() as session:
                     with local_path.open("rb") as f:
                         r = session.put(
-                            url, 
-                            data=f, 
-                            auth=(self.yandex_webdav_user, self.yandex_webdav_password), 
-                            headers=headers, 
-                            proxies=proxies, 
+                            url,
+                            data=f,
+                            auth=(self.yandex_webdav_user, self.yandex_webdav_password),
+                            headers=headers,
+                            proxies=proxies,
                             timeout=(30, read_timeout)
                         )
                 if 200 <= r.status_code < 300:
@@ -239,9 +239,9 @@ class YandexDiskClient:
                 self.logger.warning(f"WebDAV PUT timeout для {url} (попытка {attempt+1}/2)")
             except Exception as e:
                 self.logger.warning(f"WebDAV PUT ошибка {e} для {url} (попытка {attempt+1}/2)")
-            
+
             time.sleep(5)  # Wait a bit before retry
-            
+
         self.logger.error(f"Не удалось загрузить файл WebDAV после 2 попыток: {local_path.name}")
         return False
 

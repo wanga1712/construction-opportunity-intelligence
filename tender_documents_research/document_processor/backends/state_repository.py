@@ -52,8 +52,8 @@ class LegacyStateRepository(ProcessingStateRepository):
         """
         try:
             self.db.execute_query(
-                self.db_alias, 
-                sql, 
+                self.db_alias,
+                sql,
                 (procurement_id, table_source, file_name, status, datetime.now())
             )
         except Exception as e:
@@ -69,8 +69,8 @@ class LegacyStateRepository(ProcessingStateRepository):
         """
         try:
             self.db.execute_query(
-                self.db_alias, 
-                sql, 
+                self.db_alias,
+                sql,
                 (procurement_id, table_source, file_name, status, error_message, datetime.now())
             )
         except Exception as e:
@@ -124,7 +124,7 @@ class S13V2StateRepository(ProcessingStateRepository):
     def get_file_status(self, procurement_id: int, table_source: str, file_name: str, url_hash: str) -> Optional[Tuple[str]]:
         if not url_hash:
             return None
-            
+
         sql = """
             SELECT download_status
             FROM document_files
@@ -146,7 +146,7 @@ class S13V2StateRepository(ProcessingStateRepository):
     def mark_file_status(self, procurement_id: int, table_source: str, file_name: str, url_hash: str, status: str, worker_id: int = None):
         if not url_hash:
             return
-            
+
         sql = """
             UPDATE document_files
             SET download_status = %s,
@@ -165,7 +165,7 @@ class S13V2StateRepository(ProcessingStateRepository):
     def finalize_file_status(self, procurement_id: int, table_source: str, file_name: str, url_hash: str, success: bool, error_message: str = None):
         if not url_hash:
             return
-            
+
         status = 'COMPLETED' if success else 'FAILED'
         sql = """
             UPDATE document_files

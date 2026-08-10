@@ -38,7 +38,7 @@ class QueueRepository(abc.ABC):
     @abc.abstractmethod
     def reset_stale(self, stale_minutes: int, worker_id: int) -> int:
         pass
-        
+
     @abc.abstractmethod
     def requeue_error_tasks(self) -> int:
         pass
@@ -195,12 +195,12 @@ class S13V2QueueRepository(QueueRepository):
         conn = self._get_conn()
         with conn.cursor() as cur:
             cur.execute(
-                \"\"\"UPDATE document_processing_queue
+                """UPDATE document_processing_queue
                       SET status='PENDING', worker_id=NULL, started_at=NULL,
                           last_error='reset_stale'
                     WHERE status='PROCESSING'
                       AND (worker_id = %s OR started_at < NOW() - (%s || ' minutes')::interval)
-                RETURNING id\"\"\",
+                RETURNING id""",
                 (worker_id, str(stale_minutes)),
             )
             count = cur.rowcount
@@ -211,17 +211,17 @@ class S13V2QueueRepository(QueueRepository):
         conn = self._get_conn()
         with conn.cursor() as cur:
             cur.execute(
-                \"\"\"UPDATE document_processing_queue
+                """UPDATE document_processing_queue
                       SET status='PENDING', worker_id=NULL, started_at=NULL
                     WHERE status='FAILED'
-                RETURNING id\"\"\"
+                RETURNING id"""
             )
             count = cur.rowcount
         conn.commit()
         return count
 
     def requeue_no_links_with_links(self) -> int:
-        # S13_V2 currently doesn't manage no_links requeue logic this way, 
+        # S13_V2 currently doesn't manage no_links requeue logic this way,
         # or it could be implemented later.
         return 0
 
@@ -232,21 +232,21 @@ class S13V2QueueRepository(QueueRepository):
         # Dummy stats or actual local stats
         conn = self._get_conn()
         with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
-            cur.execute(\"\"\"
+            cur.execute("""
                 SELECT status, COUNT(*) as count
                 FROM document_processing_queue
                 GROUP BY status
-            \"\"\")
+            """)
             rows = cur.fetchall()
         return [dict(r) for r in rows]
 
     def get_stale_count(self, stale_minutes: int) -> int:
         conn = self._get_conn()
         with conn.cursor() as cur:
-            cur.execute(\"\"\"
+            cur.execute("""
                 SELECT COUNT(*) FROM document_processing_queue
                 WHERE status='PROCESSING' AND started_at < NOW() - (%s || ' minutes')::interval
-            \"\"\", (str(stale_minutes),))
+            """, (str(stale_minutes),))
             row = cur.fetchone()
         return row[0] if row else 0
 
@@ -275,16 +275,16 @@ class LegacyQueueRepository(QueueRepository):
         if force_table:
             where_extra += " AND table_source = %s"
             extra_params.append(force_table)
-            
-        # We also need the table_source filtering from allowed sources. 
+
+        # We also need the table_source filtering from allowed sources.
         # But wait, QueueManager does that before calling claim.
-        # It's better if QueueManager passes where_extra and extra_params down, 
+        # It's better if QueueManager passes where_extra and extra_params down,
         # or we just rely on the existing queue_claim.py
-        
+
         from document_processor.queue_claim import claim_batch_ids
         from document_processor.queue_priority import QueuePriorityPolicy
         priority = QueuePriorityPolicy()
-        
+
         rows = claim_batch_ids(
             db_execute=lambda q, p=None, fetch=True: self.db.execute_query(self.db_alias, q, p, fetch=fetch),
             worker_id=worker_id,
@@ -323,7 +323,7 @@ class LegacyQueueRepository(QueueRepository):
         self.db.execute_query(self.db_alias, sql, (message or None, task_id))
 
     def reset_stale(self, stale_minutes: int, worker_id: int) -> int:
-        sql = f\"\"\"
+        sql = f"""
             UPDATE document_processing_queue
             SET status = 'pending', worker_id = NULL, started_at = NULL
             WHERE status = 'processing'
@@ -332,12 +332,12 @@ class LegacyQueueRepository(QueueRepository):
                  OR (started_at IS NOT NULL AND started_at < NOW() - INTERVAL '{stale_minutes} minutes')
               )
             RETURNING id
-        \"\"\"
+        """
         rows = self.db.execute_query(self.db_alias, sql, (worker_id,), fetch=True) or []
         return len(rows)
 
     def requeue_error_tasks(self) -> int:
-        sql = \"\"\"
+        sql = """
             WITH upd AS (
                 UPDATE document_processing_queue
                 SET status = 'pending', worker_id = NULL, started_at = NULL
@@ -345,12 +345,12 @@ class LegacyQueueRepository(QueueRepository):
                 RETURNING id
             )
             SELECT COUNT(*) FROM upd
-        \"\"\"
+        """
         rows = self.db.execute_query(self.db_alias, sql, fetch=True) or []
         return int(rows[0][0]) if rows else 0
 
     def requeue_no_links_with_links(self) -> int:
-        sql = \"\"\"
+        sql = """
             WITH has_links AS (
                 SELECT DISTINCT q.id
                 FROM document_processing_queue q
@@ -378,7 +378,7 @@ class LegacyQueueRepository(QueueRepository):
                 RETURNING id
             )
             SELECT COUNT(*) FROM updated
-        \"\"\"
+        """
         rows = self.db.execute_query(self.db_alias, sql, fetch=True) or []
         return int(rows[0][0]) if rows else 0
 
@@ -395,17 +395,17 @@ class LegacyQueueRepository(QueueRepository):
                 pass
 
     def get_queue_stats(self, worker_id: int) -> List[Dict[str, Any]]:
-        # In reality DaemonMaintenance doesn't fetch stats this way, 
+        # In reality DaemonMaintenance doesn't fetch stats this way,
         # but if needed, we return it.
         return []
 
     def get_stale_count(self, stale_minutes: int) -> int:
-        sql = f\"\"\"
+        sql = f"""
             SELECT COUNT(*) FROM document_processing_queue
             WHERE status = 'processing'
-              AND started_at IS NOT NULL 
+              AND started_at IS NOT NULL
               AND started_at < NOW() - INTERVAL '{stale_minutes} minutes'
-        \"\"\"
+        """
         rows = self.db.execute_query(self.db_alias, sql, fetch=True) or []
         return int(rows[0][0]) if rows else 0
 

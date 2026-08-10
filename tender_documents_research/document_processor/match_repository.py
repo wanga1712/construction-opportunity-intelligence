@@ -48,7 +48,7 @@ class MatchRepository:
     ) -> None:
         if not matches:
             return
-        
+
         detail_schema_columns = self._detect_detail_schema()
 
         try:
@@ -190,10 +190,10 @@ class MatchRepository:
                             continue
                     except Exception:
                         pass
-                
+
                 cols: list[str] = ["match_id", "product_name"]
                 vals: list[object] = [match_id, keyword]
-                
+
                 if "matched_display_text" in detail_schema_columns:
                     cols.append("matched_display_text")
                     vals.append(m.get("matched_display_text") or matched_line_text)
@@ -208,7 +208,7 @@ class MatchRepository:
                 vals.append(score)
                 cols.append("matched_keywords")
                 vals.append([keyword])
-                
+
                 if "line_number" in detail_schema_columns:
                     cols.append("line_number")
                     vals.append(line_number)
@@ -227,7 +227,7 @@ class MatchRepository:
                 if "cell_address" in detail_schema_columns:
                     cols.append("cell_address")
                     vals.append(m.get("cell_address"))
-                    
+
                 placeholders = ", ".join(["%s"] * len(vals))
                 col_list = ", ".join(cols)
                 sql_detail = f"""

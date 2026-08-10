@@ -9,7 +9,7 @@ def validate_open(path: Path, logger=None) -> bool:
     """
     logger = logger or get_logger()
     ext = path.suffix.lower()
-    
+
     try:
         if ext == ".pdf":
             from PyPDF2 import PdfReader

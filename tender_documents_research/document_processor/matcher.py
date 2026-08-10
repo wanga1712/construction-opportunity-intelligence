@@ -142,7 +142,7 @@ class KeywordMatcher:
         if path_env:
             candidates.append(Path(path_env))
         candidates.append(Path("keyword_thresholds.json"))
-        
+
         for path in candidates:
             if not path.exists():
                 continue
@@ -154,7 +154,7 @@ class KeywordMatcher:
                             self.custom_thresholds[k.lower().strip()] = int(v)
             except Exception as e:
                 self.logger.error(f"Ошибка загрузки порогов из {path}: {e}")
-        
+
         if self.custom_thresholds:
             self.logger.info(f"Загружено {len(self.custom_thresholds)} индивидуальных порогов совпадения")
             # Добавляем фразы из порогов в общий список, если их там нет
@@ -214,11 +214,11 @@ class KeywordMatcher:
         if not self.keywords:
             self.logger.warning("No keywords loaded! process_text returning empty.")
             return []
-        
+
         # Log first 5 keywords for debug if needed, or just count
         if len(text) > 0:
              self.logger.info(f"Processing text len={len(text)} against {len(self.keywords)} keywords")
-        
+
         text_lower = text.lower()
         lines = text.splitlines()
         # Нормализация OCR-артефактов: омоглифы + дефисы + пробелы буква↔цифра
@@ -255,16 +255,16 @@ class KeywordMatcher:
                 )
         except Exception as exc:
             self.logger.error(f"compound_rule composite_drainage error: {exc}", exc_info=True)
-        
+
         # Regex для проверки строгих "БМ" + цифры.
         # Например: "бм 0332", "бм0332", "бм-0332"
         bm_strict_pattern = re.compile(r'^бм\s*[-]?\s*\d+')
-        
+
         # Optimization: pre-calculate total lines to avoid len() calls
         total_lines = len(lines_lower)
         if total_lines == 0:
             return []
-            
+
         self.logger.debug(f"Matching {len(self.keywords)} keywords against {total_lines} lines")
 
         import os as _os
@@ -301,30 +301,30 @@ class KeywordMatcher:
 
             # Check if keyword STARTS with "bm" pattern
             is_bm_keyword = bool(bm_strict_pattern.match(keyword))
-            
+
             # Use strict matching for:
             # 1. "BM" keywords (special requirement)
             # 2. Short keywords (<= 5 chars) to avoid false positives with partial_ratio
             #    (e.g. "act" matching "factor", "75.00" matching "175.00")
             # 3. Lite mode: low LLM priority category (exact match only, no fuzzy)
             use_strict_match = is_bm_keyword or len(keyword) <= 5 or _lite_mode
-            
+
             if use_strict_match:
                 found_exact = False
                 best_score = 0
                 best_line_idx = -1
-                
+
                 # Ищем точное вхождение ключевого слова в строках с учетом границ слова
                 # Чтобы "бм 0332" НЕ находилось внутри "бм 03321"
                 pattern = r'(^|\s|[^a-zA-Z0-9а-яА-Я])' + re.escape(keyword) + r'($|\s|[^a-zA-Z0-9а-яА-Я])'
-                
+
                 for idx, line_text in enumerate(lines_lower):
                     if re.search(pattern, line_text):
                         found_exact = True
                         best_score = 100
                         best_line_idx = idx
                         break # Нашли точное совпадение - достаточно
-                
+
                 if not found_exact:
                     continue
             else:
@@ -338,17 +338,17 @@ class KeywordMatcher:
                 # Ищем строку с наивысшим score
                 best_score = 0
                 best_line_idx = -1
-                
+
                 kw_len = len(keyword)
                 kw_words = keyword.split()
                 # Минимальная длина строки — 30% от длины keyword
                 min_line_len = max(3, int(kw_len * 0.3))
-                
+
                 for idx, line in enumerate(combined_lines):
                     line_len = len(line)
                     if line_len < min_line_len:
                         continue
-                    
+
                     # Выбираем scorer:
                     # - Если строка короткая (сравнима с keyword) -> fuzz.ratio
                     # - Если строка длинная -> fuzz.token_set_ratio (вместо partial_ratio)
@@ -358,11 +358,11 @@ class KeywordMatcher:
                         score = fuzz.ratio(keyword, line)
                     else:
                         score = fuzz.token_set_ratio(keyword, line)
-                    
+
                     if score > best_score:
                         best_score = score
                         best_line_idx = idx
-                
+
                 if best_score < required_score:
                     # Fallback: если score между 50 и threshold, проверяем stem coverage
                     # Это помогает с русским склонением: "композитных" → stem "композитн"
@@ -396,7 +396,7 @@ class KeywordMatcher:
                             continue
                     else:
                         continue
-                
+
                 # Дополнительная проверка покрытия слов для многословных keywords
                 # Включаем 2-буквенные alpha слова (пу, эп, кв — важные идентификаторы)
                 if len(kw_words) >= 2 and best_line_idx >= 0:
@@ -405,7 +405,7 @@ class KeywordMatcher:
                     meaningful_words = [w for w in kw_words if len(w) >= 2 and any(ch.isalpha() for ch in w)]
                     if not meaningful_words:
                         meaningful_words = [w for w in kw_words if len(w) >= 3 and not w.isdigit()]
-                    
+
                     for w in meaningful_words:
                         # Сначала точное вхождение
                         if w in matched_line_lower:
@@ -422,12 +422,12 @@ class KeywordMatcher:
                                 w_norm = _normalize_ocr_line(w)
                                 if w_norm != w and w_norm in matched_line_lower:
                                     words_present += 1
-                    
+
                     if meaningful_words:
                         coverage = words_present / len(meaningful_words)
                         if coverage < 0.7:
                             continue
-                
+
                 # Проверка числовых токенов: ВСЕ числа из keyword должны быть в строке
                 # "манопокс 331" НЕ должен матчить "манопокс 334"
                 # "денстоп пу 500" НЕ должен матчить "Денстоп ЭП 500" если ПУ≠ЭП
@@ -436,14 +436,14 @@ class KeywordMatcher:
                     if kw_numbers:
                         matched_line_lower = combined_lines[best_line_idx]
                         for num in kw_numbers:
-                            # Regex word boundary — находит "500" в "500," и "91." 
+                            # Regex word boundary — находит "500" в "500," и "91."
                             pattern = r'(?:^|\b)' + re.escape(num) + r'(?:\b|$)'
                             if not re.search(pattern, matched_line_lower):
                                 best_score = 0
                                 break
                         if best_score == 0:
                             continue
-            
+
             # Определяем исходную строку для результата
             if best_line_idx < len(lines):
                 matched_line = lines[best_line_idx]
@@ -481,7 +481,7 @@ class KeywordMatcher:
                 if isinstance(cells, list) and cells:
                     best_cell_score = -1
                     best_cell = None
-                    
+
                     # Если использовался строгий поиск (use_strict_match),
                     # сначала ищем ячейку, которая строго содержит keyword.
                     # Это исправит ситуацию, когда строка найдена (т.к. keyword есть),
@@ -496,7 +496,7 @@ class KeywordMatcher:
                                 best_cell = c
                                 best_cell_score = 100
                                 break
-                    
+
                     # Если строгий поиск не нашел ячейку (или не использовался), используем fuzzy
                     if not best_cell:
                         for c in cells:
@@ -558,7 +558,7 @@ class KeywordMatcher:
             except Exception as e:
                 self.logger.error(f"Smart extraction error: {e}")
                 # Продолжаем с оригинальными совпадениями
-        
+
         return matches
 
     def save_matches(

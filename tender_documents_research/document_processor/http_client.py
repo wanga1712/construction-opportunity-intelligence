@@ -362,40 +362,40 @@ class HttpFileClient:
         """
         if not name:
             return "unknown_file"
-        
+
         # 1. Заменяем стандартные запрещенные символы и расширенный набор спецсимволов
         forbidden_chars = [
             "/", "\\", ":", "*", "?", "<", ">", "|", '"',
             "+", "%", "#", "&", "{", "}", "[", "]", "=", ";", ",", "'", "@", "!", "$", "`", "^"
         ]
-        
+
         cleaned = name
         for char in forbidden_chars:
             cleaned = cleaned.replace(char, "_")
-        
+
         # 2. Убираем управляющие символы (0-31)
         cleaned = "".join(ch for ch in cleaned if ord(ch) >= 32)
-        
+
         # 3. Убираем скобки и тильды (по запросу пользователя)
         cleaned = cleaned.replace("(", "_").replace(")", "_").replace("~", "_")
-        
+
         # 4. Убираем двойные подчеркивания
         while "__" in cleaned:
             cleaned = cleaned.replace("__", "_")
-            
+
         cleaned = cleaned.strip(" ._")
-        
+
         if not cleaned:
             return "unknown_file"
-            
+
         # 5. Ограничиваем длину
         if len(cleaned) > 200:
             base, ext = os.path.splitext(cleaned)
-            if len(ext) > 10: 
+            if len(ext) > 10:
                 ext = ""
             limit = 200 - len(ext)
             cleaned = base[:limit] + ext
-            
+
         return cleaned
 
     def sanitize_folder_name(self, name: str) -> str:
@@ -411,7 +411,7 @@ class HttpFileClient:
     def _setup_ssl_context(self):
         """Настройка SSL контекста с пользовательскими сертификатами"""
         from urllib3.util.ssl_ import create_urllib3_context
-        
+
         ctx = create_urllib3_context()
         try:
             ctx.set_ciphers('DEFAULT:@SECLEVEL=1')
@@ -419,11 +419,11 @@ class HttpFileClient:
             pass
 
         ctx.check_hostname = False
-        
+
         # Загружаем пользовательский сертификат
         cert_path = os.getenv('CLIENT_CERT_PATH')
         key_path = os.getenv('CLIENT_KEY_PATH')
-        
+
         if not cert_path:
             # Ищем в стандартных местах
             possible_paths = [
@@ -435,7 +435,7 @@ class HttpFileClient:
                 if os.path.exists(path):
                     cert_path = path
                     break
-        
+
         if cert_path and os.path.exists(cert_path):
             try:
                 if key_path and os.path.exists(key_path):
@@ -445,7 +445,7 @@ class HttpFileClient:
                 self.logger.info(f"Загружен пользовательский сертификат: {cert_path}")
             except Exception as e:
                 self.logger.warning(f"Не удалось загрузить сертификат: {e}")
-        
+
         return ctx
 
     def _get_verify_param(self):
