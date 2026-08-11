@@ -1,5 +1,6 @@
 
 from pathlib import Path
+from contextlib import contextmanager
 from types import SimpleNamespace
 
 import pytest
@@ -321,11 +322,17 @@ def test_s13_durable_download_survives_parser_crash_and_retry_reuses_data_file(t
         def __init__(self, shared_conn):
             self.shared_conn = shared_conn
 
-        def get_connection(self, db_name=None):
-            return self.shared_conn
-
-        def return_connection(self, db_name, conn):
-            pass
+        @contextmanager
+        def get_cursor(self, db_name=None):
+            cursor = self.shared_conn.cursor()
+            try:
+                yield cursor
+                self.shared_conn.commit()
+            except Exception:
+                self.shared_conn.rollback()
+                raise
+            finally:
+                cursor.close()
 
     storage_root = tmp_path / "data" / "tender-documents"
     storage_root.mkdir(parents=True)

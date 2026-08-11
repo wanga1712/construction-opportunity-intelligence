@@ -66,6 +66,14 @@ class DocumentProcessorDaemon:
                     'port': os.getenv("DB_PORT_CATALOG"),
                 },
             }
+            if os.getenv("PROCESSING_BACKEND", "LEGACY") == "S13_V2":
+                db_configs['document_intelligence'] = {
+                    'host': os.getenv("S13_DOCUMENT_DB_HOST", "localhost"),
+                    'name': os.getenv("S13_DOCUMENT_DB_NAME", "document_intelligence"),
+                    'user': os.getenv("S13_DOCUMENT_DB_USER", "doc_worker"),
+                    'password': os.getenv("S13_DOCUMENT_DB_PASSWORD", ""),
+                    'port': os.getenv("S13_DOCUMENT_DB_PORT", "5432"),
+                }
 
         self.db = DatabaseManager(db_configs)
         # ─────────────────────────────────────────────────────────────────

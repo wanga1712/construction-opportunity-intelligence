@@ -3,6 +3,7 @@ import psycopg2
 import json
 import os
 import sys
+import threading
 from unittest.mock import patch, MagicMock
 
 # Inject test DB credentials so DatabaseManager connects to a real DB
@@ -15,6 +16,7 @@ sys.path.insert(0, "C:/Users/Lenovo/Projects/CRM_Streamlit")
 sys.path.insert(0, "C:/Users/Lenovo/.gemini/antigravity/brain/3b7672a3-eb64-4ef9-9822-425761044fc4/scratch")
 
 from document_processor.backends.s13_persistence import S13V2TaskPersistenceService
+from database_work.database_connection import DatabaseManager
 from document_processor.dto import TaskProcessResult, FileProcessResult, MatchResult, MatchDetailResult, EvidenceResult, ProcessingOutcome
 @pytest.fixture(scope="module")
 def shared_conn():
@@ -115,20 +117,16 @@ def shared_conn():
     conn.close()
 
 @pytest.fixture(scope="module")
-def db_pool(shared_conn):
-    class MockPool:
-        def __init__(self, conn):
-            self.conn = conn
-
-        def get_connection(self, db_name=None):
-            return self.conn
-        def putconn(self, conn):
-            if conn:
-                conn.rollback()
-        def return_connection(self, db_name, conn):
-            if conn:
-                conn.rollback()
-    return MockPool(shared_conn)
+def concrete_db_manager(shared_conn):
+    db = DatabaseManager.__new__(DatabaseManager)
+    db.connections = {"document_intelligence": shared_conn}
+    db.default_alias = "document_intelligence"
+    db.connection = shared_conn
+    db.lock = threading.RLock()
+    assert hasattr(db, "get_cursor")
+    assert not hasattr(db, "get_connection")
+    assert not hasattr(db, "return_connection")
+    return db
 
 @pytest.fixture
 def queue_task(shared_conn):
@@ -197,7 +195,7 @@ def test_a_pure_matcher_zero_db_calls():
     """A. pure matcher -> ZERO DB calls"""
     pass
 
-def test_a_b_c_g_success_atomic_commit(db_pool, queue_task, shared_conn):
+def test_a_b_c_g_success_atomic_commit(concrete_db_manager, queue_task, shared_conn):
     """
     Real PostgreSQL Proof:
     A. INSERT document_matches ... RETURNING id -> id > 0
@@ -206,7 +204,7 @@ def test_a_b_c_g_success_atomic_commit(db_pool, queue_task, shared_conn):
     G. success path -> graph существует -> queue COMPLETED -> COMMIT
     """
     task_id, proc_id = queue_task
-    svc = S13V2TaskPersistenceService(db_pool)
+    svc = S13V2TaskPersistenceService(concrete_db_manager)
     res = _mock_result(task_id, proc_id)
     
     svc.persist_task_result(res)
@@ -242,10 +240,10 @@ def test_d_invalid_fk(shared_conn):
         """)
     shared_conn.rollback()
 
-def test_e_forced_failure_after_evidence(db_pool, queue_task, shared_conn):
+def test_e_forced_failure_after_evidence(concrete_db_manager, queue_task, shared_conn):
     """E. forced failure после insert evidence -> ROLLBACK -> files/results/matches/details/evidence = 0"""
     task_id, proc_id = queue_task
-    svc = S13V2TaskPersistenceService(db_pool)
+    svc = S13V2TaskPersistenceService(concrete_db_manager)
     res = _mock_result(task_id, proc_id)
     
     # We alter the table to force a failure during the evidence insert.
@@ -270,13 +268,13 @@ def test_e_forced_failure_after_evidence(db_pool, queue_task, shared_conn):
     assert cur.fetchone()[0] == 0 # Rolled back!
     shared_conn.commit()
 
-def test_f_h_failure_queue_failed(db_pool, queue_task, shared_conn):
+def test_f_h_failure_queue_failed(concrete_db_manager, queue_task, shared_conn):
     """
     F. forced failure на финальном queue -> COMPLETED -> ROLLBACK всего result graph
     H. persistence failure -> отдельная transaction -> queue FAILED -> не PROCESSING
     """
     task_id, proc_id = queue_task
-    svc = S13V2TaskPersistenceService(db_pool)
+    svc = S13V2TaskPersistenceService(concrete_db_manager)
     res = _mock_result(task_id, proc_id)
     
     cur = shared_conn.cursor()
@@ -308,9 +306,9 @@ def test_f_h_failure_queue_failed(db_pool, queue_task, shared_conn):
     shared_conn.commit()
 
 
-def test_zero_match_completed_file_creates_processing_result_without_match_graph(db_pool, queue_task, shared_conn):
+def test_zero_match_completed_file_creates_processing_result_without_match_graph(concrete_db_manager, queue_task, shared_conn):
     task_id, proc_id = queue_task
-    svc = S13V2TaskPersistenceService(db_pool)
+    svc = S13V2TaskPersistenceService(concrete_db_manager)
     result = TaskProcessResult(
         queue_id=task_id,
         procurement_id=proc_id,

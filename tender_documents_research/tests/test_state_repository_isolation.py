@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from pathlib import Path
 from types import SimpleNamespace
+from contextlib import contextmanager
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -112,7 +113,7 @@ def test_completion_fails_closed_before_db_when_no_result_files() -> None:
     result = SimpleNamespace(files=[], queue_id=1)
     with pytest.raises(ValueError, match="at least one successfully processed"):
         service.persist_task_result(result)
-    db.get_connection.assert_not_called()
+    db.get_cursor.assert_not_called()
 
 
 class PersistenceCursor(FakeCursor):
@@ -139,10 +140,16 @@ class PersistenceConnection(FakeConnection):
 
 def test_successful_result_graph_marks_queue_completed() -> None:
     conn = PersistenceConnection()
-    db = SimpleNamespace(
-        get_connection=lambda name: conn,
-        return_connection=lambda name, returned: None,
-    )
+    @contextmanager
+    def _get_cursor(name):
+        try:
+            yield conn.cursor_instance
+            conn.commit()
+        except Exception:
+            conn.rollback()
+            raise
+
+    db = SimpleNamespace(get_cursor=_get_cursor)
     service = S13V2TaskPersistenceService(db)
     file_result = SimpleNamespace(
         file_name="a.pdf",

@@ -25,9 +25,8 @@ class S13V2TaskPersistenceService:
         if not completed_files:
             raise ValueError("S13_V2 completion requires at least one successfully processed document")
 
-        conn = self.db.get_connection('document_intelligence')
         try:
-            with conn.cursor() as cursor:
+            with self.db.get_cursor('document_intelligence') as cursor:
                 # 1. Select for update to ensure we own the task and it's PROCESSING
                 cursor.execute("""
                     SELECT status
@@ -39,12 +38,10 @@ class S13V2TaskPersistenceService:
                 row = cursor.fetchone()
                 if not row:
                     logger.warning(f"Queue task {result.queue_id} not found or not S13_V2.")
-                    conn.rollback()
                     return
 
                 if row[0] not in ('PROCESSING', 'processing'):
                     logger.warning(f"Queue task {result.queue_id} is in status {row[0]}, expected PROCESSING.")
-                    conn.rollback()
                     return
 
                 # 2. Persist File Process Results
@@ -147,28 +144,19 @@ class S13V2TaskPersistenceService:
                     WHERE id = %s
                 """, (result.error_message, result.queue_id))
 
-            conn.commit()
             logger.info(f"Task {result.queue_id} successfully persisted with outcome {result.outcome}.")
         except Exception as e:
-            conn.rollback()
             logger.error(f"Failed to persist task {result.queue_id}: {e}", exc_info=True)
             self.mark_failed(result.queue_id, str(e))
             raise
-        finally:
-            self.db.return_connection('document_intelligence', conn)
 
     def mark_failed(self, queue_id: int, error_msg: str):
-        fail_conn = self.db.get_connection('document_intelligence')
         try:
-            with fail_conn.cursor() as cursor:
+            with self.db.get_cursor('document_intelligence') as cursor:
                 cursor.execute("""
                     UPDATE document_processing_queue
                     SET status = 'FAILED', last_error = %s
                     WHERE id = %s AND pipeline_generation = 'S13_V2'
                 """, (error_msg, queue_id))
-            fail_conn.commit()
         except Exception as e:
-            fail_conn.rollback()
             logger.error(f"Failed to mark queue {queue_id} as FAILED: {e}", exc_info=True)
-        finally:
-            self.db.return_connection('document_intelligence', fail_conn)
