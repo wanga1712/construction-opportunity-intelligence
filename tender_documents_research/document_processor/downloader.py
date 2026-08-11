@@ -4,12 +4,14 @@ import shutil
 import time
 from pathlib import Path
 from typing import List, Optional, Tuple
+from dataclasses import dataclass
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
 from database_work.database_connection import DatabaseManager
 from utils.logger_config import get_logger
 
 from .http_client import HttpFileClient
+from .concurrency_manager import DownloadCoordinator
 from .archive_extractor import ArchiveExtractor
 from .yandex_client import YandexDiskClient
 from .file_skip_list import filter_links
@@ -18,6 +20,34 @@ from .registry_contract_locator import RegistryContractLocator
 from .documentation_links_loader import DocumentationLinksLoader
 from .registry_tables import links_table_for_source
 from .document_routing import DocumentRouter, RoutingContext
+
+@dataclass
+class DownloadFailure:
+    source_link_id: Optional[int]
+    source_url: str
+    url_hash: str
+    error_class: str
+    http_status: Optional[int]
+    error_message: str
+    latency_ms: int
+
+@dataclass
+class DownloadBatchResult:
+    source_links_count: int
+    attempted_count: int
+    downloaded_count: int
+    skipped_count: int
+    failed_count: int
+    files: List[Path]
+    failures: List[DownloadFailure]
+
+    @property
+    def transient_failed_count(self) -> int:
+        return sum(1 for f in self.failures if f.error_class == "TRANSIENT")
+
+    @property
+    def permanent_failed_count(self) -> int:
+        return sum(1 for f in self.failures if f.error_class == "PERMANENT")
 
 
 class Downloader:
@@ -65,6 +95,7 @@ class Downloader:
         self.contract_locator = RegistryContractLocator(self.db, self.db_alias, self.logger)
         self.links_loader = DocumentationLinksLoader(self.db, self.db_alias)
         self.document_router = DocumentRouter()
+        self.download_coordinator = DownloadCoordinator(self.db_alias)
 
     def get_links(self, contract_reg_number: str, table_source: str) -> List[Tuple[str, Optional[str]]]:
         """?????????? ?????? (url, file_name) ?? ??????? ??????????."""
@@ -135,9 +166,14 @@ class Downloader:
         else:
             return f"https://zakupki.gov.ru/223/contract/public/contract/view/general-information.html?regNumber={contract_number}"
 
-    def download_and_extract(self, task_id: int, links: List[Tuple[str, Optional[str]]], registry_type: Optional[str] = None, contract_number: Optional[str] = None, table_source: Optional[str] = None) -> List[Path]:
+    def download_and_extract_legacy(self, task_id: int, links: List[Tuple[str, Optional[str]]], registry_type: Optional[str] = None, contract_number: Optional[str] = None, table_source: Optional[str] = None) -> List[Path]:
+        res = self.download_and_extract(task_id, links, registry_type, contract_number, table_source)
+        return res.files
+
+    def download_and_extract(self, task_id: int, links: List[Tuple[str, Optional[str]]], registry_type: Optional[str] = None, contract_number: Optional[str] = None, table_source: Optional[str] = None) -> DownloadBatchResult:
         task_dir = self.base_dir / str(task_id)
         task_dir.mkdir(parents=True, exist_ok=True)
+
 
         try:
             max_links = int(os.getenv("DOCUMENT_MAX_LINKS", "0"))
@@ -147,6 +183,7 @@ class Downloader:
         self.logger.info(f"[{task_id}] Начинаю скачивание {len(effective_links)} ссылок")
 
         raw_files: List[Path] = []
+        failures: List[DownloadFailure] = []
         remote_dir, safe_prefix = self.yandex_client.build_remote_dir_and_prefix(registry_type, contract_number, None)
 
         tender_id: Optional[int] = None
@@ -170,9 +207,11 @@ class Downloader:
 
             for future in as_completed(futures):
                 try:
-                    result_files = future.result()
+                    result_files, failure = future.result()
                     if result_files:
                         raw_files.extend(result_files)
+                    if failure:
+                        failures.append(failure)
                 except Exception as exc:
                     self.logger.error(f"[{task_id}] Ошибка при параллельном скачивании файла: {exc}", exc_info=True)
 
@@ -217,7 +256,15 @@ class Downloader:
                 files.append(f)
 
         self.logger.info(f"[{task_id}] Готово. Итого файлов для обработки: {len(files)}")
-        return files
+        return DownloadBatchResult(
+            source_links_count=len(links),
+            attempted_count=len(effective_links),
+            downloaded_count=len(files),
+            skipped_count=len(links) - len(effective_links),
+            failed_count=len(failures),
+            files=files,
+            failures=failures
+        )
 
     @staticmethod
     def _is_rar_part(path: Path) -> bool:
@@ -240,7 +287,7 @@ class Downloader:
 
     def _process_single_link(self, task_id: int, task_dir: Path, url: str, db_file_name: Optional[str],
                              tender_id: Optional[int], table_source: Optional[str],
-                             remote_dir: Optional[str], safe_prefix: Optional[str]) -> List[Path]:
+                             remote_dir: Optional[str], safe_prefix: Optional[str]) -> Tuple[List[Path], Optional[DownloadFailure]]:
         self.logger.debug(f"[{task_id}] Обработка ссылки: {url} (имя из БД: {db_file_name})")
 
         url_derived_name = self.http_client.sanitize_name(self.http_client.predict_filename(url))
@@ -264,10 +311,15 @@ class Downloader:
                 )
             if check_status == "COMPLETED":
                 if os.getenv("REPROCESS_COMPLETED") != "1":
-                    self.logger.info(f"[{task_id}] Пропускаю файл (уже обработан): {safe_predicted}")
-                    return []
-                self.logger.info(f"[{task_id}] Файл обработан ранее, но разрешён REPROCESS_COMPLETED=1 — перезапускаю: {safe_predicted}")
-                self.state_repo.mark_file_status(tender_id, table_source, safe_predicted, url_hash, current_status)
+                    target_path = task_dir / safe_predicted
+                    if target_path.exists():
+                        self.logger.info(f"[{task_id}] Пропускаю файл (уже обработан и есть локально): {safe_predicted}")
+                        return [target_path], None
+                    else:
+                        self.logger.info(f"[{task_id}] Файл в статусе COMPLETED, но локально отсутствует — перескачиваю: {safe_predicted}")
+                else:
+                    self.logger.info(f"[{task_id}] Файл обработан ранее, но разрешён REPROCESS_COMPLETED=1 — перезапускаю: {safe_predicted}")
+                    self.state_repo.mark_file_status(tender_id, table_source, safe_predicted, url_hash, current_status)
             elif check_status == "PENDING_RESUME":
                 self.logger.info(
                     f"[{task_id}] Повторное скачивание файла pending_resume: {safe_predicted}"
@@ -325,10 +377,20 @@ class Downloader:
             self.logger.warning(f"[{task_id}] Не удалось получить валидный файл по ссылке: {url}")
             if tender_id is not None and table_source and self.state_repo:
                 self.state_repo.finalize_file_status(tender_id, table_source, safe_predicted, url_hash, False, "download/validate failed")
-            return []
+            
+            failure = DownloadFailure(
+                source_link_id=None,
+                source_url=url,
+                url_hash=url_hash,
+                error_class="TRANSIENT" if "zakupki.gov.ru" in url else "PERMANENT",
+                http_status=None,
+                error_message="download/validate failed",
+                latency_ms=0
+            )
+            return [], failure
 
         # Возвращаем файл как есть — распаковка будет в download_and_extract
-        return [ok_file]
+        return [ok_file], None
 
     def _download_single(self, task_dir: Path, url: str, suggested_filename: Optional[str] = None) -> Optional[Path]:
         """
@@ -363,7 +425,8 @@ class Downloader:
             for attempt in range(max_retries):
                 try:
                     self.logger.debug(f"Попытка прямого скачивания {attempt + 1}/{max_retries}")
-                    direct = self.http_client.try_download_direct(task_dir, url, suggested_filename)
+                    with self.download_coordinator.acquire_slot():
+                        direct = self.http_client.try_download_direct(task_dir, url, suggested_filename)
                     if direct:
                         file_size = direct.stat().st_size
                         self.logger.info(f"✅ Прямое скачивание успешно: {direct.name} ({file_size} байт)")
@@ -395,7 +458,8 @@ class Downloader:
                 self.logger.info(f"Файл слишком большой для прокси ({content_length} байт), пропускаем прокси")
             else:
                 self.logger.debug("Попытка скачивания через прокси")
-                path = self.http_client.try_download_with_proxy(task_dir, url, suggested_filename)
+                with self.download_coordinator.acquire_slot():
+                    path = self.http_client.try_download_with_proxy(task_dir, url, suggested_filename)
                 if path:
                     self.logger.info(f"✅ Скачивание через прокси успешно: {path.name}")
                     return path
@@ -418,7 +482,8 @@ class Downloader:
         if not bypass_proxy:  # Если еще не пробовали
             try:
                 self.logger.debug("Финальная попытка прямого скачивания")
-                direct_final = self.http_client.try_download_direct(task_dir, url, suggested_filename)
+                with self.download_coordinator.acquire_slot():
+                    direct_final = self.http_client.try_download_direct(task_dir, url, suggested_filename)
                 if direct_final:
                     self.logger.info(f"✅ Финальное прямое скачивание успешно: {direct_final.name}")
                     return direct_final

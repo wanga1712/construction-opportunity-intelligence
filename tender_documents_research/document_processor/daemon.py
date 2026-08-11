@@ -358,7 +358,7 @@ class DocumentProcessorDaemon:
                         self.queue_manager.mark_error(task_id, proc_result.error_message)
                         print(f" ERROR: {proc_result.error_message}", flush=True)
                     else:
-                        self.s13_persistence.save_result(proc_result)
+                        self.s13_persistence.persist_task_result(proc_result)
                         self.logger.info(f"[{task_id}] S13_V2 Задача завершена успешно (atomically persisted)")
                         print(" DONE (S13_V2)", flush=True)
                 else:
@@ -481,21 +481,6 @@ class DocumentProcessorDaemon:
                 "procurement_id": procurement_id,
             }
             self.pipeline.process_task_with_files(task=task_row, files=files)
-            try:
-                backend.results.persist_evidence(
-                    procurement_id=procurement_id,
-                    queue_id=task_id,
-                    match_id=0,
-                    category_code="processed",
-                    evidence_score=1.0,
-                    match_count=len(files),
-                    worker_id=self.worker_id,
-                    next_stage="STRUCTURED_EXTRACTION_PENDING",
-                )
-            except Exception as ev_exc:
-                self.logger.warning(
-                    f"[S13_V2][{task_id}] Evidence write failed: {ev_exc}"
-                )
             backend.queue.mark_completed(task_id)
             print(f"[S13_V2][{task_id}] COMPLETED", flush=True)
         except Exception as exc:

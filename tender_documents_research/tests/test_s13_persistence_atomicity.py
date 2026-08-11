@@ -11,16 +11,19 @@ os.environ["DB_USER_TENDER"] = "postgres"
 os.environ["DB_PASSWORD_TENDER"] = "0IFz3_"
 os.environ["DB_DATABASE_TENDER"] = "tender_monitor"
 
-sys.path.insert(0, "/opt/construction-opportunity-intelligence/tender_documents_research")
+sys.path.insert(0, "C:/Users/Lenovo/Projects/CRM_Streamlit")
+sys.path.insert(0, "C:/Users/Lenovo/.gemini/antigravity/brain/3b7672a3-eb64-4ef9-9822-425761044fc4/scratch")
 
 from document_processor.backends.s13_persistence import S13V2TaskPersistenceService
 from document_processor.dto import TaskProcessResult, FileProcessResult, MatchResult, MatchDetailResult, EvidenceResult, ProcessingOutcome
-from database_work.database_connection import DatabaseManager
-
 @pytest.fixture(scope="module")
 def shared_conn():
-    d_m = DatabaseManager()
-    conn = d_m.connection
+    conn = psycopg2.connect(
+        host=os.environ["DB_HOST_TENDER"],
+        user=os.environ["DB_USER_TENDER"],
+        password=os.environ["DB_PASSWORD_TENDER"],
+        dbname=os.environ["DB_DATABASE_TENDER"]
+    )
     
     with conn.cursor() as cur:
         # Drop temporary tables if they exist to start clean
@@ -57,11 +60,11 @@ def shared_conn():
                 queue_id INT REFERENCES document_processing_queue(id),
                 procurement_id INT,
                 file_id INT REFERENCES document_files(id),
-                parser_type TEXT,
                 status TEXT,
-                extracted_pages INT,
-                extracted_sheets INT,
-                extracted_rows INT,
+                pages_processed INT,
+                sheets_processed INT,
+                rows_extracted INT,
+                matches_found INT,
                 pipeline_generation TEXT
             );
             
@@ -71,7 +74,6 @@ def shared_conn():
                 procurement_id INT,
                 file_id INT REFERENCES document_files(id),
                 result_id INT REFERENCES document_processing_results(id),
-                category_code TEXT,
                 match_count INT,
                 score FLOAT,
                 pipeline_generation TEXT
@@ -117,14 +119,15 @@ def db_pool(shared_conn):
     class MockPool:
         def __init__(self, conn):
             self.conn = conn
-        def getconn(self):
+
+        def get_connection(self, db_name=None):
             return self.conn
         def putconn(self, conn):
             if conn:
-                try:
-                    conn.rollback()
-                except:
-                    pass
+                conn.rollback()
+        def return_connection(self, db_name, conn):
+            if conn:
+                conn.rollback()
     return MockPool(shared_conn)
 
 @pytest.fixture
@@ -244,24 +247,22 @@ def test_e_forced_failure_after_evidence(db_pool, queue_task, shared_conn):
     # Actually wait, we want a failure *after* evidence is inserted? 
     # Or just ANY failure that rolls back everything.
     # The requirement: "forced failure на финальном queue -> COMPLETED -> ROLLBACK всего result graph" is covered in F.
-    # "forced failure после insert evidence" can be triggered by adding a constraint to document_processing_queue.
-    # Let's add a CHECK constraint that rejects status='SUCCESS'. This happens after evidence.
     cur = shared_conn.cursor()
     cur.execute("ALTER TABLE document_processing_queue ADD CONSTRAINT fail_success CHECK (status != 'SUCCESS')")
     shared_conn.commit()
     
-    # This will fail on the very last step (updating queue status to SUCCESS).
     with pytest.raises(psycopg2.errors.CheckViolation):
         svc.persist_task_result(res)
-    
+        
+    shared_conn.rollback()
+    cur.execute("ALTER TABLE document_processing_queue DROP CONSTRAINT IF EXISTS fail_success")
+    shared_conn.commit()
+
     # Verify rollback
     cur = shared_conn.cursor()
     # It must have rolled back completely!
     cur.execute("SELECT COUNT(*) FROM document_processing_results WHERE queue_id = %s", (task_id,))
     assert cur.fetchone()[0] == 0 # Rolled back!
-    
-    # Remove the constraint for other tests
-    cur.execute("ALTER TABLE document_processing_queue DROP CONSTRAINT fail_success")
     shared_conn.commit()
 
 def test_f_h_failure_queue_failed(db_pool, queue_task, shared_conn):
