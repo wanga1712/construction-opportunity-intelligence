@@ -231,7 +231,7 @@ class Downloader:
                         # Wait, for S13_V2 we should mark the extracted files? Actually in S13_V2 download and extraction
                         # might just be marking the *archive* as COMPLETED. Let's provide a dummy url_hash or we need to pass it down.
                         # For now, just generate a dummy or None, S13V2StateRepo ignores if url_hash is None.
-                        self.state_repo.finalize_file_status(
+                        self.state_repo.finalize_download_status(
                             tender_id, table_source, f.name, None, True, None
                         )
                 else:
@@ -240,7 +240,7 @@ class Downloader:
                         f"[{task_id}] Распаковка архива не дала файлов: {f.name}"
                     )
                     if tender_id is not None and table_source and self.state_repo:
-                        self.state_repo.finalize_file_status(
+                        self.state_repo.finalize_download_status(
                             tender_id,
                             table_source,
                             f.name,
@@ -297,6 +297,9 @@ class Downloader:
         url_hash = hashlib.sha256(url.encode('utf-8')).hexdigest()
 
         if tender_id is not None and table_source and self.state_repo:
+            self.state_repo.ensure_download_file(
+                task_id, tender_id, table_source, url, url_hash, safe_predicted
+            )
             status_row = self.state_repo.get_file_status(tender_id, table_source, safe_predicted, url_hash)
             current_status = status_row[0] if status_row else None
 
@@ -311,7 +314,7 @@ class Downloader:
                 )
             if check_status == "COMPLETED":
                 if os.getenv("REPROCESS_COMPLETED") != "1":
-                    target_path = task_dir / safe_predicted
+                    target_path = Path(status_row[1]) if len(status_row) > 1 and status_row[1] else task_dir / safe_predicted
                     if target_path.exists():
                         self.logger.info(f"[{task_id}] Пропускаю файл (уже обработан и есть локально): {safe_predicted}")
                         return [target_path], None
@@ -376,7 +379,7 @@ class Downloader:
         if not ok_file:
             self.logger.warning(f"[{task_id}] Не удалось получить валидный файл по ссылке: {url}")
             if tender_id is not None and table_source and self.state_repo:
-                self.state_repo.finalize_file_status(tender_id, table_source, safe_predicted, url_hash, False, "download/validate failed")
+                self.state_repo.finalize_download_status(tender_id, table_source, safe_predicted, url_hash, False, "download/validate failed")
             
             failure = DownloadFailure(
                 source_link_id=None,
@@ -388,6 +391,11 @@ class Downloader:
                 latency_ms=0
             )
             return [], failure
+
+        if tender_id is not None and table_source and self.state_repo:
+            self.state_repo.finalize_download_status(
+                tender_id, table_source, safe_predicted, url_hash, True, None, ok_file
+            )
 
         # Возвращаем файл как есть — распаковка будет в download_and_extract
         return [ok_file], None

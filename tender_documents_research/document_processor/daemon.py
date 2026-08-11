@@ -86,6 +86,7 @@ class DocumentProcessorDaemon:
         self.downloader = Downloader(
             base_dir=Path(os.getenv("DOCUMENT_DOWNLOAD_DIR", "downloads")),
             db=self.db,
+            state_repo=self.s13_backend.state if self.s13_backend else None,
         )
         self.parser_factory = ParserFactory()
         print("daemon_init_before_matcher", flush=True)
@@ -357,6 +358,13 @@ class DocumentProcessorDaemon:
                     if proc_result.outcome == "FAILED":
                         self.queue_manager.mark_error(task_id, proc_result.error_message)
                         print(f" ERROR: {proc_result.error_message}", flush=True)
+                    elif proc_result.files and all(
+                        file_result.status == "SKIPPED" for file_result in proc_result.files
+                    ):
+                        self.s13_backend.queue.mark_no_links(
+                            task_id, "NO_RESEARCHABLE_DOCUMENT_LINKS"
+                        )
+                        print(" NO_RESEARCHABLE_DOCUMENT_LINKS", flush=True)
                     else:
                         self.s13_persistence.persist_task_result(proc_result)
                         self.logger.info(f"[{task_id}] S13_V2 Задача завершена успешно (atomically persisted)")
@@ -371,7 +379,7 @@ class DocumentProcessorDaemon:
                     )
                     db_ok = True
                     if tender_id is not None:
-                        rows = self.downloader.registry.list_file_statuses(
+                        rows = self.downloader.state_repo.list_file_statuses(
                             tender_id, table_source
                         )
                         db_ok = can_complete_tender_files(rows)
@@ -472,7 +480,7 @@ class DocumentProcessorDaemon:
                     return
                 raise
             if not files:
-                backend.queue.mark_completed(task_id)
+                backend.queue.mark_no_links(task_id, "No researchable document links")
                 return
             task_row = {
                 "id": task_id,

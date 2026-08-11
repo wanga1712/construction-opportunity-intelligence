@@ -19,10 +19,10 @@ class DaemonMaintenance:
         self.worker_id = worker_id
         self.memory_limit_bytes = memory_limit_bytes
         self.logger = logger
-        self.downloader = None  # dependency injection needed for access to _ensure_processed_table
+        self.downloader = None
 
     def set_downloader(self, downloader):
-        """Инжектим Downloader для доступа к _ensure_processed_table"""
+        """Инжектим Downloader для lifecycle-операций."""
         self.downloader = downloader
 
     def reset_stale_tasks(self) -> None:
@@ -35,8 +35,6 @@ class DaemonMaintenance:
 
             # 2. Сброс статусов файлов в processed_documents (или file_processing_state)
             try:
-                if self.downloader and hasattr(self.downloader, 'registry'):
-                    self.downloader.registry._ensure_processed_table() # на всякий случай
                 self.backend.state.reset_stale(worker_id=self.worker_id)
             except Exception as e:
                 self.logger.warning(f"Ошибка сброса обработанных файлов: {e}")

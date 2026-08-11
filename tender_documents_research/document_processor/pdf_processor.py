@@ -69,7 +69,7 @@ def parse_pdf_incremental(
 
     start_page = 0
     if tender_id is not None:
-        start_page = downloader.registry.get_progress_cursor(tender_id, table_source, path.name) or 0
+        start_page = downloader.state_repo.get_progress_cursor(tender_id, table_source, path.name) or 0
 
     try:
         reader = PdfReader(str(path))
@@ -94,7 +94,7 @@ def parse_pdf_incremental(
             if is_over_memory_limit():
                 logger.warning(f"Память: прерываем OCR {path.name} на странице {page_idx}")
                 if tender_id is not None:
-                    downloader.registry.set_progress_cursor(
+                    downloader.state_repo.set_progress_cursor(
                         tender_id, table_source, path.name, page_idx
                     )
                 return "\n".join(parts), line_meta or None, False
@@ -151,7 +151,7 @@ def parse_pdf_incremental(
                     )
 
             if tender_id is not None:
-                downloader.registry.set_progress_cursor(
+                downloader.state_repo.set_progress_cursor(
                     tender_id, table_source, path.name, page_number
                 )
     finally:

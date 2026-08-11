@@ -21,6 +21,10 @@ class S13V2TaskPersistenceService:
         """
         Persist the full object graph of a TaskProcessResult atomically.
         """
+        completed_files = [file_result for file_result in result.files if file_result.status == "COMPLETED"]
+        if not completed_files:
+            raise ValueError("S13_V2 completion requires at least one successfully processed document")
+
         conn = self.db.get_connection('document_intelligence')
         try:
             with conn.cursor() as cursor:
@@ -54,7 +58,9 @@ class S13V2TaskPersistenceService:
 
                     file_row = cursor.fetchone()
                     if not file_row:
-                        pass
+                        raise RuntimeError(
+                            f"Missing document_files row for queue={result.queue_id} file={file_res.file_name}"
+                        )
 
                     file_id = file_row[0] if file_row else None
 
@@ -124,12 +130,22 @@ class S13V2TaskPersistenceService:
                         ev.evidence_score, ev.match_count, ev.next_stage
                     ))
 
-                # 4. Final step: Update queue to COMPLETED
+                cursor.execute(
+                    "SELECT COUNT(*) FROM document_processing_results WHERE queue_id=%s AND pipeline_generation='S13_V2'",
+                    (result.queue_id,),
+                )
+                result_count = int(cursor.fetchone()[0])
+                if result_count < 1:
+                    raise RuntimeError(
+                        f"S13_V2 result graph absent for queue={result.queue_id}"
+                    )
+
+                # 4. Final step: Update queue to COMPLETED only after graph proof.
                 cursor.execute("""
                     UPDATE document_processing_queue
-                    SET status = %s, completed_at = NOW(), last_error = %s
+                    SET status = 'COMPLETED', completed_at = NOW(), last_error = %s
                     WHERE id = %s
-                """, (result.outcome.value if hasattr(result.outcome, 'value') else result.outcome, result.error_message, result.queue_id))
+                """, (result.error_message, result.queue_id))
 
             conn.commit()
             logger.info(f"Task {result.queue_id} successfully persisted with outcome {result.outcome}.")

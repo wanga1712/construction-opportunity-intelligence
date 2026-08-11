@@ -110,12 +110,12 @@ class TaskPipeline:
     ) -> bool:
         if tender_id is None:
             return False
-        cursor = self.downloader.registry.get_progress_cursor(
+        cursor = self.downloader.state_repo.get_progress_cursor(
             tender_id, table_source, file_name
         )
         if cursor and cursor > 0:
             return True
-        row = self.downloader.registry.get_processed_status(
+        row = self.downloader.state_repo.get_processed_status(
             tender_id, table_source, file_name
         )
         return bool(row and row[0] == "pending_resume")
@@ -131,10 +131,10 @@ class TaskPipeline:
         """
         Обрабатывает неполный PDF. Возвращает True, если файл переведён в error_memory.
         """
-        cursor = self.downloader.registry.get_progress_cursor(
+        cursor = self.downloader.state_repo.get_progress_cursor(
             tender_id, table_source, file_name
         )
-        attempts = self.downloader.registry.mark_pending_resume(
+        attempts = self.downloader.state_repo.mark_pending_resume(
             tender_id,
             table_source,
             file_name,
@@ -146,7 +146,7 @@ class TaskPipeline:
                 f"Исчерпаны попытки возобновления ({attempts}) "
                 f"на странице progress_cursor={cursor}"
             )
-            self.downloader.registry.mark_error_memory(
+            self.downloader.state_repo.mark_error_memory(
                 tender_id, table_source, file_name, msg
             )
             result.error_memory_files.append(file_name)
@@ -170,7 +170,7 @@ class TaskPipeline:
         if not files:
             tender_id = self.resolve_tender_id(contract_reg_number, table_source)
             if tender_id is not None:
-                rows = self.downloader.registry.list_file_statuses(
+                rows = self.downloader.state_repo.list_file_statuses(
                     tender_id, table_source
                 )
                 if rows and can_complete_tender_files(rows):
@@ -291,7 +291,7 @@ class TaskPipeline:
 
                 if not matches:
                     if tender_id is not None:
-                        self.downloader.registry.finalize_file_status(
+                        self.downloader.state_repo.finalize_processing_status(
                             tender_id, table_source, path.name, False, None
                         )
                     self.logger.info(
@@ -331,7 +331,7 @@ class TaskPipeline:
                     f"[{task_id}] MATCHES {len(matches)}: {path.name}",
                     flush=True,
                 )
-                self.downloader.registry.finalize_file_status(
+                self.downloader.state_repo.finalize_processing_status(
                     tender_id, table_source, path.name, True, None
                 )
 
@@ -362,7 +362,7 @@ class TaskPipeline:
                 print(f"[{task_id}] ERROR: {path.name}", flush=True)
 
                 if tender_id is not None:
-                    self.downloader.registry.finalize_file_status(
+                    self.downloader.state_repo.finalize_processing_status(
                         tender_id, table_source, path.name, False, error_message
                     )
                     result.retryable_error_files.append(path.name)
@@ -376,7 +376,7 @@ class TaskPipeline:
                     )
 
         if tender_id is not None:
-            rows = self.downloader.registry.list_file_statuses(tender_id, table_source)
+            rows = self.downloader.state_repo.list_file_statuses(tender_id, table_source)
             for name, status in rows:
                 if status == "pending_resume" and name not in result.pending_resume_files:
                     result.pending_resume_files.append(name)
@@ -392,4 +392,3 @@ class TaskPipeline:
                     )
 
         return result
-
