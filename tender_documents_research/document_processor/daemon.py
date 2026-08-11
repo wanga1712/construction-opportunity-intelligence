@@ -83,8 +83,9 @@ class DocumentProcessorDaemon:
         self.search_profiles = load_search_profiles()
         self.logger.info(f"Search profile config loaded: {self.search_profiles.summary()}")
         print(f"search_profiles: {self.search_profiles.summary()}", flush=True)
+        download_base_dir = self._resolve_download_base_dir(_backend_name)
         self.downloader = Downloader(
-            base_dir=Path(os.getenv("DOCUMENT_DOWNLOAD_DIR", "downloads")),
+            base_dir=download_base_dir,
             db=self.db,
             state_repo=self.s13_backend.state if self.s13_backend else None,
         )
@@ -136,6 +137,27 @@ class DocumentProcessorDaemon:
             pass
 
         self.maintenance.reset_stale_tasks()
+
+    def _resolve_download_base_dir(self, backend_name: str) -> Path:
+        """Resolve download root. S13_V2 must fail closed instead of falling back to /opt."""
+        if backend_name == "S13_V2":
+            storage_root_raw = os.getenv("DOCUMENT_STORAGE_ROOT")
+            if not storage_root_raw:
+                raise RuntimeError("S13_V2 requires DOCUMENT_STORAGE_ROOT; refusing /opt downloads fallback")
+            storage_root = Path(storage_root_raw).expanduser().resolve()
+            if not storage_root.is_absolute() or not storage_root.exists() or not storage_root.is_dir():
+                raise RuntimeError(f"Invalid S13_V2 DOCUMENT_STORAGE_ROOT={storage_root}")
+            configured_download = os.getenv("DOCUMENT_DOWNLOAD_DIR")
+            download_root = Path(configured_download).expanduser().resolve() if configured_download else storage_root / "downloads-open"
+            try:
+                download_root.relative_to(storage_root)
+            except ValueError as exc:
+                raise RuntimeError(
+                    f"S13_V2 DOCUMENT_DOWNLOAD_DIR must be under DOCUMENT_STORAGE_ROOT: {download_root} not under {storage_root}"
+                ) from exc
+            download_root.mkdir(parents=True, exist_ok=True)
+            return download_root
+        return Path(os.getenv("DOCUMENT_DOWNLOAD_DIR", "downloads"))
 
         try:
             if os.getenv("CLEAN_PREVIOUS_RUN_DATA") == "1":
@@ -486,14 +508,21 @@ class DocumentProcessorDaemon:
             if not files:
                 backend.queue.mark_no_links(task_id, "No researchable document links")
                 return
-            task_row = {
-                "id": task_id,
-                "contract_reg_number": contract_number,
-                "table_source": source_table,
-                "procurement_id": procurement_id,
-            }
-            self.pipeline.process_task_with_files(task=task_row, files=files)
-            backend.queue.mark_completed(task_id)
+            proc_result = self.s13_pipeline.process_task(
+                queue_id=task_id,
+                procurement_id=procurement_id,
+                contract_reg_number=contract_number,
+                table_source=source_table,
+                files=files,
+                match_engine=self.match_engine,
+            )
+            if proc_result.outcome == "FAILED":
+                backend.queue.mark_failed(task_id, proc_result.error_message)
+                return
+            elif proc_result.files and all(file_result.status == "SKIPPED" for file_result in proc_result.files):
+                backend.queue.mark_no_links(task_id, "NO_RESEARCHABLE_DOCUMENT_LINKS")
+                return
+            self.s13_persistence.persist_task_result(proc_result)
             print(f"[S13_V2][{task_id}] COMPLETED", flush=True)
         except Exception as exc:
             msg = str(exc)[:1000]

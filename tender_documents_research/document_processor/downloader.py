@@ -58,6 +58,7 @@ class Downloader:
     def __init__(self, base_dir: Optional[Path] = None, db: Optional[DatabaseManager] = None, db_alias: str = "tender_monitor", state_repo=None):
         self.base_dir = base_dir or Path("downloads")
         self.base_dir.mkdir(parents=True, exist_ok=True)
+        self.approved_storage_root = self._resolve_approved_storage_root()
 
         if db is None:
             db_configs = {
@@ -96,6 +97,34 @@ class Downloader:
         self.links_loader = DocumentationLinksLoader(self.db, self.db_alias)
         self.document_router = DocumentRouter()
         self.download_coordinator = DownloadCoordinator(self.db_alias)
+
+    def _resolve_approved_storage_root(self) -> Optional[Path]:
+        if os.getenv("PROCESSING_BACKEND") != "S13_V2":
+            return None
+        raw = os.getenv("DOCUMENT_STORAGE_ROOT")
+        if not raw:
+            raise RuntimeError("S13_V2 requires DOCUMENT_STORAGE_ROOT; refusing /opt downloads fallback")
+        root = Path(raw).expanduser().resolve()
+        if not root.is_absolute() or not root.exists() or not root.is_dir():
+            raise RuntimeError(f"Invalid S13_V2 DOCUMENT_STORAGE_ROOT={root}")
+        base = self.base_dir.expanduser().resolve()
+        try:
+            base.relative_to(root)
+        except ValueError as exc:
+            raise RuntimeError(f"S13_V2 download base_dir must be under approved storage root: {base} not under {root}") from exc
+        return root
+
+    def _is_reusable_local_path(self, path: Path) -> bool:
+        if not path.exists() or not path.is_file():
+            return False
+        approved_storage_root = getattr(self, "approved_storage_root", None)
+        if approved_storage_root is None:
+            return True
+        try:
+            path.resolve().relative_to(approved_storage_root)
+            return True
+        except ValueError:
+            return False
 
     def get_links(self, contract_reg_number: str, table_source: str) -> List[Tuple[str, Optional[str]]]:
         """?????????? ?????? (url, file_name) ?? ??????? ??????????."""
@@ -328,7 +357,7 @@ class Downloader:
             if check_status == "COMPLETED":
                 if os.getenv("REPROCESS_COMPLETED") != "1":
                     target_path = Path(status_row[1]) if len(status_row) > 1 and status_row[1] else task_dir / safe_predicted
-                    if target_path.exists():
+                    if self._is_reusable_local_path(target_path):
                         self.logger.info(f"[{task_id}] Пропускаю файл (уже обработан и есть локально): {safe_predicted}")
                         self.state_repo.record_download_attempt(
                             task_id,
@@ -341,6 +370,11 @@ class Downloader:
                             duration_ms=0,
                         )
                         return [target_path], None
+                    if target_path.exists():
+                        self.logger.warning(
+                            f"[{task_id}] S13 durable file is outside approved storage root; re-downloading: {target_path}"
+                        )
+                        self.state_repo.mark_file_status(tender_id, table_source, safe_predicted, url_hash, "PENDING")
                     else:
                         self.logger.info(f"[{task_id}] Файл в статусе COMPLETED, но локально отсутствует — перескачиваю: {safe_predicted}")
                 else:
