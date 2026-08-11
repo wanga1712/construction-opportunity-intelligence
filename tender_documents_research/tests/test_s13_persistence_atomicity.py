@@ -527,3 +527,109 @@ def test_missing_document_files_derived_no_longer_uses_basename_only(concrete_db
     assert cur.fetchone()[0] == "FAILED"
     cur.execute("SELECT COUNT(*) FROM document_processing_results WHERE queue_id=%s", (task_id,))
     assert cur.fetchone()[0] == 0
+
+
+def test_non_completed_terminal_outcomes_are_persisted_without_fake_graph(concrete_db_manager, shared_conn):
+    task_id, proc_id, file_id = _insert_queue_and_source_file(
+        shared_conn, file_name="source.zip", local_path="/data/q/source.zip"
+    )
+    result = TaskProcessResult(queue_id=task_id, procurement_id=proc_id, outcome=ProcessingOutcome.SUCCESS)
+    result.files.append(FileProcessResult(
+        file_name="good.docx", status="COMPLETED", pages=2,
+        parent_file_name="source.zip", parent_local_path="/data/q/source.zip",
+        local_path="/data/q/source/good.docx", archive_member_path="good.docx",
+    ))
+    result.files.append(FileProcessResult(
+        file_name="Приложение № 15.xls", status="UNSUPPORTED", error_message="Unsupported format: .xls",
+        parent_file_name="source.zip", parent_local_path="/data/q/source.zip",
+        local_path="/data/q/source/Приложение № 15.xls", archive_member_path="Приложение № 15.xls",
+    ))
+    result.files.append(FileProcessResult(
+        file_name="broken.pdf", status="FAILED", error_message="boom parser",
+        parent_file_name="source.zip", parent_local_path="/data/q/source.zip",
+        local_path="/data/q/source/broken.pdf", archive_member_path="broken.pdf",
+    ))
+
+    S13V2TaskPersistenceService(concrete_db_manager).persist_task_result(result)
+
+    cur = shared_conn.cursor()
+    cur.execute("""
+        SELECT status, matches_found, processed_file_name, archive_member_path, is_archive_member
+        FROM document_processing_results
+        WHERE queue_id=%s
+        ORDER BY processed_file_name
+    """, (task_id,))
+    assert cur.fetchall() == [
+        ("FAILED", 0, "broken.pdf", "broken.pdf", True),
+        ("COMPLETED", 0, "good.docx", "good.docx", True),
+        ("UNSUPPORTED", 0, "Приложение № 15.xls", "Приложение № 15.xls", True),
+    ]
+    cur.execute("SELECT COUNT(*) FROM document_matches WHERE queue_id=%s", (task_id,))
+    assert cur.fetchone()[0] == 0
+    cur.execute("""
+        SELECT COUNT(*)
+        FROM document_match_details d
+        JOIN document_matches m ON m.id = d.match_id
+        WHERE m.queue_id=%s
+    """, (task_id,))
+    assert cur.fetchone()[0] == 0
+    cur.execute("SELECT COUNT(*) FROM document_evidence WHERE queue_id=%s", (task_id,))
+    assert cur.fetchone()[0] == 0
+    cur.execute("SELECT download_status FROM document_files WHERE id=%s", (file_id,))
+    assert cur.fetchone()[0] == "COMPLETED"
+    cur.execute("SELECT status FROM document_processing_queue WHERE id=%s", (task_id,))
+    assert cur.fetchone()[0] == "COMPLETED"
+
+
+def test_unsupported_only_result_fails_closed_without_partial_rows(concrete_db_manager, shared_conn):
+    task_id, proc_id, _ = _insert_queue_and_source_file(
+        shared_conn, file_name="legacy.xls", local_path="/data/q/legacy.xls"
+    )
+    result = TaskProcessResult(queue_id=task_id, procurement_id=proc_id, outcome=ProcessingOutcome.SUCCESS)
+    result.files.append(FileProcessResult(
+        file_name="legacy.xls", status="UNSUPPORTED", error_message="Unsupported format: .xls",
+        local_path="/data/q/legacy.xls",
+    ))
+
+    with pytest.raises(ValueError, match="at least one successfully processed document"):
+        S13V2TaskPersistenceService(concrete_db_manager).persist_task_result(result)
+
+    cur = shared_conn.cursor()
+    cur.execute("SELECT COUNT(*) FROM document_processing_results WHERE queue_id=%s", (task_id,))
+    assert cur.fetchone()[0] == 0
+    cur.execute("SELECT status FROM document_processing_queue WHERE id=%s", (task_id,))
+    assert cur.fetchone()[0] == "PROCESSING"
+
+
+def test_archive_terminal_input_accounting_status_distribution(concrete_db_manager, shared_conn):
+    task_id, proc_id, archive_id = _insert_queue_and_source_file(
+        shared_conn, file_name="archive.zip", local_path="/data/q/archive.zip"
+    )
+    result = TaskProcessResult(queue_id=task_id, procurement_id=proc_id, outcome=ProcessingOutcome.SUCCESS)
+    for name, status in (
+        ("docs/spec.docx", "COMPLETED"),
+        ("docs/table.xlsx", "COMPLETED"),
+        ("docs/Приложение № 15.xls", "UNSUPPORTED"),
+        ("docs/blob.bin", "UNSUPPORTED"),
+    ):
+        result.files.append(FileProcessResult(
+            file_name=name.rsplit("/", 1)[-1], status=status,
+            parent_file_name="archive.zip", parent_local_path="/data/q/archive.zip",
+            local_path=f"/data/q/archive/{name}", archive_member_path=name,
+        ))
+
+    S13V2TaskPersistenceService(concrete_db_manager).persist_task_result(result)
+
+    cur = shared_conn.cursor()
+    cur.execute("""
+        SELECT status, COUNT(*)
+        FROM document_processing_results
+        WHERE queue_id=%s AND file_id=%s AND is_archive_member IS TRUE
+        GROUP BY status
+        ORDER BY status
+    """, (task_id, archive_id))
+    assert cur.fetchall() == [("COMPLETED", 2), ("UNSUPPORTED", 2)]
+    cur.execute("SELECT COUNT(*) FROM document_processing_results WHERE queue_id=%s", (task_id,))
+    assert cur.fetchone()[0] == 4
+    cur.execute("SELECT COUNT(*) FROM document_matches WHERE queue_id=%s", (task_id,))
+    assert cur.fetchone()[0] == 0

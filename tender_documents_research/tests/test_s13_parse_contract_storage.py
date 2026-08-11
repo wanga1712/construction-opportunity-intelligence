@@ -615,3 +615,132 @@ def test_s13_archive_extraction_preserves_durable_source_zip(tmp_path):
 
     assert source_zip.exists()
     assert any(path.name == "child.txt" for path in extracted)
+
+
+def test_s13_pipeline_unsupported_xls_records_terminal_outcome(tmp_path):
+    from document_processor.parser_factory import ParserFactory
+    from document_processor.pipelines.s13_v2_pipeline import S13V2Pipeline
+
+    legacy = tmp_path / "Приложение № 15.xls"
+    legacy.write_bytes(b"legacy-binary-xls-fixture")
+
+    pipeline = S13V2Pipeline(
+        parser_factory=ParserFactory(),
+        downloader=None,
+        logger=SimpleNamespace(info=lambda *a, **k: None, warning=lambda *a, **k: None, error=lambda *a, **k: None),
+        is_over_memory_limit=lambda: False,
+    )
+
+    result = pipeline.process_task(
+        queue_id=601,
+        procurement_id=202601,
+        contract_reg_number="UNSUPPORTED_XLS",
+        table_source="reestr_contract_44_fz_awarded",
+        files=[legacy],
+        match_engine=SimpleNamespace(process_text=lambda *a, **k: []),
+    )
+
+    assert result.outcome.value == "SUCCESS"
+    assert len(result.files) == 1
+    assert result.files[0].file_name == "Приложение № 15.xls"
+    assert result.files[0].status == "UNSUPPORTED"
+    assert "Unsupported format" in result.files[0].error_message
+    assert result.files[0].matches == []
+
+
+def test_s13_pipeline_parser_exception_records_failed_terminal_outcome(tmp_path):
+    from document_processor.pipelines.s13_v2_pipeline import S13V2Pipeline
+
+    doc = tmp_path / "broken.txt"
+    doc.write_text("parser should raise", encoding="utf-8")
+
+    class _BrokenParser:
+        def parse(self, path):
+            raise RuntimeError("boom parser")
+
+    class _Factory:
+        def get_parser(self, path):
+            return _BrokenParser()
+
+    pipeline = S13V2Pipeline(
+        parser_factory=_Factory(),
+        downloader=None,
+        logger=SimpleNamespace(info=lambda *a, **k: None, warning=lambda *a, **k: None, error=lambda *a, **k: None),
+        is_over_memory_limit=lambda: False,
+    )
+
+    result = pipeline.process_task(
+        queue_id=602,
+        procurement_id=202602,
+        contract_reg_number="FAILED_PARSE",
+        table_source="reestr_contract_44_fz_awarded",
+        files=[doc],
+        match_engine=SimpleNamespace(process_text=lambda *a, **k: []),
+    )
+
+    assert result.outcome.value == "SUCCESS"
+    assert result.files[0].status == "FAILED"
+    assert "boom parser" in result.files[0].error_message
+    assert result.files[0].matches == []
+
+
+def test_s13_pipeline_archive_input_accounting_docx_xlsx_xls_unsupported(tmp_path):
+    import docx
+
+    openpyxl = pytest.importorskip("openpyxl")
+    from document_processor.parser_factory import ParserFactory
+    from document_processor.pipelines.s13_v2_pipeline import S13V2Pipeline
+
+    source_zip = tmp_path / "source.zip"
+    source_zip.write_bytes(b"durable parent archive marker")
+    nested = tmp_path / "source" / "docs"
+    nested.mkdir(parents=True)
+
+    docx_path = nested / "spec.docx"
+    document = docx.Document()
+    document.add_paragraph("Документ Word без целевых совпадений.")
+    document.save(str(docx_path))
+
+    xlsx_path = nested / "table.xlsx"
+    workbook = openpyxl.Workbook()
+    worksheet = workbook.active
+    worksheet.title = "ТЗ"
+    worksheet["A1"] = "Таблица без целевых совпадений"
+    workbook.save(xlsx_path)
+
+    legacy_xls = nested / "Приложение № 15.xls"
+    legacy_xls.write_bytes(b"legacy xls member")
+    blob = nested / "blob.bin"
+    blob.write_bytes(b"unsupported binary member")
+
+    pipeline = S13V2Pipeline(
+        parser_factory=ParserFactory(),
+        downloader=None,
+        logger=SimpleNamespace(info=lambda *a, **k: None, warning=lambda *a, **k: None, error=lambda *a, **k: None),
+        is_over_memory_limit=lambda: False,
+    )
+
+    result = pipeline.process_task(
+        queue_id=603,
+        procurement_id=202603,
+        contract_reg_number="ARCHIVE_MATRIX",
+        table_source="reestr_contract_44_fz_awarded",
+        files=[docx_path, xlsx_path, legacy_xls, blob],
+        match_engine=SimpleNamespace(process_text=lambda *a, **k: []),
+    )
+
+    statuses = {file_res.file_name: file_res.status for file_res in result.files}
+    assert len(result.files) == 4
+    assert statuses["spec.docx"] == "COMPLETED"
+    assert statuses["table.xlsx"] == "COMPLETED"
+    assert statuses["Приложение № 15.xls"] == "UNSUPPORTED"
+    assert statuses["blob.bin"] == "UNSUPPORTED"
+    assert sum(1 for file_res in result.files if file_res.status == "COMPLETED") == 2
+    assert sum(1 for file_res in result.files if file_res.status == "UNSUPPORTED") == 2
+    assert all(file_res.parent_file_name == "source.zip" for file_res in result.files)
+    assert sorted(file_res.archive_member_path for file_res in result.files) == [
+        "docs/blob.bin",
+        "docs/spec.docx",
+        "docs/table.xlsx",
+        "docs/Приложение № 15.xls",
+    ]

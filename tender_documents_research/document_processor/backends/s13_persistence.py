@@ -52,15 +52,17 @@ class S13V2TaskPersistenceService:
                             f"Missing document_files row for queue={result.queue_id} file={file_res.file_name}"
                         )
 
-                    cursor.execute("""
-                        UPDATE document_files
-                        SET download_status = %s, error_message = %s
-                        WHERE id = %s AND pipeline_generation = 'S13_V2'
-                    """, (file_res.status, file_res.error_message, file_id))
+                    is_archive_member = bool(getattr(file_res, "archive_member_path", None))
+                    if not is_archive_member:
+                        cursor.execute("""
+                            UPDATE document_files
+                            SET download_status = %s, error_message = %s
+                            WHERE id = %s AND pipeline_generation = 'S13_V2'
+                        """, (file_res.status, file_res.error_message, file_id))
 
-                    if file_id and file_res.status == "COMPLETED":
-                        is_archive_member = bool(getattr(file_res, "archive_member_path", None))
-                        # Insert document_processing_results
+                    if file_id:
+                        matches_found = sum(m.match_count for m in file_res.matches) if file_res.status == "COMPLETED" else 0
+                        # Insert one terminal processing outcome for every discovered parser input.
                         cursor.execute("""
                             INSERT INTO document_processing_results
                             (queue_id, procurement_id, file_id, status, pages_processed, sheets_processed, rows_extracted, matches_found,
@@ -69,22 +71,17 @@ class S13V2TaskPersistenceService:
                             RETURNING id
                         """, (
                             result.queue_id, result.procurement_id, file_id,
-                            'COMPLETED', file_res.pages, file_res.sheets, file_res.rows, sum(m.match_count for m in file_res.matches),
+                            file_res.status, file_res.pages, file_res.sheets, file_res.rows, matches_found,
                             file_res.file_name, getattr(file_res, "local_path", None), getattr(file_res, "archive_member_path", None), is_archive_member
                         ))
                         result_id = cursor.fetchone()[0]
 
-                        # Persist matches and details
-                        # Match rows correspond to file-level aggregates here. 
-                        # In the new schema, category_code moved to details, so match is just an aggregate container.
-                        # Wait, the old match table had category_code. If we don't have it, we insert one match per file and then all details under it.
-                        
-                        # Calculate total match count and max score for this file
-                        file_matches = [m for m in file_res.matches if m.category_code != "processed"]
+                        # Persist match graph only for successfully completed parser outcomes.
+                        file_matches = [m for m in file_res.matches if file_res.status == "COMPLETED" and m.category_code != "processed"]
                         if file_matches:
                             total_matches = sum(m.match_count for m in file_matches)
                             max_score = max(m.score for m in file_matches)
-                            
+
                             cursor.execute("""
                                 INSERT INTO document_matches
                                 (queue_id, procurement_id, file_id, result_id, document_name, archive_member_path, match_count, score, pipeline_generation)

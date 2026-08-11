@@ -120,7 +120,10 @@ class S13V2Pipeline:
                         else self.parser_factory.get_parser(path)
                     )
                     if parser is None:
-                        raise RuntimeError(f"Неподдерживаемый формат: {path.name}")
+                        file_res.status = "UNSUPPORTED"
+                        file_res.error_message = f"Unsupported format: {path.suffix.lower() or path.name}"
+                        result.files.append(file_res)
+                        continue
 
                     text, line_meta = parse_file_with_meta(parser, path)
 

@@ -37,7 +37,7 @@ class EvidenceResult:
 @dataclass
 class FileProcessResult:
     file_name: str
-    status: str  # "COMPLETED", "FAILED", "SKIPPED"
+    status: str  # "COMPLETED", "UNSUPPORTED", "SKIPPED", "FAILED"
     pages: int = 0
     sheets: int = 0
     rows: int = 0
