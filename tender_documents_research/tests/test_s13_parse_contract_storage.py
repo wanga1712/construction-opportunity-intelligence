@@ -480,3 +480,125 @@ def test_s13_durable_download_survives_parser_crash_and_retry_reuses_data_file(t
     assert final_results == 1
     assert all_attempts == [("SUCCESS", 1), ("SKIPPED", 0)]
 
+
+
+def test_s13_pipeline_zero_match_parse_is_successful_processed_document(tmp_path):
+    from document_processor.parser_factory import ParserFactory
+    from document_processor.pipelines.s13_v2_pipeline import S13V2Pipeline
+
+    doc = tmp_path / "no_match.txt"
+    doc.write_text("Этот документ успешно читается, но целевых материалов здесь нет.", encoding="utf-8")
+
+    class _NoMatchEngine:
+        def process_text(self, text, line_meta=None):
+            assert "успешно читается" in text
+            return []
+
+    pipeline = S13V2Pipeline(
+        parser_factory=ParserFactory(),
+        downloader=None,
+        logger=SimpleNamespace(info=lambda *a, **k: None, warning=lambda *a, **k: None, error=lambda *a, **k: None),
+        is_over_memory_limit=lambda: False,
+    )
+
+    result = pipeline.process_task(
+        queue_id=501,
+        procurement_id=202501,
+        contract_reg_number="ZERO_MATCH",
+        table_source="reestr_contract_44_fz_awarded",
+        files=[doc],
+        match_engine=_NoMatchEngine(),
+    )
+
+    assert result.outcome.value == "SUCCESS"
+    assert len(result.files) == 1
+    assert result.files[0].status == "COMPLETED"
+    assert result.files[0].matches == []
+
+
+
+def test_s13_pipeline_docx_word_parser_success_records_completed_file(tmp_path):
+    import docx
+    from document_processor.parser_factory import ParserFactory
+    from document_processor.pipelines.s13_v2_pipeline import S13V2Pipeline
+
+    doc_path = tmp_path / "word_fixture.docx"
+    document = docx.Document()
+    document.add_paragraph("Техническое задание успешно прочитано WordParser.")
+    document.save(str(doc_path))
+
+    class _NoMatchEngine:
+        def process_text(self, text, line_meta=None):
+            assert "WordParser" in text
+            assert isinstance(line_meta, dict)
+            return []
+
+    pipeline = S13V2Pipeline(
+        parser_factory=ParserFactory(),
+        downloader=None,
+        logger=SimpleNamespace(info=lambda *a, **k: None, warning=lambda *a, **k: None, error=lambda *a, **k: None),
+        is_over_memory_limit=lambda: False,
+    )
+
+    result = pipeline.process_task(
+        queue_id=503,
+        procurement_id=202503,
+        contract_reg_number="DOCX_WORD",
+        table_source="reestr_contract_44_fz_awarded",
+        files=[doc_path],
+        match_engine=_NoMatchEngine(),
+    )
+
+    assert result.outcome.value == "SUCCESS"
+    assert result.files[0].file_name == "word_fixture.docx"
+    assert result.files[0].status == "COMPLETED"
+    assert result.files[0].matches == []
+
+def test_s13_pipeline_match_positive_produces_real_category_detail(tmp_path):
+    from document_processor.match_engine import MatchEngine
+    from document_processor.parser_factory import ParserFactory
+    from document_processor.pipelines.s13_v2_pipeline import S13V2Pipeline
+
+    doc = tmp_path / "positive.txt"
+    doc.write_text("Ведомость материалов: композитный водоотводный лоток 100 м.", encoding="utf-8")
+    engine = MatchEngine(
+        keywords=["композитный водоотводный лоток"],
+        keyword_meta={"композитный водоотводный лоток": {"category_codes": ["composite_drainage"]}},
+        min_score=75,
+    )
+    pipeline = S13V2Pipeline(
+        parser_factory=ParserFactory(),
+        downloader=None,
+        logger=SimpleNamespace(info=lambda *a, **k: None, warning=lambda *a, **k: None, error=lambda *a, **k: None),
+        is_over_memory_limit=lambda: False,
+    )
+
+    result = pipeline.process_task(
+        queue_id=502,
+        procurement_id=202502,
+        contract_reg_number="MATCH_POSITIVE",
+        table_source="reestr_contract_44_fz_awarded",
+        files=[doc],
+        match_engine=engine,
+    )
+
+    assert result.files[0].status == "COMPLETED"
+    assert result.files[0].matches
+    detail = result.files[0].matches[0].details[0]
+    assert detail.category_code in {"composite_drainage", "composites"}
+    assert detail.matched_term
+
+
+def test_s13_archive_extraction_preserves_durable_source_zip(tmp_path):
+    import zipfile
+    from document_processor.archive_extractor import ArchiveExtractor
+
+    source_zip = tmp_path / "source.zip"
+    with zipfile.ZipFile(source_zip, "w") as zf:
+        zf.writestr("child.txt", "parseable child")
+
+    extractor = ArchiveExtractor(SimpleNamespace(info=lambda *a, **k: None, warning=lambda *a, **k: None, error=lambda *a, **k: None))
+    extracted = extractor.extract_recursive(source_zip, tmp_path)
+
+    assert source_zip.exists()
+    assert any(path.name == "child.txt" for path in extracted)

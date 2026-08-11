@@ -25,14 +25,16 @@ class MatchEngine:
         custom_thresholds: Dict[str, int] = None,
         min_score: int = 75,
         match_table_all_rows: bool = True,
-        match_table_enrich: bool = True
+        match_table_enrich: bool = True,
+        keyword_meta: Optional[Dict[str, Dict[str, Any]]] = None
     ):
-        self.keywords = keywords
+        self.keywords = list(keywords or [])
         self.stop_phrases = stop_phrases or []
         self.custom_thresholds = custom_thresholds or {}
         self.min_score = min_score
         self.match_table_all_rows = match_table_all_rows
         self.match_table_enrich = match_table_enrich
+        self.keyword_meta = keyword_meta or {}
         self._table_row_matcher = TableRowMatcher()
 
     def _is_blocked_by_stop_phrase(self, keyword: str, text_lower: str) -> bool:
@@ -294,4 +296,4 @@ class MatchEngine:
             except Exception as exc:
                 logger.error(f"Table enrich error: {exc}", exc_info=True)
 
-        return [to_match_detail(m) for m in matches]
+        return [to_match_detail(m, self.keyword_meta) for m in matches]

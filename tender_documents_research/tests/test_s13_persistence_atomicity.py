@@ -306,3 +306,45 @@ def test_f_h_failure_queue_failed(db_pool, queue_task, shared_conn):
     
     cur.execute("ALTER TABLE document_processing_queue DROP CONSTRAINT fail_completed")
     shared_conn.commit()
+
+
+def test_zero_match_completed_file_creates_processing_result_without_match_graph(db_pool, queue_task, shared_conn):
+    task_id, proc_id = queue_task
+    svc = S13V2TaskPersistenceService(db_pool)
+    result = TaskProcessResult(
+        queue_id=task_id,
+        procurement_id=proc_id,
+        outcome=ProcessingOutcome.SUCCESS,
+        error_message=None,
+    )
+    result.files.append(FileProcessResult(
+        file_name="test.pdf",
+        status="COMPLETED",
+        error_message=None,
+        pages=1,
+        sheets=0,
+        rows=0,
+        matches=[],
+    ))
+
+    svc.persist_task_result(result)
+
+    cur = shared_conn.cursor()
+    cur.execute("SELECT COUNT(*), COALESCE(SUM(matches_found),0) FROM document_processing_results WHERE queue_id = %s", (task_id,))
+    result_count, matches_found = cur.fetchone()
+    cur.execute("SELECT COUNT(*) FROM document_matches WHERE queue_id = %s", (task_id,))
+    match_count = cur.fetchone()[0]
+    cur.execute("SELECT COUNT(*) FROM document_match_details")
+    detail_count = cur.fetchone()[0]
+    cur.execute("SELECT COUNT(*) FROM document_evidence WHERE queue_id = %s", (task_id,))
+    evidence_count = cur.fetchone()[0]
+    cur.execute("SELECT status FROM document_processing_queue WHERE id = %s", (task_id,))
+    status = cur.fetchone()[0]
+
+    assert result_count == 1
+    assert matches_found == 0
+    assert match_count == 0
+    assert detail_count == 0
+    assert evidence_count == 0
+    assert status == "COMPLETED"
+    shared_conn.commit()

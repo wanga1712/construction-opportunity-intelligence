@@ -106,10 +106,10 @@ class ArchiveExtractor:
                 exc_info=True,
             )
             return []
-        try:
-            zip_path.unlink(missing_ok=True)
-        except Exception:
-            pass
+        # Do not delete the canonical durable source archive here.  S13_V2
+        # records document_files.local_path for the downloaded source file and
+        # that path must survive parser/matcher failures.  Future retention
+        # cleanup may remove it explicitly, but extraction is not that owner.
         return extracted
 
     def _extract_rar_and_collect(self, rar_path: Path, dest_dir: Path) -> List[Path]:
@@ -140,10 +140,7 @@ class ArchiveExtractor:
                     continue
         except Exception:
             pass
-        try:
-            rar_path.unlink(missing_ok=True)
-        except Exception:
-            pass
+        # Do not delete the canonical durable source archive here.
         return extracted
 
     def extract_recursive(self, archive_path: Path, dest_dir: Path, depth: int = 0) -> List[Path]:

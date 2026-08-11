@@ -34,6 +34,7 @@ from .pipelines.s13_v2_pipeline import S13V2Pipeline
 from .daemon_maintenance import DaemonMaintenance
 from .task_completion import can_complete_tender_files
 from .match_engine import MatchEngine
+from .dto import ProcessingOutcome
 from .backends.s13_persistence import S13V2TaskPersistenceService
 
 class DocumentProcessorDaemon:
@@ -124,7 +125,17 @@ class DocumentProcessorDaemon:
             logger=self.logger,
             is_over_memory_limit=self.maintenance.over_memory_limit
         )
-        self.match_engine = MatchEngine(self.db, self.logger)
+        # S13_V2 must use the pure DTO match engine, but its configuration
+        # comes from the already-loaded CRM taxonomy KeywordMatcher.  Passing
+        # DatabaseManager here used to make every parsed file fail inside
+        # MatchEngine.process_text(), leaving zero successfully processed files.
+        self.match_engine = MatchEngine(
+            keywords=list(self.matcher.keywords),
+            stop_phrases=list(self.matcher.stop_phrases),
+            custom_thresholds=dict(self.matcher.custom_thresholds),
+            min_score=self.matcher.min_score,
+            keyword_meta=dict(self.matcher.keyword_meta),
+        )
         self.s13_persistence = S13V2TaskPersistenceService(self.db)
         self.morning_boost = MorningPriorityBoost()
         self.populate_coordinator = QueuePopulateCoordinator(
@@ -377,8 +388,8 @@ class DocumentProcessorDaemon:
                         match_engine=self.match_engine
                     )
 
-                    if proc_result.outcome == "FAILED":
-                        self.queue_manager.mark_error(task_id, proc_result.error_message)
+                    if proc_result.outcome == ProcessingOutcome.FAILED:
+                        self.s13_backend.queue.mark_failed(task_id, proc_result.error_message)
                         print(f" ERROR: {proc_result.error_message}", flush=True)
                     elif proc_result.files and all(
                         file_result.status == "SKIPPED" for file_result in proc_result.files
