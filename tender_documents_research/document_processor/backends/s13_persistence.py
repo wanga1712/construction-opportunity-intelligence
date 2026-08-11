@@ -77,7 +77,7 @@ class S13V2TaskPersistenceService:
                         # Wait, the old match table had category_code. If we don't have it, we insert one match per file and then all details under it.
                         
                         # Calculate total match count and max score for this file
-                        file_matches = [m for m in file_res.matches if m.category_code != "processed"]
+                        file_matches = file_res.matches
                         if file_matches:
                             total_matches = sum(m.match_count for m in file_matches)
                             max_score = max(m.score for m in file_matches)
@@ -108,8 +108,6 @@ class S13V2TaskPersistenceService:
 
                 # 3. Persist Evidence
                 for ev in result.evidence:
-                    if ev.category_code == "processed":
-                        continue
                     cursor.execute("""
                         INSERT INTO document_evidence
                         (procurement_id, queue_id, category_code, evidence_score, match_count, next_stage, pipeline_generation)
