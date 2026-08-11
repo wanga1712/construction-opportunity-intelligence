@@ -76,7 +76,14 @@ class TaskPipeline:
         except Exception as e:
             self.logger.error(f"Не удалось сохранить файл с ошибкой загрузки {local_path}: {e}")
 
-    def prefetch_task(self, task_id: int, contract_reg_number: str, table_source: str) -> list[Path]:
+    def prefetch_task(
+        self,
+        task_id: int,
+        contract_reg_number: str,
+        table_source: str,
+        procurement_id: Optional[int] = None,
+        source_id: Optional[int] = None,
+    ):
         self.logger.info(f"[{task_id}] Получение ссылок для {contract_reg_number}...")
         try:
             if os.getenv("LOG_REGISTRY_LINK") == "1":
@@ -95,15 +102,17 @@ class TaskPipeline:
             links = links[:max_links]
         self.logger.info(f"[{task_id}] Найдено ссылок: {len(links)}, начинаем скачивание...")
         registry_label = self.resolve_registry_label(table_source)
-        files = self.downloader.download_and_extract(
+        batch = self.downloader.download_and_extract(
             task_id,
             links,
             registry_type=registry_label,
             contract_number=contract_reg_number,
             table_source=table_source,
+            procurement_id=procurement_id,
+            source_id=source_id,
         )
-        self.logger.info(f"[{task_id}] Скачано файлов: {len(files)}")
-        return files
+        self.logger.info(f"[{task_id}] Скачано файлов для обработки: {len(batch.files)}")
+        return batch
 
     def _file_is_resuming(
         self, tender_id: Optional[int], table_source: str, file_name: str

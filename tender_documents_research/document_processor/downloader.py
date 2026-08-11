@@ -170,7 +170,16 @@ class Downloader:
         res = self.download_and_extract(task_id, links, registry_type, contract_number, table_source)
         return res.files
 
-    def download_and_extract(self, task_id: int, links: List[Tuple[str, Optional[str]]], registry_type: Optional[str] = None, contract_number: Optional[str] = None, table_source: Optional[str] = None) -> DownloadBatchResult:
+    def download_and_extract(
+        self,
+        task_id: int,
+        links: List[Tuple[str, Optional[str]]],
+        registry_type: Optional[str] = None,
+        contract_number: Optional[str] = None,
+        table_source: Optional[str] = None,
+        procurement_id: Optional[int] = None,
+        source_id: Optional[int] = None,
+    ) -> DownloadBatchResult:
         task_dir = self.base_dir / str(task_id)
         task_dir.mkdir(parents=True, exist_ok=True)
 
@@ -186,9 +195,12 @@ class Downloader:
         failures: List[DownloadFailure] = []
         remote_dir, safe_prefix = self.yandex_client.build_remote_dir_and_prefix(registry_type, contract_number, None)
 
-        tender_id: Optional[int] = None
-        if table_source and contract_number:
-            tender_id = self.contract_locator.resolve_tender_id(contract_number, table_source)
+        resolved_source_id: Optional[int] = source_id
+        if resolved_source_id is None and table_source and contract_number:
+            resolved_source_id = self.contract_locator.resolve_tender_id(contract_number, table_source)
+        # S13_V2 queue procurement_id is the local processing identity.
+        # The registry/native tender id belongs in document_files.source_id.
+        tender_id: Optional[int] = procurement_id if procurement_id is not None else resolved_source_id
 
         try:
             max_workers = int(os.getenv("DOWNLOAD_PARALLEL", "4"))
@@ -202,7 +214,7 @@ class Downloader:
                 futures.append(executor.submit(
                     self._process_single_link,
                     task_id, task_dir, url, db_file_name,
-                    tender_id, table_source, remote_dir, safe_prefix
+                    tender_id, table_source, remote_dir, safe_prefix, resolved_source_id
                 ))
 
             for future in as_completed(futures):
@@ -287,7 +299,8 @@ class Downloader:
 
     def _process_single_link(self, task_id: int, task_dir: Path, url: str, db_file_name: Optional[str],
                              tender_id: Optional[int], table_source: Optional[str],
-                             remote_dir: Optional[str], safe_prefix: Optional[str]) -> Tuple[List[Path], Optional[DownloadFailure]]:
+                             remote_dir: Optional[str], safe_prefix: Optional[str],
+                             source_id: Optional[int] = None) -> Tuple[List[Path], Optional[DownloadFailure]]:
         self.logger.debug(f"[{task_id}] Обработка ссылки: {url} (имя из БД: {db_file_name})")
 
         url_derived_name = self.http_client.sanitize_name(self.http_client.predict_filename(url))
@@ -298,7 +311,7 @@ class Downloader:
 
         if tender_id is not None and table_source and self.state_repo:
             self.state_repo.ensure_download_file(
-                task_id, tender_id, table_source, url, url_hash, safe_predicted
+                task_id, tender_id, table_source, url, url_hash, safe_predicted, source_id=source_id
             )
             status_row = self.state_repo.get_file_status(tender_id, table_source, safe_predicted, url_hash)
             current_status = status_row[0] if status_row else None
@@ -317,6 +330,16 @@ class Downloader:
                     target_path = Path(status_row[1]) if len(status_row) > 1 and status_row[1] else task_dir / safe_predicted
                     if target_path.exists():
                         self.logger.info(f"[{task_id}] Пропускаю файл (уже обработан и есть локально): {safe_predicted}")
+                        self.state_repo.record_download_attempt(
+                            task_id,
+                            tender_id,
+                            url,
+                            url_hash,
+                            0,
+                            "SKIPPED",
+                            bytes_received=target_path.stat().st_size,
+                            duration_ms=0,
+                        )
                         return [target_path], None
                     else:
                         self.logger.info(f"[{task_id}] Файл в статусе COMPLETED, но локально отсутствует — перескачиваю: {safe_predicted}")
@@ -336,30 +359,45 @@ class Downloader:
         suggested_name_for_download = self.http_client.sanitize_name(db_file_name) if db_file_name else None
 
         for attempt in range(2):
-            self.logger.debug(f"[{task_id}] Скачивание из источника (попытка {attempt+1}/2): {url}")
+            attempt_number = attempt + 1
+            attempt_start = time.monotonic()
+            self.logger.debug(f"[{task_id}] Скачивание из источника (попытка {attempt_number}/2): {url}")
             local_path = self._download_single(task_dir, url, suggested_name_for_download)
+            duration_ms = int((time.monotonic() - attempt_start) * 1000)
             if local_path is None:
                 self.logger.warning(f"[{task_id}] Не удалось скачать: {url}")
+                if tender_id is not None and table_source and self.state_repo:
+                    self.state_repo.record_download_attempt(
+                        task_id,
+                        tender_id,
+                        url,
+                        url_hash,
+                        attempt_number,
+                        "FAILED",
+                        error_class="TRANSIENT" if "zakupki.gov.ru" in url else "PERMANENT",
+                        duration_ms=duration_ms,
+                    )
                 continue
 
-            if tender_id is not None and table_source and self.state_repo:
-                # We use the legacy string "processing" which S13_V2 should handle or map, or we pass what state_repo expects.
-                # Since state_repo interface doesn't strictly define enums, let's pass "PROCESSING".
-                # For legacy, it might want "processing", but LegacyStateRepository just inserts what it's given.
-                # However, previous code passed "processing" directly. We will pass "PROCESSING".
-                # For S13_V2, document_files CHECK constraint expects 'PENDING', 'COMPLETED', 'FAILED', 'SKIPPED'.
-                # Wait! `document_files` doesn't have 'PROCESSING'. The download_status only has 4 values.
-                # So in S13_V2, we might not need to mark it as processing at the file level?
-                # Let's check the schema for document_files. It has PENDING, COMPLETED, FAILED, SKIPPED.
-                # So we should pass 'PENDING' if we just want to mark it as starting? No, if it's downloading, there's no PROCESSING.
-                # If backend is S13_V2, maybe mark it as something else or just skip this.
-                pass
+            bytes_received = local_path.stat().st_size if local_path.exists() else None
 
             # Пропускаем валидацию для архивов и частей RAR — их нельзя "открыть" парсером
             if not is_rar_part and not self.archive_extractor.is_archive(local_path):
                 from document_processor.file_validator import validate_open
                 if not validate_open(local_path, self.logger):
                     self.logger.warning(f"[{task_id}] Файл не открывается: {local_path.name}. Переcкачивание…")
+                    if tender_id is not None and table_source and self.state_repo:
+                        self.state_repo.record_download_attempt(
+                            task_id,
+                            tender_id,
+                            url,
+                            url_hash,
+                            attempt_number,
+                            "FAILED",
+                            error_class="PERMANENT",
+                            bytes_received=bytes_received,
+                            duration_ms=duration_ms,
+                        )
                     try: local_path.unlink(missing_ok=True)
                     except Exception: pass
                     continue
@@ -374,6 +412,17 @@ class Downloader:
                     pass
 
             ok_file = local_path
+            if tender_id is not None and table_source and self.state_repo:
+                self.state_repo.record_download_attempt(
+                    task_id,
+                    tender_id,
+                    url,
+                    url_hash,
+                    attempt_number,
+                    "SUCCESS",
+                    bytes_received=ok_file.stat().st_size if ok_file.exists() else bytes_received,
+                    duration_ms=duration_ms,
+                )
             break
 
         if not ok_file:

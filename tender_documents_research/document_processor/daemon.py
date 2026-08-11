@@ -457,12 +457,16 @@ class DocumentProcessorDaemon:
         try:
             try:
                 batch = self.pipeline.prefetch_task(
-                    task_id, contract_number, source_table
+                    task_id,
+                    contract_number,
+                    source_table,
+                    procurement_id=procurement_id,
+                    source_id=task.get("source_id"),
                 )
                 files = batch.files
                 
                 if batch.failed_count > 0:
-                    has_transient = any("Transient" in f.error_class for f in batch.failures)
+                    has_transient = any((f.error_class or "").upper() == "TRANSIENT" for f in batch.failures)
                     if has_transient:
                         msg = f"Transient download errors: {batch.failed_count}. Requeueing."
                         self.logger.warning(f"[S13_V2][{task_id}] {msg}")

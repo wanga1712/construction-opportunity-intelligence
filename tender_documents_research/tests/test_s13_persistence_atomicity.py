@@ -151,6 +151,11 @@ def queue_task(shared_conn):
     shared_conn.commit()
     yield (task_id, proc_id)
     
+    try:
+        shared_conn.rollback()
+    except Exception:
+        pass
+    cursor.execute("ALTER TABLE document_processing_queue DROP CONSTRAINT IF EXISTS fail_completed")
     cursor.execute("DELETE FROM document_evidence")
     cursor.execute("DELETE FROM document_match_details")
     cursor.execute("DELETE FROM document_matches")
@@ -209,7 +214,7 @@ def test_a_b_c_g_success_atomic_commit(db_pool, queue_task, shared_conn):
     cur = shared_conn.cursor()
     
     cur.execute("SELECT status FROM document_processing_queue WHERE id = %s", (task_id,))
-    assert cur.fetchone()[0] == 'SUCCESS' # G. queue COMPLETED (or SUCCESS)
+    assert cur.fetchone()[0] == 'COMPLETED' # G. queue COMPLETED
     
     cur.execute("SELECT id FROM document_matches WHERE queue_id = %s", (task_id,))
     match_row = cur.fetchone()
@@ -248,14 +253,14 @@ def test_e_forced_failure_after_evidence(db_pool, queue_task, shared_conn):
     # Or just ANY failure that rolls back everything.
     # The requirement: "forced failure на финальном queue -> COMPLETED -> ROLLBACK всего result graph" is covered in F.
     cur = shared_conn.cursor()
-    cur.execute("ALTER TABLE document_processing_queue ADD CONSTRAINT fail_success CHECK (status != 'SUCCESS')")
+    cur.execute("ALTER TABLE document_processing_queue ADD CONSTRAINT fail_completed CHECK (status != 'COMPLETED')")
     shared_conn.commit()
     
     with pytest.raises(psycopg2.errors.CheckViolation):
         svc.persist_task_result(res)
         
     shared_conn.rollback()
-    cur.execute("ALTER TABLE document_processing_queue DROP CONSTRAINT IF EXISTS fail_success")
+    cur.execute("ALTER TABLE document_processing_queue DROP CONSTRAINT IF EXISTS fail_completed")
     shared_conn.commit()
 
     # Verify rollback
@@ -275,7 +280,7 @@ def test_f_h_failure_queue_failed(db_pool, queue_task, shared_conn):
     res = _mock_result(task_id, proc_id)
     
     cur = shared_conn.cursor()
-    cur.execute("ALTER TABLE document_processing_queue ADD CONSTRAINT fail_success CHECK (status != 'SUCCESS')")
+    cur.execute("ALTER TABLE document_processing_queue ADD CONSTRAINT fail_completed CHECK (status != 'COMPLETED')")
     shared_conn.commit()
     
     # Persist handles failure by catching the exception and running a separate update
@@ -299,5 +304,5 @@ def test_f_h_failure_queue_failed(db_pool, queue_task, shared_conn):
     status = cur.fetchone()[0]
     assert status == 'FAILED'
     
-    cur.execute("ALTER TABLE document_processing_queue DROP CONSTRAINT fail_success")
+    cur.execute("ALTER TABLE document_processing_queue DROP CONSTRAINT fail_completed")
     shared_conn.commit()
