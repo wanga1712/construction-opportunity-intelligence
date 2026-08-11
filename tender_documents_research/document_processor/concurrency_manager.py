@@ -19,11 +19,18 @@ class DownloadCoordinator:
         # We parse the DB config from env as it's the simplest way to get an independent connection
         # to the same DB that holds the lock.
         # document_intelligence
-        host = os.getenv("DB_HOST_TENDER", "localhost")
-        dbname = os.getenv("DB_DATABASE_TENDER", "document_intelligence")
-        user = os.getenv("DB_USER_TENDER", "postgres")
-        password = os.getenv("DB_PASSWORD_TENDER", "")
-        port = os.getenv("DB_PORT_TENDER", "5432")
+        if os.getenv("PROCESSING_BACKEND") == "S13_V2":
+            host = os.getenv("S13_DOCUMENT_DB_HOST", "localhost")
+            dbname = os.getenv("S13_DOCUMENT_DB_NAME", "document_intelligence")
+            user = os.getenv("S13_DOCUMENT_DB_USER", "doc_worker")
+            password = os.getenv("S13_DOCUMENT_DB_PASSWORD", "")
+            port = os.getenv("S13_DOCUMENT_DB_PORT", "5432")
+        else:
+            host = os.getenv("DB_HOST_TENDER", "localhost")
+            dbname = os.getenv("DB_DATABASE_TENDER", "document_intelligence")
+            user = os.getenv("DB_USER_TENDER", "postgres")
+            password = os.getenv("DB_PASSWORD_TENDER", "")
+            port = os.getenv("DB_PORT_TENDER", "5432")
         
         return psycopg2.connect(
             host=host,
