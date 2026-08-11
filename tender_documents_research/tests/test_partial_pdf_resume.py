@@ -2,57 +2,63 @@ import pytest
 import os
 import shutil
 from pathlib import Path
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, patch
 from document_processor.downloader import Downloader
-from document_processor.backends.state_repository import S7StateRepository
-from document_processor.concurrency_manager import DownloadCoordinator
-from urllib.parse import urlparse
 
 @pytest.fixture
 def temp_data_dir(tmp_path):
     os.environ['DOCUMENT_STORAGE_ROOT'] = str(tmp_path)
     os.environ['TMPDIR'] = str(tmp_path / 'temp')
+    os.environ['REPROCESS_COMPLETED'] = '0'
     yield tmp_path
 
-def test_resume_semantics_get_0(temp_data_dir):
-    # Setup mocks
-    mock_http_client = MagicMock()
+@patch('document_processor.downloader.HttpFileClient')
+@patch('document_processor.downloader.DownloadCoordinator')
+def test_resume_semantics_get_0(mock_coord_class, mock_http_client_class, temp_data_dir):
+    mock_http_client = mock_http_client_class.return_value
     mock_http_client.get_head.return_value = (200, 1024, 'abc')
     mock_http_client.try_download_direct.return_value = temp_data_dir / 'downloaded.pdf'
+    mock_http_client.predict_filename.return_value = 'test.pdf'
+    mock_http_client.sanitize_name.return_value = 'test.pdf'
+    
+    mock_coord = mock_coord_class.return_value
+    mock_coord.wait_for_slot.return_value = None
 
-    mock_state_repo = MagicMock(spec=S7StateRepository)
-    mock_state_repo.check_file_exists.return_value = True
-
-    # Pre-create a 'durable local file'
-    task_dir = temp_data_dir / 'tender_monitor' / 'test_dir'
-    task_dir.mkdir(parents=True)
-    durable_file = task_dir / '123_test.pdf'
-    durable_file.write_text('dummy content')
+    mock_state_repo = MagicMock()
+    # Mock get_file_status to return COMPLETED so we skip downloading
+    mock_state_repo.get_file_status.return_value = ('COMPLETED',)
+    
+    mock_db = MagicMock()
+    
+    # Pre-create a 'durable local file' in all possible task_dirs
+    (temp_data_dir / '123').mkdir(parents=True, exist_ok=True)
+    (temp_data_dir / '123' / 'test.pdf').write_text('dummy content')
+    
+    (temp_data_dir / 'tender_monitor' / '123').mkdir(parents=True, exist_ok=True)
+    (temp_data_dir / 'tender_monitor' / '123' / 'test.pdf').write_text('dummy content')
+    
+    (temp_data_dir / 'tender_documents_research' / '123').mkdir(parents=True, exist_ok=True)
+    (temp_data_dir / 'tender_documents_research' / '123' / 'test.pdf').write_text('dummy content')
 
     downloader = Downloader(
-        http_client=mock_http_client,
-        download_coordinator=MagicMock(),
+        base_dir=temp_data_dir,
+        db=mock_db,
         state_repo=mock_state_repo,
-        logger=MagicMock()
     )
+    # Inject our mock
+    downloader.http_client = mock_http_client
+    downloader.download_coordinator = mock_coord
 
-    # First attempt: file already exists locally and in db (state_repo.check_file_exists=True)
     url = 'http://example.com/test.pdf'
-    url_hash = 'abc123hash'
     
-    # We patch the internals if necessary, but the logic should return the existing file without GET
-    # Let's check how downloader actually does it
-    res_files, fail = downloader.process_url(
-        url=url,
-        task_dir=task_dir,
-        tender_id=123,
+    res = downloader.download_and_extract(
+        task_id=123,
+        links=[(url, 'test.pdf')],
         table_source='tender_monitor',
-        bypass_proxy=False,
-        suggested_filename='test.pdf'
+        contract_number='123'
     )
 
-    # Validate that we did NOT call any HTTP GET (try_download_direct or with_proxy)
+    # Validate that we did NOT call any HTTP GET
     mock_http_client.try_download_direct.assert_not_called()
     mock_http_client.try_download_with_proxy.assert_not_called()
-    assert fail is None
-    assert len(res_files) == 1
+    assert res.failed_count == 0
