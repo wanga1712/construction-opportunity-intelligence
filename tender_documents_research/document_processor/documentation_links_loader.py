@@ -1,79 +1,105 @@
-"""
-Загрузка и дедупликация ссылок на документацию по contract_id.
-"""
+"""Explicit source-native procurement identity and document-link resolution."""
 
 from __future__ import annotations
 
-from typing import Iterable, List, Optional, Sequence, Tuple
+from dataclasses import dataclass
+from typing import Iterable, List, Optional, Tuple
 from urllib.parse import parse_qsl, urlencode, urlparse, urlunparse
 
 from .registry_tables import qualified
 
-
 LinkRow = Tuple[str, Optional[str]]
 
 
-class DocumentationLinksLoader:
-    """Читает links_documentation_* и объединяет результаты по нескольким id."""
+class SourceLinkIdentityError(RuntimeError):
+    """The source family or identity is not supported."""
+
+
+class SourceLinkMappingError(RuntimeError):
+    """The configured source schema cannot execute its declared lookup."""
+
+
+@dataclass(frozen=True)
+class SourceProcurementIdentity:
+    source_table: str
+    source_id: Optional[int]
+    registry_number: str
+    source_type: str
+
+
+class SourceLinksRepository:
+    """Resolve links using the native registry number declared by each source."""
+
+    LINK_TABLES = {
+        "44": "links_documentation_44_fz",
+        "223": "links_documentation_223_fz",
+    }
+    SOURCE_TYPES_BY_LINK_TABLE = {
+        table: source_type for source_type, table in LINK_TABLES.items()
+    }
 
     def __init__(self, db, db_alias: str):
         self.db = db
         self.db_alias = db_alias
-    def load_for_contract(
-        self,
-        links_table: str,
-        contract_number: Optional[str],
-        contract_ids: Sequence[int],
-    ) -> List[LinkRow]:
-        table_q = qualified(links_table)
-        parsed: List[LinkRow] = []
-        collected_rows = []
 
-        if contract_number:
-            try:
-                sql_by_number = (
-                    f"SELECT document_links, file_name FROM {table_q} "
-                    f"WHERE contract_number = %s"
-                )
-                rows = self.db.execute_query(
-                    self.db_alias, sql_by_number, (contract_number,), fetch=True
-                ) or []
-                collected_rows.extend(rows)
-            except Exception:
-                pass
-
-        if contract_ids:
-            unique_ids = sorted(set(contract_ids))
-            placeholders = ", ".join(["%s"] * len(unique_ids))
-            sql_by_ids = (
-                f"SELECT document_links, file_name FROM {table_q} "
-                f"WHERE contract_id IN ({placeholders})"
+    def resolve_links(self, identity: SourceProcurementIdentity) -> List[LinkRow]:
+        source_type = str(identity.source_type or "").strip()
+        table = self.LINK_TABLES.get(source_type)
+        number = str(identity.registry_number or "").strip()
+        expected_marker = f"_{source_type}_fz"
+        if table is None or not number or expected_marker not in identity.source_table:
+            raise SourceLinkIdentityError(
+                "SOURCE_LINK_IDENTITY_UNSUPPORTED: "
+                f"type={source_type!r} table={identity.source_table!r}"
             )
-            rows = self.db.execute_query(
-                self.db_alias, sql_by_ids, tuple(unique_ids), fetch=True
-            ) or []
-            collected_rows.extend(rows)
 
-        for row in collected_rows:
-            value = row[0]
-            file_name = row[1] if len(row) > 1 else None
+        sql = (
+            f"SELECT document_links, file_name FROM {qualified(table)} "
+            "WHERE contract_number = %s ORDER BY id"
+        )
+        try:
+            rows = self.db.execute_query(
+                self.db_alias, sql, (number,), fetch=True
+            ) or []
+        except Exception as exc:
+            raise SourceLinkMappingError(
+                f"SOURCE_LINK_MAPPING_ERROR: {table}.contract_number lookup failed"
+            ) from exc
+
+        parsed: List[LinkRow] = []
+        for value, file_name, *_ in rows:
             parsed.extend(self._expand_link_value(value, file_name))
         return self.dedupe_links(parsed)
 
-    @staticmethod
-    def _expand_link_value(
-        value,
-        file_name: Optional[str],
+    def load_for_contract(
+        self,
+        links_table: str,
+        contract_number: str,
+        _legacy_reestr_ids,
     ) -> List[LinkRow]:
+        """Compatibility API; reestr row IDs are deliberately not link keys."""
+        source_type = self.SOURCE_TYPES_BY_LINK_TABLE.get(links_table)
+        if source_type is None:
+            raise SourceLinkIdentityError(
+                "SOURCE_LINK_IDENTITY_UNSUPPORTED: "
+                f"links_table={links_table!r}"
+            )
+        return self.resolve_links(
+            SourceProcurementIdentity(
+                source_table=f"reestr_contract_{source_type}_fz",
+                source_id=None,
+                registry_number=contract_number,
+                source_type=source_type,
+            )
+        )
+
+    @staticmethod
+    def _expand_link_value(value, file_name: Optional[str]) -> List[LinkRow]:
         result: List[LinkRow] = []
-        if isinstance(value, list):
-            for item in value:
-                if isinstance(item, str) and item.strip():
-                    result.append((item.strip(), file_name))
-        elif isinstance(value, str):
-            for part in value.split():
-                if part.strip():
-                    result.append((part.strip(), file_name))
+        values = value if isinstance(value, list) else str(value or "").split()
+        for item in values:
+            if isinstance(item, str) and item.strip():
+                result.append((item.strip(), file_name))
         return result
 
     @staticmethod
@@ -109,12 +135,13 @@ class DocumentationLinksLoader:
         seen: set[Tuple[str, str]] = set()
         result: List[LinkRow] = []
         for url, file_name in links:
-            key = (
-                cls.normalize_url(url),
-                cls.normalize_file_name(file_name),
-            )
+            key = (cls.normalize_url(url), cls.normalize_file_name(file_name))
             if not key[0] or key in seen:
                 continue
             seen.add(key)
             result.append((url, file_name))
         return result
+
+
+# Compatibility name for callers; behavior is the explicit repository above.
+DocumentationLinksLoader = SourceLinksRepository
