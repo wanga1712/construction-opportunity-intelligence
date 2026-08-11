@@ -162,3 +162,321 @@ def test_s13_valid_data_completed_row_reuse_get_0(tmp_path):
     assert files == [data_file]
     assert d.http_client.gets == 0
     assert repo.attempts[0][0][5] == "SKIPPED"
+
+
+def test_s13_durable_download_survives_parser_crash_and_retry_reuses_data_file(tmp_path, monkeypatch):
+    """S13 regression: durable download state is committed before parser/result failure.
+
+    Contract proven here:
+    HTTP success -> document_files durable -> download_attempt durable -> controlled
+    process/parser-boundary crash -> queue not COMPLETED -> durable state remains ->
+    retry of the same procurement/url reuses valid approved-root file with HTTP GET=0.
+    """
+    import psycopg2
+
+    from document_processor.task_pipeline import TaskPipeline
+    from document_processor.backends.queue_repository import S13V2QueueRepository
+    from document_processor.backends.state_repository import S13V2StateRepository
+    from document_processor.backends.s13_persistence import S13V2TaskPersistenceService
+
+    
+    import os
+
+    conn = psycopg2.connect(
+        host=os.environ.get("DB_HOST_TENDER", "127.0.0.1"),
+        port=os.environ.get("DB_PORT_TENDER", "5432"),
+        dbname=os.environ.get("DB_DATABASE_TENDER", "document_intelligence"),
+        user=os.environ.get("DB_USER_TENDER", "doc_worker"),
+        password=os.environ.get("DB_PASSWORD_TENDER"),
+    )
+    conn.autocommit = False
+    with conn.cursor() as cur:
+        cur.execute(
+            """
+            CREATE TEMPORARY TABLE document_processing_queue (
+                id INT PRIMARY KEY,
+                procurement_id INT NOT NULL,
+                source_table TEXT,
+                source_id INT,
+                contract_number TEXT,
+                status TEXT,
+                pipeline_generation TEXT,
+                worker_id INT,
+                started_at TIMESTAMP,
+                completed_at TIMESTAMP,
+                last_error TEXT,
+                queue_lane TEXT,
+                priority_score INT,
+                research_action TEXT,
+                research_depth TEXT,
+                category_codes TEXT[]
+            ) ON COMMIT PRESERVE ROWS;
+
+            CREATE TEMPORARY TABLE document_files (
+                id SERIAL PRIMARY KEY,
+                queue_id INT REFERENCES document_processing_queue(id),
+                procurement_id INT NOT NULL,
+                source_table TEXT,
+                source_id INT,
+                url TEXT,
+                url_hash TEXT NOT NULL,
+                file_name TEXT,
+                download_status TEXT,
+                worker_id INT,
+                error_message TEXT,
+                local_path TEXT,
+                file_size_bytes BIGINT,
+                downloaded_at TIMESTAMP,
+                pipeline_generation TEXT NOT NULL,
+                UNIQUE(url_hash, pipeline_generation)
+            ) ON COMMIT PRESERVE ROWS;
+
+            CREATE TEMPORARY TABLE download_attempts (
+                id SERIAL PRIMARY KEY,
+                queue_id INT,
+                procurement_id INT,
+                file_id INT,
+                source_url TEXT,
+                url_hash TEXT,
+                attempt_number INT,
+                started_at TIMESTAMP,
+                finished_at TIMESTAMP,
+                http_status INT,
+                error_class TEXT,
+                bytes BIGINT,
+                latency DOUBLE PRECISION,
+                result TEXT,
+                duration_ms INT,
+                bytes_received BIGINT,
+                pipeline_generation TEXT
+            ) ON COMMIT PRESERVE ROWS;
+
+            CREATE TEMPORARY TABLE document_processing_results (
+                id SERIAL PRIMARY KEY,
+                queue_id INT REFERENCES document_processing_queue(id),
+                procurement_id INT,
+                file_id INT REFERENCES document_files(id),
+                status TEXT,
+                pages_processed INT,
+                sheets_processed INT,
+                rows_extracted INT,
+                matches_found INT,
+                pipeline_generation TEXT
+            ) ON COMMIT PRESERVE ROWS;
+
+            CREATE TEMPORARY TABLE document_matches (
+                id SERIAL PRIMARY KEY,
+                queue_id INT REFERENCES document_processing_queue(id),
+                procurement_id INT,
+                file_id INT REFERENCES document_files(id),
+                result_id INT REFERENCES document_processing_results(id),
+                match_count INT,
+                score FLOAT,
+                pipeline_generation TEXT
+            ) ON COMMIT PRESERVE ROWS;
+
+            CREATE TEMPORARY TABLE document_match_details (
+                id SERIAL PRIMARY KEY,
+                match_id INT REFERENCES document_matches(id),
+                procurement_id INT,
+                category_code TEXT,
+                subcategory_code TEXT,
+                matched_term TEXT,
+                term_type TEXT,
+                score FLOAT,
+                row_data JSONB,
+                page_or_sheet TEXT,
+                row_number INT,
+                context_before JSONB,
+                context_after JSONB,
+                pipeline_generation TEXT
+            ) ON COMMIT PRESERVE ROWS;
+
+            CREATE TEMPORARY TABLE document_evidence (
+                id SERIAL PRIMARY KEY,
+                procurement_id INT,
+                queue_id INT REFERENCES document_processing_queue(id),
+                match_id INT REFERENCES document_matches(id),
+                category_code TEXT,
+                evidence_score FLOAT,
+                match_count INT,
+                next_stage TEXT,
+                updated_at TIMESTAMP,
+                pipeline_generation TEXT,
+                UNIQUE(procurement_id, category_code, pipeline_generation)
+            ) ON COMMIT PRESERVE ROWS;
+            """
+        )
+        cur.execute(
+            """
+            INSERT INTO document_processing_queue
+                (id, procurement_id, source_id, source_table, contract_number, status, pipeline_generation)
+            VALUES
+                (101, 202001, 303001, 'reestr_contract_44_fz_awarded', 'TEST_CONTRACT_001', 'PROCESSING', 'S13_V2')
+            """
+        )
+    conn.commit()
+
+    class _Pool:
+        def __init__(self, shared_conn):
+            self.shared_conn = shared_conn
+
+        def get_connection(self, db_name=None):
+            return self.shared_conn
+
+        def return_connection(self, db_name, conn):
+            pass
+
+    storage_root = tmp_path / "data" / "tender-documents"
+    storage_root.mkdir(parents=True)
+    monkeypatch.setenv("PROCESSING_BACKEND", "S13_V2")
+    monkeypatch.setenv("DOCUMENT_STORAGE_ROOT", str(storage_root))
+    monkeypatch.delenv("DOCUMENT_DOWNLOAD_DIR", raising=False)
+    monkeypatch.delenv("REPROCESS_COMPLETED", raising=False)
+    monkeypatch.setattr("document_processor.file_validator.validate_open", lambda path, logger: True)
+
+    state_repo = S13V2StateRepository({}, pipeline_generation="S13_V2")
+    state_repo._conn = conn
+    queue_repo = S13V2QueueRepository({})
+    queue_repo._conn = conn
+    pool = _Pool(conn)
+
+    http_gets = {"count": 0}
+
+    class _HttpClient:
+        def sanitize_name(self, value):
+            return value
+
+        def predict_filename(self, url):
+            return "fixture.txt"
+
+    downloader = Downloader.__new__(Downloader)
+    downloader.base_dir = storage_root / "downloads-open"
+    downloader.base_dir.mkdir(parents=True)
+    downloader.approved_storage_root = storage_root.resolve()
+    downloader.state_repo = state_repo
+    downloader.http_client = _HttpClient()
+    downloader.archive_extractor = SimpleNamespace(is_archive=lambda path: False)
+    downloader.yandex_client = SimpleNamespace(build_remote_dir_and_prefix=lambda *a, **k: (None, None))
+    downloader.contract_locator = SimpleNamespace(resolve_tender_id=lambda *a, **k: 303001)
+    downloader.logger = SimpleNamespace(debug=lambda *a, **k: None, info=lambda *a, **k: None, warning=lambda *a, **k: None, error=lambda *a, **k: None)
+    downloader._is_rar_part = lambda path: False
+
+    def _download_single(task_dir, url, suggested_filename=None):
+        http_gets["count"] += 1
+        task_dir.mkdir(parents=True, exist_ok=True)
+        path = task_dir / (suggested_filename or "fixture.txt")
+        path.write_text("supported parser fixture", encoding="utf-8")
+        return path
+
+    downloader._download_single = _download_single
+    downloader.get_links = lambda contract_number, table_source: [("https://example.invalid/s13/fixture.txt", "fixture.txt")]
+    downloader.build_registry_link = lambda table_source, contract_number: "https://example.invalid/card"
+
+    daemon = DocumentProcessorDaemon.__new__(DocumentProcessorDaemon)
+    daemon.logger = SimpleNamespace(info=lambda *a, **k: None, warning=lambda *a, **k: None, error=lambda *a, **k: None)
+    daemon.match_engine = object()
+    daemon.pipeline = TaskPipeline(
+        db=None,
+        downloader=downloader,
+        parser_factory=None,
+        matcher=None,
+        enhancer=None,
+        worker_id=16,
+        failed_uploads_dir=tmp_path / "failed",
+        logger=daemon.logger,
+        is_over_memory_limit=lambda: False,
+    )
+    daemon.s13_backend = SimpleNamespace(queue=queue_repo)
+    daemon.s13_persistence = S13V2TaskPersistenceService(pool)
+
+    parser_calls = {"count": 0}
+
+    def _crashing_process_task(**kwargs):
+        parser_calls["count"] += 1
+        assert kwargs["queue_id"] == 101
+        assert kwargs["procurement_id"] == 202001
+        assert kwargs["files"]
+        raise RuntimeError("TEST_PARSER_CRASH")
+
+    daemon.s13_pipeline = SimpleNamespace(process_task=_crashing_process_task)
+    task = {
+        "id": 101,
+        "procurement_id": 202001,
+        "source_id": 303001,
+        "source_table": "reestr_contract_44_fz_awarded",
+        "contract_number": "TEST_CONTRACT_001",
+    }
+
+    daemon._process_s13v2_task(task)
+
+    assert parser_calls["count"] == 1
+    assert http_gets["count"] == 1
+
+    with conn.cursor() as cur:
+        cur.execute("SELECT status, last_error FROM document_processing_queue WHERE id=101")
+        status_after_crash, last_error = cur.fetchone()
+        assert status_after_crash == "FAILED"
+        assert "TEST_PARSER_CRASH" in last_error
+        cur.execute("SELECT id, procurement_id, source_id, download_status, local_path, pipeline_generation FROM document_files")
+        file_id, procurement_id, source_id, download_status, local_path, pipeline_generation = cur.fetchone()
+        cur.execute("SELECT result, attempt_number FROM download_attempts ORDER BY id")
+        attempts_after_crash = cur.fetchall()
+        cur.execute("SELECT COUNT(*) FROM document_processing_results")
+        results_after_crash = cur.fetchone()[0]
+        cur.execute("SELECT COUNT(*) FROM document_matches")
+        matches_after_crash = cur.fetchone()[0]
+        cur.execute("SELECT COUNT(*) FROM document_match_details")
+        details_after_crash = cur.fetchone()[0]
+        cur.execute("SELECT COUNT(*) FROM document_evidence")
+        evidence_after_crash = cur.fetchone()[0]
+
+    durable_path = Path(local_path)
+    assert file_id > 0
+    assert procurement_id == 202001
+    assert source_id == 303001
+    assert download_status == "COMPLETED"
+    assert pipeline_generation == "S13_V2"
+    assert durable_path.exists()
+    assert durable_path.resolve().is_relative_to(storage_root.resolve())
+    assert "opt/tender_documents_research/downloads" not in str(durable_path)
+    assert attempts_after_crash == [("SUCCESS", 1)]
+    assert results_after_crash == 0
+    assert matches_after_crash == 0
+    assert details_after_crash == 0
+    assert evidence_after_crash == 0
+
+    with conn.cursor() as cur:
+        cur.execute("UPDATE document_processing_queue SET status='PROCESSING', last_error=NULL WHERE id=101")
+    conn.commit()
+
+    def _successful_process_task(**kwargs):
+        parser_calls["count"] += 1
+        assert kwargs["files"] == [durable_path]
+        return TaskProcessResult(
+            procurement_id=202001,
+            queue_id=101,
+            outcome=ProcessingOutcome.SUCCESS,
+            files=[SimpleNamespace(file_name="fixture.txt", status="COMPLETED", error_message=None, pages=1, sheets=0, rows=0, matches=[])],
+            evidence=[],
+        )
+
+    daemon.s13_pipeline = SimpleNamespace(process_task=_successful_process_task)
+    daemon._process_s13v2_task(task)
+
+    assert parser_calls["count"] == 2
+    assert http_gets["count"] == 1  # retry HTTP GET = 0
+
+    with conn.cursor() as cur:
+        cur.execute("SELECT status, last_error FROM document_processing_queue WHERE id=101")
+        final_status, final_error = cur.fetchone()
+        cur.execute("SELECT result, attempt_number FROM download_attempts ORDER BY id")
+        all_attempts = cur.fetchall()
+        cur.execute("SELECT COUNT(*) FROM document_processing_results WHERE queue_id=101")
+        final_results = cur.fetchone()[0]
+
+    assert final_status == "COMPLETED"
+    assert final_error is None
+    assert final_results == 1
+    assert all_attempts == [("SUCCESS", 1), ("SKIPPED", 0)]
+
