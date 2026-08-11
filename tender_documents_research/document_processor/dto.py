@@ -43,6 +43,10 @@ class FileProcessResult:
     rows: int = 0
     error_message: Optional[str] = None
     matches: List[MatchResult] = field(default_factory=list)
+    local_path: Optional[str] = None
+    parent_file_name: Optional[str] = None
+    parent_local_path: Optional[str] = None
+    archive_member_path: Optional[str] = None
 
 @dataclass
 class TaskProcessResult:

@@ -46,31 +46,31 @@ class S13V2TaskPersistenceService:
 
                 # 2. Persist File Process Results
                 for file_res in result.files:
-                    cursor.execute("""
-                        UPDATE document_files
-                        SET download_status = %s, error_message = %s
-                        WHERE queue_id = %s AND file_name = %s AND pipeline_generation = 'S13_V2'
-                        RETURNING id
-                    """, (file_res.status, file_res.error_message, result.queue_id, file_res.file_name))
-
-                    file_row = cursor.fetchone()
-                    if not file_row:
+                    file_id = self._resolve_document_file_id(cursor, result.queue_id, file_res)
+                    if not file_id:
                         raise RuntimeError(
                             f"Missing document_files row for queue={result.queue_id} file={file_res.file_name}"
                         )
 
-                    file_id = file_row[0] if file_row else None
+                    cursor.execute("""
+                        UPDATE document_files
+                        SET download_status = %s, error_message = %s
+                        WHERE id = %s AND pipeline_generation = 'S13_V2'
+                    """, (file_res.status, file_res.error_message, file_id))
 
                     if file_id and file_res.status == "COMPLETED":
+                        is_archive_member = bool(getattr(file_res, "archive_member_path", None))
                         # Insert document_processing_results
                         cursor.execute("""
                             INSERT INTO document_processing_results
-                            (queue_id, procurement_id, file_id, status, pages_processed, sheets_processed, rows_extracted, matches_found, pipeline_generation)
-                            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, 'S13_V2')
+                            (queue_id, procurement_id, file_id, status, pages_processed, sheets_processed, rows_extracted, matches_found,
+                             processed_file_name, processed_local_path, archive_member_path, is_archive_member, pipeline_generation)
+                            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, 'S13_V2')
                             RETURNING id
                         """, (
                             result.queue_id, result.procurement_id, file_id,
-                            'COMPLETED', file_res.pages, file_res.sheets, file_res.rows, sum(m.match_count for m in file_res.matches)
+                            'COMPLETED', file_res.pages, file_res.sheets, file_res.rows, sum(m.match_count for m in file_res.matches),
+                            file_res.file_name, getattr(file_res, "local_path", None), getattr(file_res, "archive_member_path", None), is_archive_member
                         ))
                         result_id = cursor.fetchone()[0]
 
@@ -87,11 +87,12 @@ class S13V2TaskPersistenceService:
                             
                             cursor.execute("""
                                 INSERT INTO document_matches
-                                (queue_id, procurement_id, file_id, result_id, match_count, score, pipeline_generation)
-                                VALUES (%s, %s, %s, %s, %s, %s, 'S13_V2')
+                                (queue_id, procurement_id, file_id, result_id, document_name, archive_member_path, match_count, score, pipeline_generation)
+                                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, 'S13_V2')
                                 RETURNING id
                             """, (
                                 result.queue_id, result.procurement_id, file_id, result_id,
+                                file_res.file_name, getattr(file_res, "archive_member_path", None),
                                 total_matches, max_score
                             ))
                             match_id = cursor.fetchone()[0]
@@ -149,6 +150,75 @@ class S13V2TaskPersistenceService:
             logger.error(f"Failed to persist task {result.queue_id}: {e}", exc_info=True)
             self.mark_failed(result.queue_id, str(e))
             raise
+
+
+    def _resolve_document_file_id(self, cursor, queue_id: int, file_res) -> Optional[int]:
+        """
+        Resolve persisted document_files identity for a parser result.
+
+        document_files is the source-download table. Archive-derived children are
+        intentionally anchored to their parent source archive row; the child
+        identity is stored in document_processing_results/document_matches.
+        """
+        archive_member_path = getattr(file_res, "archive_member_path", None)
+        parent_local_path = getattr(file_res, "parent_local_path", None)
+        parent_file_name = getattr(file_res, "parent_file_name", None)
+        local_path = getattr(file_res, "local_path", None)
+
+        if archive_member_path:
+            if parent_local_path:
+                cursor.execute("""
+                    SELECT id FROM document_files
+                    WHERE queue_id = %s
+                      AND local_path = %s
+                      AND pipeline_generation = 'S13_V2'
+                    ORDER BY id DESC
+                    LIMIT 1
+                """, (queue_id, parent_local_path))
+                row = cursor.fetchone()
+                if row:
+                    return row[0]
+
+            if parent_file_name:
+                cursor.execute("""
+                    SELECT id FROM document_files
+                    WHERE queue_id = %s
+                      AND file_name = %s
+                      AND pipeline_generation = 'S13_V2'
+                    ORDER BY id DESC
+                    LIMIT 1
+                """, (queue_id, parent_file_name))
+                row = cursor.fetchone()
+                if row:
+                    return row[0]
+
+            # Never fall back to the derived child basename. That was the bug:
+            # archive members do not have document_files rows.
+            return None
+
+        if local_path:
+            cursor.execute("""
+                SELECT id FROM document_files
+                WHERE queue_id = %s
+                  AND local_path = %s
+                  AND pipeline_generation = 'S13_V2'
+                ORDER BY id DESC
+                LIMIT 1
+            """, (queue_id, local_path))
+            row = cursor.fetchone()
+            if row:
+                return row[0]
+
+        cursor.execute("""
+            SELECT id FROM document_files
+            WHERE queue_id = %s
+              AND file_name = %s
+              AND pipeline_generation = 'S13_V2'
+            ORDER BY id DESC
+            LIMIT 1
+        """, (queue_id, file_res.file_name))
+        row = cursor.fetchone()
+        return row[0] if row else None
 
     def mark_failed(self, queue_id: int, error_msg: str):
         try:

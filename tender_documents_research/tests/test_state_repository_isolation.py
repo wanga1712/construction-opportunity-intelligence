@@ -122,6 +122,8 @@ class PersistenceCursor(FakeCursor):
         normalized = " ".join(sql.split())
         if "SELECT status" in normalized:
             self._row = ("PROCESSING",)
+        elif "SELECT id FROM document_files" in normalized:
+            self._row = (101,)
         elif "UPDATE document_files" in normalized:
             self._row = (101,)
         elif "INSERT INTO document_processing_results" in normalized:

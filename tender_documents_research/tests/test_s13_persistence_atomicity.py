@@ -52,6 +52,8 @@ def shared_conn():
                 id SERIAL PRIMARY KEY,
                 queue_id INT REFERENCES document_processing_queue(id),
                 file_name TEXT,
+                local_path TEXT,
+                file_size_bytes BIGINT,
                 download_status TEXT,
                 error_message TEXT,
                 pipeline_generation TEXT
@@ -67,6 +69,10 @@ def shared_conn():
                 sheets_processed INT,
                 rows_extracted INT,
                 matches_found INT,
+                processed_file_name TEXT,
+                processed_local_path TEXT,
+                archive_member_path TEXT,
+                is_archive_member BOOLEAN DEFAULT FALSE,
                 pipeline_generation TEXT
             );
             
@@ -78,6 +84,8 @@ def shared_conn():
                 result_id INT REFERENCES document_processing_results(id),
                 match_count INT,
                 score FLOAT,
+                document_name TEXT,
+                archive_member_path TEXT,
                 pipeline_generation TEXT
             );
             
@@ -346,3 +354,176 @@ def test_zero_match_completed_file_creates_processing_result_without_match_graph
     assert evidence_count == 0
     assert status == "COMPLETED"
     shared_conn.commit()
+
+
+def _insert_queue_and_source_file(conn, *, file_name="source.pdf", local_path="/data/source.pdf"):
+    cur = conn.cursor()
+    proc_id = 1999
+    cur.execute("""
+        INSERT INTO document_processing_queue (procurement_id, status, pipeline_generation)
+        VALUES (%s, 'PROCESSING', 'S13_V2')
+        RETURNING id
+    """, (proc_id,))
+    task_id = cur.fetchone()[0]
+    cur.execute("""
+        INSERT INTO document_files (queue_id, file_name, download_status, local_path, pipeline_generation)
+        VALUES (%s, %s, 'COMPLETED', %s, 'S13_V2')
+        RETURNING id
+    """, (task_id, file_name, local_path))
+    file_id = cur.fetchone()[0]
+    conn.commit()
+    return task_id, proc_id, file_id
+
+
+def test_direct_source_persistence_uses_local_path_identity(concrete_db_manager, shared_conn):
+    task_id, proc_id, file_id = _insert_queue_and_source_file(
+        shared_conn, file_name="direct.pdf", local_path="/data/q/direct.pdf"
+    )
+    result = TaskProcessResult(queue_id=task_id, procurement_id=proc_id, outcome=ProcessingOutcome.SUCCESS)
+    result.files.append(FileProcessResult(
+        file_name="direct.pdf", status="COMPLETED", pages=2, local_path="/data/q/direct.pdf"
+    ))
+
+    S13V2TaskPersistenceService(concrete_db_manager).persist_task_result(result)
+
+    cur = shared_conn.cursor()
+    cur.execute("""
+        SELECT file_id, processed_file_name, processed_local_path, archive_member_path, is_archive_member
+        FROM document_processing_results WHERE queue_id=%s
+    """, (task_id,))
+    assert cur.fetchone() == (file_id, "direct.pdf", "/data/q/direct.pdf", None, False)
+
+
+def test_derived_docx_persistence_anchors_to_parent_archive(concrete_db_manager, shared_conn):
+    task_id, proc_id, archive_id = _insert_queue_and_source_file(
+        shared_conn, file_name="archive.zip", local_path="/data/q/archive.zip"
+    )
+    result = TaskProcessResult(queue_id=task_id, procurement_id=proc_id, outcome=ProcessingOutcome.SUCCESS)
+    result.files.append(FileProcessResult(
+        file_name="spec.docx", status="COMPLETED", pages=3,
+        local_path="/data/q/archive/docs/spec.docx",
+        parent_file_name="archive.zip", parent_local_path="/data/q/archive.zip",
+        archive_member_path="docs/spec.docx",
+    ))
+
+    S13V2TaskPersistenceService(concrete_db_manager).persist_task_result(result)
+
+    cur = shared_conn.cursor()
+    cur.execute("""
+        SELECT file_id, processed_file_name, processed_local_path, archive_member_path, is_archive_member
+        FROM document_processing_results WHERE queue_id=%s
+    """, (task_id,))
+    assert cur.fetchone() == (archive_id, "spec.docx", "/data/q/archive/docs/spec.docx", "docs/spec.docx", True)
+
+
+def test_derived_xls_positive_match_graph_and_row_data(concrete_db_manager, shared_conn):
+    task_id, proc_id, archive_id = _insert_queue_and_source_file(
+        shared_conn, file_name="archive.zip", local_path="/data/q/archive.zip"
+    )
+    result = TaskProcessResult(queue_id=task_id, procurement_id=proc_id, outcome=ProcessingOutcome.SUCCESS)
+    detail = MatchDetailResult(
+        category_code="lighting", subcategory_code="fixture", matched_term="светильник",
+        term_type="keyword", score=91.0, row_data={"sheet_name": "ТЗ", "row_index": 5},
+        page_or_sheet="ТЗ", row_number=5,
+    )
+    match = MatchResult(category_code="lighting", match_count=1, score=91.0, details=[detail])
+    result.files.append(FileProcessResult(
+        file_name="spec.xls", status="COMPLETED", sheets=1, rows=7, matches=[match],
+        local_path="/data/q/archive/docs/spec.xls",
+        parent_file_name="archive.zip", parent_local_path="/data/q/archive.zip",
+        archive_member_path="docs/spec.xls",
+    ))
+    result.evidence.append(EvidenceResult(category_code="lighting", evidence_score=91.0, match_count=1))
+
+    S13V2TaskPersistenceService(concrete_db_manager).persist_task_result(result)
+
+    cur = shared_conn.cursor()
+    cur.execute("SELECT file_id, document_name, archive_member_path FROM document_matches WHERE queue_id=%s", (task_id,))
+    assert cur.fetchone() == (archive_id, "spec.xls", "docs/spec.xls")
+    cur.execute("SELECT category_code, row_data->>'sheet_name', (row_data->>'row_index')::int FROM document_match_details")
+    assert cur.fetchone() == ("lighting", "ТЗ", 5)
+    cur.execute("SELECT category_code, match_count, match_id FROM document_evidence WHERE queue_id=%s", (task_id,))
+    assert cur.fetchone() == ("lighting", 1, None)
+
+
+def test_zero_match_derived_result_without_match_graph(concrete_db_manager, shared_conn):
+    task_id, proc_id, archive_id = _insert_queue_and_source_file(
+        shared_conn, file_name="archive.zip", local_path="/data/q/archive.zip"
+    )
+    result = TaskProcessResult(queue_id=task_id, procurement_id=proc_id, outcome=ProcessingOutcome.SUCCESS)
+    result.files.append(FileProcessResult(
+        file_name="zero.xlsx", status="COMPLETED", sheets=1, rows=2, matches=[],
+        parent_file_name="archive.zip", parent_local_path="/data/q/archive.zip",
+        local_path="/data/q/archive/zero.xlsx", archive_member_path="zero.xlsx",
+    ))
+    S13V2TaskPersistenceService(concrete_db_manager).persist_task_result(result)
+    cur = shared_conn.cursor()
+    cur.execute("SELECT COUNT(*) FROM document_processing_results WHERE queue_id=%s", (task_id,))
+    assert cur.fetchone()[0] == 1
+    cur.execute("SELECT COUNT(*) FROM document_matches WHERE queue_id=%s", (task_id,))
+    assert cur.fetchone()[0] == 0
+
+
+def test_duplicate_basename_isolated_by_parent_archive(concrete_db_manager, shared_conn):
+    task_id, proc_id, archive_a = _insert_queue_and_source_file(
+        shared_conn, file_name="archive_a.zip", local_path="/data/q/archive_a.zip"
+    )
+    cur = shared_conn.cursor()
+    cur.execute("""
+        INSERT INTO document_files (queue_id, file_name, download_status, local_path, pipeline_generation)
+        VALUES (%s, 'archive_b.zip', 'COMPLETED', '/data/q/archive_b.zip', 'S13_V2') RETURNING id
+    """, (task_id,))
+    archive_b = cur.fetchone()[0]
+    shared_conn.commit()
+    result = TaskProcessResult(queue_id=task_id, procurement_id=proc_id, outcome=ProcessingOutcome.SUCCESS)
+    for parent, parent_id in (("archive_a", archive_a), ("archive_b", archive_b)):
+        result.files.append(FileProcessResult(
+            file_name="spec.xls", status="COMPLETED", sheets=1,
+            local_path=f"/data/q/{parent}/docs/spec.xls",
+            parent_file_name=f"{parent}.zip", parent_local_path=f"/data/q/{parent}.zip",
+            archive_member_path="docs/spec.xls",
+        ))
+    S13V2TaskPersistenceService(concrete_db_manager).persist_task_result(result)
+    cur.execute("SELECT file_id, processed_local_path FROM document_processing_results WHERE queue_id=%s ORDER BY processed_local_path", (task_id,))
+    assert cur.fetchall() == [
+        (archive_a, "/data/q/archive_a/docs/spec.xls"),
+        (archive_b, "/data/q/archive_b/docs/spec.xls"),
+    ]
+
+
+def test_archive_relative_path_identity_with_same_basename(concrete_db_manager, shared_conn):
+    task_id, proc_id, archive_id = _insert_queue_and_source_file(
+        shared_conn, file_name="archive.zip", local_path="/data/q/archive.zip"
+    )
+    result = TaskProcessResult(queue_id=task_id, procurement_id=proc_id, outcome=ProcessingOutcome.SUCCESS)
+    for member in ("folder_a/spec.xls", "folder_b/spec.xls"):
+        result.files.append(FileProcessResult(
+            file_name="spec.xls", status="COMPLETED", sheets=1,
+            local_path=f"/data/q/archive/{member}",
+            parent_file_name="archive.zip", parent_local_path="/data/q/archive.zip",
+            archive_member_path=member,
+        ))
+    S13V2TaskPersistenceService(concrete_db_manager).persist_task_result(result)
+    cur = shared_conn.cursor()
+    cur.execute("SELECT archive_member_path FROM document_processing_results WHERE queue_id=%s ORDER BY archive_member_path", (task_id,))
+    assert [r[0] for r in cur.fetchall()] == ["folder_a/spec.xls", "folder_b/spec.xls"]
+
+
+def test_missing_document_files_derived_no_longer_uses_basename_only(concrete_db_manager, shared_conn):
+    task_id, proc_id, _ = _insert_queue_and_source_file(
+        shared_conn, file_name="other.zip", local_path="/data/q/other.zip"
+    )
+    result = TaskProcessResult(queue_id=task_id, procurement_id=proc_id, outcome=ProcessingOutcome.SUCCESS)
+    result.files.append(FileProcessResult(
+        file_name="spec.xls", status="COMPLETED", sheets=1,
+        local_path="/data/q/archive/spec.xls",
+        parent_file_name="archive.zip", parent_local_path="/data/q/archive.zip",
+        archive_member_path="spec.xls",
+    ))
+    with pytest.raises(RuntimeError, match="Missing document_files row"):
+        S13V2TaskPersistenceService(concrete_db_manager).persist_task_result(result)
+    cur = shared_conn.cursor()
+    cur.execute("SELECT status FROM document_processing_queue WHERE id=%s", (task_id,))
+    assert cur.fetchone()[0] == "FAILED"
+    cur.execute("SELECT COUNT(*) FROM document_processing_results WHERE queue_id=%s", (task_id,))
+    assert cur.fetchone()[0] == 0

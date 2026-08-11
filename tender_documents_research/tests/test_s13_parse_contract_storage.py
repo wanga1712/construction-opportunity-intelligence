@@ -262,6 +262,10 @@ def test_s13_durable_download_survives_parser_crash_and_retry_reuses_data_file(t
                 sheets_processed INT,
                 rows_extracted INT,
                 matches_found INT,
+                processed_file_name TEXT,
+                processed_local_path TEXT,
+                archive_member_path TEXT,
+                is_archive_member BOOLEAN DEFAULT FALSE,
                 pipeline_generation TEXT
             ) ON COMMIT PRESERVE ROWS;
 
@@ -271,6 +275,8 @@ def test_s13_durable_download_survives_parser_crash_and_retry_reuses_data_file(t
                 procurement_id INT,
                 file_id INT REFERENCES document_files(id),
                 result_id INT REFERENCES document_processing_results(id),
+                document_name TEXT,
+                archive_member_path TEXT,
                 match_count INT,
                 score FLOAT,
                 pipeline_generation TEXT
