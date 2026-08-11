@@ -64,7 +64,7 @@ def shared_conn():
                 queue_id INT REFERENCES document_processing_queue(id),
                 procurement_id INT,
                 file_id INT REFERENCES document_files(id),
-                status TEXT,
+                status TEXT CHECK (status IN ('PENDING', 'COMPLETED', 'FAILED', 'UNSUPPORTED', 'SKIPPED')),
                 pages_processed INT,
                 sheets_processed INT,
                 rows_extracted INT,
@@ -633,3 +633,58 @@ def test_archive_terminal_input_accounting_status_distribution(concrete_db_manag
     assert cur.fetchone()[0] == 4
     cur.execute("SELECT COUNT(*) FROM document_matches WHERE queue_id=%s", (task_id,))
     assert cur.fetchone()[0] == 0
+
+
+def test_skipped_terminal_outcome_is_persisted_without_fake_graph(concrete_db_manager, shared_conn):
+    task_id, proc_id, file_id = _insert_queue_and_source_file(
+        shared_conn, file_name="source.zip", local_path="/data/q/source.zip"
+    )
+    result = TaskProcessResult(queue_id=task_id, procurement_id=proc_id, outcome=ProcessingOutcome.SUCCESS)
+    result.files.append(FileProcessResult(
+        file_name="good.docx", status="COMPLETED", pages=1,
+        parent_file_name="source.zip", parent_local_path="/data/q/source.zip",
+        local_path="/data/q/source/good.docx", archive_member_path="good.docx",
+    ))
+    result.files.append(FileProcessResult(
+        file_name="readme.txt", status="SKIPPED", error_message="Skipped by file_skip_list",
+        parent_file_name="source.zip", parent_local_path="/data/q/source.zip",
+        local_path="/data/q/source/readme.txt", archive_member_path="readme.txt",
+    ))
+
+    S13V2TaskPersistenceService(concrete_db_manager).persist_task_result(result)
+
+    cur = shared_conn.cursor()
+    cur.execute("""
+        SELECT status, matches_found, processed_file_name, archive_member_path, is_archive_member
+        FROM document_processing_results
+        WHERE queue_id=%s
+        ORDER BY processed_file_name
+    """, (task_id,))
+    assert cur.fetchall() == [
+        ("COMPLETED", 0, "good.docx", "good.docx", True),
+        ("SKIPPED", 0, "readme.txt", "readme.txt", True),
+    ]
+    cur.execute("SELECT COUNT(*) FROM document_matches WHERE queue_id=%s", (task_id,))
+    assert cur.fetchone()[0] == 0
+    cur.execute("SELECT COUNT(*) FROM document_evidence WHERE queue_id=%s", (task_id,))
+    assert cur.fetchone()[0] == 0
+    cur.execute("SELECT download_status FROM document_files WHERE id=%s", (file_id,))
+    assert cur.fetchone()[0] == "COMPLETED"
+
+
+def test_processing_result_status_constraint_rejects_invalid_status(shared_conn, queue_task):
+    task_id, proc_id = queue_task
+    cur = shared_conn.cursor()
+    cur.execute("""
+        INSERT INTO document_files (queue_id, file_name, download_status, local_path, pipeline_generation)
+        VALUES (%s, 'invalid-status.pdf', 'COMPLETED', '/data/q/invalid-status.pdf', 'S13_V2')
+        RETURNING id
+    """, (task_id,))
+    file_id = cur.fetchone()[0]
+    with pytest.raises(psycopg2.errors.CheckViolation):
+        cur.execute("""
+            INSERT INTO document_processing_results
+                (queue_id, procurement_id, file_id, status, matches_found, pipeline_generation)
+            VALUES (%s, %s, %s, 'NOT_A_REAL_STATUS', 0, 'S13_V2')
+        """, (task_id, proc_id, file_id))
+    shared_conn.rollback()
