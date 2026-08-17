@@ -5,22 +5,22 @@ from src.ui.db_health_ui import apply_health_to_session, check_and_reconnect
 from src.ui.export_queue_ui import queue_size
 
 PAGES = {
-    "objects": ("📊", "Аналитический контур"),
     "objects_v2": ("🧱", "Аналитический контур v2"),
-    "ai_review": ("🧠", "AI аналитика"),
+    "analytics_v3": ("📊", "Аналитика V3"),
+    # ai_review route intentionally omitted from CRM sidebar (module code kept).
     "opportunity_radar": ("📡", "Радар объектов"),
     "computers": ("💻", "Контур компьютеров"),
     "waterproofing": ("💧", "Гидроизоляция"),
     "map": ("🗺️", "Карта"),
     "infrastructure": ("🖥️", "Инфраструктура"),
+    "system_health": ("🖥️", "Состояние серверов"),
     "customers": ("👥", "Заказчики"),
     "export_pdf": ("📄", "Выгрузка PDF"),
     "crm_profiles": ("⚙️", "Профили поиска"),
+    "category_registry": ("📦", "Товарные категории"),
 }
 
-FUTURE_PAGES = [
-    ("settings", "⚙️", "Настройки"),
-]
+FUTURE_PAGES: list = []
 
 
 def render_sidebar_nav() -> str:
@@ -42,7 +42,12 @@ def render_sidebar_nav() -> str:
         st.session_state.ui_theme = selected_theme
         st.rerun()
 
-    current = st.session_state.get("nav_page", "objects")
+    current = st.session_state.get("nav_page", "objects_v2")
+    # Legacy sidebar entry «Аналитический контур» removed; keep hidden route
+    # `objects` for object_detail deep-links (waterproofing / object_card).
+    if current not in PAGES and current not in ("objects", "objects_copy"):
+        current = "objects_v2"
+        st.session_state.nav_page = current
 
     for key, (icon, label) in PAGES.items():
         btn_label = label
@@ -91,4 +96,4 @@ def render_sidebar_nav() -> str:
     if st.session_state.get("db_warn"):
         st.sidebar.warning(st.session_state.db_warn)
 
-    return st.session_state.get("nav_page", "objects")
+    return st.session_state.get("nav_page", "objects_v2")

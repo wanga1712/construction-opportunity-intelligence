@@ -118,14 +118,11 @@ def ensure_schema(crm_db: Optional[CrmDatabaseManager] = None) -> bool:
     if _table_exists(db):
         _SCHEMA_INITIALIZED = True
         return True
-    try:
-        db.execute_update(DDL)
-        _SCHEMA_INITIALIZED = True
-        return True
-    except Exception as exc:
-        # Do not block the UI flow when DB is under load.
-        logger.warning(f"ensure_schema ai_classifications failed: {exc}")
-        return False
+    # No runtime CREATE — capability unavailable until migration applied.
+    logger.warning(
+        "crm_object_ai_classifications SCHEMA_NOT_READY (no runtime DDL)"
+    )
+    return False
 
 
 def load_ai_classifications(crm_db: Optional[CrmDatabaseManager] = None) -> Dict[str, dict]:

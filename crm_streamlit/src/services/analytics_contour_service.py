@@ -21,9 +21,9 @@ _LIMITS = {"gold": 3, "silver": 6, "bronze": 8, "early": 12}
 
 
 @st.cache_resource(show_spinner=False)
-def get_analytics_contour_repository(_service):
+def get_analytics_contour_repository(_objects_service):
     """Кешируем слой данных в рантайме Streamlit."""
-    return AnalyticsContourRepository(_service)
+    return AnalyticsContourRepository(_objects_service)
 
 
 def _parse_date(raw: Optional[str]) -> Optional[date]:

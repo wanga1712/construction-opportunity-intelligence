@@ -75,13 +75,23 @@ class ProfiledSearchService:
         return bool(self.crm_db) and not self.crm_db.is_offline_mode()
 
     def ensure_schema(self) -> None:
-        """Create tables and seed default product groups/profiles."""
+        """Fail-closed: required profiled-search tables must already exist.
+
+        No runtime CREATE/seed. Apply SQL under controlled migration only.
+        """
         if not self.available():
             raise RuntimeError("CRM DB is not available")
-        sql = SCHEMA_PATH.read_text(encoding="utf-8")
-        self.crm_db.execute_update(sql)
-        if PROFILES_PATH.exists():
-            self.crm_db.execute_update(PROFILES_PATH.read_text(encoding="utf-8"))
+        from src.services.schema_guard import require_relations_or_raise
+
+        require_relations_or_raise(
+            self.crm_db,
+            [
+                "crm_product_groups",
+                "crm_search_profiles",
+                "crm_search_rules",
+                "crm_object_profile_decisions",
+            ],
+        )
 
     def product_groups(self) -> list[ProductGroup]:
         rows = self._query(

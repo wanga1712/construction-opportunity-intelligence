@@ -286,15 +286,21 @@ CREATE INDEX IF NOT EXISTS ix_crm_computer_tz_items_category
 
 
 def ensure_computer_cards_schema(crm_db) -> None:
+    """Fail-closed presence check. No runtime DDL."""
     if not crm_db:
         return
-    crm_db.execute_update(_SCHEMA_SQL)
+    from src.services.schema_guard import require_relations_or_raise
+
+    require_relations_or_raise(crm_db, ["crm_computer_tz_cards", "crm_computer_tz_items"])
 
 
 def load_computer_cards(crm_db, keys: Sequence[str]) -> Dict[str, dict]:
     if not crm_db or not keys:
         return {}
-    ensure_computer_cards_schema(crm_db)
+    try:
+        ensure_computer_cards_schema(crm_db)
+    except Exception:
+        return {}
     placeholders = ",".join(["%s"] * len(keys))
     rows = crm_db.execute_query(
         f"SELECT * FROM crm_computer_tz_cards WHERE object_key IN ({placeholders})",
@@ -306,7 +312,10 @@ def load_computer_cards(crm_db, keys: Sequence[str]) -> Dict[str, dict]:
 def load_computer_items(crm_db, keys: Sequence[str]) -> Dict[str, List[dict]]:
     if not crm_db or not keys:
         return {}
-    ensure_computer_cards_schema(crm_db)
+    try:
+        ensure_computer_cards_schema(crm_db)
+    except Exception:
+        return {}
     placeholders = ",".join(["%s"] * len(keys))
     rows = crm_db.execute_query(
         f"""

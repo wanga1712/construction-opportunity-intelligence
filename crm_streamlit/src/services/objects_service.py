@@ -251,52 +251,6 @@ class ObjectsService:
         return sorted(seen.items(), key=lambda x: x[1])
 
     def dynamic_product_groups(self, *, include_computers: bool = False) -> List[tuple[str, str]]:
-        """Load active product groups from CRM DB with a safe fallback."""
-        fallback = [
-            ("flooring", "Напольные покрытия"),
-            ("self_leveling_floors", "Наливные / промышленные полы"),
-            ("lighting", "Светотехника"),
-            ("curbstone", "Бордюрный камень"),
-            ("drainage", "Водоотвод"),
-            ("waterproofing", "Гидроизоляция"),
-            ("composites", "Композиты"),
-            ("computers", "Компьютеры / ИТ"),
-        ]
-        if not self.crm_db or self.crm_db.is_offline_mode():
-            return [x for x in fallback if include_computers or x[0] != "computers"]
-        try:
-            rows = ProfiledSearchService(self.crm_db).product_groups()
-            if rows:
-                groups = [(row.code, row.name) for row in rows]
-                return groups if include_computers else [x for x in groups if x[0] != "computers"]
-        except Exception as exc:
-            logger.warning(f"dynamic_product_groups: {exc}")
-        return [x for x in fallback if include_computers or x[0] != "computers"]
-
-    def dynamic_product_groups(self, *, include_computers: bool = False) -> List[tuple[str, str]]:
-        """Load active product groups from CRM DB with a safe fallback."""
-        fallback = [
-            ("flooring", "Напольные покрытия"),
-            ("self_leveling_floors", "Наливные / промышленные полы"),
-            ("lighting", "Светотехника"),
-            ("curbstone", "Бордюрный камень"),
-            ("drainage", "Водоотвод"),
-            ("waterproofing", "Гидроизоляция"),
-            ("composites", "Композиты"),
-            ("computers", "Компьютеры / ИТ"),
-        ]
-        if not self.crm_db or self.crm_db.is_offline_mode():
-            return [x for x in fallback if include_computers or x[0] != "computers"]
-        try:
-            rows = ProfiledSearchService(self.crm_db).product_groups()
-            if rows:
-                groups = [(row.code, row.name) for row in rows]
-                return groups if include_computers else [x for x in groups if x[0] != "computers"]
-        except Exception as exc:
-            logger.warning(f"dynamic_product_groups: {exc}")
-        return [x for x in fallback if include_computers or x[0] != "computers"]
-
-    def dynamic_product_groups(self, *, include_computers: bool = False) -> List[tuple[str, str]]:
         """Load active product groups from CRM DB with a safe static fallback.
 
         The contour should not depend on a hardcoded category list on first load:
