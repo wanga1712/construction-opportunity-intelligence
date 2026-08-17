@@ -13,7 +13,9 @@
 
 ## CURRENT WIP — 2026-08-17
 
-**PROJECT-EIS-PRODUCTION-RECOVERY-AND-24H-SOURCE-DAY-SLA-CLOSURE-1** — `[~]` production recovery + 24h source-day SLA. Auth stall fixed; S7 UNION ALL lookup parenthesized; DB connections reused per folder; cheap JSONL metrics. Full source-date 2026-08-12 is **not** complete (4/55 regions). Reports: `docs/reports/eis_24h_sla_closure/`. Qwen/docs not started. CRM UI unchanged.
+**PROJECT-EIS-YEAR-LONG-PERFORMANCE-REGRESSION-AND-DATA-TRUTH-AUDIT-1** — `[~]` audit-only. Production parser not stopped. Reports: `docs/reports/eis_year_long_audit/`.
+
+Prior (open SLA): **PROJECT-EIS-PRODUCTION-RECOVERY-AND-24H-SOURCE-DAY-SLA-CLOSURE-1** — `[~]` 2026-08-12 still 4/55. UNION/auth fixed. Commit `3b26815`. Auth stall fixed; S7 UNION ALL lookup parenthesized; DB connections reused per folder; cheap JSONL metrics. Full source-date 2026-08-12 is **not** complete (4/55 regions). Reports: `docs/reports/eis_24h_sla_closure/`. Qwen/docs not started. CRM UI unchanged.
 
 Size note: `eis_ingestion/s7_forward/parsing_xml/okpd_parser.py` is 550 lines. Left as one processing loop (615 / recouped / OKPD / skip). Splitting it in this recovery WIP would risk skip/reuse regressions.
 
