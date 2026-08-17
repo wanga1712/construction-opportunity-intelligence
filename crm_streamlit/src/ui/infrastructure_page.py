@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import streamlit as st
 
+from src.ui.processing_quality_ui import render_processing_quality_tab
 from src.services.infrastructure_status import (
     acknowledge_alert,
     get_nyx_status,
@@ -80,13 +81,18 @@ def render_infrastructure_page(service) -> None:
     else:
         st.warning(summary.get("error") or "Очередь недоступна")
 
-    tab_errors, tab_logs, tab_rules = st.tabs(["Ошибки / no_links", "Логи sergey", "Правила"])
+    tab_errors, tab_logs, tab_quality, tab_rules = st.tabs(
+        ["Ошибки / no_links", "Логи sergey", "Качество обработки", "Правила"]
+    )
     with tab_errors:
         rows = get_recent_queue_errors(service.tender_db, limit=50)
         if rows:
             st.dataframe(rows, use_container_width=True, hide_index=True)
         else:
             st.success("Свежих error/no_links не найдено.")
+
+    with tab_quality:
+        render_processing_quality_tab(service.tender_db)
 
     with tab_logs:
         if st.button("Показать последние 80 строк", key="infra_logs"):

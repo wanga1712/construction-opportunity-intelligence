@@ -1,5 +1,8 @@
 """
 Подключение к тем же БД, что и десктопное CRM-приложение.
+
+SOURCE (tender_monitor) is wrapped read-only for CRM application paths.
+CRM derived state writes must use crm_db.
 """
 from typing import Optional, Tuple
 
@@ -10,18 +13,20 @@ from core.radar_database import RadarDatabaseManager
 from core.tender_database import TenderDatabaseManager
 from modules.crm.crm_database import CrmDatabaseManager
 
+from src.services.source_db_readonly import wrap_source_db_readonly
+
 
 def connect_databases() -> Tuple[
     Optional[RadarDatabaseManager],
-    Optional[TenderDatabaseManager],
+    Optional[object],
     Optional[CrmDatabaseManager],
     str,
 ]:
     """
-    Подключить Radar, Tender и CRM.
+    Подключить Radar, Tender (source READ ONLY) и CRM.
 
     Returns:
-        (radar_db, tender_db, crm_db, warning_message)
+        (radar_db, tender_db/source_db, crm_db, warning_message)
     """
     errors = []
     config = Settings()
@@ -35,7 +40,7 @@ def connect_databases() -> Tuple[
     }
 
     radar_db: Optional[RadarDatabaseManager] = None
-    tender_db: Optional[TenderDatabaseManager] = None
+    tender_db: Optional[object] = None
     crm_db: Optional[CrmDatabaseManager] = None
 
     try:
@@ -46,8 +51,9 @@ def connect_databases() -> Tuple[
         errors.append(f"Radar: {e}")
 
     try:
-        tender_db = TenderDatabaseManager(config.tender_database)
-        tender_db.connect()
+        raw_tender = TenderDatabaseManager(config.tender_database)
+        raw_tender.connect()
+        tender_db = wrap_source_db_readonly(raw_tender)
     except Exception as e:
         logger.warning(f"Tender DB: {e}")
         errors.append(f"Tender: {e}")

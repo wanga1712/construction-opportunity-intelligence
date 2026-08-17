@@ -13,7 +13,9 @@
 
 ## CURRENT WIP — 2026-08-17
 
-**PROJECT-PUBLIC-REPO-SECURITY-REMEDIATION-1** — `[x]` **PASS**. Public GitHub tree no longer contains plaintext DB password fallbacks. CRM UI uses env-only fail-closed `crm_db_runtime`. Exposed leftover credential was S7 `postgres` (not S13 `crm_app`); that role was rotated via existing `wanga`/`sudo -n -u postgres` route and matching runtime env keys were updated. `crm_app` password unchanged. Streamlit HTTP 200. Expert annotation grants intact. Qwen/docs not started by this WIP. No history rewrite.
+**PROJECT-CANONICAL-PRODUCTION-SOURCE-RECONCILIATION-1** — `[x]` **PASS**. File-content reconciliation of active S13 CRM/V3 source into canonical GitHub. No S13 Git history merge. No UI/routing/scoring/Qwen/docs behavior change. Credential fallbacks in copied S13 files stripped to env-only (`require_crm_db_connect_kwargs`). Clean-checkout `src.*` import closure 0. Safe unit tests pass. Production smoke after deploy: Streamlit HTTP 200; Qwen/docs not started.
+
+Prior (closed): **PROJECT-PUBLIC-REPO-SECURITY-REMEDIATION-1** — `[x]` **PASS**.
 
 Prior (paused): **CRM-V3-EXPERT-ANNOTATION-UI-1** — `[~]` paused by explicit security WIP. Canonical reconciliation remaining.
 

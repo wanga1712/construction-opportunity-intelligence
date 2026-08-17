@@ -60,11 +60,13 @@ from src.ui.ai_review_page import render_ai_review_page
 from src.ui.analytics_contour_page import render_analytics_contour_page
 from src.ui.analytics_contour_copy_page import render_analytics_contour_copy_page
 from src.ui.analytics_contour_v2_page import render_analytics_contour_v2_page
+from src.ui.v3_analytics_page import render_v3_analytics_page
 from src.ui.companies_page import render_companies_page
 from src.ui.computers_page import render_computers_page
 from src.ui.customers_page import render_customers_page
 from src.ui.export_queue_page import render_export_queue_page
 from src.ui.infrastructure_page import render_infrastructure_page
+from src.ui.system_health_page import render_system_health_page
 from src.ui.map_page import render_map_page
 from src.ui.opportunity_radar_page import render_opportunity_radar_page
 from src.ui.waterproofing_page import render_waterproofing_page
@@ -218,7 +220,7 @@ def main() -> None:
         render_companies_page(service)
 
     elif page == "objects":
-
+        # Deprecated nav item removed; route kept for object_detail deep-links.
         render_analytics_contour_page(service)
     elif page == "objects_copy":
 
@@ -226,6 +228,9 @@ def main() -> None:
     elif page == "objects_v2":
 
         render_analytics_contour_v2_page(service)
+    elif page == "analytics_v3":
+
+        render_v3_analytics_page(service)
 
     elif page == "opportunity_radar":
 
@@ -246,6 +251,10 @@ def main() -> None:
     elif page == "infrastructure":
 
         render_infrastructure_page(service)
+
+    elif page == "system_health":
+
+        render_system_health_page(service)
 
     elif page == "customers":
 

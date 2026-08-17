@@ -139,17 +139,19 @@ def render_leads_bridge_panel(objects_service: ObjectsService) -> None:
 def render_docs_priority_panel(objects_service: ObjectsService) -> None:
     with st.expander("AI-приоритет для docs-демонов", expanded=False):
         st.caption(
-            "Синхронизирует в tender_monitor таблицу `crm_docs_priority_hints` подсказки приоритета "
-            "и профиля анализа (open/awarded, segment-based profile)."
+            "Пишет в CRM DB таблицу `crm_docs_priority_hints` (не в tender_monitor). "
+            "SOURCE_DB_READONLY: CRM больше не мутирует S7."
         )
         if st.button(
-            "Синхронизировать AI-приоритет в очередь документов",
+            "Синхронизировать AI-приоритет в CRM hints",
             key="objects_sync_docs_priority",
             type="primary",
             use_container_width=True,
         ):
-            with st.spinner("Публикую приоритеты в tender_monitor…"):
-                stats = sync_docs_priority_hints(objects_service.tender_db, objects_service.all_objects())
+            with st.spinner("Публикую приоритеты в CRM DB…"):
+                stats = sync_docs_priority_hints(
+                    objects_service.crm_db, objects_service.all_objects()
+                )
             if stats.get("error"):
                 st.error(stats["error"])
             else:
@@ -161,16 +163,11 @@ def render_docs_priority_panel(objects_service: ObjectsService) -> None:
             key="objects_soft_reclassify_docs_queue",
             use_container_width=True,
         ):
-            with st.spinner("Перераскладываю pending-задачи между open/awarded…"):
+            with st.spinner("SOURCE_DB_READONLY check…"):
                 stats = soft_reclassify_docs_queue(objects_service.tender_db)
             if stats.get("error"):
                 st.error(stats["error"])
             else:
                 st.success(
-                    "Обновлено задач: "
-                    f"{stats.get('total', 0)} "
-                    f"(44 o→a={stats.get('44_open_to_awarded', 0)}, "
-                    f"223 o→a={stats.get('223_open_to_awarded', 0)}, "
-                    f"44 a→o={stats.get('44_awarded_to_open', 0)}, "
-                    f"223 a→o={stats.get('223_awarded_to_open', 0)})"
+                    f"Готово: total={stats.get('total', 0)}"
                 )

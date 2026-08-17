@@ -1,16 +1,17 @@
 """Репозиторий данных для нового аналитического контура."""
 from __future__ import annotations
 
-from src.services.companies_service import CompaniesService
-from src.ui.session_deps import get_objects_service
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from src.services.objects_service import ObjectsService
 
 
 class AnalyticsContourRepository:
     """Тонкий доступ к данным без UI-логики."""
 
-    def __init__(self, service: CompaniesService) -> None:
-        self._service = service
-        self._objects_service = get_objects_service(service)
+    def __init__(self, objects_service: ObjectsService) -> None:
+        self._objects_service = objects_service
 
     @property
     def objects_service(self):

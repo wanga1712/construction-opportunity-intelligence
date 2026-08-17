@@ -117,13 +117,21 @@ ON CONFLICT (key) DO NOTHING;
 
 
 def ensure_schema(crm_db) -> bool:
-    try:
-        for statement in DDL.split(";"):
-            stmt = statement.strip()
-            if stmt:
-                crm_db.execute_update(stmt + ";")
-        return True
-    except Exception as exc:
+    """Fail-closed presence check. DDL is not executed at runtime.
+
+    Canonical DDL text remains in this module for documentation / migration
+    extraction; apply via controlled migration scripts only.
+    """
+    from src.services.schema_guard import require_relations
+
+    ok, missing = require_relations(
+        crm_db,
+        ["crm_procurements", "crm_sync_jobs", "crm_sync_events", "crm_settings"],
+    )
+    if not ok:
         import logging
-        logging.getLogger(__name__).error(f"crm_procurements_schema: {exc}")
-        return False
+
+        logging.getLogger(__name__).error(
+            "crm_procurements_schema NOT_READY missing=%s (no runtime DDL)", missing
+        )
+    return ok
