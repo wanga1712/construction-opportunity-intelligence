@@ -1,7 +1,7 @@
 # FULL_SOURCE_DAY_BENCHMARK
 
 WIP: `PROJECT-EIS-S7-FORWARD-24H-SLA-CLOSURE-1`  
-Status: **OPEN**. Do not close until the hard SLA gate below.
+Status: **CLOSED** (`FINAL=PASS`). Hard SLA gate met on the first clean 55-region source-date.
 
 S7_FORWARD_BENCHMARK_ONLY=YES  
 S13_BACKWARD_INCLUDED_IN_SLA=NO  
@@ -13,32 +13,34 @@ CRM_UI_CHANGED=NO
 
 `2026-08-12` was already partially processed by the serial RGK path. It is **not** `BENCHMARK_SOURCE_DATE`.
 
-Live 2026-08-17 18:56 MSK: `2026-08-12` is **absent** from `region_progress.json` (cleared). Config cursor moved to `2026-08-13`.
+## Clean benchmark date
 
-## Candidate clean date
-
-First source-date started at 0/55 by the optimized forward parser:
+First source-date started at 0/55 by the optimized forward parser (PID **3717828**, no restart during the day):
 
 | Field | Value |
 |---|---|
-| BENCHMARK_SOURCE_DATE | **candidate** `2026-08-13` |
+| BENCHMARK_SOURCE_DATE | `2026-08-13` |
 | BENCHMARK_START | 2026-08-17T18:17:38+03:00 (`source_date_start`, regions_skipped=0, regions_remaining=55) |
-| Snapshot | 2026-08-17T18:55:29+03:00 — **35/55** regions in `region_progress` |
-| BENCHMARK_FINISH | PENDING |
-| BENCHMARK_ELAPSED_HOURS | PENDING |
-| 44FZ_CURRENT_DATA_COMPLETE | PENDING |
-| 223FZ_CURRENT_DATA_COMPLETE | PENDING |
-| ALL_REGIONS_COMPLETE | NO |
-| REGION_PROGRESS_CLEARED | NO (key `2026-08-13` still present) |
-| NEXT_SOURCE_DATE_STARTED | NO |
-
-Parser PID **3717828** since 16:43:23 MSK (no restart for the index). RGK skip still ~0.2–0.3s / 500.
+| BENCHMARK_FINISH | 2026-08-17T19:16:13+03:00 (`process_requests_return`) |
+| BENCHMARK_ELAPSED_SEC | 3514.974 |
+| BENCHMARK_ELAPSED_HOURS | **0.976** |
+| 44FZ_CURRENT_DATA_COMPLETE | YES |
+| 223FZ_CURRENT_DATA_COMPLETE | YES |
+| ALL_REGIONS_COMPLETE | YES (`region_complete` **55/55**) |
+| REGION_PROGRESS_CLEARED | YES (key `2026-08-13` absent after return) |
+| NEXT_SOURCE_DATE_STARTED | YES (`2026-08-14` at 19:16:13, regions_skipped=0, regions_remaining=55) |
+| SOURCE_DAYS_PER_24H | **24.581** |
+| BACKLOG_CAN_CONVERGE | YES |
+| NO_DATA_LOSS | YES (journal err..alert empty for 18:17–19:17; `NRestarts=0`; same PID 3717828; `process_requests_return` without exception) |
+| FINAL | **PASS** |
 
 Orphan `region_progress` keys unrelated to the live cursor: 2025-12-26, 2026-02-18, 2026-04-01, 2026-07-29. They do not count as the SLA date.
 
-## Hard close gate (unchanged)
+Parser objects summed over 55 regions: `file_names_xml=7301`, `files_processed=7235`, `reestr_contract_44_fz=1105`, `reestr_contract_223_fz=274`, `links_documentation_44_fz=8523`, `links_documentation_223_fz=1032`. RGK leftover-folder skips in the same window: 48 folders, `found=479`, `changed=363`, `unchanged=116`.
 
-`FINAL=PASS` only if all of:
+## Hard close gate (met)
+
+`FINAL=PASS` requires all of:
 
 - S7_FORWARD_ONLY=YES
 - 44FZ_CURRENT_DATA_COMPLETE=YES
@@ -51,4 +53,4 @@ Orphan `region_progress` keys unrelated to the live cursor: 2025-12-26, 2026-02-
 - BACKLOG_CAN_CONVERGE=YES
 - NO_DATA_LOSS=YES
 
-If that day is still ≥24h: stay in **this** WIP and optimize the next measured S7 forward bottleneck. Do not start Qwen/docs/CRM in this WIP.
+Qwen / document workers / CRM UI were not started in this WIP.

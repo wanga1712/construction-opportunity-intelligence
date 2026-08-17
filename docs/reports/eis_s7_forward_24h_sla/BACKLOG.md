@@ -1,22 +1,21 @@
 # BACKLOG
 
 WIP: `PROJECT-EIS-S7-FORWARD-24H-SLA-CLOSURE-1`  
-Status: **OPEN**.
+Status: **CLOSED** (`FINAL=PASS`).
 
-Snapshot 2026-08-17 18:56 MSK:
+Snapshot 2026-08-17 19:16 MSK (benchmark close):
 
 | Field | Value |
 |---|---|
-| LIVE_CURSOR | 2026-08-13 (35/55) |
+| BENCHMARK_SOURCE_DATE | 2026-08-13 |
+| BENCHMARK_ELAPSED_HOURS | 0.976 |
+| LIVE_CURSOR_AFTER_CLOSE | 2026-08-14 started 0/55 |
 | TODAY | 2026-08-17 |
-| 2026-08-12 | cleared from region_progress (catch-up, not SLA benchmark) |
-| CURRENT_BACKLOG_DAYS | ~4 (13 remaining + 14,15,16,17) until 13 finishes |
-| SOURCE_DAYS_PER_24H | PENDING until 2026-08-13 (or later) completes 55/55 and the next date starts |
-| NET_BACKLOG_CHANGE_PER_DAY | PENDING |
-| ESTIMATED_DAYS_TO_CATCH_UP | PENDING |
-| BACKLOG_CAN_CONVERGE | PENDING |
-
-`BACKLOG_CAN_CONVERGE` cannot be YES until `BENCHMARK_ELAPSED_HOURS < 24` and `SOURCE_DAYS_PER_24H > 1`.
+| CURRENT_BACKLOG_DAYS | ~4 remaining source-dates (14–17) after 13 finished |
+| SOURCE_DAYS_PER_24H | **24.581** (= 24 / 0.976) |
+| NET_BACKLOG_CHANGE_PER_DAY | **-23.581** (backlog shrinks) |
+| ESTIMATED_HOURS_TO_CATCH_UP | ~4h if remaining dates are similar (~1h each) |
+| BACKLOG_CAN_CONVERGE | **YES** |
 
 HISTORICAL_223_AWARDED_REPAIR=OUT_OF_SCOPE  
 HISTORICAL_WINNER_EXTRACTION=OUT_OF_SCOPE  
