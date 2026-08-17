@@ -1,0 +1,208 @@
+{
+  "window_files": 15017,
+  "by_contour": {
+    "223_NOTICE": 1529,
+    "44_RGK": 7716,
+    "44_NOTICE": 5706,
+    "615": 66
+  },
+  "by_prefix": {
+    "contract": 7716,
+    "epNotificationEF2020": 3300,
+    "epNotificationEZK2020": 1596,
+    "purchaseNotice": 1075,
+    "epNotificationEZT2020": 621,
+    "purchaseNoticeAESMBO": 376,
+    "epNotificationEOK2020": 189,
+    "purchaseNoticeZPESMBO": 76,
+    "pprf615Contract": 41,
+    "pprf615ContractProcedure": 24,
+    "pprf615ContractProcedureCancel": 1,
+    "purchaseNoticeAE": 1,
+    "purchaseNoticeOK": 1
+  },
+  "unparsed_count": 0,
+  "unparsed_sample": [],
+  "raw_from_filenames": {
+    "UNIQUE_NOTICE_NUMBERS_44": 5630,
+    "UNIQUE_RGK_CONTRACT_NUMBERS_44": 7635,
+    "UNIQUE_PURCHASE_NOTICE_NUMBERS_223": 1499,
+    "UNIQUE_RGK_OR_CUTTED_223": 0,
+    "UNIQUE_615": 64,
+    "44_NOTICE_FILES": 5706,
+    "44_RGK_FILES": 7716,
+    "223_NOTICE_FILES": 1529,
+    "223_RGK_FILES": 0,
+    "615_FILES": 66,
+    "OTHER_FILES": 0
+  },
+  "rgk_xml_parse": {
+    "files": 7716,
+    "parsed_ok": 7716,
+    "parse_fail": 0,
+    "missing_xml": 0,
+    "unique_contract_numbers": 7473
+  },
+  "rgk_balance": {
+    "UNRESOLVED": 6269,
+    "FOUND_IN_REGISTRY": 1447,
+    "IN_AWARDED": 978,
+    "PRICE_MATCH": 1423,
+    "OKPD_MATCH": 1447,
+    "CONTRACTOR_MATCH": 1447,
+    "PRICE_MISMATCH": 24
+  },
+  "rgk_mismatch_samples": {
+    "PRICE": [
+      {
+        "number": "0172200004926000387",
+        "xml": "130988.11",
+        "db": "65494.06",
+        "table": "reestr_contract_44_fz"
+      },
+      {
+        "number": "0373200214726000006",
+        "xml": "565752.52",
+        "db": "9399.23",
+        "table": "reestr_contract_44_fz_awarded"
+      },
+      {
+        "number": "0373200315425000007",
+        "xml": "378212.01",
+        "db": "235436.05",
+        "table": "reestr_contract_44_fz_awarded"
+      },
+      {
+        "number": "0373200333526000009",
+        "xml": "57863.52",
+        "db": "87172.80",
+        "table": "reestr_contract_44_fz_awarded"
+      },
+      {
+        "number": "0173100007725000130",
+        "xml": "1443324431.51",
+        "db": "1397774253.68",
+        "table": "reestr_contract_44_fz_awarded"
+      },
+      {
+        "number": "0366200035626002652",
+        "xml": "45567060.09",
+        "db": "41424600.09",
+        "table": "reestr_contract_44_fz_awarded"
+      },
+      {
+        "number": "0164200001925002482",
+        "xml": "332191757.67",
+        "db": "297765175.77",
+        "table": "reestr_contract_44_fz_awarded"
+      },
+      {
+        "number": "0164200001925002482",
+        "xml": "332191757.67",
+        "db": "297765175.77",
+        "table": "reestr_contract_44_fz_awarded"
+      },
+      {
+        "number": "0160300003626000356",
+        "xml": "18563.40",
+        "db": "62134.00",
+        "table": "reestr_contract_44_fz"
+      },
+      {
+        "number": "0160300003626000356",
+        "xml": "31067.00",
+        "db": "62134.00",
+        "table": "reestr_contract_44_fz"
+      },
+      {
+        "number": "0315100000526000418",
+        "xml": "25706116.47",
+        "db": "25523736.57",
+        "table": "reestr_contract_44_fz_awarded"
+      },
+      {
+        "number": "0351400001326000392",
+        "xml": "130374.00",
+        "db": "130372.39",
+        "table": "reestr_contract_44_fz_awarded"
+      },
+      {
+        "number": "0148200005425000118",
+        "xml": "858100309.71",
+        "db": "858100619.42",
+        "table": "reestr_contract_44_fz_awarded"
+      },
+      {
+        "number": "0348300139626000222",
+        "xml": "5538582.44",
+        "db": "5538582.43",
+        "table": "reestr_contract_44_fz_awarded"
+      },
+      {
+        "number": "0348100013126000155",
+        "xml": "26257.00",
+        "db": "26254.00",
+        "table": "reestr_contract_44_fz"
+      }
+    ]
+  },
+  "unresolved_count_for_parsed_rgk": 6072,
+  "notice_44_filename_vs_db": {
+    "unique_numbers": 5630,
+    "found_in_registry": 1134,
+    "not_in_registry": 4496,
+    "not_in_registry_sample": [
+      "0106300003726000018",
+      "0106300008426000027",
+      "0106300008726000038",
+      "0110300010426000006",
+      "0110300010426000008",
+      "0111200000926000353",
+      "0111200000926000354",
+      "0111200002426000376",
+      "0111200002426000377",
+      "0111200002426000378",
+      "0111200002426000379",
+      "0111200002426000380",
+      "0111200002426000381",
+      "0111200002426000382",
+      "0111200002426000383",
+      "0111200002426000384",
+      "0111200002426000385",
+      "0111200002426000386",
+      "0111200002426000387",
+      "0111200002426000388"
+    ]
+  },
+  "notice_223_filename_vs_db": {
+    "unique_numbers": 1499,
+    "found_in_registry": 293,
+    "not_in_registry": 1206,
+    "not_in_registry_sample": [
+      "32515326230",
+      "32615958561",
+      "32616014567",
+      "32616050646",
+      "32616147870",
+      "32616152351",
+      "32616159007",
+      "32616162907",
+      "32616164349",
+      "32616164738",
+      "32616165896",
+      "32616179926",
+      "32616189774",
+      "32616215099",
+      "32616215763",
+      "32616217419",
+      "32616227004",
+      "32616229181",
+      "32616232329",
+      "32616233005"
+    ]
+  },
+  "pp615_filename_vs_db": {
+    "unique_numbers": 64,
+    "found": 41
+  }
+}

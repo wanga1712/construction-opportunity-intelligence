@@ -1,0 +1,235 @@
+{
+  "samples": 15,
+  "any_row_match": 7,
+  "still_mismatch": 8,
+  "rows": [
+    {
+      "number": "0172200004926000387",
+      "xml": "130988.11",
+      "row_count": 1,
+      "any_row_matches_xml": false,
+      "matched": [],
+      "distinct_db_prices": [
+        "65494.06"
+      ]
+    },
+    {
+      "number": "0373200214726000006",
+      "xml": "565752.52",
+      "row_count": 18,
+      "any_row_matches_xml": true,
+      "matched": [
+        {
+          "loc": "awarded",
+          "id": 627574,
+          "final_price": "565752.52"
+        },
+        {
+          "loc": "awarded",
+          "id": 615774,
+          "final_price": "565752.52"
+        },
+        {
+          "loc": "awarded",
+          "id": 639398,
+          "final_price": "565752.52"
+        },
+        {
+          "loc": "awarded",
+          "id": 651339,
+          "final_price": "565752.52"
+        }
+      ],
+      "distinct_db_prices": [
+        "1366875.87",
+        "1672350.50",
+        "230605.27",
+        "565752.52",
+        "576634.10",
+        "9399.23"
+      ]
+    },
+    {
+      "number": "0373200315425000007",
+      "xml": "378212.01",
+      "row_count": 1,
+      "any_row_matches_xml": false,
+      "matched": [],
+      "distinct_db_prices": [
+        "235436.05"
+      ]
+    },
+    {
+      "number": "0373200333526000009",
+      "xml": "57863.52",
+      "row_count": 1,
+      "any_row_matches_xml": false,
+      "matched": [],
+      "distinct_db_prices": [
+        "87172.80"
+      ]
+    },
+    {
+      "number": "0173100007725000130",
+      "xml": "1443324431.51",
+      "row_count": 5,
+      "any_row_matches_xml": true,
+      "matched": [
+        {
+          "loc": "awarded",
+          "id": 631203,
+          "final_price": "1443324431.51"
+        }
+      ],
+      "distinct_db_prices": [
+        "1397774253.68",
+        "1443324431.51"
+      ]
+    },
+    {
+      "number": "0366200035626002652",
+      "xml": "45567060.09",
+      "row_count": 8,
+      "any_row_matches_xml": true,
+      "matched": [
+        {
+          "loc": "awarded",
+          "id": 630446,
+          "final_price": "45567060.09"
+        }
+      ],
+      "distinct_db_prices": [
+        "41424600.09",
+        "45567060.09"
+      ]
+    },
+    {
+      "number": "0164200001925002482",
+      "xml": "332191757.67",
+      "row_count": 3,
+      "any_row_matches_xml": true,
+      "matched": [
+        {
+          "loc": "awarded",
+          "id": 419897,
+          "final_price": "332191757.67"
+        }
+      ],
+      "distinct_db_prices": [
+        "297765175.77",
+        "332191757.67"
+      ]
+    },
+    {
+      "number": "0164200001925002482",
+      "xml": "332191757.67",
+      "row_count": 3,
+      "any_row_matches_xml": true,
+      "matched": [
+        {
+          "loc": "awarded",
+          "id": 419897,
+          "final_price": "332191757.67"
+        }
+      ],
+      "distinct_db_prices": [
+        "297765175.77",
+        "332191757.67"
+      ]
+    },
+    {
+      "number": "0160300003626000356",
+      "xml": "18563.40",
+      "row_count": 1,
+      "any_row_matches_xml": false,
+      "matched": [],
+      "distinct_db_prices": [
+        "62134.00"
+      ]
+    },
+    {
+      "number": "0160300003626000356",
+      "xml": "31067.00",
+      "row_count": 1,
+      "any_row_matches_xml": false,
+      "matched": [],
+      "distinct_db_prices": [
+        "62134.00"
+      ]
+    },
+    {
+      "number": "0315100000526000418",
+      "xml": "25706116.47",
+      "row_count": 1,
+      "any_row_matches_xml": false,
+      "matched": [],
+      "distinct_db_prices": [
+        "25523736.57"
+      ]
+    },
+    {
+      "number": "0351400001326000392",
+      "xml": "130374.00",
+      "row_count": 1,
+      "any_row_matches_xml": false,
+      "matched": [],
+      "distinct_db_prices": [
+        "130372.39"
+      ]
+    },
+    {
+      "number": "0148200005425000118",
+      "xml": "858100309.71",
+      "row_count": 5,
+      "any_row_matches_xml": true,
+      "matched": [
+        {
+          "loc": "awarded",
+          "id": 619742,
+          "final_price": "858100309.71"
+        }
+      ],
+      "distinct_db_prices": [
+        "858100309.71",
+        "858100619.42"
+      ]
+    },
+    {
+      "number": "0348300139626000222",
+      "xml": "5538582.44",
+      "row_count": 4,
+      "any_row_matches_xml": true,
+      "matched": [
+        {
+          "loc": "awarded",
+          "id": 633737,
+          "final_price": "5538582.44"
+        },
+        {
+          "loc": "awarded",
+          "id": 594214,
+          "final_price": "5538582.44"
+        },
+        {
+          "loc": "awarded",
+          "id": 645591,
+          "final_price": "5538582.44"
+        }
+      ],
+      "distinct_db_prices": [
+        "5538582.43",
+        "5538582.44"
+      ]
+    },
+    {
+      "number": "0348100013126000155",
+      "xml": "26257.00",
+      "row_count": 1,
+      "any_row_matches_xml": false,
+      "matched": [],
+      "distinct_db_prices": [
+        "26254.00"
+      ]
+    }
+  ]
+}

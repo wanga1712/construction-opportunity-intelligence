@@ -1,0 +1,164 @@
+{
+  "rgk_disk_pattern": {
+    "files": 67357,
+    "parsed_contract_ver_guid": 67357,
+    "unmatched_count": 0,
+    "unmatched_sample": [],
+    "kinds": {
+      "contract": 67357
+    },
+    "unique_guids": 67357,
+    "guid_duplicate_count": 0,
+    "guid_duplicate_sample": {},
+    "unique_contract_numbers_in_filename": 64329,
+    "numbers_with_multiple_guids": 2687,
+    "numbers_with_multiple_versions": 2687,
+    "max_files_per_number": 7
+  },
+  "bench_mtime_names": 7716,
+  "columns": [
+    {
+      "name": "id",
+      "type": "integer",
+      "notnull": true
+    },
+    {
+      "name": "file_name",
+      "type": "text",
+      "notnull": true
+    },
+    {
+      "name": "processed_at",
+      "type": "timestamp without time zone",
+      "notnull": false
+    }
+  ],
+  "constraints": [
+    {
+      "name": "file_names_xml_pkey",
+      "def": "PRIMARY KEY (id)"
+    }
+  ],
+  "indexes": [
+    {
+      "name": "file_names_xml_pkey",
+      "def": "CREATE UNIQUE INDEX file_names_xml_pkey ON public.file_names_xml USING btree (id)"
+    },
+    {
+      "name": "idx_file_names_xml_file_name",
+      "def": "CREATE INDEX idx_file_names_xml_file_name ON public.file_names_xml USING btree (file_name)"
+    },
+    {
+      "name": "idx_file_names_xml_processed_at",
+      "def": "CREATE INDEX idx_file_names_xml_processed_at ON public.file_names_xml USING btree (processed_at DESC)"
+    }
+  ],
+  "duplicate_file_name_groups": 722568,
+  "duplicate_file_name_top": [
+    {
+      "file_name": "contract_3300700883026000005_2_019D2A1AAF5075C99D29DC1DB5D8ECE1.xml",
+      "rows": 1178
+    },
+    {
+      "file_name": "contract_3300900798326000005_0_019D28F50E0A7136A7B9AB01AECF3069.xml",
+      "rows": 1175
+    },
+    {
+      "file_name": "contract_3312804349026000019_0_019D2949A8A87BD1B76C34D9DD1DD9FA.xml",
+      "rows": 1173
+    },
+    {
+      "file_name": "contract_3301504223126000001_0_019D2989C7FF79A383178A7AE190A1E9.xml",
+      "rows": 1171
+    },
+    {
+      "file_name": "contract_3301900836926000012_0_019D294C3C6677A1BAFFE8478C4B796F.xml",
+      "rows": 1169
+    },
+    {
+      "file_name": "contract_2323000334726000057_0_019D2955C83B7225AF9A371BA78E7072.xml",
+      "rows": 1169
+    },
+    {
+      "file_name": "contract_2344390133826000142_0_019D2A62854A77E6924307AC2797DC08.xml",
+      "rows": 1167
+    },
+    {
+      "file_name": "contract_2312401394626000158_0_019D28DC83CC7260BDD31D786E113BCB.xml",
+      "rows": 1167
+    },
+    {
+      "file_name": "contract_2330100089926000065_0_019D28345F2270579E7EF1D737D93427.xml",
+      "rows": 1166
+    },
+    {
+      "file_name": "contract_3325200181926000003_1_019D2A9ADFFA7A2DBA1FA8F620C5E2FB.xml",
+      "rows": 1165
+    },
+    {
+      "file_name": "contract_2352509261726000015_1_019D2A1B155E7053BBC0094C6A064379.xml",
+      "rows": 1165
+    },
+    {
+      "file_name": "contract_2352524929726000018_0_019D28D14FD77CC18F9F06071C53FB88.xml",
+      "rows": 1165
+    },
+    {
+      "file_name": "contract_2344890603326000027_1_019D28CF851B7635A768231A12F67172.xml",
+      "rows": 1165
+    },
+    {
+      "file_name": "contract_3470601411526000008_2_019D291AA16C7BE19895CB150EB7395F.xml",
+      "rows": 1164
+    },
+    {
+      "file_name": "contract_3501001075126000018_0_019D2A44C1D670F58694BDA543159398.xml",
+      "rows": 1163
+    }
+  ],
+  "has_processed_at": true,
+  "db_rows_processed_in_window": 15017,
+  "db_distinct_names_processed_in_window": 15017,
+  "bench_mtime_vs_db": {
+    "names": 7716,
+    "found_in_db": 7716,
+    "missing_from_db": 0,
+    "missing_sample": [],
+    "first_processed_in_window": 0,
+    "first_processed_before_window": 7716,
+    "first_processed_after_window": 0
+  },
+  "window_name_pattern": {
+    "rows": 15017,
+    "parsed": 7716,
+    "unmatched": 7301,
+    "unique_guids": 7716,
+    "guid_dups": 0,
+    "unique_numbers": 7635,
+    "unmatched_sample": [
+      "purchaseNotice_32616289549_1_019FFAAE3FFF7BC88002AB4D286517B6.xml",
+      "epNotificationEF2020_0583500000126000100_5_019FFB8CEA5C79C18B26FB3DF0794E65.xml",
+      "epNotificationEF2020_0883500063926000184_2_019FFA933D9C7FB29B7956919552B3C3.xml",
+      "epNotificationEF2020_0883500075126000006_4_019FFBE3C8607D5BA4DB3901F3173110.xml",
+      "epNotificationEF2020_0883500075126000006_3_019FFBD1FA157628AFBFB6E4FB66495E.xml",
+      "epNotificationEF2020_0883500063926000184_1_019FFA49D53D71A7934E6D76F2F217E2.xml",
+      "epNotificationEZK2020_0883500132326000001_2_019FFB3B34D3714EB64F776BBC70E7AE.xml",
+      "epNotificationEZK2020_0883600000626000011_1_019FFB99C3F776008D6E3E82B8A1477C.xml",
+      "epNotificationEZK2020_0883500009126000026_1_019FFA6D9C367ABFA95604E62FDFD857.xml",
+      "epNotificationEZK2020_0883500148426000003_1_019FF9F57A9271DC8E29E7E4B399FEEC.xml",
+      "epNotificationEZK2020_0883500064826000004_1_019FFA56F31C727C9408417BC66D3ED9.xml",
+      "epNotificationEZK2020_0883500109026000030_1_019FFB0311CA79E590D8C576B80B1319.xml",
+      "epNotificationEZK2020_0883500109026000029_1_019FF9E95A7D7A49B06E4A63621C744E.xml",
+      "epNotificationEZK2020_0883500111326000085_1_019FFA28424A7B2F9203C829A6EC7501.xml",
+      "epNotificationEZK2020_0883500064826000005_1_019FFB1B41597600B8999432F1172429.xml",
+      "purchaseNoticeZPESMBO_32616288322_1_019FF9E7DE2771968B891D440FA4FF5E.xml",
+      "purchaseNoticeZPESMBO_32616243227_3_019FF9CC7DA577769A946F7957FBC69A.xml",
+      "purchaseNoticeZPESMBO_32616288322_2_019FF9EA5B1878C8914EEA8752A775ED.xml",
+      "purchaseNotice_32616290967_1_019FFB672194710B9FC1D1BD5F01439F.xml",
+      "epNotificationEOK2020_0500500007926000001_1_019FFB4BA0EF7585934AD7ED297C8E71.xml"
+    ]
+  },
+  "FILENAME_IS_GLOBALLY_UNIQUE": "YES",
+  "FALSE_DEDUP_RISK": "NO",
+  "FALSE_DEDUP_NOTE": "Skip key is full basename including 32-hex publish GUID. On-disk leftover RGK has unique GUID per file. Same contract_number can have many versions/GUIDs; those are different filenames and are parsed."
+}

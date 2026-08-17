@@ -1,0 +1,46 @@
+{
+  "ts": "2026-08-17T19:33:29+03:00",
+  "host": "S7",
+  "S7_FORWARD_SERVICE": "tendermonitor-eis-parser.service",
+  "SERVICE_ACTIVE": {
+    "MainPID": "3717828",
+    "NRestarts": "0",
+    "WorkingDirectory": "/opt/tendermonitor",
+    "User": "tendermonitor",
+    "Id": "tendermonitor-eis-parser.service",
+    "ActiveState": "active",
+    "SubState": "running",
+    "FragmentPath": "/etc/systemd/system/tendermonitor-eis-parser.service",
+    "ActiveEnterTimestamp": "Mon 2026-08-17 16:43:23 MSK"
+  },
+  "BACKWARD_SERVICE": {
+    "MainPID": "0",
+    "NRestarts": "0",
+    "WorkingDirectory": "/opt/tendermonitor",
+    "User": "tendermonitor",
+    "Id": "tendermonitor-eis-parser-backward.service",
+    "ActiveState": "inactive",
+    "SubState": "dead",
+    "FragmentPath": "/etc/systemd/system/tendermonitor-eis-parser-backward.service",
+    "ActiveEnterTimestamp": ""
+  },
+  "CURRENT_REGION_PROGRESS_COUNTS": {
+    "2026-02-18": 26,
+    "2025-12-26": 2,
+    "2026-04-01": 18,
+    "2026-07-29": 50,
+    "2026-08-14": 17
+  },
+  "CURRENT_REGION_PROGRESS_KEYS": [
+    "2025-12-26",
+    "2026-02-18",
+    "2026-04-01",
+    "2026-07-29",
+    "2026-08-14"
+  ],
+  "config_date_lines": [
+    "date = 2026-08-14"
+  ],
+  "QWEN_STARTED": "NO",
+  "NOTE": "Do not restart S7 unless a proven critical data-loss bug is found."
+}

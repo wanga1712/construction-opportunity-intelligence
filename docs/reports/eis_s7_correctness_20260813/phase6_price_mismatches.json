@@ -1,0 +1,443 @@
+[
+  {
+    "number": "0172200004926000387",
+    "xmls": [],
+    "db": [
+      {
+        "loc": "main",
+        "id": 661057,
+        "final_price": "65494.06",
+        "contractor_id": null,
+        "okpd_id": 3180
+      }
+    ],
+    "processed": []
+  },
+  {
+    "number": "0373200214726000006",
+    "xmls": [],
+    "db": [
+      {
+        "loc": "awarded",
+        "id": 578053,
+        "final_price": "9399.23",
+        "contractor_id": 28522,
+        "okpd_id": 2219
+      },
+      {
+        "loc": "awarded",
+        "id": 642952,
+        "final_price": "230605.27",
+        "contractor_id": 28522,
+        "okpd_id": 2219
+      },
+      {
+        "loc": "awarded",
+        "id": 635360,
+        "final_price": "1366875.87",
+        "contractor_id": 28522,
+        "okpd_id": 5601
+      },
+      {
+        "loc": "awarded",
+        "id": 627574,
+        "final_price": "565752.52",
+        "contractor_id": 28522,
+        "okpd_id": 2219
+      },
+      {
+        "loc": "awarded",
+        "id": 623559,
+        "final_price": "1366875.87",
+        "contractor_id": 28522,
+        "okpd_id": 5601
+      },
+      {
+        "loc": "awarded",
+        "id": 632917,
+        "final_price": "576634.10",
+        "contractor_id": 28522,
+        "okpd_id": 2219
+      },
+      {
+        "loc": "awarded",
+        "id": 631109,
+        "final_price": "230605.27",
+        "contractor_id": 28522,
+        "okpd_id": 2219
+      },
+      {
+        "loc": "awarded",
+        "id": 619309,
+        "final_price": "230605.27",
+        "contractor_id": 28522,
+        "okpd_id": 2219
+      },
+      {
+        "loc": "awarded",
+        "id": 624932,
+        "final_price": "1672350.50",
+        "contractor_id": 28522,
+        "okpd_id": 2219
+      },
+      {
+        "loc": "awarded",
+        "id": 615774,
+        "final_price": "565752.52",
+        "contractor_id": 28522,
+        "okpd_id": 2219
+      },
+      {
+        "loc": "awarded",
+        "id": 621117,
+        "final_price": "576634.10",
+        "contractor_id": 28522,
+        "okpd_id": 2219
+      },
+      {
+        "loc": "awarded",
+        "id": 636733,
+        "final_price": "1672350.50",
+        "contractor_id": 28522,
+        "okpd_id": 2219
+      },
+      {
+        "loc": "awarded",
+        "id": 639398,
+        "final_price": "565752.52",
+        "contractor_id": 28522,
+        "okpd_id": 2219
+      },
+      {
+        "loc": "awarded",
+        "id": 644768,
+        "final_price": "576634.10",
+        "contractor_id": 28522,
+        "okpd_id": 2219
+      },
+      {
+        "loc": "awarded",
+        "id": 647217,
+        "final_price": "1366875.87",
+        "contractor_id": 28522,
+        "okpd_id": 5601
+      },
+      {
+        "loc": "awarded",
+        "id": 648595,
+        "final_price": "1672350.50",
+        "contractor_id": 28522,
+        "okpd_id": 2219
+      },
+      {
+        "loc": "awarded",
+        "id": 651339,
+        "final_price": "565752.52",
+        "contractor_id": 28522,
+        "okpd_id": 2219
+      },
+      {
+        "loc": "awarded",
+        "id": 654916,
+        "final_price": "230605.27",
+        "contractor_id": 28522,
+        "okpd_id": 2219
+      }
+    ],
+    "processed": []
+  },
+  {
+    "number": "0373200315425000007",
+    "xmls": [],
+    "db": [
+      {
+        "loc": "awarded",
+        "id": 658763,
+        "final_price": "235436.05",
+        "contractor_id": 851,
+        "okpd_id": 7425
+      }
+    ],
+    "processed": []
+  },
+  {
+    "number": "0373200333526000009",
+    "xmls": [],
+    "db": [
+      {
+        "loc": "awarded",
+        "id": 658755,
+        "final_price": "87172.80",
+        "contractor_id": 64304,
+        "okpd_id": 6048
+      }
+    ],
+    "processed": []
+  },
+  {
+    "number": "0173100007725000130",
+    "xmls": [],
+    "db": [
+      {
+        "loc": "awarded",
+        "id": 432183,
+        "final_price": "1397774253.68",
+        "contractor_id": 27550,
+        "okpd_id": 7426
+      },
+      {
+        "loc": "awarded",
+        "id": 643047,
+        "final_price": "1397774253.68",
+        "contractor_id": 27550,
+        "okpd_id": 7426
+      },
+      {
+        "loc": "awarded",
+        "id": 655014,
+        "final_price": "1397774253.68",
+        "contractor_id": 27550,
+        "okpd_id": 7426
+      },
+      {
+        "loc": "awarded",
+        "id": 619403,
+        "final_price": "1397774253.68",
+        "contractor_id": 27550,
+        "okpd_id": 7426
+      },
+      {
+        "loc": "awarded",
+        "id": 631203,
+        "final_price": "1443324431.51",
+        "contractor_id": 27550,
+        "okpd_id": 7426
+      }
+    ],
+    "processed": []
+  },
+  {
+    "number": "0366200035626002652",
+    "xmls": [],
+    "db": [
+      {
+        "loc": "awarded",
+        "id": 618647,
+        "final_price": "41424600.09",
+        "contractor_id": 38882,
+        "okpd_id": 5730
+      },
+      {
+        "loc": "awarded",
+        "id": 634630,
+        "final_price": "41424600.09",
+        "contractor_id": 38882,
+        "okpd_id": 5730
+      },
+      {
+        "loc": "awarded",
+        "id": 642286,
+        "final_price": "41424600.09",
+        "contractor_id": 38882,
+        "okpd_id": 5730
+      },
+      {
+        "loc": "awarded",
+        "id": 646485,
+        "final_price": "41424600.09",
+        "contractor_id": 38882,
+        "okpd_id": 5730
+      },
+      {
+        "loc": "awarded",
+        "id": 654246,
+        "final_price": "41424600.09",
+        "contractor_id": 38882,
+        "okpd_id": 5730
+      },
+      {
+        "loc": "awarded",
+        "id": 576528,
+        "final_price": "41424600.09",
+        "contractor_id": 38882,
+        "okpd_id": 5730
+      },
+      {
+        "loc": "awarded",
+        "id": 622829,
+        "final_price": "41424600.09",
+        "contractor_id": 38882,
+        "okpd_id": 5730
+      },
+      {
+        "loc": "awarded",
+        "id": 630446,
+        "final_price": "45567060.09",
+        "contractor_id": 38882,
+        "okpd_id": 5730
+      }
+    ],
+    "processed": []
+  },
+  {
+    "number": "0164200001925002482",
+    "xmls": [],
+    "db": [
+      {
+        "loc": "awarded",
+        "id": 430642,
+        "final_price": "297765175.77",
+        "contractor_id": 39624,
+        "okpd_id": 5648
+      },
+      {
+        "loc": "awarded",
+        "id": 417195,
+        "final_price": "297765175.77",
+        "contractor_id": 39624,
+        "okpd_id": 5648
+      },
+      {
+        "loc": "awarded",
+        "id": 419897,
+        "final_price": "332191757.67",
+        "contractor_id": 39624,
+        "okpd_id": 5740
+      }
+    ],
+    "processed": []
+  },
+  {
+    "number": "0160300003626000356",
+    "xmls": [],
+    "db": [
+      {
+        "loc": "main",
+        "id": 660487,
+        "final_price": "62134.00",
+        "contractor_id": null,
+        "okpd_id": 3904
+      }
+    ],
+    "processed": []
+  },
+  {
+    "number": "0315100000526000418",
+    "xmls": [],
+    "db": [
+      {
+        "loc": "awarded",
+        "id": 657049,
+        "final_price": "25523736.57",
+        "contractor_id": 10238,
+        "okpd_id": 3625
+      }
+    ],
+    "processed": []
+  },
+  {
+    "number": "0351400001326000392",
+    "xmls": [],
+    "db": [
+      {
+        "loc": "awarded",
+        "id": 660142,
+        "final_price": "130372.39",
+        "contractor_id": 91337,
+        "okpd_id": 2219
+      }
+    ],
+    "processed": []
+  },
+  {
+    "number": "0148200005425000118",
+    "xmls": [],
+    "db": [
+      {
+        "loc": "awarded",
+        "id": 631542,
+        "final_price": "858100619.42",
+        "contractor_id": 11017,
+        "okpd_id": 7415
+      },
+      {
+        "loc": "awarded",
+        "id": 594098,
+        "final_price": "858100619.42",
+        "contractor_id": 11017,
+        "okpd_id": 7415
+      },
+      {
+        "loc": "awarded",
+        "id": 655356,
+        "final_price": "858100619.42",
+        "contractor_id": 11017,
+        "okpd_id": 7415
+      },
+      {
+        "loc": "awarded",
+        "id": 643387,
+        "final_price": "858100619.42",
+        "contractor_id": 11017,
+        "okpd_id": 7415
+      },
+      {
+        "loc": "awarded",
+        "id": 619742,
+        "final_price": "858100309.71",
+        "contractor_id": 11017,
+        "okpd_id": 7415
+      }
+    ],
+    "processed": []
+  },
+  {
+    "number": "0348300139626000222",
+    "xmls": [],
+    "db": [
+      {
+        "loc": "awarded",
+        "id": 621937,
+        "final_price": "5538582.43",
+        "contractor_id": 86721,
+        "okpd_id": 3634
+      },
+      {
+        "loc": "awarded",
+        "id": 633737,
+        "final_price": "5538582.44",
+        "contractor_id": 86721,
+        "okpd_id": 3634
+      },
+      {
+        "loc": "awarded",
+        "id": 594214,
+        "final_price": "5538582.44",
+        "contractor_id": 86721,
+        "okpd_id": 3634
+      },
+      {
+        "loc": "awarded",
+        "id": 645591,
+        "final_price": "5538582.44",
+        "contractor_id": 86721,
+        "okpd_id": 3634
+      }
+    ],
+    "processed": []
+  },
+  {
+    "number": "0348100013126000155",
+    "xmls": [],
+    "db": [
+      {
+        "loc": "main",
+        "id": 659912,
+        "final_price": "26254.00",
+        "contractor_id": null,
+        "okpd_id": 3937
+      }
+    ],
+    "processed": []
+  }
+]
