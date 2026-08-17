@@ -1,0 +1,10 @@
+# Copy to .hygiene/denylist.txt (gitignored) and replace these documentation
+# addresses with the real literals that must never re-enter Git.
+# RFC 5737 documentation IPs only — do not commit production hosts here.
+
+192.0.2.7
+192.0.2.13
+198.51.100.7
+203.0.113.13
+example-internal-hostname
+example-ssh-identity-filename

@@ -22,9 +22,11 @@ class XMLParser:
         Загружает конфигурацию и путь к XML-файлам из config.ini.
         """
 
-        # Инициализируем методы для работы с базой данных внутри XMLParser
+        # Один DatabaseManager на parser: иначе каждый XML открывал 2 TCP-сессии.
         self.database_operations = DatabaseOperations()
-        self.db_id_fetcher = DatabaseIDFetcher()
+        self.db_id_fetcher = DatabaseIDFetcher(
+            db_manager=self.database_operations.db_manager
+        )
 
         self.config = load_config(config_path)
         if not self.config:

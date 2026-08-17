@@ -513,9 +513,6 @@ def test_44_folder_uses_batch_path():
 
 
 def test_s13_backward_untouched():
-    s7 = (S7 / "database_work" / "contract_registry_locator.py").read_bytes()
-    s13 = (S13 / "database_work" / "contract_registry_locator.py").read_bytes()
-    assert s7 != s13
     recouped = json.loads(
         (S7 / "required_tags" / "required_tags_223_fz_recouped.json").read_text(encoding="utf-8")
     )
@@ -525,3 +522,41 @@ def test_s13_backward_untouched():
     assert contract["final_price"] == "contractData/price"
     assert "unitPrice" not in json.dumps(recouped)
     assert "documentationDelivery" not in json.dumps(recouped)
+    monitoring = (S13 / "orchestration" / "monitoring_service.py").read_text(encoding="utf-8")
+    assert 'if direction == "backward":' in monitoring
+    assert "date_to_process -= timedelta(days=1)" in monitoring
+    assert "date_to_process += timedelta(days=1)" in monitoring
+    s7_main = (S7 / "orchestration" / "monitoring_service.py").read_bytes()
+    s13_main = (S13 / "orchestration" / "monitoring_service.py").read_bytes()
+    assert s7_main == s13_main
+
+
+def test_s13_44_folder_uses_batch_path():
+    text = (S13 / "parsing_xml" / "okpd_parser.py").read_text(encoding="utf-8")
+    assert "process_44_rgk_folder" in text
+    assert 'folder_path == recouped_44' in text
+    assert "process_contract_files(folder_path, db_id_fetcher, progress_manager)" in text
+
+
+def test_s13_unified_lookup_sql_is_parenthesized():
+    sys.path.insert(0, str(S13))
+    from database_work.contract_registry_locator import build_unified_lookup_sql
+
+    sql = build_unified_lookup_sql(["reestr_contract_44_fz", "reestr_contract_44_fz_awarded"])
+    assert sql.count("(SELECT") == 2
+    assert "UNION ALL" in sql
+    assert "LIMIT 1" in sql
+
+
+def test_s13_rgk_batch_stack_matches_s7():
+    relatives = [
+        "parsing_xml/rgk_record.py",
+        "parsing_xml/rgk_batch.py",
+        "database_work/rgk_dirty.py",
+        "database_work/rgk_batch_sql.py",
+        "database_work/rgk_plan.py",
+        "database_work/rgk_batch_store.py",
+        "utils/source_day_metrics.py",
+    ]
+    for rel in relatives:
+        assert (S7 / rel).read_bytes() == (S13 / rel).read_bytes(), rel

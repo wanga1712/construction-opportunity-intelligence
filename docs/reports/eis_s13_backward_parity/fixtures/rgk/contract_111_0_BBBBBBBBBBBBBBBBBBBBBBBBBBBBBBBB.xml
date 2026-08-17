@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<export>
+  <contract>
+    <versionNumber>1</versionNumber>
+    <docPublishDate>2026-08-13T16:35:24.177+07:00</docPublishDate>
+    <order><notificationNumber>1111111111111111111</notificationNumber></order>
+    <executionPeriod><startDate>2026-01-10</startDate><endDate>2026-11-30</endDate></executionPeriod>
+    <priceInfo><price>200.00</price></priceInfo>
+    <contractSubject>Remont krovli shkoly</contractSubject>
+    <OKPD2><code>41.20.10</code></OKPD2>
+    <legalEntityRF><EGRULInfo><shortName>OOO Test</shortName><fullName>OOO Test Full</fullName><INN>7701234567</INN><KPP>770101001</KPP></EGRULInfo></legalEntityRF>
+  </contract>
+</export>

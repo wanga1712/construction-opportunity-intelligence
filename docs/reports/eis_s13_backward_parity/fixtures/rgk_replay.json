@@ -1,0 +1,22 @@
+{
+  "xml_count": 3,
+  "parsed": 3,
+  "parse_passes": 3,
+  "identities_old": 2,
+  "identities_new": 2,
+  "BUSINESS_IDENTITIES_MATCH": true,
+  "PRICE_MISMATCH_COUNT": 0,
+  "OLD_WALL_SECONDS": 0.001496,
+  "NEW_WALL_SECONDS": 0.00157,
+  "PARSE_SECONDS": 0.001483,
+  "OLD_SELECTS_EST": 15,
+  "OLD_COMMITS_EST": 3,
+  "NEW_SELECTS_EST": 9,
+  "NEW_COMMITS_EST": 1,
+  "OLD_XML_PER_SECOND": 2004.812,
+  "NEW_XML_PER_SECOND": 1911.193,
+  "REPLAY_SPEEDUP": 0.953,
+  "plan_unresolved": 3,
+  "plan_inserted": 0,
+  "RGK_VERSION_ORDER_INDEPENDENT_OF_FILENAME": true
+}

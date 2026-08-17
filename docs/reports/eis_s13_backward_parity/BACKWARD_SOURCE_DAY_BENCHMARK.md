@@ -1,0 +1,10 @@
+# BACKWARD_SOURCE_DAY_BENCHMARK
+
+WIP: `PROJECT-EIS-S7-CORRECTNESS-PROOF-AND-S13-BACKWARD-PARITY-1`
+
+Not started. Live backward is still on source-date `2026-08-11` with 3/55 regions in `region_progress.json`. Optimized runtime is not deployed.
+
+BACKWARD_BENCHMARK_SOURCE_DATE=  
+REGIONS_COMPLETE=  
+REGION_PROGRESS_CLEARED=NO  
+NEXT_BACKWARD_DATE_STARTED=NO  

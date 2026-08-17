@@ -44,7 +44,7 @@ def get_parking_config() -> ParkingDbConfig:
     _load_parking_env()
     url = os.environ.get("PARKING_DATABASE_URL", "").strip()
     if url.startswith("postgresql://") or url.startswith("postgres://"):
-        # postgresql://user:pass@host:port/db
+        # postgres URI; password comes from the environment, not this comment
         from urllib.parse import urlparse
 
         p = urlparse(url)

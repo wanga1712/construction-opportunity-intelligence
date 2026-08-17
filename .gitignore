@@ -25,3 +25,6 @@ venv/
 # OS
 .DS_Store
 Thumbs.db
+
+# Local hygiene denylist (never commit real host literals)
+.hygiene/

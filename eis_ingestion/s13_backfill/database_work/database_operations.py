@@ -10,9 +10,9 @@ logger = get_logger()
 
 
 class DatabaseOperations:
-    def __init__(self, config_path="config.ini"):
+    def __init__(self, config_path="config.ini", db_manager=None):
 
-        self.db_manager = DatabaseManager()
+        self.db_manager = db_manager or DatabaseManager()
 
         self.config = load_config(config_path)
         if not self.config:
@@ -262,7 +262,12 @@ class DatabaseOperations:
                 return inserted_id
 
         except IntegrityError as e:
-            # Это нормально, если файл уже существует
+            # Это нормально, если файл уже существует.
+            # Rollback so the shared connection is not left aborted.
+            try:
+                self.db_manager.connection.rollback()
+            except Exception:
+                pass
             return None
         except Exception as e:
             logger.error(f"Ошибка при вставке имени файла {file_name}: {e}")

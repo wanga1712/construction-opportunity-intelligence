@@ -19,6 +19,27 @@ from database_work.contract_lookup_strategy import (
 from database_work.database_connection import DatabaseManager
 from database_work.registry_tables import all_lookup_tables, lookup_order, tables_for_fz
 
+
+def build_unified_lookup_sql(table_names: list[str]) -> str:
+    """One round-trip lookup. Each LIMIT 1 branch must be parenthesized
+    or PostgreSQL rejects UNION ALL (syntax error at UNION).
+    """
+    branches = []
+    for priority, table_name in enumerate(table_names):
+        branches.append(
+            "("
+            f"SELECT id, '{table_name}'::text AS table_name, "
+            f"{priority} AS priority FROM {table_name} "
+            "WHERE contract_number = %s LIMIT 1"
+            ")"
+        )
+    return (
+        "SELECT id, table_name FROM ("
+        + " UNION ALL ".join(branches)
+        + ") candidates ORDER BY priority LIMIT 1"
+    )
+
+
 logger = get_logger()
 
 
@@ -80,19 +101,8 @@ class ContractRegistryLocator:
         if not number:
             return None
         table_names = lookup_order(tables_for_fz(fz_type))
-        branches = []
-        params = []
-        for priority, table_name in enumerate(table_names):
-            branches.append(
-                f"SELECT id, '{table_name}'::text AS table_name, "
-                f"{priority} AS priority FROM {table_name} "
-                "WHERE contract_number = %s"
-            )
-            params.append(number)
-        query = (
-            "SELECT id, table_name FROM (" + " UNION ALL ".join(branches) +
-            ") candidates ORDER BY priority LIMIT 1"
-        )
+        query = build_unified_lookup_sql(table_names)
+        params = [number] * len(table_names)
         try:
             with self._db.connection.cursor() as cursor:
                 cursor.execute(query, tuple(params))
