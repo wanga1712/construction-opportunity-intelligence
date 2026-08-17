@@ -83,8 +83,8 @@ def process_44_rgk_folder(folder_path: str, progress_manager=None, db_manager=No
 
     elapsed = time.perf_counter() - folder_started
     logger.info(
-        "RGK folder: files=%s batches=%s found=%s changed=%s unchanged=%s "
-        "promoted=%s inserted=%s unresolved=%s elapsed=%.1fs",
+        "RGK folder: files={} batches={} found={} changed={} unchanged={} "
+        "promoted={} inserted={} unresolved={} elapsed={:.1f}s",
         totals["input"],
         totals["batches"],
         totals["found"],
@@ -161,8 +161,8 @@ def _process_one_batch(folder_path: str, names: list[str], tags: dict, store: Rg
     metrics["updates"] = counter.updates - updates0
     metrics["commits"] = counter.commits - commits0
     logger.info(
-        "RGK batch: input=%s duplicates=%s found=%s changed=%s unchanged=%s "
-        "promoted=%s inserted=%s unresolved=%s elapsed=%.1fs",
+        "RGK batch: input={} duplicates={} found={} changed={} unchanged={} "
+        "promoted={} inserted={} unresolved={} elapsed={:.1f}s",
         metrics.get("input", 0),
         metrics.get("duplicates", 0),
         metrics.get("found", 0),
