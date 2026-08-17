@@ -17,14 +17,16 @@ class DatabaseIDFetcher:
         cursor (cursor): Общий курсор для выполнения запросов.
     """
 
-    def __init__(self):
+    def __init__(self, db_manager=None):
         """
         Инициализация объекта DatabaseIDFetcher.
 
-        Создает экземпляр DatabaseManager для выполнения запросов к базе данных.
+        Создает экземпляр DatabaseManager для выполнения запросов к базе данных,
+        либо переиспользует уже открытый менеджер.
         """
 
-        self.db_manager = DatabaseManager()
+        self._owns_manager = db_manager is None
+        self.db_manager = db_manager or DatabaseManager()
         self.cursor = None  # Инициализируем курсор как None
     
     def __del__(self):
@@ -34,7 +36,7 @@ class DatabaseIDFetcher:
                 self.cursor.close()
             except:
                 pass
-        if hasattr(self, 'db_manager') and self.db_manager:
+        if getattr(self, "_owns_manager", False) and hasattr(self, "db_manager") and self.db_manager:
             try:
                 self.db_manager.close()
             except:
@@ -292,6 +294,7 @@ class DatabaseIDFetcher:
 
     def close(self):
         """
-        Закрывает соединение с базой данных.
+        Закрывает соединение с базой данных, только если этот объект его создал.
         """
-        self.db_manager.close()
+        if getattr(self, "_owns_manager", True):
+            self.db_manager.close()

@@ -67,6 +67,7 @@ class AdvancedXMLParser(XMLParser):
 
         super().__init__(config_path)  # Инициализируем родительский класс XMLParser
         self.database_check_manager = DatabaseCheckManager()  # Менеджер для проверки БД
+        self._recouped_sync = RecoupedContractSync(self.database_operations.db_manager)
 
     def _enrich_rgk_okpd_and_subject(self, root, found_tags: dict) -> dict:
         """Attach OKPD2 codes + subject; resolve okpd_id via collection_codes_okpd.
@@ -139,13 +140,12 @@ class AdvancedXMLParser(XMLParser):
         found_tags = self._enrich_rgk_okpd_and_subject(root, found_tags)
 
         try:
-            sync = RecoupedContractSync()
             number = found_tags.get("contract_number") or contract_number_param
             if not number:
                 logger.debug("Recouped 44: нет contract_number в XML, использую fallback из параметра")
                 return None
 
-            location = sync.apply_update(
+            location = self._recouped_sync.apply_update(
                 contract_number=number,
                 fields=found_tags,
                 fz_type="44",
@@ -178,8 +178,7 @@ class AdvancedXMLParser(XMLParser):
             logger.debug("Recouped 223: нет contract_number в XML, использую fallback из параметра")
             return None
         try:
-            sync = RecoupedContractSync()
-            location = sync.apply_update(number, found_tags, fz_type="223")
+            location = self._recouped_sync.apply_update(number, found_tags, fz_type="223")
             return location.record_id if location else None
         except Exception as e:
             logger.error(f"Ошибка sync контракта 223: {e}")
@@ -300,7 +299,7 @@ class AdvancedXMLParser(XMLParser):
             logger.error(f"Ошибка при парсинге XML-файла {file_path}: {e}")
             raise  # Прекращаем выполнение программы
 
-        sync = RecoupedContractSync()
+        sync = self._recouped_sync
         location = None
 
         # 44-FZ RGK only. Exact-version dedup is content-based, so the same

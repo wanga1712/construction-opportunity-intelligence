@@ -13,7 +13,11 @@
 
 ## CURRENT WIP — 2026-08-17
 
-**PROJECT-EIS-END-TO-END-SOURCE-AND-24H-SLA-RECONCILIATION-1** — `[~]` source reconciliation + observability + 24h SLA benchmark. Not an optimization WIP. Not a CRM card redesign. S7 forward and S13 backfill kept as separate trees. Qwen/docs not started. Reports: `docs/reports/eis_reconciliation/`.
+**PROJECT-EIS-PRODUCTION-RECOVERY-AND-24H-SOURCE-DAY-SLA-CLOSURE-1** — `[~]` production recovery + 24h source-day SLA. Auth stall fixed; S7 UNION ALL lookup parenthesized; DB connections reused per folder; cheap JSONL metrics. Full source-date 2026-08-12 is **not** complete (4/55 regions). Reports: `docs/reports/eis_24h_sla_closure/`. Qwen/docs not started. CRM UI unchanged.
+
+Size note: `eis_ingestion/s7_forward/parsing_xml/okpd_parser.py` is 550 lines. Left as one processing loop (615 / recouped / OKPD / skip). Splitting it in this recovery WIP would risk skip/reuse regressions.
+
+Prior (closed for source import only): **PROJECT-EIS-END-TO-END-SOURCE-AND-24H-SLA-RECONCILIATION-1** — `[x]` source + observability. Local/remote `5e4dd60`. Not an SLA pass.
 
 Prior (closed): **CRM-V3-PRODUCTION-RECOVERY-EXPERT-CALIBRATION-AND-DOCUMENT-LEARNING-BASELINE-1** — `[x]` **PASS**. GitHub `main` fast-forwarded `cfeaf156` → `50f5c844` (no merge commit, no force). Phase 1 UI frozen. SAVE+NEXT production smoke PASS. Document-observation DDL present. Qwen timer/service inactive at close; document workers inactive; procurement sync active.
 

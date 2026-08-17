@@ -45,7 +45,7 @@ class RecoupedContractSync:
 
     def find(self, contract_number: str, fz_type: Optional[str] = None) -> Optional[ContractLocation]:
         if fz_type:
-            return self._locator.find_in_fz(fz_type, contract_number)
+            return self._locator.find_in_fz_one_query(fz_type, contract_number)
         return self._locator.find_by_number(contract_number)
 
     def find_44_one_query(self, contract_number: str) -> Optional[ContractLocation]:
@@ -242,7 +242,7 @@ class RecoupedContractSync:
                 f"https://zakupki.gov.ru/223/contract/public/contract/view/general-information.html?regNumber={contract_number}",
             )
 
-        ops = DatabaseOperations()
+        ops = DatabaseOperations(db_manager=self._db)
         try:
             if fz_type == "44":
                 record_id = ops.insert_reestr_contract_44_fz(payload)

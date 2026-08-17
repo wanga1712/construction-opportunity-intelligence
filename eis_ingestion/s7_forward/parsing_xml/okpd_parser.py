@@ -17,6 +17,12 @@ from database_work.database_operations import DatabaseOperations
 
 logger = get_logger()
 
+
+def _dprint(*args, **kwargs) -> None:
+    if os.getenv("TENDERMONITOR_DEBUG_PRINTS") == "1":
+        kwargs.setdefault("flush", True)
+        print(*args, **kwargs)
+
 # Путь для отладочных логов (общий для проекта) — используется только для диагностики
 DEBUG_LOG_PATH = Path(__file__).resolve().parent.parent / ".cursor" / "debug.log"
 
@@ -45,13 +51,13 @@ def debug_log(hypothesis_id: str, location: str, message: str, data: Optional[di
 
 
 def process_okpd_files(folder_path, region_code, progress_manager: Optional[ProgressManager] = None):
-    print(f"DEBUG: process_okpd_files called for {folder_path}...", flush=True)
+    _dprint(f"DEBUG: process_okpd_files called for {folder_path}...", flush=True)
     db_id_fetcher = DatabaseIDFetcher()
     region_id = db_id_fetcher.get_region_id(region_code)
 
     if not region_id:
         logger.error(f"Не удалось получить ID региона для кода {region_code}")
-        print(f"DEBUG: Region ID not found for {region_code}", flush=True)
+        _dprint(f"DEBUG: Region ID not found for {region_code}", flush=True)
         return
 
     config = load_config()
@@ -62,19 +68,19 @@ def process_okpd_files(folder_path, region_code, progress_manager: Optional[Prog
         archive_615 = config.get('eis_615', 'archive_xml', fallback=None)
 
     if folder_path == recouped_contract_archive_44_fz_xml:
-        print("DEBUG: Branch process_contract_files", flush=True)
+        _dprint("DEBUG: Branch process_contract_files", flush=True)
         process_contract_files(folder_path, db_id_fetcher, progress_manager)
     elif folder_path == recouped_contract_archive_223_fz_xml:
-        print("DEBUG: Branch process_contract_files (223 recouped)", flush=True)
+        _dprint("DEBUG: Branch process_contract_files (223 recouped)", flush=True)
         process_contract_files(folder_path, db_id_fetcher, progress_manager)
     elif archive_615 and folder_path == archive_615:
         # В XML 615-ПП нет OKPD2 — обходим фильтр ОКПД
-        print("DEBUG: Branch process_615_files (OKPD bypass)", flush=True)
+        _dprint("DEBUG: Branch process_615_files (OKPD bypass)", flush=True)
         process_615_files(folder_path, region_code, progress_manager)
     else:
-        print("DEBUG: Branch process_okpd_files_normal", flush=True)
+        _dprint("DEBUG: Branch process_okpd_files_normal", flush=True)
         process_okpd_files_normal(folder_path, db_id_fetcher, region_code, progress_manager)
-    print("DEBUG: process_okpd_files finished.", flush=True)
+    _dprint("DEBUG: process_okpd_files finished.", flush=True)
 
 
 def process_615_files(folder_path, region_code, progress_manager: Optional[ProgressManager] = None):
@@ -98,7 +104,7 @@ def process_615_files(folder_path, region_code, progress_manager: Optional[Progr
     file_deleter = FileDeleter(folder_path)
     xml_files = [f for f in os.listdir(folder_path) if f.endswith(".xml")]
     if not xml_files:
-        print("DEBUG: No 615 XML files found.", flush=True)
+        _dprint("DEBUG: No 615 XML files found.", flush=True)
         return
 
     total_files = len(xml_files)
@@ -107,20 +113,24 @@ def process_615_files(folder_path, region_code, progress_manager: Optional[Progr
     logger.info(f"615-ПП: найдено {total_files} XML файлов (регион {region_code})")
 
     xml_parser = XMLParser()
+    db_operations = xml_parser.database_operations
     for idx, file_name in enumerate(xml_files, 1):
         file_path = os.path.join(folder_path, file_name)
         try:
-            db_operations = DatabaseOperations()
-            db_operations.insert_file_name(file_name)
+            inserted_id = db_operations.insert_file_name(file_name)
+            if inserted_id is None:
+                file_deleter.delete_single_file(file_path)
+                skipped_count += 1
+                continue
             # okpd_code=None — в 615 нет ОКПД
             result = xml_parser.parse_xml_tags(file_path, region_code, None, folder_path)
             file_deleter.delete_single_file(file_path)
             if result is None:
                 skipped_count += 1
-                print(f"DEBUG: 615 skipped {idx}/{total_files}: {file_name}", flush=True)
+                _dprint(f"DEBUG: 615 skipped {idx}/{total_files}: {file_name}", flush=True)
             else:
                 processed_count += 1
-                print(f"DEBUG: 615 processed {idx}/{total_files}: {file_name}", flush=True)
+                _dprint(f"DEBUG: 615 processed {idx}/{total_files}: {file_name}", flush=True)
         except Exception as e:
             skipped_count += 1
             logger.error(f"615-ПП: ошибка обработки {file_name}: {e}", exc_info=True)
@@ -147,10 +157,21 @@ def process_contract_files(folder_path, db_id_fetcher, progress_manager: Optiona
     
     if not xml_files:
         return
+
+    recouped_parser = AdvancedXMLParser(config_path="config.ini")
+    db_operations = recouped_parser.database_operations
     
     for file_name in xml_files:
         file_path = os.path.join(folder_path, file_name)
-        process_contract_file(file_path, file_name, db_id_fetcher, file_deleter, folder_path)
+        process_contract_file(
+            file_path,
+            file_name,
+            db_id_fetcher,
+            file_deleter,
+            folder_path,
+            recouped_parser=recouped_parser,
+            db_operations=db_operations,
+        )
 
 
 def extract_contract_number_from_filename(file_name: str) -> Optional[str]:
@@ -167,7 +188,15 @@ def extract_contract_number_from_filename(file_name: str) -> Optional[str]:
     return None
 
 
-def process_contract_file(file_path, file_name, db_id_fetcher, file_deleter, folder_path):
+def process_contract_file(
+    file_path,
+    file_name,
+    db_id_fetcher,
+    file_deleter,
+    folder_path,
+    recouped_parser=None,
+    db_operations=None,
+):
     try:
         # file_id = db_id_fetcher.get_file_names_xml_id(file_name)
         # if file_id:
@@ -184,10 +213,15 @@ def process_contract_file(file_path, file_name, db_id_fetcher, file_deleter, fol
         if not contract_number:
             contract_number = extract_contract_number_from_filename(file_name)
         if contract_number:
-            result = process_contract_with_number(file_path, contract_number, folder_path)
+            result = process_contract_with_number(
+                file_path,
+                contract_number,
+                folder_path,
+                recouped_parser=recouped_parser,
+            )
             if result != "duplicate_non_target_version":
-                db_operations = DatabaseOperations()
-                db_operations.insert_file_name(file_name)
+                ops = db_operations or DatabaseOperations()
+                ops.insert_file_name(file_name)
         else:
             logger.error(f"Не найден номер контракта в файле {file_name}")
             try:
@@ -248,18 +282,18 @@ def extract_contract_number(root):
     return None
 
 
-def process_contract_with_number(file_path, contract_number, folder_path):
-    xml_parser_recouped = AdvancedXMLParser(config_path="config.ini")
+def process_contract_with_number(file_path, contract_number, folder_path, recouped_parser=None):
+    xml_parser_recouped = recouped_parser or AdvancedXMLParser(config_path="config.ini")
     return xml_parser_recouped.parse_xml_tags_recouped_contract(file_path, contract_number, folder_path)
 
 
 def process_okpd_files_normal(folder_path, db_id_fetcher, region_code, progress_manager: Optional[ProgressManager] = None):
-    print(f"DEBUG: process_okpd_files_normal started for {folder_path}", flush=True)
+    _dprint(f"DEBUG: process_okpd_files_normal started for {folder_path}", flush=True)
     file_deleter = FileDeleter(folder_path)
     xml_files = [f for f in os.listdir(folder_path) if f.endswith(".xml")]
 
     if not xml_files:
-        print("DEBUG: No XML files found.", flush=True)
+        _dprint("DEBUG: No XML files found.", flush=True)
         debug_log(
             "OK1",
             "okpd_parser.py:process_okpd_files_normal",
@@ -269,7 +303,7 @@ def process_okpd_files_normal(folder_path, db_id_fetcher, region_code, progress_
         return
 
     total_files = len(xml_files)
-    print(f"DEBUG: Found {total_files} XML files.", flush=True)
+    _dprint(f"DEBUG: Found {total_files} XML files.", flush=True)
     processed_count = 0
     skipped_count = 0
     
@@ -292,12 +326,24 @@ def process_okpd_files_normal(folder_path, db_id_fetcher, region_code, progress_
         process_task_name = "process_44" if fz_type == "44-ФЗ" else "process_223"
         progress_manager.update_task(process_task_name, advance=0, total=total_files)
         progress_manager.set_description(process_task_name, f"⚙️ Обработка {fz_type} | Регион {region_code} | 0/{total_files}")
+
+    xml_parser = XMLParser(config_path="config.ini")
+    db_operations = xml_parser.database_operations
     
     for idx, file_name in enumerate(xml_files, 1):
-        print(f"DEBUG: Processing file {idx}/{total_files}: {file_name}", flush=True)
+        _dprint(f"DEBUG: Processing file {idx}/{total_files}: {file_name}", flush=True)
         file_path = os.path.join(folder_path, file_name)
-        result = process_okpd_file(file_path, file_name, db_id_fetcher, region_code, file_deleter, folder_path)
-        print(f"DEBUG: Finished file {idx}/{total_files}: {result}", flush=True)
+        result = process_okpd_file(
+            file_path,
+            file_name,
+            db_id_fetcher,
+            region_code,
+            file_deleter,
+            folder_path,
+            db_operations=db_operations,
+            xml_parser=xml_parser,
+        )
+        _dprint(f"DEBUG: Finished file {idx}/{total_files}: {result}", flush=True)
         
         if result == "processed":
             processed_count += 1
@@ -331,7 +377,16 @@ def process_okpd_files_normal(folder_path, db_id_fetcher, region_code, progress_
     )
 
 
-def process_okpd_file(file_path, file_name, db_id_fetcher, region_code, file_deleter, folder_path):
+def process_okpd_file(
+    file_path,
+    file_name,
+    db_id_fetcher,
+    region_code,
+    file_deleter,
+    folder_path,
+    db_operations=None,
+    xml_parser=None,
+):
     """
     Обрабатывает XML файл:
     1. Проверяет в БД, был ли файл уже обработан
@@ -352,8 +407,16 @@ def process_okpd_file(file_path, file_name, db_id_fetcher, region_code, file_del
 
         # Файл новый - добавляем его имя в БД
         try:
-            db_operations = DatabaseOperations()
-            inserted_id = db_operations.insert_file_name(file_name)
+            ops = db_operations or DatabaseOperations()
+            inserted_id = ops.insert_file_name(file_name)
+            if inserted_id is None:
+                try:
+                    from utils import stats as stats_collector
+                    stats_collector.increment("files_skipped_already_processed", 1)
+                except Exception:
+                    pass
+                file_deleter.delete_single_file(file_path)
+                return "skipped"
             debug_log(
                 "OK6",
                 "okpd_parser.py:process_okpd_file",
@@ -390,7 +453,13 @@ def process_okpd_file(file_path, file_name, db_id_fetcher, region_code, file_del
                     "Найден ОКПД код в файле",
                     {"file_name": file_name, "region_code": region_code, "okpd_code": okpd_code},
                 )
-                process_okpd_code(okpd_code, file_path, region_code, folder_path)
+                process_okpd_code(
+                    okpd_code,
+                    file_path,
+                    region_code,
+                    folder_path,
+                    xml_parser=xml_parser,
+                )
                 debug_log(
                     "OK8",
                     "okpd_parser.py:process_okpd_file",
@@ -446,7 +515,7 @@ def extract_okpd_code(root):
     return None
 
 
-def process_okpd_code(okpd_code, file_path, region_code, folder_path):
+def process_okpd_code(okpd_code, file_path, region_code, folder_path, xml_parser=None):
     """
     Обрабатывает файл с ОКПД кодом:
     1. Проверяет, есть ли ОКПД код в БД (в таблице collection_codes_okpd)
@@ -455,28 +524,27 @@ def process_okpd_code(okpd_code, file_path, region_code, folder_path):
     
     При ошибке БД - выбрасывает исключение (чтобы вызывающий код знал об ошибке)
     """
-    print(f"DEBUG: process_okpd_code called for {okpd_code}", flush=True)
+    _dprint(f"DEBUG: process_okpd_code called for {okpd_code}", flush=True)
     if len(okpd_code.split('.')) == 2 and okpd_code.endswith('0'):
         okpd_code = okpd_code[:-1]
 
-    db_id_fetcher = DatabaseIDFetcher()
+    parser = xml_parser or XMLParser(config_path="config.ini")
     # get_okpd_id теперь выбрасывает исключение при ошибке БД
-    print("DEBUG: Checking OKPD in DB...", flush=True)
-    exists_in_db = db_id_fetcher.get_okpd_id(okpd_code)
-    print(f"DEBUG: OKPD exists in DB: {exists_in_db}", flush=True)
+    _dprint("DEBUG: Checking OKPD in DB...", flush=True)
+    exists_in_db = parser.db_id_fetcher.get_okpd_id(okpd_code)
+    _dprint(f"DEBUG: OKPD exists in DB: {exists_in_db}", flush=True)
     
     if exists_in_db:
         # ОКПД код есть в БД - обрабатываем файл
-        print("DEBUG: Parsing XML tags...", flush=True)
-        xml_parser = XMLParser(config_path="config.ini")
-        xml_parser.parse_xml_tags(file_path, region_code, okpd_code, folder_path)
-        print("DEBUG: XML tags parsed.", flush=True)
+        _dprint("DEBUG: Parsing XML tags...", flush=True)
+        parser.parse_xml_tags(file_path, region_code, okpd_code, folder_path)
+        _dprint("DEBUG: XML tags parsed.", flush=True)
 
         file_deleter = FileDeleter(folder_path)
         file_deleter.delete_single_file(file_path)
     else:
         # ОКПД код не найден в БД - просто удаляем файл
-        print("DEBUG: OKPD not in DB, deleting file...", flush=True)
+        _dprint("DEBUG: OKPD not in DB, deleting file...", flush=True)
         file_deleter = FileDeleter(folder_path)
         file_deleter.delete_single_file(file_path)
-    print("DEBUG: process_okpd_code finished.", flush=True)
+    _dprint("DEBUG: process_okpd_code finished.", flush=True)

@@ -7,6 +7,7 @@ from utils.logger_config import get_logger
 from utils.progress import ProgressManager
 from utils import XMLParser
 from utils import stats as stats_collector
+from utils.source_day_metrics import emit as emit_metric
 from secondary_functions import load_token, load_config
 from database_work.database_requests import get_region_codes
 from file_downloader import FileDownloader
@@ -176,6 +177,14 @@ class EISRequester:
             if processed_regions:
                 logger.info(f"Пропущено уже обработанных регионов: {len(processed_regions)}, осталось обработать: {len(regions_to_process)}")
                 print(f"ℹ️  Пропущено уже обработанных регионов: {len(processed_regions)}, осталось обработать: {len(regions_to_process)}")
+
+            date_started = time.perf_counter()
+            emit_metric(
+                "source_date_start",
+                source_date=self.date,
+                regions_remaining=len(regions_to_process),
+                regions_skipped=len(processed_regions),
+            )
             
             total_requests = 0
             for region_code in regions_to_process:
@@ -206,7 +215,9 @@ class EISRequester:
                 # Снимок статистики ДО обработки региона
                 stats_before = stats_collector.get_snapshot()
                 downloaded_archives = 0  # Счетчик скачанных архивов для региона
+                region_started = time.perf_counter()
                 
+                t44_started = time.perf_counter()
                 for subsystem in self.subsystems_44:
                     document_types = []
                     if subsystem == "PRIZ":
@@ -233,7 +244,9 @@ class EISRequester:
                             self.file_downloader.download_files(archive_urls, subsystem, region_code, self.progress_manager)
                         
                         time.sleep(0.5)
+                fz44_sec = time.perf_counter() - t44_started
                 
+                t223_started = time.perf_counter()
                 for subsystem in self.subsystems_223:
                     document_types = []
                     if subsystem == "RI223":
@@ -260,9 +273,12 @@ class EISRequester:
                             self.file_downloader.download_files(archive_urls, subsystem, region_code, self.progress_manager)
                         
                         time.sleep(0.5)
+                fz223_sec = time.perf_counter() - t223_started
                 
                 # 615-ПП проход — только выбранные регионы (Москва/МО)
+                pp615_sec = 0.0
                 if self._615_enabled and str(region_code) in self._615_regions:
+                    t615_started = time.perf_counter()
                     self.progress_manager.set_description("requests", f"📡 Запросы к ЕИС | Регион {region_code} | {self._615_subsystem} (615-ПП)")
                     for doc_type in self._615_doctypes:
                         self.progress_manager.update_task("requests", advance=1)
@@ -273,6 +289,7 @@ class EISRequester:
                             downloaded_archives += len(archive_urls)
                             self.file_downloader.download_files(archive_urls, f"615_{self._615_subsystem}", region_code, self.progress_manager)
                         time.sleep(0.5)
+                    pp615_sec = time.perf_counter() - t615_started
 
                 # Снимок статистики ПОСЛЕ обработки региона
                 stats_after = stats_collector.get_snapshot()
@@ -311,6 +328,18 @@ class EISRequester:
                     
                     if parts:
                         print(f"\r{' '*100}\r✅ Регион {region_code} ({region_idx}/{len(regions_to_process)}): {' | '.join(parts)}", flush=True)
+
+                emit_metric(
+                    "region_complete",
+                    source_date=self.date,
+                    region=str(region_code),
+                    elapsed_sec=round(time.perf_counter() - region_started, 3),
+                    fz44_sec=round(fz44_sec, 3),
+                    fz223_sec=round(fz223_sec, 3),
+                    pp615_sec=round(pp615_sec, 3),
+                    archives=downloaded_archives,
+                    objects=region_stats,
+                )
                 
                 # Сохраняем прогресс обработки региона
                 if on_region_processed:
@@ -318,5 +347,10 @@ class EISRequester:
                         on_region_processed(region_code)
                     except Exception as e:
                         logger.error(f"Ошибка при сохранении прогресса региона {region_code}: {e}", exc_info=True)
+            emit_metric(
+                "process_requests_return",
+                source_date=self.date,
+                elapsed_sec=round(time.perf_counter() - date_started, 3),
+            )
         finally:
             self.progress_manager.stop()
