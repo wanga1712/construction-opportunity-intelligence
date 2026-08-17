@@ -10,6 +10,7 @@ from datetime import date
 
 import streamlit as st
 
+from src.ui.components.analytics_v2.annotation_queue import bind_and_advance
 from src.ui.components.analytics_v2.card_feed import render_card_feed
 from src.ui.components.analytics_v2.card_compact import render_compact_card
 # Removed render_card_detail import
@@ -400,6 +401,7 @@ def _render_torgi_tab() -> None:
         key=lambda c: _torgi_sort_key(c, eff_map),
         reverse=True,
     )
+    filtered = bind_and_advance(filtered, _SESSION_TORGI, st.session_state)
 
     selected_id = st.session_state.get(_SESSION_TORGI)
     caption = f"Активных торгов: {len(cards)}"
@@ -432,11 +434,13 @@ def _render_komissia_tab() -> None:
         st.info("Нет тендеров на стадии работы комиссии.")
         return
 
-    selected_id   = st.session_state.get(_SESSION_KOMISSIA)
-    selected_card = next((c for c in cards if c["id"] == selected_id), None)
-
     waiting   = [c for c in cards if c["award_status"] == "submission_closed_waiting_award"]
     not_found = [c for c in cards if c["award_status"] == "award_not_found"]
+    waiting = bind_and_advance(
+        waiting, _SESSION_KOMISSIA, st.session_state, consume_if_missing=False
+    )
+    not_found = bind_and_advance(not_found, _SESSION_KOMISSIA, st.session_state)
+    selected_id = st.session_state.get(_SESSION_KOMISSIA)
 
     st.caption(
         f"Ждём решения: {len(waiting)} · результат не найден: {len(not_found)}"
@@ -487,6 +491,7 @@ def _render_razygranye_tab() -> None:
     )
     is_confirmed_layer = qual_layer == "✓ Подтверждено"
     cards_layer = [c for c in cards if bool(c.get("is_confirmed")) == is_confirmed_layer]
+    cards_layer = bind_and_advance(cards_layer, _SESSION_RAZYGR, st.session_state)
 
     st.caption(
         f"Найдено: {len(cards)} записей"

@@ -13,7 +13,17 @@
 
 ## CURRENT WIP — 2026-08-17
 
-**CRM-V3-PRODUCTION-RECOVERY-EXPERT-CALIBRATION-AND-DOCUMENT-LEARNING-BASELINE-1** — `[~]` **PHASE 1 DEPLOYED / WAITING_FOR_USER_VISUAL_ACCEPTANCE**. Restored last-working nested procurement subnav (`Предварительно ИИ` / `✓ Подтверждено`) from standalone `tabs.py` + category filter panel. Radar env/role password aligned after security rotation (no Qwen/docs start). Phase 2–3 not started until operator confirms the restored UI.
+**CRM-V3-PRODUCTION-RECOVERY-EXPERT-CALIBRATION-AND-DOCUMENT-LEARNING-BASELINE-1** — `[~]` **PHASE 2–3 CODE COMPLETE / PHASE 1 UI FROZEN**. Operator accepted Phase 1 nested procurement view as the last working look. Do not merge to `main` any commit that changes that appearance.
+
+**Phase 1** — `[x]` accepted. Nested pills `Предварительно ИИ` / `✓ Подтверждено`; stage tabs Лиды / Подготовка к торгам / Идут торги / Комиссия / На рассмотрении / Разыгранные.
+
+**Phase 2** — `[x]` workbench queue. SAVE+NEXT now consumes `annotation_go_next` / `annotation_go_next_from` and rotates the current filtered card to the front without new tabs or labels. CORRECT fast path gained the existing full-form `Сохранить и следующая →` button only. MODEL RAW still read-only. Tests: `tests/test_annotation_queue.py`, extended `tests/test_expert_annotation_ui.py`. 29 targeted tests PASS. No production 5-card live annotation run.
+
+**Phase 3** — `[x]` document learning contract only. Flag `CRM_V3_EXHAUSTIVE_DOCUMENT_DISCOVERY` default off. Observation DTO + SQL `src/migrations/crm_v3_document_observation_1.sql` + store/export/stats/policy. Usefulness from extraction outcomes, not selector score. Provenance: `EXHAUSTIVE` / `MODEL_SELECTED` / `RANDOM_EXPLORATION` / `HISTORICAL_FILTERED` (biased, not calibration truth). Wilson interval: 1/1 is not 100%. Automatic skip remains forbidden. Workers not started. DDL not applied (Phase 4).
+
+**Phase 4** — `[ ]` apply DDL via `sudo -n -u postgres psql -d crm` on S13; deploy non-chrome files; freeze verify; do not FF `main` with UI-changing commits.
+
+Size notes: `tabs.py` 791 lines — accepted Phase 1 workspace plus three `bind_and_advance` call sites; queue logic lives in `annotation_queue.py` (67). `card_tabs_ai_expert_form.py` 816 — still one stateful Streamlit form; SAVE+NEXT on CORRECT is a second existing button, not a split.
 
 Prior (closed): **CRM-V3-CALIBRATION-FREEZE-TIMER-CLOSURE-1** — `[x]` **PASS** (operational; no git commit).
 
