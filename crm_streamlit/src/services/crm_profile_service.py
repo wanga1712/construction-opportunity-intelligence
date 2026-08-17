@@ -40,6 +40,27 @@ def load_profiles() -> list[dict]:
         conn.close()
 
 
+@st.cache_data(ttl=120, show_spinner=False)
+def load_profile_counts() -> dict[int, int]:
+    """Количество активных закупок (crm_stage IN torgi/lidy/podgotovka) per profile_id."""
+    try:
+        conn = _crm_conn()
+        with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+            cur.execute("""
+                SELECT crm_profile_id, count(*) AS cnt
+                FROM crm_procurements
+                WHERE crm_stage IN ('torgi', 'lidy', 'podgotovka')
+                  AND crm_profile_id IS NOT NULL
+                GROUP BY crm_profile_id
+            """)
+            return {r["crm_profile_id"]: int(r["cnt"]) for r in cur.fetchall()}
+    except Exception as exc:
+        logger.error(f"load_profile_counts: {exc}")
+        return {}
+    finally:
+        conn.close()
+
+
 @st.cache_data(ttl=60, show_spinner=False)
 def load_subcategories(profile_id: Optional[int] = None) -> list[str]:
     """Уникальные подкатегории для профиля (или все если profile_id=None)."""
@@ -63,6 +84,37 @@ def load_subcategories(profile_id: Optional[int] = None) -> list[str]:
     except Exception as exc:
         logger.error(f"load_subcategories: {exc}")
         return []
+    finally:
+        conn.close()
+
+
+@st.cache_data(ttl=120, show_spinner=False)
+def load_category_counts(profile_id: Optional[int] = None) -> dict[str, int]:
+    """Количество активных закупок per crm_category (optionally filtered by profile)."""
+    try:
+        conn = _crm_conn()
+        with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+            if profile_id:
+                cur.execute("""
+                    SELECT crm_category, count(*) AS cnt
+                    FROM crm_procurements
+                    WHERE crm_stage IN ('torgi', 'lidy', 'podgotovka')
+                      AND crm_profile_id = %s
+                      AND crm_category IS NOT NULL
+                    GROUP BY crm_category
+                """, (profile_id,))
+            else:
+                cur.execute("""
+                    SELECT crm_category, count(*) AS cnt
+                    FROM crm_procurements
+                    WHERE crm_stage IN ('torgi', 'lidy', 'podgotovka')
+                      AND crm_category IS NOT NULL
+                    GROUP BY crm_category
+                """)
+            return {r["crm_category"]: int(r["cnt"]) for r in cur.fetchall()}
+    except Exception as exc:
+        logger.error(f"load_category_counts: {exc}")
+        return {}
     finally:
         conn.close()
 
@@ -154,6 +206,131 @@ def trigger_sync_refresh() -> None:
         conn.close()
     except Exception as exc:
         logger.warning(f"trigger_sync_refresh: {exc}")
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Иерархический фильтр категорий (CRM-FILTER-1)
+# ──────────────────────────────────────────────────────────────────────────────
+
+_CAT_DISPLAY_NAMES: dict[str, str] = {
+    "uncategorized": "Без подтверждённой категории",
+    "outdoor_lighting": "Наружное освещение",
+    "indoor_lighting": "Внутреннее освещение",
+    "emergency_lighting": "Аварийное освещение",
+    "lighting": "Светотехника",
+    "computers": "Компьютеры / IT",
+    "monoblock": "Моноблоки",
+    "laptop": "Ноутбуки",
+    "server": "Серверы",
+    "networking": "Сетевое оборудование",
+    "education": "Образование",
+    "education_kindergarten": "Детские сады",
+    "education_school": "Школы",
+    "waterproofing": "Гидроизоляция",
+    "construction": "Строительство",
+}
+
+
+def _cat_display(code: str) -> str:
+    """Display name for a category/subcategory code."""
+    return _CAT_DISPLAY_NAMES.get(code, code)
+
+
+@st.cache_data(ttl=30, show_spinner=False)
+def load_category_hierarchy(stage: str = "torgi", filters: dict | None = None) -> dict:
+    """
+    Один batch-запрос для иерархической агрегации категорий.
+
+    Counts НЕ учитывают текущий category selection — так видны альтернативные категории.
+
+    Returns:
+        {
+          cat_code: {
+            "display": str,
+            "count": int,           # суммарный по всем подкатегориям + без подкатегорий
+            "subcategories": {
+              sub_code: {"display": str, "count": int}
+            }
+          }
+        }
+    """
+    try:
+        conn = _crm_conn()
+        params: dict = {"stage": stage}
+        extra_where = ""
+        if filters:
+            if filters.get("profile_id"):
+                extra_where += " AND cp.crm_profile_id = %(profile_id)s"
+                params["profile_id"] = filters["profile_id"]
+            if filters.get("region") and filters["region"] not in ("Все регионы", None, ""):
+                extra_where += " AND cp.delivery_region = %(region)s"
+                params["region"] = filters["region"]
+
+        with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+            cur.execute(f"""
+                SELECT
+                  COALESCE(cc.category, cp.crm_category, cp.object_type, 'uncategorized') AS cat,
+                  cc.subcategory,
+                  COUNT(DISTINCT cp.id) AS cnt
+                FROM crm_procurements cp
+                LEFT JOIN crm_category_candidates cc ON cc.procurement_id = cp.id
+                WHERE cp.crm_stage = %(stage)s
+                {extra_where}
+                GROUP BY 1, 2
+            """, params)
+            rows = cur.fetchall()
+        conn.close()
+
+        hierarchy: dict = {}
+        for row in rows:
+            cat = row["cat"] or "uncategorized"
+            sub = row["subcategory"]
+            cnt = int(row["cnt"])
+
+            if cat not in hierarchy:
+                hierarchy[cat] = {
+                    "display": _cat_display(cat),
+                    "count": 0,
+                    "subcategories": {},
+                }
+            hierarchy[cat]["count"] += cnt
+
+            if sub:
+                if sub not in hierarchy[cat]["subcategories"]:
+                    hierarchy[cat]["subcategories"][sub] = {
+                        "display": _cat_display(sub),
+                        "count": 0,
+                    }
+                hierarchy[cat]["subcategories"][sub]["count"] += cnt
+
+        return hierarchy
+    except Exception as exc:
+        logger.error("load_category_hierarchy(stage=%s): %s", stage, exc)
+        return {}
+
+
+def build_category_sql_filter(
+    selected_cats: set,
+    all_cats_in_hierarchy: set,
+) -> tuple[str, dict]:
+    """
+    Возвращает (sql_fragment, params) для WHERE-условия фильтрации по категориям.
+
+    Rules:
+    - Пустой выбор → всё (безопасный fallback, не показываем пустую страницу)
+    - Все выбраны → TRUE (без лишнего фильтра)
+    - Частичный выбор → условие по списку
+    """
+    if not selected_cats:
+        return "TRUE", {}
+    if all_cats_in_hierarchy and selected_cats >= all_cats_in_hierarchy:
+        return "TRUE", {}
+    cats_list = sorted(selected_cats)
+    sql = (
+        "COALESCE(cc.category, cp.crm_category, cp.object_type, 'uncategorized')"
+        " = ANY(%(selected_cats)s)"
+    )
+    return sql, {"selected_cats": cats_list}
 
 
 def queue_reenrich(procurement_id: int) -> bool:

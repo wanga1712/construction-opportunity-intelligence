@@ -13,7 +13,11 @@
 
 ## CURRENT WIP — 2026-08-17
 
-**PROJECT-CANONICAL-PRODUCTION-SOURCE-RECONCILIATION-1** — `[x]` **PASS**. File-content reconciliation of active S13 CRM/V3 source into canonical GitHub. No S13 Git history merge. No UI/routing/scoring/Qwen/docs behavior change. Credential fallbacks in copied S13 files stripped to env-only (`require_crm_db_connect_kwargs`). Clean-checkout `src.*` import closure 0. Safe unit tests pass. Production smoke after deploy: Streamlit HTTP 200; Qwen/docs not started.
+**CRM-V3-PRODUCTION-RECOVERY-EXPERT-CALIBRATION-AND-DOCUMENT-LEARNING-BASELINE-1** — `[~]` **PHASE 1 DEPLOYED / WAITING_FOR_USER_VISUAL_ACCEPTANCE**. Restored last-working nested procurement subnav (`Предварительно ИИ` / `✓ Подтверждено`) from standalone `tabs.py` + category filter panel. Radar env/role password aligned after security rotation (no Qwen/docs start). Phase 2–3 not started until operator confirms the restored UI.
+
+Prior (closed): **CRM-V3-CALIBRATION-FREEZE-TIMER-CLOSURE-1** — `[x]` **PASS** (operational; no git commit).
+
+Prior (closed): **PROJECT-CANONICAL-PRODUCTION-SOURCE-RECONCILIATION-1** — `[x]` **PASS**. File-content reconciliation of active S13 CRM/V3 source into canonical GitHub. No S13 Git history merge. No UI/routing/scoring/Qwen/docs behavior change. Credential fallbacks in copied S13 files stripped to env-only (`require_crm_db_connect_kwargs`). Clean-checkout `src.*` import closure 0. Safe unit tests pass. Production smoke after deploy: Streamlit HTTP 200; Qwen/docs not started.
 
 Prior (closed): **PROJECT-PUBLIC-REPO-SECURITY-REMEDIATION-1** — `[x]` **PASS**.
 
