@@ -197,6 +197,7 @@ def _handle_save(
 
         if save_and_next:
             st.session_state["annotation_go_next"] = True
+            st.session_state["annotation_go_next_from"] = procurement_id
 
         st.rerun()
 
@@ -224,29 +225,50 @@ def _load_annotation_safe(crm_db: Any, procurement_id: int) -> dict | None:
         return None
 
 
+def _cached_list(key: str, loader) -> list:
+    cached = st.session_state.get(key)
+    if cached is not None:
+        return cached
+    rows = loader()
+    st.session_state[key] = rows
+    return rows
+
+
 def _load_categories_safe(crm_db: Any) -> list[dict]:
     try:
-        return load_categories_for_selector(crm_db)
+        return _cached_list(
+            "_expert_taxonomy_categories",
+            lambda: load_categories_for_selector(crm_db),
+        )
     except Exception:
         return []
 
 
 def _load_expert_obj_types_safe(crm_db: Any) -> list[str]:
     try:
-        return collect_expert_object_types(crm_db)
+        return _cached_list(
+            "_expert_obj_types",
+            lambda: collect_expert_object_types(crm_db),
+        )
     except Exception:
         return []
 
 
 def _load_expert_stages_safe(crm_db: Any) -> list[str]:
     try:
-        return collect_expert_work_stages(crm_db)
+        return _cached_list(
+            "_expert_work_stages",
+            lambda: collect_expert_work_stages(crm_db),
+        )
     except Exception:
         return []
 
 
 def _load_expert_subtypes_safe(crm_db: Any) -> list[str]:
     try:
-        return collect_expert_object_subtypes(crm_db)
+        return _cached_list(
+            "_expert_obj_subtypes",
+            lambda: collect_expert_object_subtypes(crm_db),
+        )
     except Exception:
         return []
