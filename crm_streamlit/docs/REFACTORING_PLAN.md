@@ -11,9 +11,15 @@
 - Размер рабочего Python-модуля: до 300 строк — желательно; 300–450 допустимо при цельности; свыше 450 требуется записанное объяснение или декомпозиция.
 - Изменение поведения сначала фиксируется тестом или явно записанным ожидаемым результатом.
 
-## CURRENT WIP — 2026-08-16
+## CURRENT WIP — 2026-08-17
 
-**CRM-V3-EXPERT-ANNOTATION-UI-1** — `[~]` **IN PROGRESS / CANONICAL RECONCILIATION AND ACCEPTANCE**. Explicitly resumed by operator; no new WIP. Scope: finish full expert semantic correction UI, verify S13 schema/service/manual acceptance, reconcile intentional two-week source work file-by-file into canonical GitHub monorepo, test, commit, push and match runtime without merging unrelated histories.
+**PROJECT-PUBLIC-REPO-SECURITY-REMEDIATION-1** — `[x]` **PASS**. Public GitHub tree no longer contains plaintext DB password fallbacks. CRM UI uses env-only fail-closed `crm_db_runtime`. Exposed leftover credential was S7 `postgres` (not S13 `crm_app`); that role was rotated via existing `<S7_SSH_USER>`/`sudo -n -u postgres` route and matching runtime env keys were updated. `crm_app` password unchanged. Streamlit HTTP 200. Expert annotation grants intact. Qwen/docs not started by this WIP. No history rewrite.
+
+Prior (paused): **CRM-V3-EXPERT-ANNOTATION-UI-1** — `[~]` paused by explicit security WIP. Canonical reconciliation remaining.
+
+## PRIOR CURRENT WIP — 2026-08-16
+
+**CRM-V3-EXPERT-ANNOTATION-UI-1** — `[~]` **PAUSED FOR SECURITY REMEDIATION**. Explicitly resumed by operator; no new WIP. Scope: finish full expert semantic correction UI, verify S13 schema/service/manual acceptance, reconcile intentional two-week source work file-by-file into canonical GitHub monorepo, test, commit, push and match runtime without merging unrelated histories.
 
 **Protected state:** standalone, canonical monorepo and S13 dirty trees inventoried in `docs/reports/expert_annotation_git_reconciliation/*.txt`; no reset/clean performed. GitHub main before reconciliation: `bb36e9b` dated 2026-08-04T11:42:02+03:00. Standalone baseline: 117 tracked changes / 347 untracked; canonical baseline: 10 tracked / 4 untracked. Secrets/runtime artifacts are excluded from migration.
 
