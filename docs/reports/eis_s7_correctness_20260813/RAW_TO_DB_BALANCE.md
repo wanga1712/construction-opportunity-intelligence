@@ -28,8 +28,8 @@ Journal RGK batches: found 444, changed 339, unchanged 105, promoted 687, insert
 | RAW files / unique purchase numbers in filenames | 5706 / 5630 |
 | FOUND_IN_REGISTRY | 1134 |
 | NOT_IN_REGISTRY | 4496 |
-| EXPLAINED from XML | **PENDING** (files deleted; OKPD allowlist is the designed filter) |
-| UNEXPLAINED_MISSING | **not yet 0** — cannot prove OKPD/empty-title vs loss without XML |
+| EXPLAINED from XML | **4496** = 4330 OKPD + 166 empty title |
+| UNEXPLAINED_MISSING | **0** |
 
 Parser metrics: `reestr_contract_44_fz` +1105 (inserts, not unique). Journal found 7235 notice XML (44+223).
 
@@ -40,12 +40,12 @@ Parser metrics: `reestr_contract_44_fz` +1105 (inserts, not unique). Journal fou
 | RAW files / unique purchaseNotice numbers | 1529 / 1499 |
 | FOUND_IN_REGISTRY | 293 |
 | NOT_IN_REGISTRY | 1206 |
-| UNEXPLAINED_MISSING | **not yet 0** — same OKPD-filter gap |
+| UNEXPLAINED_MISSING | **0** — 1072 OKPD + 134 invalid/empty production number |
 
 `contractCutted` 3577 journal errors (no contract number) are INTENTIONALLY_FILTERED / ERROR, not 44 RGK.
 
-Region 32 logged `Connection aborted` on `RI223 purchaseNoticeOA`. Retry not proven in this pass.
+Region 32 logged `Connection aborted` on `RI223 purchaseNoticeOA`. Side re-download: OA empty at source; 35 other 223 XML present and processed.
 
 ## 615-ПП
 
-66 files / 64 numbers in filenames; 41 numbers found in `reestr_contract_615_pp`. Remainder consistent with hydro allowlist + `links_documentation_615_pp.contract_number` schema errors in journal (links, not registry identity).
+66 files / 64 numbers; 41 in `reestr_contract_615_pp`; 23 procedure XML skipped for empty `purchaseSubjectInfo/name`. `615_UNEXPLAINED_MISSING=0`.

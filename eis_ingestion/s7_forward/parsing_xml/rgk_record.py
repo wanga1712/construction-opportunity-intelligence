@@ -4,6 +4,7 @@ from __future__ import annotations
 import os
 import xml.etree.ElementTree as ET
 from dataclasses import dataclass, field
+from datetime import datetime, timezone
 from typing import Any, Optional
 
 from parsing_xml.xml_parser import XMLParser
@@ -34,6 +35,8 @@ class RGKRecord:
     reestr_number: Optional[str] = None
     version_key: str = ""
     raw_file: Optional[str] = None
+    source_version: Optional[str] = None
+    source_publish: Optional[str] = None
 
     def as_fields(self) -> dict[str, Any]:
         return {
@@ -100,6 +103,47 @@ def extract_contract_number(root) -> Optional[str]:
             if value:
                 return value
     return None
+
+
+def extract_source_meta(root) -> tuple[Optional[str], Optional[str]]:
+    version = _first_text(root, "versionNumber") or _first_text(root, "docVersion")
+    publish = (
+        _first_text(root, "docPublishDate")
+        or _first_text(root, "publishDate")
+        or _first_text(root, "publishDTInEIS")
+        or _first_text(root, "modificationDate")
+        or _first_text(root, "signDate")
+    )
+    return version, publish
+
+
+def filename_guid(file_name: str) -> str:
+    parts = os.path.basename(file_name).split("_")
+    if len(parts) >= 4:
+        return parts[3].split(".")[0].upper()
+    return ""
+
+
+def _publish_sort_key(text: Optional[str]) -> str:
+    if not text:
+        return ""
+    raw = str(text).strip()
+    try:
+        parsed = datetime.fromisoformat(raw.replace("Z", "+00:00"))
+    except ValueError:
+        return raw
+    if parsed.tzinfo is None:
+        return parsed.isoformat()
+    return parsed.astimezone(timezone.utc).isoformat()
+
+
+def canonical_source_key(record: RGKRecord) -> tuple:
+    """EIS version, then publish timestamp, then filename GUID. Not DB id or mtime."""
+    try:
+        version = int(str(record.source_version).strip()) if record.source_version not in (None, "") else 0
+    except (TypeError, ValueError):
+        version = 0
+    return (version, _publish_sort_key(record.source_publish), filename_guid(record.file_name))
 
 
 def extract_contract_number_from_filename(file_name: str) -> Optional[str]:
@@ -180,6 +224,7 @@ def parse_rgk_root(
     codes = extract_rgk_okpd_codes(root)
     contractor_fields = _extract_contractor(root, tags.get("contractor") or {})
     inn = contractor_fields.get("inn")
+    source_version, source_publish = extract_source_meta(root)
 
     return RGKRecord(
         file_name=file_name,
@@ -198,6 +243,8 @@ def parse_rgk_root(
         reestr_number=_first_text(root, reestr_tags.get("reestr_number", "reestrNumber")),
         version_key=_non_target_version_key(str(number).strip(), cleaned_xml),
         raw_file=os.path.basename(file_path),
+        source_version=source_version,
+        source_publish=source_publish,
     )
 
 

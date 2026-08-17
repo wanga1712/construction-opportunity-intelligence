@@ -341,6 +341,75 @@ def test_correctness_parity_cases():
     assert plan.updates[0].fields["final_price"] == "1500.50"
 
 
+def test_canonical_source_order_beats_filename_order():
+    """Later EIS publish must win even if that XML is last in glob/filename order."""
+    _s7()
+    from database_work.rgk_plan import plan_44_batch
+
+    okpd = {"41.20.10": 42}
+    contractors = {"7701234567": 7}
+    older = _record(
+        file_name="contract_1690501088826000247_0_019FFA6CB777771588BAFFC729E099B3.xml",
+        final_price="25523736.57",
+        source_version="0",
+        source_publish="2026-08-13T12:20:54.152+03:00",
+        version_key="older",
+    )
+    newer = _record(
+        file_name="contract_1540810634826001084_0_019FFA79FCD27203823F582E5367B163.xml",
+        final_price="25706116.47",
+        source_version="0",
+        source_publish="2026-08-13T16:35:24.177+07:00",
+        version_key="newer",
+    )
+    plan = plan_44_batch(
+        [older, newer],
+        known_filenames=set(),
+        okpd_map=okpd,
+        contractor_map=contractors,
+        registry_map={"111": _awarded_row(final_price="1.00")},
+        unresolved_map={},
+        version_cache={},
+    )
+    assert plan.updates[0].fields["final_price"] == "25706116.47"
+
+    plan = plan_44_batch(
+        [newer, older],
+        known_filenames=set(),
+        okpd_map=okpd,
+        contractor_map=contractors,
+        registry_map={"111": _awarded_row(final_price="1.00")},
+        unresolved_map={},
+        version_cache={},
+    )
+    assert plan.updates[0].fields["final_price"] == "25706116.47"
+
+    earlier_clock = _record(
+        file_name="contract_1_0_AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA.xml",
+        final_price="10.00",
+        source_version="0",
+        source_publish="2026-08-13T18:00:00+07:00",
+        version_key="tz-early",
+    )
+    later_clock = _record(
+        file_name="contract_2_0_BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB.xml",
+        final_price="20.00",
+        source_version="0",
+        source_publish="2026-08-13T15:00:00+03:00",
+        version_key="tz-late",
+    )
+    plan = plan_44_batch(
+        [later_clock, earlier_clock],
+        known_filenames=set(),
+        okpd_map=okpd,
+        contractor_map=contractors,
+        registry_map={"111": _awarded_row(final_price="1.00")},
+        unresolved_map={},
+        version_cache={},
+    )
+    assert plan.updates[0].fields["final_price"] == "20.00"
+
+
 def test_links_only_for_main_table_ids():
     _s7()
     from database_work.registry_tables import tables_for_fz

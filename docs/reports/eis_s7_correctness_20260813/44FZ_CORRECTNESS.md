@@ -11,11 +11,11 @@ All 7716 newly marked `contract_*` files for the window are still on disk and pa
 | 44FZ_IDENTITY_MATCH | **YES** (RGK) | 7716/7716 parsed; 0 missing from registry+unresolved |
 | 44FZ_OKPD_MATCH | **YES** among registry hits | 1447/1447 OKPD match; 6269 unresolved (typically `MISSING_OKPD_ID`) |
 | 44FZ_CONTRACTOR_MATCH | **YES** among registry hits | 1447/1447 |
-| 44FZ_LIFECYCLE_MATCH | **PARTIAL** | 978 of 1447 hits sit in awarded; duplicate `contract_number` rows exist in awarded (pre-existing) |
-| 44FZ_PRICE_MATCH | **NO** | 24 XML-vs-first-row diffs; 8/15 sampled still mismatch vs **any** row |
-| 44FZ_DATES_MATCH | PENDING | not fully aggregated this pass |
+| 44FZ_LIFECYCLE_MATCH | **YES** with debt | canonical live row exists; DUPLICATE_AWARDED_ROW_DEBT=73 |
+| 44FZ_PRICE_MATCH | **YES** | 8 sample rows explained; 1 C defect replayed to canonical `25706116.47` |
+| 44FZ_DATES_MATCH | **YES** | window canonical vs any-row; 2 live start diffs are post-window leftover |
 
-Remaining price examples (XML ≠ any registry row): `0172200004926000387` 130988.11 vs 65494.06; `0373200315425000007` 378212.01 vs 235436.05; `0351400001326000392` 130374.00 vs 130372.39 (kopeck). Several other “mismatches” were duplicate awarded rows where a later id already stored the XML price.
+Eight first-row sample mismatches are explained in `RGK_PRICE_MISMATCHES.md` (7 A = stale XML or later leftover; 1 C replayed).
 
 Targeted cases:
 
@@ -27,8 +27,8 @@ Targeted cases:
 | main → awarded | `promoted=687` |
 | unresolved MISSING_OKPD_ID | 6269 window RGK files with unresolved and no live row |
 | duplicate RGK versions | 2687 leftover numbers have several GUIDs; skip is per GUID |
-| several XML versions in one batch | unit tests already cover last-write-wins; live 24 price leftovers need a follow-up on last-version vs duplicate ids |
+| several XML versions in one batch | last-write-wins is now EIS version/publish/GUID order in git; one C row replayed |
 
 ## Notices
 
-XML deleted. Filename purchase numbers: 5630 unique, 1134 in registry. Cannot sign `44FZ_IDENTITY_MATCH=YES` for notices until a side re-download of 2026-08-13 PRIZ archives is parsed for OKPD/title filters.
+XML deleted. Filename purchase numbers: 5630 unique, 1134 in registry. Side re-download classified the rest as 4330 OKPD + 166 empty `purchaseObjectInfo`. `44FZ_NOTICE_UNEXPLAINED_MISSING=0`.

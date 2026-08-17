@@ -1,0 +1,29 @@
+{
+  "window_files": 7716,
+  "missing_files": 0,
+  "unique_xml_numbers": 7473,
+  "no_registry_row": 6067,
+  "start_match": 1404,
+  "start_miss": 2,
+  "end_match": 1406,
+  "end_miss": 0,
+  "duplicate_awarded_numbers": 73,
+  "samples": [
+    {
+      "number": "0373200333526000009",
+      "field": "start",
+      "xml": "2026-08-11",
+      "db": [
+        "2026-08-13"
+      ]
+    },
+    {
+      "number": "0813500000122020516",
+      "field": "start",
+      "xml": "2023-01-19",
+      "db": [
+        "2023-01-18"
+      ]
+    }
+  ]
+}

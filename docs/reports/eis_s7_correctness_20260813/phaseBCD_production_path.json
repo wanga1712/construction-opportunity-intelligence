@@ -1,0 +1,76 @@
+{
+  "files": {
+    "44_NOTICE": 5706,
+    "223_NOTICE": 1529,
+    "615": 66
+  },
+  "file_classes": {
+    "44_NOTICE": {
+      "INTENTIONALLY_FILTERED_OKPD": 4382,
+      "PRESENT_IN_REGISTRY": 1158,
+      "INTENTIONALLY_FILTERED_EMPTY_TITLE": 166
+    },
+    "223_NOTICE": {
+      "INTENTIONALLY_FILTERED_INVALID": 136,
+      "PRESENT_IN_REGISTRY": 299,
+      "INTENTIONALLY_FILTERED_OKPD": 1094
+    },
+    "615": {
+      "PRESENT_IN_REGISTRY": 41,
+      "INTENTIONALLY_FILTERED_EMPTY_TITLE": 25
+    }
+  },
+  "unique_identities": {
+    "44_NOTICE": 5630,
+    "223_NOTICE": 1499,
+    "615": 64
+  },
+  "unique_classes": {
+    "44_NOTICE": {
+      "INTENTIONALLY_FILTERED_OKPD": 4330,
+      "PRESENT_IN_REGISTRY": 1134,
+      "INTENTIONALLY_FILTERED_EMPTY_TITLE": 166
+    },
+    "223_NOTICE": {
+      "INTENTIONALLY_FILTERED_INVALID": 134,
+      "PRESENT_IN_REGISTRY": 293,
+      "INTENTIONALLY_FILTERED_OKPD": 1072
+    },
+    "615": {
+      "PRESENT_IN_REGISTRY": 41,
+      "INTENTIONALLY_FILTERED_EMPTY_TITLE": 23
+    }
+  },
+  "duplicate_version_files": {
+    "44_NOTICE": 76,
+    "223_NOTICE": 30,
+    "615": 2
+  },
+  "region32_223_files": 35,
+  "region32_223_classes": {
+    "INTENTIONALLY_FILTERED_OKPD": 30,
+    "INTENTIONALLY_FILTERED_INVALID": 2,
+    "PRESENT_IN_REGISTRY": 3
+  },
+  "region32_prefixes": {
+    "purchaseNotice": 26,
+    "purchaseNoticeAESMBO": 9
+  },
+  "okpd_allowlist_size": 2963,
+  "seen_in_file_names_xml": 7301,
+  "not_seen_in_file_names_xml": 0,
+  "missing_unseen": 0,
+  "prefix_missing": {},
+  "missing_empty_auction_name": 0,
+  "missing_empty_contract_number": 0,
+  "missing_samples": {
+    "44_NOTICE": [],
+    "223_NOTICE": [],
+    "615": []
+  },
+  "unexplained_unique": {
+    "44_NOTICE": 0,
+    "223_NOTICE": 0,
+    "615": 0
+  }
+}

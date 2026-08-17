@@ -1,0 +1,19 @@
+{
+  "number": "0315100000526000418",
+  "xml_count": 7,
+  "chosen_file": "contract_1540810634826001084_0_019FFA79FCD27203823F582E5367B163.xml",
+  "chosen_price": "25706116.47",
+  "filename_key": [
+    0,
+    "019FFA79FCD27203823F582E5367B163"
+  ],
+  "before": [
+    {
+      "table": "awarded",
+      "id": 657049,
+      "final_price": "25523736.57",
+      "updated_at": "2026-08-17 16:01:50.160797+00"
+    }
+  ],
+  "rows_updated": 1
+}

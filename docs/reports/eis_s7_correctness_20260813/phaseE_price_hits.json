@@ -1,0 +1,226 @@
+{
+  "window_contract_files": 7716,
+  "scanned_existing": 7716,
+  "hits": {
+    "0172200004926000387": {
+      "xmls": [
+        {
+          "file_name": "contract_2781480784726000025_0_019FFC6E9573731290A5DE790FC28DB8.xml",
+          "in_window_file_names": true,
+          "filename_version": 0,
+          "guid": "019FFC6E9573731290A5DE790FC28DB8",
+          "xml_contract_number": "0172200004926000387",
+          "parsed_price": "65494.06",
+          "publish_dt": "2026-08-13T21:42:12.015+03:00",
+          "version_number": "0",
+          "first_processed_at": "2026-08-17T16:11:17.817464"
+        },
+        {
+          "file_name": "contract_2780268840126000041_0_019FFB47DBCA78A290C6A046A0A1D640.xml",
+          "in_window_file_names": true,
+          "filename_version": 0,
+          "guid": "019FFB47DBCA78A290C6A046A0A1D640",
+          "xml_contract_number": "0172200004926000387",
+          "parsed_price": "130988.11",
+          "publish_dt": "2026-08-13T16:20:16.853+03:00",
+          "version_number": "0",
+          "first_processed_at": "2026-08-17T16:11:13.403542"
+        }
+      ],
+      "db": [
+        {
+          "loc": "main",
+          "id": 661057,
+          "final_price": "65494.06"
+        }
+      ]
+    },
+    "0373200315425000007": {
+      "xmls": [
+        {
+          "file_name": "contract_2771544697425000011_1_019FF9A01C277DD98709808B9171D05F.xml",
+          "in_window_file_names": true,
+          "filename_version": 1,
+          "guid": "019FF9A01C277DD98709808B9171D05F",
+          "xml_contract_number": "0373200315425000007",
+          "parsed_price": "378212.01",
+          "publish_dt": "2026-08-13T08:37:25.466+03:00",
+          "version_number": "1",
+          "first_processed_at": "2026-08-17T16:07:29.079031"
+        },
+        {
+          "file_name": "contract_2771678958025000013_2_019FFB503D8B73C79349C08C278FCF7F.xml",
+          "in_window_file_names": true,
+          "filename_version": 2,
+          "guid": "019FFB503D8B73C79349C08C278FCF7F",
+          "xml_contract_number": "0373200315425000007",
+          "parsed_price": "235436.05",
+          "publish_dt": "2026-08-13T16:29:25.956+03:00",
+          "version_number": "2",
+          "first_processed_at": "2026-08-17T16:07:29.079031"
+        }
+      ],
+      "db": [
+        {
+          "loc": "awarded",
+          "id": 658763,
+          "final_price": "235436.05"
+        }
+      ]
+    },
+    "0373200333526000009": {
+      "xmls": [
+        {
+          "file_name": "contract_2774394059026000048_0_019FFB65B1387BC387B3766DC133DF50.xml",
+          "in_window_file_names": true,
+          "filename_version": 0,
+          "guid": "019FFB65B1387BC387B3766DC133DF50",
+          "xml_contract_number": "0373200333526000009",
+          "parsed_price": "87172.80",
+          "publish_dt": "2026-08-13T16:52:51.751+03:00",
+          "version_number": "0",
+          "first_processed_at": "2026-08-17T16:07:43.760131"
+        },
+        {
+          "file_name": "contract_2771201376426000040_0_019FFA6B47187E1BBF9DB25877F9B212.xml",
+          "in_window_file_names": true,
+          "filename_version": 0,
+          "guid": "019FFA6B47187E1BBF9DB25877F9B212",
+          "xml_contract_number": "0373200333526000009",
+          "parsed_price": "57863.52",
+          "publish_dt": "2026-08-13T12:19:19.581+03:00",
+          "version_number": "0",
+          "first_processed_at": "2026-08-17T16:07:25.819487"
+        }
+      ],
+      "db": [
+        {
+          "loc": "awarded",
+          "id": 658755,
+          "final_price": "33118.80"
+        }
+      ]
+    },
+    "0160300003626000356": {
+      "xmls": [
+        {
+          "file_name": "contract_3644902848226000018_1_019FFB256AEE770BBCEF2FA119144B75.xml",
+          "in_window_file_names": true,
+          "filename_version": 1,
+          "guid": "019FFB256AEE770BBCEF2FA119144B75",
+          "xml_contract_number": "0160300003626000356",
+          "parsed_price": "18563.40",
+          "publish_dt": "2026-08-13T16:42:38.631+04:00",
+          "version_number": "1",
+          "first_processed_at": "2026-08-17T15:59:19.165797"
+        },
+        {
+          "file_name": "contract_3644903208726000014_1_019FFB26A571720C93A34758A2584797.xml",
+          "in_window_file_names": true,
+          "filename_version": 1,
+          "guid": "019FFB26A571720C93A34758A2584797",
+          "xml_contract_number": "0160300003626000356",
+          "parsed_price": "31067.00",
+          "publish_dt": "2026-08-13T16:43:59.246+04:00",
+          "version_number": "1",
+          "first_processed_at": "2026-08-17T15:59:19.165797"
+        },
+        {
+          "file_name": "contract_3644910349026000014_1_019FFB42086878B49A1B2FF58E2B7C57.xml",
+          "in_window_file_names": true,
+          "filename_version": 1,
+          "guid": "019FFB42086878B49A1B2FF58E2B7C57",
+          "xml_contract_number": "0160300003626000356",
+          "parsed_price": "62134.00",
+          "publish_dt": "2026-08-13T17:13:54.535+04:00",
+          "version_number": "1",
+          "first_processed_at": "2026-08-17T15:59:19.165797"
+        }
+      ],
+      "db": [
+        {
+          "loc": "main",
+          "id": 660487,
+          "final_price": "62134.00"
+        }
+      ]
+    },
+    "0315100000526000418": {
+      "xmls": [
+        {
+          "file_name": "contract_1690501088826000247_0_019FFA6CB777771588BAFFC729E099B3.xml",
+          "in_window_file_names": true,
+          "filename_version": 0,
+          "guid": "019FFA6CB777771588BAFFC729E099B3",
+          "xml_contract_number": "0315100000526000418",
+          "parsed_price": "25523736.57",
+          "publish_dt": "2026-08-13T12:20:54.152+03:00",
+          "version_number": "0",
+          "first_processed_at": "2026-08-17T16:01:50.160797"
+        },
+        {
+          "file_name": "contract_1540810634826001084_0_019FFA79FCD27203823F582E5367B163.xml",
+          "in_window_file_names": true,
+          "filename_version": 0,
+          "guid": "019FFA79FCD27203823F582E5367B163",
+          "xml_contract_number": "0315100000526000418",
+          "parsed_price": "25706116.47",
+          "publish_dt": "2026-08-13T16:35:24.177+07:00",
+          "version_number": "0",
+          "first_processed_at": "2026-08-17T15:50:43.536174"
+        }
+      ],
+      "db": [
+        {
+          "loc": "awarded",
+          "id": 657049,
+          "final_price": "25523736.57"
+        }
+      ]
+    },
+    "0351400001326000392": {
+      "xmls": [
+        {
+          "file_name": "contract_1540810013826000368_0_019FF95BBC8572338D8D94AA7831E6E0.xml",
+          "in_window_file_names": true,
+          "filename_version": 0,
+          "guid": "019FF95BBC8572338D8D94AA7831E6E0",
+          "xml_contract_number": "0351400001326000392",
+          "parsed_price": "130374.00",
+          "publish_dt": "2026-08-13T11:22:44.291+07:00",
+          "version_number": "0",
+          "first_processed_at": "2026-08-17T15:50:40.942498"
+        }
+      ],
+      "db": [
+        {
+          "loc": "awarded",
+          "id": 660142,
+          "final_price": "130372.39"
+        }
+      ]
+    },
+    "0348100013126000155": {
+      "xmls": [
+        {
+          "file_name": "contract_1503200412726000146_0_019FF9E0150076C3A1A5E9AD7467C5B2.xml",
+          "in_window_file_names": true,
+          "filename_version": 0,
+          "guid": "019FF9E0150076C3A1A5E9AD7467C5B2",
+          "xml_contract_number": "0348100013126000155",
+          "parsed_price": "26257.00",
+          "publish_dt": "2026-08-13T09:47:18.249+03:00",
+          "version_number": "0",
+          "first_processed_at": "2026-08-17T15:45:36.074864"
+        }
+      ],
+      "db": [
+        {
+          "loc": "main",
+          "id": 659912,
+          "final_price": "26254.00"
+        }
+      ]
+    }
+  }
+}

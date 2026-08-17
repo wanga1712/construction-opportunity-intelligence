@@ -6,7 +6,7 @@ from typing import Any, Iterable, Mapping, Optional
 
 from database_work.rgk_dirty import row_is_dirty
 from database_work.registry_tables import ALLOWED_UPDATE_FIELDS, tables_for_fz
-from parsing_xml.rgk_record import RGKRecord
+from parsing_xml.rgk_record import RGKRecord, canonical_source_key
 
 PLACEHOLDER_TITLE_PREFIX = "Контракт "
 MAIN_44 = tables_for_fz("44").main
@@ -176,6 +176,7 @@ def plan_44_batch(
     version_cache: Mapping[str, Any],
 ) -> BatchPlan:
     plan = BatchPlan(records=list(records))
+    ordered = sorted(plan.records, key=canonical_source_key)
     state: dict[str, dict] = {key: dict(value) for key, value in registry_map.items()}
     pending: dict[str, RegistryWrite] = {}
     unresolved_pending: dict[str, UnresolvedWrite] = {}
@@ -194,7 +195,7 @@ def plan_44_batch(
         "updates_skipped": 0,
     }
 
-    for record in records:
+    for record in ordered:
         if record.file_name in known_filenames:
             plan.skip_filenames.add(record.file_name)
             metrics["duplicates"] += 1

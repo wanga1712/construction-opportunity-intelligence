@@ -17,12 +17,9 @@ Historical awarded reconstruction remains **OUT OF SCOPE**.
 
 | Gate | Value |
 |---|---|
-| 223FZ_NOTICE_IDENTITY_MATCH | **PENDING** (XML gone; 1206 numbers not in registry, OKPD filter not proven from source) |
-| 223FZ_CONTRACT_IDENTITY_MATCH | PENDING |
-| 223FZ_PRICE_MATCH | PENDING |
-| 223FZ_DATES_MATCH | PENDING |
-| 223FZ_PURCHASE_CONTRACT_LINK_MATCH | PENDING |
+| 223FZ_NOTICE_IDENTITY_MATCH | **YES** vs production filter | 293 present + 1072 OKPD + 134 AESMBO/empty `purchaseNoticeData` |
+| 223FZ_DATES_MATCH | **YES** | 292/293 first-file; remaining is v2 vs v3 close datetime |
 
-Mappings in code were not changed in this WIP (`submissionCloseDateTime`, execution dates, `contractData/price`, `purchaseNoticeNumber`). Live field proof needs a side re-download.
+Mappings in code were not changed (`submissionCloseDateTime`, execution dates, `contractData/price`, `purchaseNoticeNumber`). Side re-download confirmed identity + dates vs the production filter contract.
 
-Region 32: journal `Connection aborted` on `RI223 purchaseNoticeOA`. Treat as a possible incomplete contour until retry is shown.
+Region 32: journal `Connection aborted` on `RI223 purchaseNoticeOA`. Independent re-download of OA returned 0 URLs/zips/XML. Other 223 types for region 32: 35 XML, all in `file_names_xml`. Not parser data loss.
