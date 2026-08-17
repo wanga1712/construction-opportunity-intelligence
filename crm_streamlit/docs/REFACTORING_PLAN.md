@@ -21,7 +21,7 @@
 
 **Phase 3** — `[x]` document learning contract. Outcome labels are factual processing results (`USEFUL_COMMERCIAL_EVIDENCE`, `PARSED_NO_COMMERCIAL_EVIDENCE`, `DOWNLOAD_FAILED`, `PARSE_FAILED`, `UNSUPPORTED_FORMAT`, `EMPTY_DOCUMENT`, `DUPLICATE_DOCUMENT`, `UNOBSERVED`); failures are not collapsed into no-evidence. `calibration_truth` is TRUE only for `EXHAUSTIVE` and `RANDOM_EXPLORATION`; `MODEL_SELECTED` and `HISTORICAL_FILTERED` are FALSE even if a caller passes True. Class stats aggregate by source `source_document_type` when present, otherwise retain title/extension/mime signals without inventing a class. Wilson interval: 1/1 is not 100%. Flag `CRM_V3_EXHAUSTIVE_DOCUMENT_DISCOVERY` default off. Automatic skip forbidden. Workers not started.
 
-**Phase 4** — `[~]` apply DDL via `sudo -n -u postgres psql -d crm` on S13; deploy non-chrome files; freeze verify; do not FF `main`.
+**Phase 4** — `[x]` DDL applied on S13 `crm` via `sudo -n -u postgres psql`. Table/indexes/constraints/grants verified. Phase 2–3 runtime deployed to `/opt/CRM_Streamlit`; `crm-streamlit` restarted; Qwen/docs not started. Live SAVE+NEXT on 5 previously unannotated procurements: reload OK, MODEL RAW hashes unchanged, queue advances, no wrap at end. GitHub `main` not merged.
 
 Size notes: `tabs.py` 791 lines — accepted Phase 1 workspace plus three `bind_and_advance` call sites; queue logic lives in `annotation_queue.py` (67). `card_tabs_ai_expert_form.py` 816 — still one stateful Streamlit form; SAVE+NEXT on CORRECT is a second existing button, not a split.
 
