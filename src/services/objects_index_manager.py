@@ -31,7 +31,7 @@ def build_objects_index(
 
     prog("Схема индекса CRM…", 0.02)
     if not repo.ensure_schema():
-        return False, "Не удалось создать таблицу crm_objects_index", {}
+        return False, "SCHEMA_NOT_READY: crm_objects_index (no runtime DDL)", {}
 
     source_ok = repo.apply_source_indexes(tender_db, radar_db, on_progress=prog)
 

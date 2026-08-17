@@ -50,19 +50,20 @@ def _json_text(value: Any) -> str:
 
 
 def ensure_schema(crm_db) -> bool:
-    """Создаём таблицу связей объектов и подкатегорий."""
+    """Fail-closed presence check. No runtime DDL."""
     global _READY
     if not crm_db:
         return False
     if _READY:
         return True
-    try:
-        crm_db.execute_update(DDL)
-        _READY = True
-        return True
-    except Exception as exc:
-        logger.warning(f"object_subcategory_links ensure_schema failed: {exc}")
+    from src.services.schema_guard import require_relations
+
+    ok, missing = require_relations(crm_db, ["crm_object_subcategory_links"])
+    if not ok:
+        logger.warning(f"object_subcategory_links SCHEMA_NOT_READY missing={missing}")
         return False
+    _READY = True
+    return True
 
 
 def _load_rules(crm_db, contour_code: str) -> dict[str, list[dict]]:

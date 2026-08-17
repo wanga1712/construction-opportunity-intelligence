@@ -69,19 +69,27 @@ def _json_text(value: Any) -> str:
 
 
 def ensure_schema(crm_db) -> bool:
-    """Создаём таблицы справочника."""
+    """Fail-closed: tables must already exist. No runtime DDL."""
     global _SCHEMA_READY
     if not crm_db:
         return False
     if _SCHEMA_READY:
         return True
-    try:
-        crm_db.execute_update(DDL)
-        _SCHEMA_READY = True
-        return True
-    except Exception as exc:
-        logger.warning(f"product_subcategories ensure_schema failed: {exc}")
+    from src.services.schema_guard import require_relations
+
+    ok, missing = require_relations(
+        crm_db,
+        [
+            "crm_product_categories",
+            "crm_product_subcategories",
+            "crm_product_subcategory_terms",
+        ],
+    )
+    if not ok:
+        logger.warning(f"product_subcategories SCHEMA_NOT_READY missing={missing}")
         return False
+    _SCHEMA_READY = True
+    return True
 
 
 def _upsert_categories(crm_db) -> dict[str, int]:

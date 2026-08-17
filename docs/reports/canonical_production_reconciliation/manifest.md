@@ -1,0 +1,149 @@
+# Canonical production reconciliation manifest
+
+FILES_COMPARED=923
+
+## Counts
+- CANONICAL_NEWER_ACTIVE: 3
+- CANONICAL_ONLY_ACTIVE: 7
+- DIVERGED_SEMANTIC_CONFLICT: 15
+- S13_NEWER_ACTIVE: 71
+- S13_ONLY_ACTIVE: 302
+- SAME: 98
+- SECRET_CONFIG: 1
+- STANDALONE_ONLY_ACTIVE: 425
+- TEMP_ARTIFACT: 1
+
+## Active Python missing from canonical tracked
+
+- `scripts/run_crm_sync.py`
+- `scripts/run_system_health_collector.py`
+- `scripts/run_v3_daily_medal_reevaluation.py`
+- `scripts/v3_analytics_refresh.py`
+- `src/domain/__init__.py`
+- `src/domain/commercial_opportunity_lifecycle.py`
+- `src/domain/commercial_routing_v3.py`
+- `src/domain/commercial_taxonomy.py`
+- `src/services/ai_assessment_runner.py`
+- `src/services/candidate_policy.py`
+- `src/services/category_registry_service.py`
+- `src/services/commercial_routing_v3/__init__.py`
+- `src/services/commercial_routing_v3/analysis_mode.py`
+- `src/services/commercial_routing_v3/candidate_scoring.py`
+- `src/services/commercial_routing_v3/canonical_card.py`
+- `src/services/commercial_routing_v3/category_aliases.py`
+- `src/services/commercial_routing_v3/commercial_routing_v3.py`
+- `src/services/commercial_routing_v3/commercial_timing.py`
+- `src/services/commercial_routing_v3/construction_semantics.py`
+- `src/services/commercial_routing_v3/daily_medal_reevaluation.py`
+- `src/services/commercial_routing_v3/deadline_pressure.py`
+- `src/services/commercial_routing_v3/decision_authorities.py`
+- `src/services/commercial_routing_v3/direct_product_evidence.py`
+- `src/services/commercial_routing_v3/document_lane_authority.py`
+- `src/services/commercial_routing_v3/document_links.py`
+- `src/services/commercial_routing_v3/document_priority.py`
+- `src/services/commercial_routing_v3/engine.py`
+- `src/services/commercial_routing_v3/golden_canary_config.py`
+- `src/services/commercial_routing_v3/golden_canary_readiness.py`
+- `src/services/commercial_routing_v3/golden_canary_runner.py`
+- `src/services/commercial_routing_v3/golden_canary_select.py`
+- `src/services/commercial_routing_v3/golden_canary_validate.py`
+- `src/services/commercial_routing_v3/gpu_arbiter.py`
+- `src/services/commercial_routing_v3/legacy_okpd_knowledge.py`
+- `src/services/commercial_routing_v3/manager_lane_gates.py`
+- `src/services/commercial_routing_v3/manager_object_ranking.py`
+- `src/services/commercial_routing_v3/medal.py`
+- `src/services/commercial_routing_v3/medal_lineage.py`
+- `src/services/commercial_routing_v3/model_input.py`
+- `src/services/commercial_routing_v3/model_json.py`
+- `src/services/commercial_routing_v3/normalizer.py`
+- `src/services/commercial_routing_v3/object_mode_routing.py`
+- `src/services/commercial_routing_v3/okpd_priors.py`
+- `src/services/commercial_routing_v3/okpd_product_branch.py`
+- `src/services/commercial_routing_v3/opportunity_lifecycle_sync.py`
+- `src/services/commercial_routing_v3/opportunity_persistence.py`
+- `src/services/commercial_routing_v3/post_award_execution_timing.py`
+- `src/services/commercial_routing_v3/prior_promotion_contract.py`
+- `src/services/commercial_routing_v3/prior_semantics.py`
+- `src/services/commercial_routing_v3/processing_lease.py`
+- `src/services/commercial_routing_v3/procurement_form.py`
+- `src/services/commercial_routing_v3/projection.py`
+- `src/services/commercial_routing_v3/projection_writer.py`
+- `src/services/commercial_routing_v3/prompt.py`
+- `src/services/commercial_routing_v3/queue_producer.py`
+- `src/services/commercial_routing_v3/research_queue_lifecycle.py`
+- `src/services/commercial_routing_v3/routing_backlog.py`
+- `src/services/commercial_routing_v3/routing_drain.py`
+- `src/services/commercial_routing_v3/routing_eligibility.py`
+- `src/services/commercial_routing_v3/routing_priority.py`
+- `src/services/commercial_routing_v3/routing_ready.py`
+- `src/services/commercial_routing_v3/routing_runtime_config.py`
+- `src/services/commercial_routing_v3/routing_signals.py`
+- `src/services/commercial_routing_v3/runtime_adapter.py`
+- `src/services/commercial_routing_v3/schema_readiness.py`
+- `src/services/commercial_routing_v3/source_contour.py`
+- `src/services/commercial_routing_v3/source_enrich.py`
+- `src/services/commercial_routing_v3/source_lifecycle.py`
+- `src/services/commercial_routing_v3/wave1_corpus.py`
+- `src/services/commercial_taxonomy_registry.py`
+- `src/services/crm_ai_assessment_runner.py`
+- `src/services/db_role_contract.py`
+- `src/services/processing_quality.py`
+- `src/services/s13_v2_queue_producer.py`
+- `src/services/schema_guard.py`
+- `src/services/source_db_readonly.py`
+- `src/services/system_health_alerts.py`
+- `src/services/system_health_collector.py`
+- `src/services/system_health_config.py`
+- `src/services/system_health_gpu.py`
+- `src/services/system_health_probes.py`
+- `src/services/system_health_read.py`
+- `src/services/system_health_s7.py`
+- `src/services/system_health_services.py`
+- `src/services/system_health_smart.py`
+- `src/services/system_health_store.py`
+- `src/services/system_health_temps.py`
+- `src/services/v3_analytics_cache.py`
+- `src/services/v3_analytics_fixtures.py`
+- `src/services/v3_analytics_level_b.py`
+- `src/services/v3_analytics_metric_state.py`
+- `src/services/v3_analytics_okpd.py`
+- `src/services/v3_analytics_precutover.py`
+- `src/services/v3_analytics_read.py`
+- `src/services/v3_analytics_refresh.py`
+- `src/services/v3_analytics_service.py`
+- `src/ui/app_bootstrap.py`
+- `src/ui/category_registry_page.py`
+- `src/ui/components/analytics_v2/card_processing.py`
+- `src/ui/components/analytics_v2/tabs_lazy_dispatch.py`
+- `src/ui/components/analytics_v2/test_torgi_tab.py`
+- `src/ui/processing_quality_ui.py`
+- `src/ui/system_health_format.py`
+- `src/ui/system_health_page.py`
+- `src/ui/v3_analytics_okpd_funnel.py`
+- `src/ui/v3_analytics_page.py`
+- `src/ui/v3_analytics_page_sections.py`
+- `src/ui/v3_analytics_pipeline_funnel.py`
+- `src/ui/v3_analytics_premodel_panel.py`
+- `src/ui/v3_analytics_wave1_panel.py`
+
+## S13 import targets not found in S13 tree
+
+- `src.ui.components.analytics_v2`
+
+## Conflicts
+
+- `requirements.txt`
+- `src/repositories/analytics_contour_repository.py`
+- `src/services/analytics_contour_service.py`
+- `src/services/crm_procurements_repository.py`
+- `src/services/docs_priority_sync.py`
+- `src/services/effective_assessment.py`
+- `src/ui/ai_review_page.py`
+- `src/ui/analytics_contour_copy_page.py`
+- `src/ui/analytics_contour_page.py`
+- `src/ui/components/analytics_v2/card_compact.py`
+- `src/ui/components/analytics_v2/card_tabs_history.py`
+- `src/ui/components/analytics_v2/card_tabs_medals.py`
+- `src/ui/components/analytics_v2/kpi_row.py`
+- `src/ui/components/analytics_v2/mock_data.py`
+- `tests/test_expert_annotation_ui.py`

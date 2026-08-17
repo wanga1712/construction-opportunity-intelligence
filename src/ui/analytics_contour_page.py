@@ -15,6 +15,7 @@ from src.services.analytics_contour_service import (
 from src.ui.components.analytics_charts import render_charts
 from src.ui.components.object_card import render_object_cards
 from src.ui.components.object_detail import render_object_detail
+from src.ui.session_deps import get_objects_service
 
 PAGE_SIZES = [10, 15, 20]
 SORT_OPTIONS = ["По приоритету", "По дате обновления", "По стадии"]
@@ -240,7 +241,7 @@ def render_analytics_contour_page(service) -> None:
     _ensure_state()
     _sync_selected_object()
 
-    repository = get_analytics_contour_repository(service)
+    repository = get_analytics_contour_repository(get_objects_service(service))
     contour_service = AnalyticsContourService(repository)
 
     with st.spinner("Загрузка аналитического контура..."):

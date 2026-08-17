@@ -1,0 +1,36 @@
+[project]
+name = "crm-streamlit"
+version = "0.1.0"
+requires-python = ">=3.13,<3.14"
+dependencies = [
+    "streamlit>=1.33.0",
+    "pandas>=2.0.0",
+    "psycopg2-binary>=2.9.0",
+    "python-dotenv>=1.0.0",
+    "loguru>=0.7.0",
+    "reportlab>=4.0.0",
+    "requests>=2.31.0",
+    "plotly>=5.20.0",
+]
+
+[project.optional-dependencies]
+dev = ["mypy>=1.10.0", "pytest>=8.0.0", "ruff>=0.5.0"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+
+[tool.ruff]
+target-version = "py313"
+line-length = 100
+exclude = ["*.bak.*", "*.tmp_path_issue", "tmp_*", "_tmp_*", ".venv*"]
+
+[tool.ruff.lint]
+select = ["E9", "F63", "F7", "F82"]
+
+[tool.mypy]
+python_version = "3.13"
+files = ["app.py", "src"]
+ignore_missing_imports = true
+warn_unused_configs = true
+check_untyped_defs = true

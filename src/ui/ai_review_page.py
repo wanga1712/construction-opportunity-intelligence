@@ -13,6 +13,8 @@ from src.services.docs_match_preview import confirmed_product_groups
 from src.services.object_pipeline_stage import PIPELINE_STAGE_OPTIONS
 from src.ui.session_deps import get_objects_service
 
+__all__ = ["render_ai_review_page"]
+
 _REVIEW_DIR = Path("/opt/CRM_Streamlit/data/ai_review")
 _REVIEW_FILE = _REVIEW_DIR / "manual_corrections.jsonl"
 _REASONS = [

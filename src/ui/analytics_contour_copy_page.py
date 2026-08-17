@@ -13,6 +13,7 @@ from src.services.analytics_contour_service import (
 from src.ui.components.analytics_charts import render_charts
 from src.ui.components.object_card import render_object_cards
 from src.ui.components.object_detail import render_object_detail
+from src.ui.session_deps import get_objects_service
 
 PAGE_SIZES = [10, 15, 20]
 TAB_KEYS = {
@@ -174,7 +175,7 @@ def _render_tab_content(items: list, group_map: dict[str, str], page_key: str, c
 def render_analytics_contour_copy_page(service) -> None:
     """Новая страница-копия аналитического контура."""
     _ensure_state()
-    repository = get_analytics_contour_repository(service)
+    repository = get_analytics_contour_repository(get_objects_service(service))
     contour_service = AnalyticsContourService(repository)
 
     with st.spinner("Загрузка аналитического контура (копия)..."):
