@@ -47,7 +47,7 @@ CREATE TABLE IF NOT EXISTS crm_v3_document_observations (
     matcher_version                 TEXT,
     taxonomy_version                TEXT,
     selector_model_version          TEXT,
-    calibration_truth               BOOLEAN NOT NULL DEFAULT TRUE,
+    calibration_truth               BOOLEAN NOT NULL DEFAULT FALSE,
     observed_at                     TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
@@ -59,6 +59,9 @@ CREATE INDEX IF NOT EXISTS idx_crm_v3_document_observations_proc
 
 CREATE INDEX IF NOT EXISTS idx_crm_v3_document_observations_policy
     ON crm_v3_document_observations (acquisition_policy, usefulness_label);
+
+CREATE INDEX IF NOT EXISTS idx_crm_v3_document_observations_type
+    ON crm_v3_document_observations (source_document_type);
 
 DO $$
 BEGIN
@@ -88,20 +91,37 @@ BEGIN
         ALTER TABLE crm_v3_document_observations
             ADD CONSTRAINT chk_crm_v3_doc_obs_usefulness
             CHECK (usefulness_label IN (
-                'USEFUL',
-                'NOT_USEFUL',
-                'UNOBSERVED',
+                'USEFUL_COMMERCIAL_EVIDENCE',
+                'PARSED_NO_COMMERCIAL_EVIDENCE',
                 'DOWNLOAD_FAILED',
-                'PARSE_FAILED'
+                'PARSE_FAILED',
+                'UNSUPPORTED_FORMAT',
+                'EMPTY_DOCUMENT',
+                'DUPLICATE_DOCUMENT',
+                'UNOBSERVED'
             ));
     END IF;
 END $$;
 
 COMMENT ON TABLE crm_v3_document_observations IS
     'Document acquisition observations for a future DOCUMENT_VALUE_MODEL. '
-    'Usefulness comes from extraction outcomes, not selector opinion. '
-    'HISTORICAL_FILTERED is biased provenance, not calibration truth. '
+    'Outcome labels are factual processing results, not selector opinion. '
+    'calibration_truth is TRUE only for EXHAUSTIVE and RANDOM_EXPLORATION. '
+    'MODEL_SELECTED and HISTORICAL_FILTERED are never unbiased calibration truth. '
+    'source_document_type is retained as-is; title is a signal, not an inferred class. '
     'Runtime must not CREATE this table.';
+
+COMMENT ON COLUMN crm_v3_document_observations.calibration_truth IS
+    'Unbiased calibration: EXHAUSTIVE=TRUE, RANDOM_EXPLORATION=TRUE, '
+    'MODEL_SELECTED=FALSE, HISTORICAL_FILTERED=FALSE.';
+
+COMMENT ON COLUMN crm_v3_document_observations.usefulness_label IS
+    'Factual outcome: USEFUL_COMMERCIAL_EVIDENCE | PARSED_NO_COMMERCIAL_EVIDENCE | '
+    'DOWNLOAD_FAILED | PARSE_FAILED | UNSUPPORTED_FORMAT | EMPTY_DOCUMENT | '
+    'DUPLICATE_DOCUMENT | UNOBSERVED. Failures are not collapsed into no-evidence.';
+
+COMMENT ON COLUMN crm_v3_document_observations.source_document_type IS
+    'Source metadata type only. NULL means absent; do not infer a class from title.';
 
 GRANT SELECT, INSERT, UPDATE ON crm_v3_document_observations TO crm_app;
 GRANT USAGE, SELECT ON SEQUENCE crm_v3_document_observations_id_seq TO crm_app;
