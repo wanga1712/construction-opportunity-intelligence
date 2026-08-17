@@ -281,8 +281,18 @@ def render_correct_fast_path(
         "Комментарий (необязательно):",
         key=_sk(procurement_id, "correct_comment"),
     )
-    if st.button("💾 Сохранить CORRECT", key=_sk(procurement_id, "save_correct")):
-        return _build_correct_payload(assessment, expert_form, comment, created_by)
+    b1, b2 = st.columns(2)
+    save_clicked = b1.button("💾 Сохранить CORRECT", key=_sk(procurement_id, "save_correct"))
+    save_next_clicked = b2.button(
+        "💾 Сохранить и следующая →",
+        key=_sk(procurement_id, "save_next_correct"),
+        type="primary",
+    )
+    if save_clicked or save_next_clicked:
+        payload = _build_correct_payload(assessment, expert_form, comment, created_by)
+        if save_next_clicked:
+            payload["_save_and_next"] = True
+        return payload
     return None
 
 
