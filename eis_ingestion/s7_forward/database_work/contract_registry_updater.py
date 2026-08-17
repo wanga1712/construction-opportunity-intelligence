@@ -60,7 +60,7 @@ class ContractRegistryUpdater:
             with self._db.connection.cursor() as cursor:
                 cursor.execute(query, tuple(values))
                 self._db.connection.commit()
-                logger.info(
+                logger.debug(
                     f"Обновлён контракт {location.contract_number} "
                     f"в {location.table_name} (id={location.record_id}), "
                     f"поля={list(payload.keys())}"

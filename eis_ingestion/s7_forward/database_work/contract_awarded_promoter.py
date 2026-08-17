@@ -93,7 +93,7 @@ class ContractAwardedPromoter:
                 cursor.execute("SET session_replication_role = 'origin'")
                 self._db.connection.commit()
 
-                logger.info(
+                logger.debug(
                     f"Контракт {location.contract_number} перенесён "
                     f"{source} → {awarded} (id={location.record_id})"
                 )

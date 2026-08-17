@@ -152,6 +152,13 @@ def process_615_files(folder_path, region_code, progress_manager: Optional[Progr
 
 
 def process_contract_files(folder_path, db_id_fetcher, progress_manager: Optional[ProgressManager] = None):
+    config = load_config()
+    recouped_44 = config.get("path", "recouped_contract_archive_44_fz_xml", fallback=None)
+    if recouped_44 and folder_path == recouped_44:
+        from parsing_xml.rgk_batch import process_44_rgk_folder
+        process_44_rgk_folder(folder_path, progress_manager=progress_manager)
+        return
+
     file_deleter = FileDeleter(folder_path)
     xml_files = [f for f in os.listdir(folder_path) if f.endswith(".xml")]
     
