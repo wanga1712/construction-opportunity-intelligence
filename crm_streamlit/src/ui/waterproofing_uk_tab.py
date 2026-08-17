@@ -86,7 +86,7 @@ def _render_qualification(selected: dict[str, Any], state: dict[str, Any], key: 
                 key=f"hydro_exploitation_contact_{key}")
             next_action_date = st.date_input("Дата следующего касания", value=_next_date(state),
                 key=f"hydro_next_date_{key}")
-            responsible = st.text_input("Ответственный", value=state.get("responsible") or "<S13_SSH_USER>",
+            responsible = st.text_input("Ответственный", value=state.get("responsible") or "",
                 key=f"hydro_responsible_{key}")
         if st.button("Сохранить первый шаг по УК", key=f"hydro_save_contour_{key}", type="primary"):
             save_contour_state(key, {

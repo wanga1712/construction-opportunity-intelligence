@@ -30,8 +30,11 @@ ZERO_LINK_ROOT_CAUSE = (
 
 
 def _s7_dsn() -> Dict[str, Any]:
+    host = os.getenv("DB_HOST") or os.getenv("TENDER_DB_HOST") or os.getenv("TENDER_MONITOR_DB_HOST")
+    if not host:
+        raise RuntimeError("TENDER_MONITOR_DB_HOST (or DB_HOST / TENDER_DB_HOST) is required")
     return {
-        "host": os.getenv("DB_HOST") or os.getenv("TENDER_DB_HOST") or "S7",
+        "host": host,
         "port": int(os.getenv("DB_PORT") or os.getenv("TENDER_DB_PORT") or 5432),
         "dbname": os.getenv("DB_NAME") or os.getenv("TENDER_DB_DATABASE") or "tender_monitor",
         "user": os.getenv("DB_USER") or os.getenv("TENDER_DB_USER"),

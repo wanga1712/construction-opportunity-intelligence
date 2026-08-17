@@ -32,7 +32,6 @@ def test_s7_ssh_never_on_ui():
     assert cfg.S7_SSH_CALLS_ON_UI_RERUN == 0
     ui = (ROOT / "src/ui/system_health_page.py").read_text(encoding="utf-8")
     assert "ssh" not in ui.lower() or "S7_SSH_CALLS_ON_UI_RERUN" in ui
-    assert "S7" not in ui
     assert "subprocess" not in ui
     read_src = (ROOT / "src/services/system_health_read.py").read_text(encoding="utf-8")
     assert "ssh" not in read_src.lower() or "S7_SSH" in read_src

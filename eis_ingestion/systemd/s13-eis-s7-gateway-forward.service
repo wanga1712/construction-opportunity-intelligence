@@ -1,13 +1,15 @@
-# Factual copy of S13 /etc/systemd/system/eis-s7-gateway-forward.service
-# Forwards S13 localhost:8080 to S7 EIS stunnel gateway S7:8080.
+# Template of S13 /etc/systemd/system/eis-s7-gateway-forward.service
+# Forwards S13 localhost:8080 to the S7 EIS stunnel gateway.
+# Live host sets S7_EIS_GATEWAY_HOST in the EnvironmentFile (not committed).
 
 [Unit]
-Description=Forward localhost:8080 to S7 EIS stunnel gateway (S7:8080)
+Description=Forward localhost:8080 to S7 EIS stunnel gateway
 After=network-online.target
 Wants=network-online.target
 
 [Service]
 Type=simple
+EnvironmentFile=-/etc/tendermonitor/eis-s7-gateway-forward.env
 ExecStart=/usr/bin/socat TCP-LISTEN:8080,bind=127.0.0.1,reuseaddr,fork TCP:${S7_EIS_GATEWAY_HOST}:8080
 Restart=always
 RestartSec=5

@@ -34,5 +34,10 @@ print("CONNECTED_SERVER_ADDR=" + str(row[0]))
 print("CONNECTED_SERVER_PORT=" + str(row[1]))
 print("CONNECTED_DB=" + str(row[2]))
 print("CONNECTED_USER=" + str(row[3]))
-print("S13_TO_S7_DB_CONNECTION=OK" if host == "S7" else "S13_TO_S7_DB_CONNECTION=UNEXPECTED_HOST")
+expected = os.environ.get("S7_DB_HOST", "")
+print(
+    "S13_TO_S7_DB_CONNECTION=OK"
+    if expected and host == expected
+    else "S13_TO_S7_DB_CONNECTION=UNEXPECTED_HOST"
+)
 conn.close()

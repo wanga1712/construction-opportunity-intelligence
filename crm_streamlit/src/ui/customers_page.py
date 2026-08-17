@@ -16,7 +16,7 @@ def render_customers_page() -> None:
         st.error(f"База паркинга недоступна: {db.last_error or 'нет подключения'}")
         st.info(
             "Проверьте `PARKING_DB_*` или `CRM_DB_HOST` в `.env`. "
-            "БД `nspd_parking` обычно на том же сервере, что и CRM (`S7`)."
+            "БД `nspd_parking` обычно на том же сервере, что и CRM (S13)."
         )
         return
 

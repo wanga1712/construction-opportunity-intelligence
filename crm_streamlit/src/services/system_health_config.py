@@ -1,6 +1,7 @@
 """Central thresholds and paths for multi-host system health."""
 from __future__ import annotations
 
+import os
 from pathlib import Path
 
 COLLECTOR_VERSION = "1.3.0"
@@ -24,9 +25,9 @@ STALE_AFTER_SEC = 45
 COLLECTOR_DOWN_AFTER_SEC = 120
 S7_STALE_AFTER_SEC = 90
 
-# S7 remote (collector only — never from UI)
-S7_SSH_TARGET = "<S7_SSH_USER>@S7"
-S7_SSH_IDENTITY = "<HOME>/.ssh/id_to_nyx"
+# S7 remote (collector only — never from UI). Host/user live in runtime env, not git.
+S7_SSH_TARGET = os.environ.get("S7_SSH_TARGET", "")
+S7_SSH_IDENTITY = os.environ.get("S7_SSH_IDENTITY", "")
 S7_CONNECT_TIMEOUT = 5
 S7_COMMAND_TIMEOUT = 25
 S7_COLLECTION_TIMEOUT = 60

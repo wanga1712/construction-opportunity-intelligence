@@ -25,7 +25,7 @@ def _status_badge(value: str | None) -> str:
 
 def render_infrastructure_page(service) -> None:
     st.title("🖥 Инфраструктура")
-    st.caption("Где что крутится: S7 хранит БД и парсер ЕИС, <S13_SSH_USER> обрабатывает документы.")
+    st.caption("Где что крутится: S7 хранит БД и парсер ЕИС, S13 обрабатывает документы.")
 
     if st.button("↻ Проверить сейчас", use_container_width=True):
         st.cache_data.clear()
@@ -45,20 +45,20 @@ def render_infrastructure_page(service) -> None:
                         acknowledge_alert(service.tender_db, alert["id"])
                         st.rerun()
 
-    S7 = get_nyx_status()
+    s7_status = get_nyx_status()
     worker = get_worker_status()
 
     c1, c2 = st.columns(2)
     with c1:
-        st.markdown("### S7 / S7")
+        st.markdown("### S7")
         st.caption("БД + EIS-парсер + мониторинг; document_processor здесь не запускать.")
-        st.metric("EIS parser", f"{_status_badge(S7.get('eis'))} {S7.get('eis') or '—'}")
-        st.metric("Monitoring timer", f"{_status_badge(S7.get('monitor'))} {S7.get('monitor') or '—'}")
-        st.metric("Document daemon", f"{_status_badge(S7.get('docs'))} {S7.get('docs') or '—'}")
-        st.caption(S7.get("uptime") or S7.get("raw") or S7.get("error") or "")
+        st.metric("EIS parser", f"{_status_badge(s7_status.get('eis'))} {s7_status.get('eis') or '—'}")
+        st.metric("Monitoring timer", f"{_status_badge(s7_status.get('monitor'))} {s7_status.get('monitor') or '—'}")
+        st.metric("Document daemon", f"{_status_badge(s7_status.get('docs'))} {s7_status.get('docs') or '—'}")
+        st.caption(s7_status.get("uptime") or s7_status.get("raw") or s7_status.get("error") or "")
 
     with c2:
-        st.markdown("### <S13_SSH_USER> / S13")
+        st.markdown("### S13")
         st.caption("Рабочий ПК: document_processor.daemon + локальная модель/Ollama.")
         svc_open = worker.get("service_open") or worker.get("service") or "—"
         svc_awd = worker.get("service_awarded") or "—"
@@ -82,7 +82,7 @@ def render_infrastructure_page(service) -> None:
         st.warning(summary.get("error") or "Очередь недоступна")
 
     tab_errors, tab_logs, tab_quality, tab_rules = st.tabs(
-        ["Ошибки / no_links", "Логи <S13_SSH_USER>", "Качество обработки", "Правила"]
+        ["Ошибки / no_links", "Логи S13", "Качество обработки", "Правила"]
     )
     with tab_errors:
         rows = get_recent_queue_errors(service.tender_db, limit=50)
@@ -104,9 +104,9 @@ def render_infrastructure_page(service) -> None:
     with tab_rules:
         st.markdown(
             """
-- `S7 / S7`: база `tender_monitor`, EIS-парсер, мониторинг.
-- `<S13_SSH_USER> / S13`: единственный активный document daemon.
-- На `S7` document daemon отключён и не должен запускаться.
+- S7: база `tender_monitor`, EIS-парсер, мониторинг.
+- S13: единственный активный document daemon.
+- На S7 document daemon отключён и не должен запускаться.
 - Новые закупки поднимаются в приоритет при старте демона и ежедневно утром.
 - `no_links` после registry lookup fix можно отдельно возвращать в очередь на повтор.
             """

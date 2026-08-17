@@ -84,10 +84,10 @@ def _render_startup_error(warn: str) -> None:
     st.error(warn or "Не удалось подключиться к базе данных.")
     st.markdown(
         "**Что проверить:**\n"
-        "1. В `.env`: `DOM_RF_RADAR_DB_HOST`, `TENDER_MONITOR_DB_HOST`, `CRM_DB_HOST` → `S7`\n"
-        "2. С ноутбука: VPN/сеть до `S7:5432`\n"
+        "1. В `.env`: `DOM_RF_RADAR_DB_HOST`, `TENDER_MONITOR_DB_HOST`, `CRM_DB_HOST` → S7 DB host from runtime env\n"
+        "2. С ноутбука: VPN/сеть до S7 PostgreSQL (`TENDER_MONITOR_DB_HOST`)\n"
         "3. На сервере БД: `pg_hba.conf` разрешает ваш IP\n"
-        "4. CRM на сервере: [http://S13:8504/](http://S13:8504/) — если там работает, "
+        "4. CRM на сервере S13 — если там работает, "
         "проблема только в локальном `.env`/сети ноутбука"
     )
     if st.button("↻ Повторить подключение", key="startup_retry_db"):

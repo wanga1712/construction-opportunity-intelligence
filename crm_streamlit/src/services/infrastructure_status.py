@@ -1,21 +1,22 @@
 """Operational status helpers for TenderMonitor infrastructure."""
 from __future__ import annotations
 
+import os
 import subprocess
 from dataclasses import dataclass
 from datetime import datetime
 from typing import Optional
 
 
-WORKER_HOST = "S13"
-WORKER_USER = "<S13_SSH_USER>"
-WORKER_KEY = r"<HOME>\.ssh\<SSH_IDENTITY>"
+WORKER_HOST = os.environ.get("S13_SSH_HOST", "")
+WORKER_USER = os.environ.get("S13_SSH_USER", "")
+WORKER_KEY = os.environ.get("S13_SSH_IDENTITY", "")
 WORKER_SERVICE_OPEN = "tender-docs-daemon-open.service"
 WORKER_SERVICE_AWARDED = "tender-docs-daemon-awarded.service"
 WORKER_SERVICE = WORKER_SERVICE_OPEN  # backward compat alias for logs
 
-NYX_HOST = "S7"
-NYX_USER = "<S7_SSH_USER>"
+NYX_HOST = os.environ.get("S7_SSH_HOST", "")
+NYX_USER = os.environ.get("S7_SSH_USER", "")
 
 
 @dataclass
@@ -41,18 +42,17 @@ def _run(cmd: list[str], timeout: int = 15) -> CommandResult:
 
 
 def ssh_worker(command: str, timeout: int = 15) -> CommandResult:
-    return _run([
-        "ssh",
-        "-i",
-        WORKER_KEY,
-        "-o",
-        "ConnectTimeout=8",
-        f"{WORKER_USER}@{WORKER_HOST}",
-        command,
-    ], timeout=timeout)
+    if not WORKER_HOST or not WORKER_USER:
+        return CommandResult(False, "", "S13_SSH_HOST/S13_SSH_USER missing")
+    cmd = ["ssh", "-o", "ConnectTimeout=8", f"{WORKER_USER}@{WORKER_HOST}", command]
+    if WORKER_KEY:
+        cmd[1:1] = ["-i", WORKER_KEY]
+    return _run(cmd, timeout=timeout)
 
 
 def ssh_nyx(command: str, timeout: int = 15) -> CommandResult:
+    if not NYX_HOST or not NYX_USER:
+        return CommandResult(False, "", "S7_SSH_HOST/S7_SSH_USER missing")
     return _run([
         "ssh",
         "-o",

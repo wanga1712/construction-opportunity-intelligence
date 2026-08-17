@@ -5,8 +5,8 @@
 
 | Id | Host | Unit | Role | ExecStart |
 |---|---|---|---|---|
-| A | S7 `S7` S7 | `tendermonitor-eis-parser.service` enabled/active | forward/current EIS ingestion | `/opt/tendermonitor/venv/bin/python /opt/tendermonitor/main.py` |
-| B | S13 `S13` | `tendermonitor-eis-parser-backward.service` enabled/active | backward/historical EIS ingestion | same `main.py`, env `TENDERMONITOR_DIRECTION=backward` |
+| A | S7 | `tendermonitor-eis-parser.service` enabled/active | forward/current EIS ingestion | `/opt/tendermonitor/venv/bin/python /opt/tendermonitor/main.py` |
+| B | S13 | `tendermonitor-eis-parser-backward.service` enabled/active | backward/historical EIS ingestion | same `main.py`, env `TENDERMONITOR_DIRECTION=backward` |
 | C | S13 | `tender-docs-daemon-open/awarded` inactive/disabled | document processor | `/opt/tender_documents_research/.venv/bin/python -m document_processor.daemon` — already in Git under `tender_documents_research/document_processor/` |
 
 S7 also has `tendermonitor-eis-parser-backward.service` **disabled/inactive**. S13 has no forward parser unit.

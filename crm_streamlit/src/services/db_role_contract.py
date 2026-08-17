@@ -4,7 +4,7 @@ CRM V3 target architecture:
   SOURCE (procurement history) = S7 tender_monitor  — READ ONLY from S13
   CRM (intelligence / hot state) = S13 canonical CRM DB — WRITE target
 
-Current production still points CRM DSN at S7:5432/crm.
+Current production CRM DSN is configured via runtime env (`CRM_DB_HOST`), not a hardcoded address.
 This module does not switch production; it encodes the contract and
 validates that source and CRM roles are configured independently.
 """

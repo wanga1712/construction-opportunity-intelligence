@@ -115,8 +115,11 @@ def build_okpd_hierarchy(crm_or_tender_db, okpd_code: str) -> Dict[str, Any]:
         import psycopg2
         import psycopg2.extras
 
+        host = os.getenv("DB_HOST") or os.getenv("TENDER_DB_HOST") or os.getenv("TENDER_MONITOR_DB_HOST")
+        if not host:
+            return {"okpd_code": okpd_code, "okpd_name": None, "hierarchy": []}
         conn = psycopg2.connect(
-            host=os.getenv("DB_HOST") or os.getenv("TENDER_DB_HOST") or "S7",
+            host=host,
             port=int(os.getenv("DB_PORT") or os.getenv("TENDER_DB_PORT") or 5432),
             dbname=os.getenv("DB_NAME") or os.getenv("TENDER_DB_DATABASE") or "tender_monitor",
             user=os.getenv("DB_USER") or os.getenv("TENDER_DB_USER"),

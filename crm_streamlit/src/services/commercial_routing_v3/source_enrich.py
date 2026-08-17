@@ -14,8 +14,11 @@ def enrich_procurement_from_s7(proc: Dict[str, Any]) -> Dict[str, Any]:
     sid = proc.get("source_id")
     if not table.startswith("reestr_contract_") or sid is None:
         return proc
+    host = os.getenv("DB_HOST") or os.getenv("TENDER_DB_HOST") or os.getenv("TENDER_MONITOR_DB_HOST")
+    if not host:
+        return proc
     conn = psycopg2.connect(
-        host=os.getenv("DB_HOST") or "S7",
+        host=host,
         port=int(os.getenv("DB_PORT") or 5432),
         dbname=os.getenv("DB_NAME") or "tender_monitor",
         user=os.getenv("DB_USER"),

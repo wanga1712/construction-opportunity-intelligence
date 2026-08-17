@@ -1,5 +1,5 @@
 # Factual copy of S7 /etc/systemd/system/tendermonitor-eis-parser.service
-# Host: S7 (S7). Service user: tendermonitor.
+# Host: S7. Service user: tendermonitor.
 # Do not treat this unit as an S13 unit.
 
 [Unit]

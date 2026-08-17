@@ -2,7 +2,7 @@
 
 WIP: `PROJECT-EIS-S7-CORRECTNESS-PROOF-AND-S13-BACKWARD-PARITY-1`  
 Source-date: `2026-08-13`  
-Host: S7 `S7` forensic only.
+Host: S7 forensic only.
 
 ## Isolation
 

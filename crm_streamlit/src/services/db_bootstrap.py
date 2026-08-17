@@ -72,7 +72,7 @@ def connect_databases() -> Tuple[
             tender_db,
             crm_db,
             f"База Radar недоступна ({hosts_hint}). "
-            "Проверьте .env, VPN и pg_hba на PostgreSQL (хост S7).",
+            "Проверьте .env, VPN и pg_hba на PostgreSQL (хост S7 / TENDER_MONITOR_DB_HOST).",
         )
 
     warn = "; ".join(errors) if errors else ""

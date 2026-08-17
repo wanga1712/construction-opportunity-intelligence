@@ -5,6 +5,7 @@ Wants=network-online.target
 
 [Service]
 Type=simple
+# OS user is host-local. Replace <SSH_USER> via a systemd drop-in on BACKWARD_RUNTIME.
 User=<SSH_USER>
 Group=<SSH_USER>
 WorkingDirectory=/opt/CRM_Streamlit

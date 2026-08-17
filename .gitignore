@@ -9,6 +9,24 @@ venv/
 # Env файлы с реальными паролями (используй *.template)
 *.env
 !*.env.template
+!*.env.example
+db_credintials.env
+**/db_credintials.env
+credentials.json
+
+# Keys / VPN material
+*.pem
+*.key
+*.p12
+*.pfx
+*.ovpn
+wg0.conf
+id_rsa
+id_ed25519
+id_ecdsa
+
+# Local hygiene denylist and scan output (may contain real host literals)
+.hygiene/
 
 # Логи и временные файлы
 *.log

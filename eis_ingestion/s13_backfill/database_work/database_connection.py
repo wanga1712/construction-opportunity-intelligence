@@ -111,7 +111,10 @@ class DatabaseManager:
             "port": port,
             "connect_timeout": 10,
         }
-        if host in ("localhost", "127.0.0.1", "<S7_DB_HOST>"):
+        sslmode = os.getenv("DB_SSLMODE")
+        if sslmode:
+            connect_params["sslmode"] = sslmode
+        elif host in ("localhost", "127.0.0.1"):
             connect_params["sslmode"] = "disable"
 
         conn = psycopg2.connect(**connect_params)

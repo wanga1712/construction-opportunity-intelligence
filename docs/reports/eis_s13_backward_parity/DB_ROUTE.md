@@ -7,7 +7,7 @@ Parser DB settings come from `/opt/tendermonitor/database_work/db_credintials.en
 | Field | Value |
 |---|---|
 | BACKWARD_RUNTIME_HOST | S13 |
-| BACKWARD_DB_HOST | S7 (`S7`) |
+| BACKWARD_DB_HOST | S7_DB (`<S7_DB_HOST>`) |
 | BACKWARD_DB_PORT | 5432 |
 | BACKWARD_DB_NAME | `tender_monitor` |
 | BACKWARD_DB_ROLE | `postgres` (file key `DB_USER_TENDER`) |

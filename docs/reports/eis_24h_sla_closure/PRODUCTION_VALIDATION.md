@@ -1,6 +1,6 @@
 # PRODUCTION_VALIDATION
 
-Host: S7 `S7` `/opt/tendermonitor`
+Host: S7 `/opt/tendermonitor`
 Unit: `tendermonitor-eis-parser.service` only
 Backup dir: `/opt/tendermonitor/bak-eis-recovery-20260817T152200`
 Previous auth-file backup: `/opt/tendermonitor/database_work/db_credintials.env.bak-20260817T150457`

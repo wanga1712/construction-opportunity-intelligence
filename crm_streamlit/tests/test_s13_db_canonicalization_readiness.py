@@ -36,7 +36,7 @@ class TestSourceCrmDsnSeparation:
     def test_source_and_crm_can_point_to_different_servers(self) -> None:
         contract = resolve_db_role_contract(
             {
-                "TENDER_MONITOR_DB_HOST": "S7",
+                "TENDER_MONITOR_DB_HOST": "s7-db.example.test",
                 "TENDER_MONITOR_DB_PORT": "5432",
                 "TENDER_MONITOR_DB_DATABASE": "tender_monitor",
                 "TENDER_MONITOR_DB_USER": "reader",
@@ -51,13 +51,13 @@ class TestSourceCrmDsnSeparation:
         assert contract.same_server is False
         assert contract.same_database is False
         assert contract.roles_separated is True
-        assert contract.source.route == "S7:5432/tender_monitor"
+        assert contract.source.route == "s7-db.example.test:5432/tender_monitor"
         assert contract.crm.route == "127.0.0.1:5432/crm"
 
     def test_ambiguous_generic_fallback_rejected(self) -> None:
         contract = resolve_db_role_contract(
             {
-                "TENDER_MONITOR_DB_HOST": "S7",
+                "TENDER_MONITOR_DB_HOST": "s7-db.example.test",
                 "TENDER_MONITOR_DB_DATABASE": "tender_monitor",
                 "TENDER_MONITOR_DB_USER": "reader",
                 # CRM host missing → would implicitly reuse source host
@@ -69,11 +69,11 @@ class TestSourceCrmDsnSeparation:
     def test_current_like_same_server_different_databases_ok(self) -> None:
         contract = resolve_db_role_contract(
             {
-                "TENDER_MONITOR_DB_HOST": "S7",
+                "TENDER_MONITOR_DB_HOST": "s7-db.example.test",
                 "TENDER_MONITOR_DB_PORT": "5432",
                 "TENDER_MONITOR_DB_DATABASE": "tender_monitor",
                 "TENDER_MONITOR_DB_USER": "postgres",
-                "CRM_DB_HOST": "S7",
+                "CRM_DB_HOST": "s7-db.example.test",
                 "CRM_DB_PORT": "5432",
                 "CRM_DB_DATABASE": "crm",
                 "CRM_DB_USER": "postgres",

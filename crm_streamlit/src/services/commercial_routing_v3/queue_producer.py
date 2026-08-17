@@ -103,9 +103,7 @@ class CommercialRoutingV3QueueProducer:
         self.enabled = enabled
         # S13 local document_intelligence via CRM app role (never S7 tender-docs DB_*).
         self._doc_dsn = {
-            "host": os.getenv("S13_DOCUMENT_DB_HOST")
-            if os.getenv("S13_DOCUMENT_DB_HOST") not in (None, "", "S7")
-            else "127.0.0.1",
+            "host": os.getenv("S13_DOCUMENT_DB_HOST") or "127.0.0.1",
             "port": int(
                 os.getenv("S13_DOCUMENT_DB_PORT")
                 or os.getenv("CRM_DB_PORT")

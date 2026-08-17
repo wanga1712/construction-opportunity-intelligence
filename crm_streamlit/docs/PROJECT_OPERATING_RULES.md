@@ -25,10 +25,16 @@ account, host, credential или key path. Запрещено пробовать
 
 ## Canonical hosts and SSH
 
+Logical aliases used in Git and documentation: **S7**, **S13**, **S7_DB**,
+**FORWARD_RUNTIME**, **BACKWARD_RUNTIME**. Real addresses, VPN endpoints, SSH
+login names and identity filenames live only in local untracked SSH config and
+runtime env. Do not commit them.
+
 | Host | Authority and purpose | Approved human/SSH access |
 |---|---|---|
-| S13 | `S13`, alias `S13`; CRM, Candidate routing, Qwen/Ollama, document intelligence runtime, canonical CRM DB | primary operator and OS user `<S13_SSH_USER>`; `ssh <S13_SSH_USER>@S13` or `ssh <S13_SSH_USER>@S13` |
-| S7 | `S7`, hostname `S7`; source/history authority, source procurement data and source lifecycle/status | approved OS user `<S7_SSH_USER>`; `ssh <S7_SSH_USER>@S7` |
+| S13 / BACKWARD_RUNTIME | CRM, Candidate routing, Qwen/Ollama, document intelligence runtime, canonical CRM DB | OS user `<S13_SSH_USER>` via local SSH alias `S13` |
+| S7 / FORWARD_RUNTIME | source/history authority, source procurement data and source lifecycle/status | OS user `<S7_SSH_USER>` via local SSH alias `S7` |
+| S7_DB | authoritative `tender_monitor` PostgreSQL | host from env `<S7_DB_HOST>`; never hardcoded |
 
 Не вводить дополнительные canonical hosts без отдельного project decision.
 
@@ -138,3 +144,17 @@ pre-cutover readiness report. `HOSTS.md` превращён в stable pointer,
 операционные документы явно подчинены этой authority, а historical report
 помечен как superseded snapshot. Credentials, DB ownership и production
 services в documentation WIP не изменялись.
+
+## Repository hygiene
+
+Do not commit real host addresses, VPN/SSH endpoints, SSH login names,
+passwords, tokens, private keys, or `.env` contents. Runtime must read DB and
+network authority from config/env.
+
+Before committing, run `python tools/repo_hygiene_check.py`. Local banned
+literals belong in untracked `.hygiene/denylist.txt` (see
+`tools/repo_hygiene_denylist.example`). The public checker does not hardcode
+production hosts.
+
+Future Git commits should use a GitHub `users.noreply.github.com` identity when
+the operator configures it. This file does not change local `git config`.
