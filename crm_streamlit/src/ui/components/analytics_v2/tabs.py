@@ -10,6 +10,7 @@ from datetime import date
 
 import streamlit as st
 
+from src.services.crm_db_runtime import require_crm_db_connect_kwargs
 from src.ui.components.analytics_v2.card_feed import render_card_feed
 from src.ui.components.analytics_v2.card_compact import render_compact_card
 from src.ui.components.analytics_v2.card_detail import render_card_detail
@@ -21,14 +22,7 @@ _SESSION_RAZYGR   = "selected_razygr_id"
 # ─── DB helpers ───────────────────────────────────────────────────────────────
 
 def _pg():
-    import os
-    return dict(
-        host=os.environ.get("CRM_DB_HOST", "10.8.0.7"),
-        port=int(os.environ.get("CRM_DB_PORT", 5432)),
-        user=os.environ.get("CRM_DB_USER", "postgres"),
-        password=os.environ.get("CRM_DB_PASSWORD", "0IFz3_"),
-        dbname="crm",
-    )
+    return require_crm_db_connect_kwargs()
 
 
 def _load_torgi() -> tuple[list[dict], list[dict]]:
