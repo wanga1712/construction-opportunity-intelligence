@@ -6,6 +6,7 @@ from typing import Optional
 
 import streamlit as st
 
+from src.services.crm_db_runtime import require_crm_db_connect_kwargs
 from src.ui.components.analytics_v2.card_feed import render_card_feed
 
 _STATUS_LABEL = {
@@ -68,20 +69,16 @@ def _badge(level: str, color: str, category: str) -> str:
     )
 
 
+def _pg():
+    return require_crm_db_connect_kwargs()
+
+
 def _load_torgi(grace_days: int) -> tuple[list[dict], list[dict]]:
     """Загружает карточки «Идут торги» из crm_procurements."""
     try:
         import psycopg2
         from psycopg2.extras import RealDictCursor
-        import os
-        PG = dict(
-            host=os.environ.get("CRM_DB_HOST", "S7"),
-            port=int(os.environ.get("CRM_DB_PORT", 5432)),
-            user=os.environ.get("CRM_DB_USER", "postgres"),
-            password=os.environ.get("CRM_DB_PASSWORD", "<REMOVED_COMPROMISED_CREDENTIAL>"),
-            dbname="crm",
-        )
-        conn = psycopg2.connect(**PG)
+        conn = psycopg2.connect(**_pg())
         with conn.cursor(cursor_factory=RealDictCursor) as cur:
             cur.execute("""
                 SELECT id, contract_number, auction_name,
@@ -118,15 +115,7 @@ def _load_razygranye() -> list[dict]:
     try:
         import psycopg2
         from psycopg2.extras import RealDictCursor
-        import os
-        PG = dict(
-            host=os.environ.get("CRM_DB_HOST", "S7"),
-            port=int(os.environ.get("CRM_DB_PORT", 5432)),
-            user=os.environ.get("CRM_DB_USER", "postgres"),
-            password=os.environ.get("CRM_DB_PASSWORD", "<REMOVED_COMPROMISED_CREDENTIAL>"),
-            dbname="crm",
-        )
-        conn = psycopg2.connect(**PG)
+        conn = psycopg2.connect(**_pg())
         with conn.cursor(cursor_factory=RealDictCursor) as cur:
             cur.execute("""
                 SELECT id, contract_number, auction_name,
@@ -156,13 +145,7 @@ def _load_sync_info() -> dict:
     try:
         import psycopg2
         from psycopg2.extras import RealDictCursor
-        import os
-        PG = dict(host=os.environ.get("CRM_DB_HOST","S7"),
-                  port=int(os.environ.get("CRM_DB_PORT",5432)),
-                  user=os.environ.get("CRM_DB_USER","postgres"),
-                  password=os.environ.get("CRM_DB_PASSWORD","<REMOVED_COMPROMISED_CREDENTIAL>"),
-                  dbname="crm")
-        conn = psycopg2.connect(**PG)
+        conn = psycopg2.connect(**_pg())
         with conn.cursor(cursor_factory=RealDictCursor) as cur:
             cur.execute("""
                 SELECT status, started_at, finished_at
