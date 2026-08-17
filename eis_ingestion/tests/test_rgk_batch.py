@@ -341,6 +341,33 @@ def test_correctness_parity_cases():
     assert plan.updates[0].fields["final_price"] == "1500.50"
 
 
+def test_links_only_for_main_table_ids():
+    _s7()
+    from database_work.registry_tables import tables_for_fz
+    from database_work.rgk_plan import plan_44_batch
+
+    rec = _record(document_links=[{"file_name": "doc", "document_links": "http://x"}])
+    plan = plan_44_batch(
+        [rec],
+        known_filenames=set(),
+        okpd_map={"41.20.10": 42},
+        contractor_map={"7701234567": 7},
+        registry_map={"111": _awarded_row(final_price="9")},
+        unresolved_map={},
+        version_cache={},
+    )
+    main = tables_for_fz("44").main
+    main_ids = {
+        int(write.record_id)
+        for write in plan.inserts + plan.updates
+        if write.table_name == main and write.record_id is not None
+    }
+    assert plan.updates
+    assert plan.updates[0].table_name.endswith("_awarded")
+    assert main_ids == set()
+    assert all(item["contract_id"] not in main_ids for item in plan.links())
+
+
 def test_replay_statement_budget_5000():
     _s7()
     from database_work.rgk_batch_sql import statements_for_batch

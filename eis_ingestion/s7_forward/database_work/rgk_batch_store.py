@@ -177,9 +177,9 @@ class RgkBatchStore:
                             write.fields["contractor_id"] = contractor_map[inn]
                 self._insert_canonical(cursor, plan)
                 self._update_changed(cursor, plan)
+                self._insert_links(cursor, plan)
                 self._promote(cursor, plan)
                 self._upsert_unresolved(cursor, plan)
-                self._insert_links(cursor, plan)
                 self._insert_filenames(cursor, plan.filenames)
             connection.commit()
             self.counter.note_commit()
@@ -349,7 +349,18 @@ class RgkBatchStore:
         self.counter.inserts += 1
 
     def _insert_links(self, cursor, plan: BatchPlan) -> None:
-        links = [item for item in plan.links() if item.get("document_links")]
+        # FK links_documentation_44_fz_contract_id_fkey points at main 44 only.
+        # Old per-row path swallowed IntegrityError for awarded/unclear ids.
+        main_ids = {
+            int(write.record_id)
+            for write in plan.inserts + plan.updates
+            if write.table_name == TABLES_44.main and write.record_id is not None
+        }
+        links = [
+            item
+            for item in plan.links()
+            if item.get("document_links") and item.get("contract_id") in main_ids
+        ]
         if not links:
             return
         rows = [
@@ -361,13 +372,19 @@ class RgkBatchStore:
             )
             for item in links
         ]
-        execute_values(
-            cursor,
-            "INSERT INTO links_documentation_44_fz "
-            "(file_name, document_links, contract_id, contract_number) VALUES %s",
-            rows,
-        )
-        self.counter.inserts += 1
+        self._execute(cursor, "SAVEPOINT rgk_links")
+        try:
+            execute_values(
+                cursor,
+                "INSERT INTO links_documentation_44_fz "
+                "(file_name, document_links, contract_id, contract_number) VALUES %s",
+                rows,
+            )
+            self._execute(cursor, "RELEASE SAVEPOINT rgk_links")
+            self.counter.inserts += 1
+        except IntegrityError as exc:
+            self._execute(cursor, "ROLLBACK TO SAVEPOINT rgk_links")
+            logger.warning("RGK links bulk insert skipped: %s", exc)
 
     def _insert_filenames(self, cursor, names: list[str]) -> None:
         unique = [name for name in dict.fromkeys(names) if name]
