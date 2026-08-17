@@ -19,9 +19,9 @@
 
 **Phase 2** — `[x]` workbench queue. SAVE+NEXT now consumes `annotation_go_next` / `annotation_go_next_from` and rotates the current filtered card to the front without new tabs or labels. CORRECT fast path gained the existing full-form `Сохранить и следующая →` button only. MODEL RAW still read-only. Tests: `tests/test_annotation_queue.py`, extended `tests/test_expert_annotation_ui.py`. 29 targeted tests PASS. No production 5-card live annotation run.
 
-**Phase 3** — `[x]` document learning contract only. Flag `CRM_V3_EXHAUSTIVE_DOCUMENT_DISCOVERY` default off. Observation DTO + SQL `src/migrations/crm_v3_document_observation_1.sql` + store/export/stats/policy. Usefulness from extraction outcomes, not selector score. Provenance: `EXHAUSTIVE` / `MODEL_SELECTED` / `RANDOM_EXPLORATION` / `HISTORICAL_FILTERED` (biased, not calibration truth). Wilson interval: 1/1 is not 100%. Automatic skip remains forbidden. Workers not started. DDL not applied (Phase 4).
+**Phase 3** — `[x]` document learning contract. Outcome labels are factual processing results (`USEFUL_COMMERCIAL_EVIDENCE`, `PARSED_NO_COMMERCIAL_EVIDENCE`, `DOWNLOAD_FAILED`, `PARSE_FAILED`, `UNSUPPORTED_FORMAT`, `EMPTY_DOCUMENT`, `DUPLICATE_DOCUMENT`, `UNOBSERVED`); failures are not collapsed into no-evidence. `calibration_truth` is TRUE only for `EXHAUSTIVE` and `RANDOM_EXPLORATION`; `MODEL_SELECTED` and `HISTORICAL_FILTERED` are FALSE even if a caller passes True. Class stats aggregate by source `source_document_type` when present, otherwise retain title/extension/mime signals without inventing a class. Wilson interval: 1/1 is not 100%. Flag `CRM_V3_EXHAUSTIVE_DOCUMENT_DISCOVERY` default off. Automatic skip forbidden. Workers not started.
 
-**Phase 4** — `[ ]` apply DDL via `sudo -n -u postgres psql -d crm` on S13; deploy non-chrome files; freeze verify; do not FF `main` with UI-changing commits.
+**Phase 4** — `[~]` apply DDL via `sudo -n -u postgres psql -d crm` on S13; deploy non-chrome files; freeze verify; do not FF `main`.
 
 Size notes: `tabs.py` 791 lines — accepted Phase 1 workspace plus three `bind_and_advance` call sites; queue logic lives in `annotation_queue.py` (67). `card_tabs_ai_expert_form.py` 816 — still one stateful Streamlit form; SAVE+NEXT on CORRECT is a second existing button, not a split.
 
