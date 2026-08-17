@@ -2,20 +2,18 @@
 
 WIP: `PROJECT-EIS-S7-FORWARD-24H-SLA-CLOSURE-1`
 
-Clean SLA date is the first source-date processed **entirely** by the optimized forward parser (all 55 regions, region_progress cleared, next date started).
-
-2026-08-12 is **not** that date: it was partially processed by the serial RGK path.
-
 | Field | Value |
 |---|---|
-| BENCHMARK_SOURCE_DATE | PENDING |
+| BENCHMARK_SOURCE_DATE | PENDING — not 2026-08-12 |
 | BENCHMARK_START | PENDING |
 | BENCHMARK_FINISH | PENDING |
 | BENCHMARK_ELAPSED_HOURS | PENDING |
-| 44FZ_CURRENT_DATA_COMPLETE | PENDING |
-| 223FZ_CURRENT_DATA_COMPLETE | PENDING |
-| ALL_REGIONS_COMPLETE | PENDING |
-| REGION_PROGRESS_CLEARED | PENDING |
-| NEXT_SOURCE_DATE_STARTED | PENDING |
+| 44FZ_CURRENT_DATA_COMPLETE | NO (2026-08-12 still in region_progress, 6/55 at deploy) |
+| 223FZ_CURRENT_DATA_COMPLETE | NO |
+| ALL_REGIONS_COMPLETE | NO |
+| REGION_PROGRESS_CLEARED | NO |
+| NEXT_SOURCE_DATE_STARTED | NO |
 | S7_FORWARD_BENCHMARK_ONLY | YES |
 | S13_BACKWARD_INCLUDED_IN_SLA | NO |
+
+Clean SLA date = first source-date processed entirely by this batch forward parser (55/55, progress cleared, next date started).

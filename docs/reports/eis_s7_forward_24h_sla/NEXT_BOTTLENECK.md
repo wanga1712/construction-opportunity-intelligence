@@ -2,14 +2,13 @@
 
 WIP: `PROJECT-EIS-S7-FORWARD-24H-SLA-CLOSURE-1`
 
-Before RGK batch deploy the measured primary bottleneck was:
+Serial 44-FZ RGK UPDATE+COMMIT is no longer the live writer for S7 recouped 44-FZ. The batch path is in production.
 
-`serial 44-FZ RGK awarded UPDATE+COMMIT`
+Measured next costs on the catch-up date 2026-08-12 / region 20:
 
-After deploy this file is updated from live stage timings. If a full source-day is still >24h, the next largest S7 forward stage is optimized in **this same WIP**. Candidate later stages (not started until measured):
+1. **`file_names_xml` bulk lookup ~11s per 500 names** while skipping XML already marked processed (table is huge; leftover zip re-extract after restart).
+2. Full source-day stages not yet ranked: 223-FZ notice/contract, 44-FZ notices at scale, SOAP/download.
 
-- 223-FZ notice/contract persistence
-- 44-FZ notice path (`check_contract_in_any_table` still constructs a new locator per notice)
-- download / unzip / SOAP
+Do **not** start multiprocessing. If after a clean 55-region day `BENCHMARK_ELAPSED_HOURS` is still ≥24, optimize the largest measured S7 forward stage in this same WIP.
 
-No concurrency until N+1 / per-row COMMIT / duplicate parse / redundant writes / per-row INFO are gone (RGK phase addresses those for 44-FZ recouped).
+Candidate (not started): index/lookup strategy for `file_names_xml`; 223-FZ per-file path; notice `ContractRegistryLocator()` per XML.

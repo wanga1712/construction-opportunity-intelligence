@@ -7,30 +7,27 @@ WIP: `PROJECT-EIS-S7-FORWARD-24H-SLA-CLOSURE-1`
 | HOST | S7 |
 | SERVICE | tendermonitor-eis-parser.service |
 | SOURCE | /opt/tendermonitor |
+| BACKUP | `/opt/tendermonitor/bak-eis-s7-rgk-batch-20260817T162647` |
+| S7_FORWARD_ONLY | YES |
 | S13_BACKWARD_CHANGED | NO |
-| S13_BACKWARD_SERVICE_CHANGE | NO |
+| S13_BACKWARD_SERVICE_CHANGE | NO (unit left `inactive`, not restarted) |
 | QWEN_STARTED | NO |
 | DOCUMENT_WORKERS_STARTED | NO |
 | CRM_UI_CHANGED | NO |
+| SERVICE_ACTIVE | YES |
+| MAIN_PID | 3717828 |
+| ACTIVE_ENTER | 2026-08-17 16:43:23 MSK |
+| DB_AUTH | OK (connect check 55 regions) |
+| UNION_ERRORS | 0 |
+| CANONICAL_RUNTIME_HASH_MATCH | YES (sha256 of deployed files vs local working tree) |
+| RUNTIME_COMMIT | `3d6a8f81b1b8d9778650681613ba2e9c39976262` |
 
-Deploy procedure (executed after local tests PASS):
+Deployed files: `okpd_parser.py`, `rgk_record.py`, `rgk_batch.py`, `rgk_dirty.py`, `rgk_batch_sql.py`, `rgk_plan.py`, `rgk_batch_store.py`, `contract_registry_updater.py`, `contract_awarded_promoter.py`.
 
-1. Snapshot live source-date / region_progress / unit PID
-2. Backup only the files this WIP replaces under `/opt/tendermonitor/bak-eis-s7-rgk-batch-<timestamp>`
-3. Install S7 forward files listed below as `tendermonitor:tendermonitor`
-4. sha256 canonical vs runtime
-5. Restart **only** `tendermonitor-eis-parser.service`
+Live after deploy:
 
-Files:
+- Batch path is on: `RGK batch: input=500 duplicates=500 … elapsed=11.0s`
+- First install corrupted trailing `r` via PowerShell `sed "s/\r$//"` (became `s/r$//`). Restored from backup and re-copied without sed.
+- First persist of a non-empty remainder batch crashed on `links_documentation_44_fz_contract_id_fkey` (awarded id). Old per-row path swallowed that IntegrityError. Fixed in `3d6a8f8`: links only for main-table ids, insert before promote, savepoint on FK.
 
-- `parsing_xml/okpd_parser.py`
-- `parsing_xml/rgk_record.py` (new)
-- `parsing_xml/rgk_batch.py` (new)
-- `database_work/rgk_dirty.py` (new)
-- `database_work/rgk_batch_sql.py` (new)
-- `database_work/rgk_plan.py` (new)
-- `database_work/rgk_batch_store.py` (new)
-- `database_work/contract_registry_updater.py`
-- `database_work/contract_awarded_promoter.py`
-
-Live result: filled at deploy time.
+Catch-up note: region 20 RGK zip was already processed by the serial path; current batches are filename-dedup skips (~11s / 500 names on large `file_names_xml`).
