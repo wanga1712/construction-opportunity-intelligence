@@ -1,0 +1,34 @@
+{
+  "reestr_contract": {
+    "contract_number": "order/notificationNumber",
+    "delivery_start_date": "executionPeriod/startDate",
+    "delivery_end_date": "executionPeriod/endDate",
+    "final_price": "priceInfo/price",
+    "auction_name": "contractSubject",
+    "okpd_code": "OKPD2/code",
+    "notification_number": "notificationNumber",
+    "reestr_number": "reestrNumber"
+  },
+  "contractor": {
+    "short_name": "legalEntityRF/EGRULInfo/shortName",
+    "full_name": "EGRULInfo/fullName",
+    "inn": "EGRULInfo/INN",
+    "kpp": "EGRULInfo/KPP",
+    "legal_address": "EGRULInfo/address",
+    "email": "contactEMail",
+    "phone": "contactPhone"
+  },
+  "links_documentation": {
+    "printFormInfo": {
+      "xpath": ".//printForm",
+      "document_links": "url",
+      "default_file_name": "Информация о контракте",
+      "first_only": true
+    },
+    "attachmentInfo": {
+      "xpath": ".//attachment",
+      "file_name": "fileName",
+      "document_links": "url"
+    }
+  }
+}

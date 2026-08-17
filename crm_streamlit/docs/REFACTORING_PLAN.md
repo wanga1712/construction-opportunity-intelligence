@@ -13,15 +13,17 @@
 
 ## CURRENT WIP — 2026-08-17
 
-**CRM-V3-PRODUCTION-RECOVERY-EXPERT-CALIBRATION-AND-DOCUMENT-LEARNING-BASELINE-1** — `[~]` **PHASE 2–3 CODE COMPLETE / PHASE 1 UI FROZEN**. Operator accepted Phase 1 nested procurement view as the last working look. Do not merge to `main` any commit that changes that appearance.
+**PROJECT-EIS-END-TO-END-SOURCE-AND-24H-SLA-RECONCILIATION-1** — `[~]` source reconciliation + observability + 24h SLA benchmark. Not an optimization WIP. Not a CRM card redesign. S7 forward and S13 backfill kept as separate trees. Qwen/docs not started. Reports: `docs/reports/eis_reconciliation/`.
+
+Prior (closed): **CRM-V3-PRODUCTION-RECOVERY-EXPERT-CALIBRATION-AND-DOCUMENT-LEARNING-BASELINE-1** — `[x]` **PASS**. GitHub `main` fast-forwarded `cfeaf156` → `50f5c844` (no merge commit, no force). Phase 1 UI frozen. SAVE+NEXT production smoke PASS. Document-observation DDL present. Qwen timer/service inactive at close; document workers inactive; procurement sync active.
 
 **Phase 1** — `[x]` accepted. Nested pills `Предварительно ИИ` / `✓ Подтверждено`; stage tabs Лиды / Подготовка к торгам / Идут торги / Комиссия / На рассмотрении / Разыгранные.
 
-**Phase 2** — `[x]` workbench queue. SAVE+NEXT now consumes `annotation_go_next` / `annotation_go_next_from` and rotates the current filtered card to the front without new tabs or labels. CORRECT fast path gained the existing full-form `Сохранить и следующая →` button only. MODEL RAW still read-only. Tests: `tests/test_annotation_queue.py`, extended `tests/test_expert_annotation_ui.py`. 29 targeted tests PASS. No production 5-card live annotation run.
+**Phase 2** — `[x]` workbench queue. SAVE+NEXT now consumes `annotation_go_next` / `annotation_go_next_from` and rotates the current filtered card to the front without new tabs or labels. CORRECT fast path gained the existing full-form `Сохранить и следующая →` button only. MODEL RAW still read-only. Tests: `tests/test_annotation_queue.py`, extended `tests/test_expert_annotation_ui.py`. 29 targeted tests PASS. Live SAVE+NEXT on 5 previously unannotated procurements PASS.
 
 **Phase 3** — `[x]` document learning contract. Outcome labels are factual processing results (`USEFUL_COMMERCIAL_EVIDENCE`, `PARSED_NO_COMMERCIAL_EVIDENCE`, `DOWNLOAD_FAILED`, `PARSE_FAILED`, `UNSUPPORTED_FORMAT`, `EMPTY_DOCUMENT`, `DUPLICATE_DOCUMENT`, `UNOBSERVED`); failures are not collapsed into no-evidence. `calibration_truth` is TRUE only for `EXHAUSTIVE` and `RANDOM_EXPLORATION`; `MODEL_SELECTED` and `HISTORICAL_FILTERED` are FALSE even if a caller passes True. Class stats aggregate by source `source_document_type` when present, otherwise retain title/extension/mime signals without inventing a class. Wilson interval: 1/1 is not 100%. Flag `CRM_V3_EXHAUSTIVE_DOCUMENT_DISCOVERY` default off. Automatic skip forbidden. Workers not started.
 
-**Phase 4** — `[x]` DDL applied on S13 `crm` via `sudo -n -u postgres psql`. Table/indexes/constraints/grants verified. Phase 2–3 runtime deployed to `/opt/CRM_Streamlit`; `crm-streamlit` restarted; Qwen/docs not started. Live SAVE+NEXT on 5 previously unannotated procurements: reload OK, MODEL RAW hashes unchanged, queue advances, no wrap at end. GitHub `main` not merged.
+**Phase 4** — `[x]` DDL applied on S13 `crm` via `sudo -n -u postgres psql`. Table/indexes/constraints/grants verified. Phase 2–3 runtime deployed to `/opt/CRM_Streamlit`; `crm-streamlit` restarted; Qwen/docs not started. Live SAVE+NEXT on 5 previously unannotated procurements: reload OK, MODEL RAW hashes unchanged, queue advances, no wrap at end. GitHub `main` = `50f5c844`.
 
 Size notes: `tabs.py` 791 lines — accepted Phase 1 workspace plus three `bind_and_advance` call sites; queue logic lives in `annotation_queue.py` (67). `card_tabs_ai_expert_form.py` 816 — still one stateful Streamlit form; SAVE+NEXT on CORRECT is a second existing button, not a split.
 

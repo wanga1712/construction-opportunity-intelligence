@@ -1,0 +1,14 @@
+{
+  "reestr_contract": {
+    "contract_number": "contractData/purchaseNoticeInfo/purchaseNoticeNumber",
+    "delivery_start_date": "contractData/startExecutionDate",
+    "delivery_end_date": "contractData/endExecutionDate",
+    "final_price": "contractData/price"
+  },
+  "contractor": {
+    "short_name": "contractData/supplierInfo/shortName",
+    "full_name": "contractData/supplierInfo/name",
+    "inn": "contractData/supplierInfo/inn",
+    "kpp": "contractData/supplierInfo/kpp"
+  }
+}

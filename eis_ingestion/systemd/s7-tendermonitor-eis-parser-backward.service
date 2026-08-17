@@ -1,0 +1,30 @@
+# Factual copy of S7 /etc/systemd/system/tendermonitor-eis-parser-backward.service
+# Observed 2026-08-17: disabled/inactive on S7. Forward contour owns current dates.
+# Environment values below are paths/mode flags, not credentials.
+
+[Unit]
+Description=TenderMonitor - EIS parser BACKWARD catchup (avoids today/yesterday owned by main)
+After=network.target postgresql.service
+
+[Service]
+Type=simple
+User=tendermonitor
+WorkingDirectory=/opt/tendermonitor
+Environment=PATH=/opt/tendermonitor/venv/bin
+Environment=TENDERMONITOR_CONFIG=/opt/tendermonitor/backward/config.ini
+Environment=TENDERMONITOR_PROCESSED_DATES=/opt/tendermonitor/backward/processed_dates.json
+Environment=TENDERMONITOR_REGION_PROGRESS=/opt/tendermonitor/backward/region_progress.json
+Environment=TENDERMONITOR_LOG_DIR=/opt/tendermonitor/backward
+Environment=TENDERMONITOR_DIRECTION=backward
+Environment=TENDERMONITOR_STOP_BEFORE=2026-04-01
+ExecStart=/opt/tendermonitor/venv/bin/python /opt/tendermonitor/main.py
+Restart=on-failure
+RestartSec=30
+Nice=10
+CPUWeight=100
+IOWeight=100
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target

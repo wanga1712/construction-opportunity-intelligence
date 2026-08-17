@@ -1,0 +1,21 @@
+# Factual copy of S7 /etc/systemd/system/tendermonitor-eis-parser.service
+# Host: S7 (S7). Service user: tendermonitor.
+# Do not treat this unit as an S13 unit.
+
+[Unit]
+Description=TenderMonitor - Парсер закупок ЕИС
+After=network.target postgresql.service
+
+[Service]
+Type=simple
+User=tendermonitor
+WorkingDirectory=/opt/tendermonitor
+Environment="PATH=/opt/tendermonitor/venv/bin"
+ExecStart=/opt/tendermonitor/venv/bin/python /opt/tendermonitor/main.py
+Restart=on-failure
+RestartSec=10
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target

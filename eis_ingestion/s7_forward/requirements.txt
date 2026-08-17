@@ -1,0 +1,24 @@
+# Основные зависимости для проекта TenderMonitor
+
+# HTTP запросы
+requests>=2.31.0
+
+# Работа с базами данных
+psycopg2-binary>=2.9.9
+
+# Работа с XML
+lxml>=4.9.3
+
+# Работа с конфигурационными файлами
+python-dotenv>=1.0.0
+configparser>=6.0.0
+
+# Логирование
+loguru>=0.7.2
+
+# Утилиты
+python-dateutil>=2.8.2
+
+# Progress bars
+rich>=13.7.0
+

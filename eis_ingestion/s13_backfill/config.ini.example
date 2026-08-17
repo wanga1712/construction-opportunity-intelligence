@@ -1,0 +1,46 @@
+# Non-secret contract for /opt/tendermonitor/config.ini
+# S13 active backfill uses TENDERMONITOR_CONFIG=/opt/tendermonitor/backward/config.ini
+# Copy to that path (or config.ini) and fill runtime values. Never commit a filled copy.
+
+[stunnel]
+stunnel_dir =
+config_file =
+
+[path]
+env_file =
+reest_new_contract_archive_44_fz_xml =
+recouped_contract_archive_44_fz_xml =
+reest_new_contract_archive_223_fz_xml =
+recouped_contract_archive_223_fz_xml =
+unziped_xml_files =
+
+[eis]
+date =
+subsystems_44 = PRIZ,RGK
+subsystems_223 = RI223,RD223
+documentType44_PRIZ = epNotificationEZK2020,epNotificationEF2020,epNotificationEZT2020,epNotificationEOK2020
+documentType44_RGK = contract
+documentType223_RI223 = purchaseNotice,purchaseNoticeOK,purchaseNoticeOA,purchaseNoticeAE,purchaseNoticeAE94FZ,purchaseNoticeAESMBO,purchaseNoticeZPESMBO
+documentType223_RD223 = contractCutted,performanceContract
+
+[tags]
+get_tags_44_new = required_tags/required_tags_44_fz.json
+get_tags_44_recouped = required_tags/required_tags_44_fz_recouped.json
+get_tags_223_new = required_tags/required_tags_223_fz.json
+get_tags_223_recouped = required_tags/required_tags_223_fz_recouped.json
+get_tags_615_new = required_tags/required_tags_615_pp.json
+
+[eis_615]
+enabled = true
+subsystem = RD615
+regions =
+documenttypes =
+archive_xml =
+recouped_xml =
+hydro_keywords =
+hydro_filter_strict =
+
+[runtime]
+direction = backward
+stop_before_date =
+role = backward-catchup

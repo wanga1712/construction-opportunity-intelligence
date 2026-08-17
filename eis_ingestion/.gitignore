@@ -1,0 +1,12 @@
+# Runtime / secrets — never commit filled copies
+config.ini
+.env
+database_work/db_credintials.env
+processed_dates.json
+region_progress.json
+debug.log
+errors.log
+*.tgz
+__pycache__/
+venv/
+.venv/

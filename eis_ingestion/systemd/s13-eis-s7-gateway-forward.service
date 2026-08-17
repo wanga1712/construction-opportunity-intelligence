@@ -1,0 +1,16 @@
+# Factual copy of S13 /etc/systemd/system/eis-s7-gateway-forward.service
+# Forwards S13 localhost:8080 to S7 EIS stunnel gateway S7:8080.
+
+[Unit]
+Description=Forward localhost:8080 to S7 EIS stunnel gateway (S7:8080)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+ExecStart=/usr/bin/socat TCP-LISTEN:8080,bind=127.0.0.1,reuseaddr,fork TCP:${S7_EIS_GATEWAY_HOST}:8080
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

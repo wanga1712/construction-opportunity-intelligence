@@ -1,0 +1,56 @@
+{
+  "reestr_contract": {
+    "contract_number": "commonInfo/regNum",
+    "tender_link": "commonInfo/href",
+    "auction_name": "purchaseSubjectInfo/name",
+    "start_date": "financesInfo/stagesInfo/stageInfo/startDate",
+    "end_date": "financesInfo/stagesInfo/stageInfo/endDate",
+    "delivery_start_date": "financesInfo/stagesInfo/stageInfo/startDate",
+    "delivery_end_date": "financesInfo/stagesInfo/stageInfo/endDate",
+    "initial_price": "financesInfo/price",
+    "final_price": "financesInfo/price",
+    "customer": "customerInfo/fullName",
+    "delivery_region": "kladr/fullName",
+    "delivery_address": "kladrPlace/deliveryPlace"
+  },
+  "work_kind": {
+    "work_kind_code": "purchaseSubjectInfo/code",
+    "work_kind_name": "purchaseSubjectInfo/name"
+  },
+  "trading_platform": {
+    "trading_platform_name": "ETP/name",
+    "trading_platform_url": "ETP/url"
+  },
+  "customer": {
+    "customer_short_name": "customerInfo/shortName",
+    "customer_full_name": "customerInfo/fullName",
+    "customer_inn": "customerInfo/INN",
+    "customer_kpp": "customerInfo/KPP",
+    "customer_legal_address": "customerInfo/orgFactAddress",
+    "customer_actual_address": "customerInfo/orgFactAddress",
+    "contact_email": "customerInfo/eMail",
+    "contact_phone": "customerInfo/phone"
+  },
+  "contractor": {
+    "short_name": "legalEntityRFInfo/shortName",
+    "full_name": "legalEntityRFInfo/fullName",
+    "inn": "legalEntityRFInfo/INN",
+    "kpp": "legalEntityRFInfo/KPP",
+    "legal_address": "legalEntityRFInfo/orgFactAddress",
+    "email": "legalEntityRFInfo/eMail",
+    "phone": "legalEntityRFInfo/phone"
+  },
+  "links_documentation": {
+    "printFormInfo": {
+      "xpath": ".//printFormInfo",
+      "document_links": "url",
+      "default_file_name": "Печатная форма договора 615-ПП",
+      "first_only": true
+    },
+    "attachmentInfo": {
+      "xpath": ".//attachmentInfo",
+      "file_name": "fileName",
+      "document_links": "url"
+    }
+  }
+}
