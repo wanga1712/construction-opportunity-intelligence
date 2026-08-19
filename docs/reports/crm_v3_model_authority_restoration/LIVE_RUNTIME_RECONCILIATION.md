@@ -16,7 +16,7 @@ Date: 2026-08-19 (UTC)
 ## Snapshot
 
 LIVE_RUNTIME_SNAPSHOT_CREATED=YES
-Archive (outside repo): `C:\Users\Lenovo\Projects\_s13_runtime_snapshot_phase35\20260819T193630Z`
+Archive (outside repo): `<HOME>/Projects/_s13_runtime_snapshot_phase35/20260819T193630Z`
 
 | Metric | Count |
 |---|---|
