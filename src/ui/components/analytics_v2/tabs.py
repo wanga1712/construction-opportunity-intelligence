@@ -44,12 +44,25 @@ def _get_category_filter(stage: str) -> tuple[str, dict]:
 
 
 def _load_torgi() -> list[dict]:
-    """Только submission_open и ещё не истёкшие."""
+    """Open torgi procurements that pass V3 publication contract (fail-closed)."""
     try:
         import psycopg2
         from psycopg2.extras import RealDictCursor
 
+        from src.services.db_bootstrap import connect_databases
+        from src.services.torgi_publication import (
+            publication_schema_ready,
+            torgi_publication_sql_filters,
+        )
+
+        _, _, crm_db, _ = connect_databases()
+        if not publication_schema_ready(crm_db):
+            log = __import__("logging").getLogger(__name__)
+            log.warning("torgi publication schema not ready — fail-closed empty feed")
+            return []
+
         cat_sql, cat_params = _get_category_filter("torgi")
+        pub_sql = torgi_publication_sql_filters()
 
         conn = psycopg2.connect(**_pg())
         with conn.cursor(cursor_factory=RealDictCursor) as cur:
@@ -83,6 +96,7 @@ def _load_torgi() -> list[dict]:
                 WHERE cp.crm_stage = 'torgi'
                   AND cp.award_status = 'submission_open'
                   AND cp.end_date >= CURRENT_DATE
+                  {pub_sql}
                   AND ({cat_sql})
                 ORDER BY cp.end_date ASC, cp.match_score DESC
                 LIMIT 500
