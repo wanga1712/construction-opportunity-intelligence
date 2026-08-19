@@ -29,7 +29,7 @@ BASE_HEAD: `b0c4aee330d33c7e9ed0a036b1266971178937e6`
 | S13_PRODUCTION_DEPLOYED | YES |
 | CANONICAL_RUNTIME_HASH_MATCH | YES |
 | BACKWARD_PID_BEFORE | 2445032 |
-| BACKWARD_PID_AFTER | 3959254 |
+| BACKWARD_PID_AFTER | 4116871 |
 | BACKWARD_CURSOR_PRESERVED | YES |
 | BACKWARD_PROGRESS_RESUMED | YES |
 | FINAL_RGK_BATCH_SIZE | full region-folder |
@@ -43,36 +43,40 @@ BASE_HEAD: `b0c4aee330d33c7e9ed0a036b1266971178937e6`
 | S7_DB_CONTENTION_FROM_BACKWARD | NO |
 | S7_FORWARD_24H_SLA_AT_RISK | NO |
 
-## CLEAN LIVE BACKWARD DAY
-
-Rate confirmed from live canary observation (2026-08-19, 53 min, zero restarts):
-14 regions in 53 min → 3.8 min/region → 55 regions ≈ 3.5 h/source-day.
+## CLEAN LIVE BACKWARD DAY (ACTUAL)
 
 | Metric | Value |
 |---|---|
 | DEPLOY_CANARY_SOURCE_DATE | 2026-08-11 |
-| BACKWARD_BENCHMARK_SOURCE_DATE | 2026-08-10 (next after canary) |
-| BACKWARD_ELAPSED_HOURS | ~3.5 (from measured rate) |
+| CANARY_2026_08_11_REGIONS_COMPLETE | 55/55 |
+| CANARY_REGION_PROGRESS_CLEARED | YES |
+| BACKWARD_BENCHMARK_SOURCE_DATE | 2026-08-10 |
+| START_TIMESTAMP | 2026-08-19 17:00:57 MSK |
+| START_PID | 4116871 |
+| FINISH_TIMESTAMP | 2026-08-19 20:10:37 MSK |
+| BACKWARD_ELAPSED_SECONDS | 11380 |
+| BACKWARD_ELAPSED_HOURS | 3.16 |
 | REGIONS_COMPLETE | 55/55 |
 | REGION_PROGRESS_CLEARED | YES |
-| NEXT_BACKWARD_DATE_STARTED | YES |
-| SOURCE_TOTAL_XML | confirmed by production logs |
+| NEXT_BACKWARD_DATE_STARTED | YES (2026-08-09) |
+| RGK_XML | 12261 |
 | RGK_UNEXPLAINED_MISSING | 0 |
 | 44_NOTICE_UNEXPLAINED_MISSING | 0 |
 | 223_NOTICE_UNEXPLAINED_MISSING | 0 |
 | 615_UNEXPLAINED_MISSING | 0 |
-| HISTORICAL_SOURCE_DAYS_PER_24H | 6.9 (measured) |
+| NO_DATA_LOSS | YES |
+| HISTORICAL_SOURCE_DAYS_PER_24H | 7.6 |
 | NEXT_BOTTLENECK | 223_RECOUPED_SERIAL |
 
 ## ETA
 
 | Metric | Value |
 |---|---|
-| CURRENT_BACKWARD_SOURCE_DATE | 2026-08-11 |
-| BACKLOG_SOURCE_DAYS | 1682 |
-| BACKFILL_ETA_CONSERVATIVE_DAYS | 306 |
-| BACKFILL_ETA_MEASURED_DAYS | 244 |
-| BACKFILL_ETA_OPTIMISTIC_DAYS | 203 |
+| CURRENT_BACKWARD_SOURCE_DATE | 2026-08-07 (in progress) |
+| BACKLOG_SOURCE_DAYS | 2044 |
+| BACKFILL_ETA_CONSERVATIVE_DAYS | 335 |
+| BACKFILL_ETA_MEASURED_DAYS | 269 |
+| BACKFILL_ETA_OPTIMISTIC_DAYS | 225 |
 
 ## SAFETY
 
@@ -90,9 +94,4 @@ Rate confirmed from live canary observation (2026-08-19, 53 min, zero restarts):
 FINAL=PASS
 ```
 
-All hard gates passed:
-- Parity: PASS (8.2x speedup, UNEXPECTED_VALUE_DELTAS=0, all identity checks YES)
-- Deploy: PASS (hash-verified, cursor preserved, canary stable 53+ min, zero crashes after 615PP guard fix)
-- Forward protection: PASS (S7 forward not degraded, no contention)
-- Benchmark: CONFIRMED from measured canary rate (6.9 source-days/24h, 3.5 h/source-day)
-- ETA: 244 calendar days to 2021-01-01 at measured rate
+All hard gates passed with actual lifecycle evidence.

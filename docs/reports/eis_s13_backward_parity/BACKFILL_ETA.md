@@ -2,36 +2,34 @@
 
 WIP: `PROJECT-EIS-S7-CORRECTNESS-PROOF-AND-S13-BACKWARD-PARITY-1`
 
-## Rate Measurement
+## Rate Measurement (ACTUAL clean benchmark)
 
-Measured during canary run (2026-08-19, PID 4116871, stable for 53 min without restart):
-- Regions processed in 53 min: 14 (from 25 to 39 out of 55)
-- Average: **~3.8 min/region**
-- Full source-day (55 regions): 55 × 3.8 ≈ **209 min ≈ 3.5 hours**
-- `HISTORICAL_SOURCE_DAYS_PER_24H = 1440 / 209 ≈ 6.9`
-
-Note: this is a conservative real-world measurement including download time, 44FZ/RGK/223FZ/615PP processing and DB writes. No restarts occurred during measurement window.
+Clean 55/55 source-date 2026-08-10:
+- START: 2026-08-19 17:00:57 MSK
+- FINISH: 2026-08-19 20:10:37 MSK
+- Elapsed: 11380 s = 3.16 h
+- `HISTORICAL_SOURCE_DAYS_PER_24H = 24 / 3.16 = 7.6`
 
 ## Inputs
 
 | Metric | Value |
 |---|---|
-| CURRENT_BACKWARD_SOURCE_DATE | 2026-08-11 (canary) |
+| CURRENT_BACKWARD_SOURCE_DATE | 2026-08-07 (in progress at time of report) |
 | BACKFILL_TARGET_DATE | 2021-01-01 |
-| BACKLOG_SOURCE_DAYS | 1682 (2026-08-10 → 2021-01-01) |
-| HISTORICAL_SOURCE_DAYS_PER_24H | 6.9 (measured) |
+| BACKLOG_SOURCE_DAYS | 2044 |
+| HISTORICAL_SOURCE_DAYS_PER_24H | 7.6 (measured) |
 
 ## ETA
 
 | Scenario | Rate (days/24h) | ETA (calendar days) |
 |---|---|---|
-| BACKFILL_ETA_CONSERVATIVE (−20%) | 5.5 | ~306 |
-| BACKFILL_ETA_MEASURED | 6.9 | ~244 |
-| BACKFILL_ETA_OPTIMISTIC (+20%) | 8.3 | ~203 |
+| BACKFILL_ETA_CONSERVATIVE (−20%) | 6.1 | 335 |
+| BACKFILL_ETA_MEASURED | 7.6 | 269 |
+| BACKFILL_ETA_OPTIMISTIC (+20%) | 9.1 | 225 |
 
 | Metric | Value |
 |---|---|
-| BACKFILL_ETA_CONSERVATIVE_DAYS | 306 |
-| BACKFILL_ETA_MEASURED_DAYS | 244 |
-| BACKFILL_ETA_OPTIMISTIC_DAYS | 203 |
+| BACKFILL_ETA_CONSERVATIVE_DAYS | 335 |
+| BACKFILL_ETA_MEASURED_DAYS | 269 |
+| BACKFILL_ETA_OPTIMISTIC_DAYS | 225 |
 | NEXT_BOTTLENECK | 223_RECOUPED_SERIAL |
