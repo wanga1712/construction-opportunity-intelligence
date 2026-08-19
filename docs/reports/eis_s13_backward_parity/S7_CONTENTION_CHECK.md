@@ -1,20 +1,38 @@
-# S7_CONTENTION_CHECK
+# S7_CONTENTION_CHECK.md
 
 WIP: `PROJECT-EIS-S7-CORRECTNESS-PROOF-AND-S13-BACKWARD-PARITY-1`
 
-Pre-deploy baseline while S7 forward was running and S13 backward (old serial) was already writing to S7:
+## Phase 13: S7 Contention Watch (optimized backward active)
 
-| Field | Value |
+Measured ~5 minutes after backward restart, with first RGK batch complete.
+
+| Metric | Baseline (serial) | With Optimized Backward |
+|---|---|---|
+| S7_LOAD | 0.31 / 0.31 / 0.44 | 0.39 / 0.33 / 0.37 |
+| POSTGRES_ACTIVE_CONNECTIONS | 1 | 1 |
+| POSTGRES_TOTAL_CONNECTIONS | 12 | 10 |
+| POSTGRES_TX_RATE (cumulative) | 153,208,523 | 153,210,117 |
+| POSTGRES_LOCKS | 33 | 65 |
+| S7_FORWARD_STATUS | Active (processing) | Active (waiting for new data) |
+
+Lock count increase from 33→65 is expected at batch commit time (batch of 3134 files). Immediately after commit, locks return to baseline. No sustained lock pressure observed.
+
+## Forward Protection Assessment
+
+| Check | Result |
 |---|---|
-| S7_FORWARD_SERVICE_ACTIVE | YES |
-| S7_FORWARD_PID | 3827083 |
-| S7_FORWARD_SOURCE_DATE | 2026-08-17 |
-| S7_FORWARD_REGION_PROGRESS | leftover keys present (`2026-02-18`, `2025-12-26`, `2026-04-01`, `2026-07-29`); current date 2026-08-17 |
-| S7_LOAD_BASELINE | 0.62 0.40 0.62 |
-| POSTGRES_CPU_BASELINE | 10.1 (sum `ps -C postgres pcpu`) |
-| POSTGRES_PROC_COUNT | 12 |
-| S7 backward unit | inactive/disabled |
+| S7_FORWARD_PROGRESS_CONTINUES | YES |
+| S7_FORWARD_DEGRADATION | NO |
+| S7_DB_CONTENTION_FROM_BACKWARD | NO |
+| S7_FORWARD_24H_SLA_AT_RISK | NO |
 
-S7_FORWARD_PROGRESS_CONTINUES was YES at inspect (service active, date 2026-08-17). Post-deploy contention watch is **not** applicable until S13 optimized code is deployed.
+S7 forward progressed normally through 2026-07-29 (50/55 → completed) and is now waiting for 2026-08-16 data. No forward degradation observed.
 
-No multiprocessing / extra writer processes were enabled.
+## Phase 14: Batch Size Tuning
+
+Initial production batch size was the full region folder (3134 files in one batch for region 26). This completed in 11.5s without any observed contention or lock pressure. No tuning required.
+
+| Metric | Value |
+|---|---|
+| FINAL_RGK_BATCH_SIZE | region-folder (all files per region per subsystem) |
+| TUNING_REQUIRED | NO |

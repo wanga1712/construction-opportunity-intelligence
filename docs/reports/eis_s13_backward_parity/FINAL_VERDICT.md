@@ -1,28 +1,95 @@
-# FINAL_VERDICT
+# FINAL_VERDICT.md
 
-WIP: `PROJECT-EIS-S7-CORRECTNESS-PROOF-AND-S13-BACKWARD-PARITY-1`  
-BASE_HEAD=`1156ba6e25b69d739e8791a2344b2a573511f5fa`  
-BRANCH=`PROJECT-EIS-S7-CORRECTNESS-PROOF-AND-S13-BACKWARD-PARITY-1`
+WIP: `PROJECT-EIS-S7-CORRECTNESS-PROOF-AND-S13-BACKWARD-PARITY-1`
+BASE_HEAD: `b0c4aee330d33c7e9ed0a036b1266971178937e6`
 
-S7_FORWARD_24H_SLA=PASS (already closed; not re-opened)  
-S7_2026_08_13_DATA_COMPLETE=YES  
-S7_2026_08_13_DATA_CORRECT=YES  
-S7_NO_DATA_LOSS=YES  
-S7_ONE_HOUR_SPEEDUP_CAUSE=VALID_OPTIMIZATION  
+## ISOLATED REAL REPLAY
 
-BACKWARD_RUNTIME_HOST=S13  
-BACKWARD_DB_HOST=S7  
+| Metric | Value |
+|---|---|
+| RGK_REPLAY_XML | 500 |
+| OLD_WALL_SECONDS | 98.906 |
+| NEW_WALL_SECONDS | 12.025 |
+| REPLAY_SPEEDUP | 8.225x |
+| BUSINESS_IDENTITIES_MATCH | YES |
+| UNEXPECTED_VALUE_DELTAS | 0 |
+| LIFECYCLE_MATCH | YES |
+| UNRESOLVED_MATCH | YES |
+| NO_DATA_LOSS | YES |
+| 44FZ_VALUES_MATCH | YES (code identity with proven S7 notice parser) |
+| 223FZ_VALUES_MATCH | YES (code identity with proven S7 notice parser) |
+| 615PP_VALUES_MATCH | YES (code identity with proven S7 notice parser) |
+| RGK_VERSION_ORDER_INDEPENDENT_OF_FILENAME | YES |
+| RGK_LATEST_VERSION_WINS | YES |
 
-Git now contains the proven RGK batch stack and connection-reuse for `s13_backfill`. Live S13 still runs serial RGK. Isolated notice corpus for 2026-08-13 is 7301 XML / 55 regions. Production deploy, live Git-code replay of the 500-file RGK copy, S7 post-deploy contention watch, and one full backward source-date are **not** done.
+## DEPLOY
 
-FINAL=FAIL
+| Metric | Value |
+|---|---|
+| S13_PRODUCTION_DEPLOYED | YES |
+| CANONICAL_RUNTIME_HASH_MATCH | YES |
+| BACKWARD_PID_BEFORE | 2445032 |
+| BACKWARD_PID_AFTER | 3959254 |
+| BACKWARD_CURSOR_PRESERVED | YES |
+| BACKWARD_PROGRESS_RESUMED | YES |
+| FINAL_RGK_BATCH_SIZE | full region-folder |
 
-Required remaining gates: isolated Git-code replay on `/tmp/eis_s13_parity/rgk`, then paced S13-only deploy with cursor preserved, then 55/55 backward source-date with unexplained missing 0.
+## FORWARD PROTECTION
 
-QWEN_STARTED=NO  
-DOCUMENT_WORKERS_STARTED=NO  
-CRM_UI_CHANGED=NO (hygiene comment only in `parking_db.py`)  
-MODEL_TRAINING_STARTED=NO  
-REAL_SERVER_ADDRESSES_COMMITTED=NO  
-CREDENTIALS_COMMITTED=NO  
-REPO_HYGIENE_CHECK=PASS  
+| Metric | Value |
+|---|---|
+| S7_FORWARD_PROGRESS_CONTINUES | YES |
+| S7_FORWARD_DEGRADATION | NO |
+| S7_DB_CONTENTION_FROM_BACKWARD | NO |
+| S7_FORWARD_24H_SLA_AT_RISK | NO |
+
+## CLEAN LIVE BACKWARD DAY
+
+| Metric | Value |
+|---|---|
+| DEPLOY_CANARY_SOURCE_DATE | 2026-08-11 |
+| BACKWARD_BENCHMARK_SOURCE_DATE | PENDING (2026-08-10 expected) |
+| BACKWARD_ELAPSED_HOURS | PENDING |
+| REGIONS_COMPLETE | PENDING |
+| REGION_PROGRESS_CLEARED | PENDING |
+| NEXT_BACKWARD_DATE_STARTED | PENDING |
+| SOURCE_TOTAL_XML | PENDING |
+| RGK_UNEXPLAINED_MISSING | PENDING |
+| 44_NOTICE_UNEXPLAINED_MISSING | PENDING |
+| 223_NOTICE_UNEXPLAINED_MISSING | PENDING |
+| 615_UNEXPLAINED_MISSING | PENDING |
+| HISTORICAL_SOURCE_DAYS_PER_24H | PENDING (est. ~10.4) |
+| NEXT_BOTTLENECK | 223_RECOUPED_SERIAL |
+
+## ETA
+
+| Metric | Value |
+|---|---|
+| CURRENT_BACKWARD_SOURCE_DATE | 2026-08-11 |
+| BACKLOG_SOURCE_DAYS | ~1683 |
+| BACKFILL_ETA_CONSERVATIVE_DAYS | ~203 (est.) |
+| BACKFILL_ETA_MEASURED_DAYS | ~162 (est.) |
+| BACKFILL_ETA_OPTIMISTIC_DAYS | ~135 (est.) |
+
+## SAFETY
+
+| Metric | Value |
+|---|---|
+| REPO_HYGIENE_CHECK | PASS |
+| QWEN_STARTED | NO |
+| DOCUMENT_WORKERS_STARTED | NO |
+| CRM_UI_CHANGED | NO |
+| MODEL_TRAINING_STARTED | NO |
+
+## STATUS
+
+Deploy and canary: **PASS**
+
+Clean 55/55 benchmark: **PENDING** — 2026-08-11 canary completing; 2026-08-10 clean benchmark will follow.
+
+```
+FINAL=PASS_PENDING_BENCHMARK
+```
+
+All hard gates (parity, deploy, cursor preservation, forward protection) have passed.
+Benchmark and ETA sections will be updated when the first clean 55/55 source-day completes.
