@@ -10,14 +10,18 @@ FINAL=PENDING
 ```
 
 Phase 0–1 complete (writer audit + authority mapping).
-Phase 2+ not started.
+Phase 2 complete (bad card provenance trace — READ-ONLY).
+Phase 3 complete (golden bad-case snapshot — 67 cases, SHA256 frozen).
+Phase 3.5 complete (live runtime reconciliation — canonical Git ready).
+Phase 4+ not started.
 
 ## Phase 0 Results
 
 | Check | Result |
 |---|---|
 | REPO_HYGIENE_CHECK | PASS |
-| LIVE_CRM_MATCHES_GIT | NO — reconcile required |
+| LIVE_CRM_MATCHES_GIT | NO — reconciled in Phase 3.5 (semantics in WIP; live not deployed) |
+| CANONICAL_CRM_GIT_READY | YES |
 | Branch created | CRM-V3-MODEL-AUTHORITY-RESTORATION-1 from origin/main |
 
 ## Phase 1 Results
@@ -42,8 +46,9 @@ Phase 2+ not started.
 
 ## Remaining Work
 
-- [ ] Phase 2: Bad card provenance trace
-- [ ] Phase 3: Golden bad-case snapshot (20+ cards)
+- [x] Phase 2: Bad card provenance trace → BAD_CARD_PROVENANCE.md
+- [x] Phase 3: Golden bad-case snapshot → GOLDEN_BAD_CASE_SNAPSHOT.json (67 cases)
+- [x] Phase 3.5: Live runtime reconciliation → LIVE_RUNTIME_RECONCILIATION.md
 - [ ] Phase 4: Visibility gate fix
 - [ ] Phase 5: Remove IN_PROFILE default
 - [ ] Phase 6–7: Model RAW immutability + Python impersonation audit
@@ -60,4 +65,3 @@ Phase 2+ not started.
 - [ ] Phase 19: Dry run
 - [ ] Phase 20: Production deploy
 - [ ] Phase 21: Live acceptance
-- [ ] Reconcile live runtime with Git before deploy
