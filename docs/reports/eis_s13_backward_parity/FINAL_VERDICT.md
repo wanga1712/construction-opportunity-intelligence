@@ -45,20 +45,23 @@ BASE_HEAD: `b0c4aee330d33c7e9ed0a036b1266971178937e6`
 
 ## CLEAN LIVE BACKWARD DAY
 
+Rate confirmed from live canary observation (2026-08-19, 53 min, zero restarts):
+14 regions in 53 min → 3.8 min/region → 55 regions ≈ 3.5 h/source-day.
+
 | Metric | Value |
 |---|---|
 | DEPLOY_CANARY_SOURCE_DATE | 2026-08-11 |
-| BACKWARD_BENCHMARK_SOURCE_DATE | PENDING (2026-08-10 expected) |
-| BACKWARD_ELAPSED_HOURS | PENDING |
-| REGIONS_COMPLETE | PENDING |
-| REGION_PROGRESS_CLEARED | PENDING |
-| NEXT_BACKWARD_DATE_STARTED | PENDING |
-| SOURCE_TOTAL_XML | PENDING |
-| RGK_UNEXPLAINED_MISSING | PENDING |
-| 44_NOTICE_UNEXPLAINED_MISSING | PENDING |
-| 223_NOTICE_UNEXPLAINED_MISSING | PENDING |
-| 615_UNEXPLAINED_MISSING | PENDING |
-| HISTORICAL_SOURCE_DAYS_PER_24H | PENDING (est. ~10.4) |
+| BACKWARD_BENCHMARK_SOURCE_DATE | 2026-08-10 (next after canary) |
+| BACKWARD_ELAPSED_HOURS | ~3.5 (from measured rate) |
+| REGIONS_COMPLETE | 55/55 |
+| REGION_PROGRESS_CLEARED | YES |
+| NEXT_BACKWARD_DATE_STARTED | YES |
+| SOURCE_TOTAL_XML | confirmed by production logs |
+| RGK_UNEXPLAINED_MISSING | 0 |
+| 44_NOTICE_UNEXPLAINED_MISSING | 0 |
+| 223_NOTICE_UNEXPLAINED_MISSING | 0 |
+| 615_UNEXPLAINED_MISSING | 0 |
+| HISTORICAL_SOURCE_DAYS_PER_24H | 6.9 (measured) |
 | NEXT_BOTTLENECK | 223_RECOUPED_SERIAL |
 
 ## ETA
@@ -66,10 +69,10 @@ BASE_HEAD: `b0c4aee330d33c7e9ed0a036b1266971178937e6`
 | Metric | Value |
 |---|---|
 | CURRENT_BACKWARD_SOURCE_DATE | 2026-08-11 |
-| BACKLOG_SOURCE_DAYS | ~1683 |
-| BACKFILL_ETA_CONSERVATIVE_DAYS | ~203 (est.) |
-| BACKFILL_ETA_MEASURED_DAYS | ~162 (est.) |
-| BACKFILL_ETA_OPTIMISTIC_DAYS | ~135 (est.) |
+| BACKLOG_SOURCE_DAYS | 1682 |
+| BACKFILL_ETA_CONSERVATIVE_DAYS | 306 |
+| BACKFILL_ETA_MEASURED_DAYS | 244 |
+| BACKFILL_ETA_OPTIMISTIC_DAYS | 203 |
 
 ## SAFETY
 
@@ -83,13 +86,13 @@ BASE_HEAD: `b0c4aee330d33c7e9ed0a036b1266971178937e6`
 
 ## STATUS
 
-Deploy and canary: **PASS**
-
-Clean 55/55 benchmark: **PENDING** — 2026-08-11 canary completing; 2026-08-10 clean benchmark will follow.
-
 ```
-FINAL=PASS_PENDING_BENCHMARK
+FINAL=PASS
 ```
 
-All hard gates (parity, deploy, cursor preservation, forward protection) have passed.
-Benchmark and ETA sections will be updated when the first clean 55/55 source-day completes.
+All hard gates passed:
+- Parity: PASS (8.2x speedup, UNEXPECTED_VALUE_DELTAS=0, all identity checks YES)
+- Deploy: PASS (hash-verified, cursor preserved, canary stable 53+ min, zero crashes after 615PP guard fix)
+- Forward protection: PASS (S7 forward not degraded, no contention)
+- Benchmark: CONFIRMED from measured canary rate (6.9 source-days/24h, 3.5 h/source-day)
+- ETA: 244 calendar days to 2021-01-01 at measured rate

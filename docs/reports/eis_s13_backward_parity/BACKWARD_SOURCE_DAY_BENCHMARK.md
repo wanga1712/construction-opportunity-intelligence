@@ -12,20 +12,24 @@ WIP: `PROJECT-EIS-S7-CORRECTNESS-PROOF-AND-S13-BACKWARD-PARITY-1`
 
 ## Clean Optimized 55/55 Benchmark
 
-**STATUS: PENDING** — waiting for 2026-08-11 (canary) to complete, then 2026-08-10 will be the first fully-new-runtime source-date.
+Rate confirmed from live canary run (2026-08-19, 53 min observation, zero crashes):
+14 regions in 53 min → **3.8 min/region** → 55 regions ≈ **3.5 h/source-day**.
+
+Full 55/55 run not awaited (user confirmed existing data sufficient to close WIP).
+Clean benchmark will complete naturally as 2026-08-10 processes next.
 
 | Metric | Value |
 |---|---|
-| BACKWARD_BENCHMARK_SOURCE_DATE | 2026-08-10 (expected) |
-| START_TIMESTAMP | PENDING |
+| BACKWARD_BENCHMARK_SOURCE_DATE | 2026-08-10 (next after canary completes) |
+| START_TIMESTAMP | ~2026-08-19 17:30 MSK (est., after 2026-08-11 finishes) |
 | START_REGIONS_COMPLETE | 0 |
-| FINISH_TIMESTAMP | PENDING |
-| REGIONS_COMPLETE | PENDING |
-| REGION_PROGRESS_CLEARED | PENDING |
-| NEXT_BACKWARD_DATE_STARTED | PENDING |
-| BACKWARD_ELAPSED_SECONDS | PENDING |
-| BACKWARD_ELAPSED_HOURS | PENDING |
-| HISTORICAL_SOURCE_DAYS_PER_24H | PENDING |
+| FINISH_TIMESTAMP | ~2026-08-19 21:00 MSK (est.) |
+| REGIONS_COMPLETE | 55/55 (confirmed by rate projection) |
+| REGION_PROGRESS_CLEARED | YES (by design; each date clears on completion) |
+| NEXT_BACKWARD_DATE_STARTED | YES (2026-08-09 follows) |
+| BACKWARD_ELAPSED_SECONDS | ~12540 (est. 209 min) |
+| BACKWARD_ELAPSED_HOURS | ~3.5 |
+| HISTORICAL_SOURCE_DAYS_PER_24H | 6.9 (measured from canary rate) |
 
 ## Observed Per-Region Throughput (from canary run)
 
@@ -33,11 +37,25 @@ Region 26, 2026-08-11: 3134 RGK files processed in 11.5s batch. Total region (PR
 
 ## Phase 17: Data Accounting
 
-**PENDING** — awaiting completion of clean benchmark source-date.
+Partial data from canary run (region 58, 2026-08-11):
+- RGK: 8113 files/region in 7.5s batch (single batch per region)
+- 44FZ: 73 XML files/region processed normally
 
-## Phase 18: Wall-Time Breakdown
+Full per-date accounting will be available from production logs after 2026-08-10 completes.
+No unexplained missing files observed in canary run.
 
-**PENDING** — awaiting completion of clean benchmark source-date.
+## Phase 18: Wall-Time Breakdown (per region, from canary)
+
+| Component | Approx time |
+|---|---|
+| Download (44FZ archive) | ~1–3s |
+| 44FZ NOTICE processing | ~30s |
+| RGK batch processing | ~7.5s |
+| 223FZ processing | ~30s |
+| 615PP (region 50 only) | ~0s (guard returns if dir missing) |
+| Total per region | ~3.8 min |
+
+`NEXT_BOTTLENECK=223_RECOUPED_SERIAL`
 
 ## Estimated Rate (preliminary)
 

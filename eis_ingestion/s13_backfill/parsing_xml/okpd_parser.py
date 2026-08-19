@@ -79,6 +79,9 @@ def process_okpd_files(folder_path, region_code, progress_manager: Optional[Prog
 
 def process_615_files(folder_path, region_code, progress_manager: Optional[ProgressManager] = None):
     """Обработка XML 615-ПП без фильтрации по ОКПД."""
+    if not os.path.isdir(folder_path):
+        # Download may have failed (0 archives); nothing to process.
+        return
     config = load_config()
     allowed = set()
     if config.has_section('eis_615'):
