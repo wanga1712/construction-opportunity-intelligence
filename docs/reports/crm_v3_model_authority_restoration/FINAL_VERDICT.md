@@ -14,7 +14,8 @@ Phase 2 complete (bad card provenance trace — READ-ONLY).
 Phase 3 complete (golden bad-case snapshot — 67 cases, SHA256 frozen).
 Phase 3.5 complete (live runtime reconciliation — canonical Git ready).
 Phase 4 complete (torgi visibility gate deployed; live acceptance PASS).
-Phase 5+ not started.
+Phase 5 complete (business scope fail-closed; live deploy PASS).
+Phase 6+ not started.
 
 ## Phase 0 Results
 
@@ -51,7 +52,7 @@ Phase 5+ not started.
 - [x] Phase 3: Golden bad-case snapshot → GOLDEN_BAD_CASE_SNAPSHOT.json (67 cases)
 - [x] Phase 3.5: Live runtime reconciliation → LIVE_RUNTIME_RECONCILIATION.md
 - [x] Phase 4: Visibility gate fix → VISIBILITY_GATE.md (live deploy)
-- [ ] Phase 5: Remove IN_PROFILE default
+- [x] Phase 5: Remove IN_PROFILE default → BUSINESS_SCOPE_AUTHORITY.md
 - [ ] Phase 6–7: Model RAW immutability + Python impersonation audit
 - [ ] Phase 8: OKPD priors audit
 - [ ] Phase 9: ASSESSED contract validation
