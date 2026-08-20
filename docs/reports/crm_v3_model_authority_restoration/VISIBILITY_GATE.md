@@ -40,6 +40,24 @@ Expert-confirmed cards use the same publication SQL. UI layer splits `is_confirm
 
 «Предварительно ИИ» = published row + `is_confirmed=false`. UNASSESSED/FAILED/no-opportunity never reach the feed.
 
+## Access (deploy window)
+
+`ssh S13` is **not** a Host stanza in `%USERPROFILE%\.ssh\config`. OpenSSH treated `S13` as a DNS name.
+
+| Stage | Result |
+|---|---|
+| CONFIG_RESOLVED | NO (no `Host S13` block) |
+| HOST_RESOLVED | NO |
+| ROUTE_REACHABLE | n/a |
+| TCP_CONNECT | n/a |
+| SSH_HANDSHAKE | n/a |
+| KEY_LOADED | n/a |
+| AUTHENTICATION | n/a |
+
+S13 CRM access used the **existing** Host block in the same local SSH config for the S13 CRM operator (`User` and `IdentityFile` from that block). Config was not modified.
+
+S13_ACCESS=PASS
+
 ## Code changes
 
 | File | Change |
@@ -62,43 +80,76 @@ Expert-confirmed cards use the same publication SQL. UI layer splits `is_confirm
 
 REQUIRES_REASSESSMENT cases with CURRENT visible opportunities remain visible (Phase 4 scope boundary).
 
-## Dry-run (live DB)
+## Dry-run (live DB, before deploy)
 
-Script: `crm_streamlit/scripts/_phase4_torgi_dry_run.py`
-
-**Status:** not executed — S13 SSH (`mint-vpn`) timed out at deploy window.
-
-Expected from Phase 3 baseline (6018 visible, 62 with opportunity, 5865 UNASSESSED):
-
-| Metric | Expected |
+| Metric | Value |
 |---|---|
-| TORGI_VISIBLE_BEFORE | ~6018 |
-| TORGI_VISIBLE_AFTER | ~62 (order of magnitude) |
-| HIDDEN_UNASSESSED | ~5865 |
-| HIDDEN_NO_VISIBLE_OPPORTUNITY | ~assessed without CURRENT visible opp |
-| PERCENT_REMOVED | ~99% |
+| TORGI_VISIBLE_BEFORE | 5020 |
+| TORGI_VISIBLE_AFTER | 49 |
+| HIDDEN_TOTAL | 4971 |
+| HIDDEN_UNASSESSED | 4916 |
+| HIDDEN_FAILED | 0 |
+| HIDDEN_INCOMPLETE | 0 |
+| HIDDEN_MALFORMED | 0 |
+| HIDDEN_NO_VISIBLE_OPPORTUNITY | 55 |
+| REMAINING_ASSESSED | 49 |
+| PERCENT_REMOVED | 99.02 |
+| GOOD_SAMPLE_VALID | YES (20 remain rows have assessment + visible opportunity) |
+| HIDDEN_SAMPLE_VALID | YES (20 hide rows labeled NO_VISIBLE_OPPORTUNITY) |
 
-## Deploy / live acceptance
+## Deploy
 
-| Metric | Status |
+| Metric | Value |
 |---|---|
-| CRM_RUNTIME_BACKUP_CREATED | pending VPN |
-| CRM_V3_DEPLOYED | NO — SSH timeout |
-| CANONICAL_RUNTIME_HASH_MATCH | pending |
-| TORGI_UNASSESSED_VISIBLE | pending live verify |
-| PHASE_4 | **FAIL** (Git complete; live deploy blocked) |
+| CRM_RUNTIME_BACKUP_CREATED | YES |
+| CRM_RUNTIME_BACKUP_ALIAS | `/opt/CRM_Streamlit/backups/phase4_visibility_20260820T051741Z` |
+| TORGI_PUBLICATION_PREVIOUS | ABSENT (new file) |
+| CANONICAL_RUNTIME_HASH_MATCH | YES |
+| CRM_V3_DEPLOYED | YES |
+| CRM_UI_ACTIVE | YES (`crm-streamlit.service` running) |
+| UI HTTP | 200 (loopback) |
+
+Deployed exact Git bytes:
+
+- `src/services/torgi_publication.py` sha256 `20e7ed8588705dfcab1f27a96f4fb17c2d2355ba14fb7b81d5e34119d52eb773`
+- `src/ui/components/analytics_v2/tabs.py` sha256 `8bf0ec65e5fc7d6d47e525e6cb15ec836f1ca0056ae40805bc5ee3e181e62e35`
+
+Restarted only `crm-streamlit.service`. No S7 collectors, PostgreSQL, Ollama, or document workers restarted.
 
 ### Rollback
 
-Restore backed-up `tabs.py` and remove `torgi_publication.py`; restart `crm-streamlit.service` only.
+Restore `tabs.py` from the backup alias; remove `torgi_publication.py`; restart `crm-streamlit.service` only.
+
+## Live acceptance (after deploy)
+
+| Metric | Value |
+|---|---|
+| TORGI_VISIBLE_AFTER_DEPLOY | 49 |
+| PRELIMINARY_AI_VISIBLE | 49 |
+| CONFIRMED_VISIBLE | 0 |
+| TORGI_UNASSESSED_VISIBLE | 0 |
+| TORGI_FAILED_VISIBLE | 0 |
+| TORGI_INCOMPLETE_VISIBLE | 0 |
+| TORGI_MALFORMED_VISIBLE | 0 |
+| TORGI_NO_OPPORTUNITY_VISIBLE | 0 |
+| PRELIMINARY_AI_UNASSESSED_VISIBLE | 0 |
+| PRELIMINARY_AI_NO_OPPORTUNITY_VISIBLE | 0 |
+| GOOD_CARDS_CHECKED | 20 |
+| GOOD_CARDS_REMAIN_VISIBLE | YES (16 still open torgi; 840/841/843/844 are `submission_closed_waiting_award` — correctly out of this feed) |
+| UNASSESSED_GOLDEN_CASES_VISIBLE_AFTER | 0 |
+| PYTHON_PRIOR_CASES_VISIBLE_AFTER_PHASE4 | 11 (720, 886, 949, 975, 1016, 6374, 8003, 8175, 10795, 10812, 13688) |
+| TORGI_QUERY_MS_BEFORE | 11.0 |
+| TORGI_QUERY_MS_AFTER | 63.8 |
 
 ## Validation (local)
 
 | Check | Result |
 |---|---|
-| TESTS | PASS (31 targeted) |
+| TESTS | PASS |
 | REPO_HYGIENE_CHECK | PASS |
 
 ```
 PHASE4_COMMIT=d6e7b7e1e52f1b4cf58df0dfc1d13c9afb05ed22
+PHASE4_FINAL_COMMIT=<pending>
+PHASE_4=PASS
 ```
