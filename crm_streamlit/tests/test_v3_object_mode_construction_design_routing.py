@@ -123,9 +123,12 @@ def test_10753_object_mode_blocks_mistaken_nce() -> None:
         allowed_categories=ALLOWED,
     )
     assert out["routing_mode"] == "OBJECT_MODE"
-    assert out.get("empty_hypothesis_status") is None
-    assert out["overall_research_action"] != "SKIP"
-    hyps = out["commercial_category_hypotheses"]
+    # Phase 6B: MODEL empty status stays; business clears mistaken NCE via priors.
+    assert out.get("empty_hypothesis_status") == "NO_COMMERCIAL_ENTRY"
+    assert out.get("business_empty_hypothesis_status") is None
+    assert out.get("business_overall_research_action") != "SKIP"
+    assert out["commercial_category_hypotheses"] == []  # MODEL hyps unchanged (empty)
+    hyps = out.get("business_category_hypotheses") or out.get("contextual_prior_hypotheses") or []
     assert len(hyps) >= 2
     cats = {h["category_code"] for h in hyps}
     assert cats <= ALLOWED
@@ -135,8 +138,9 @@ def test_10753_object_mode_blocks_mistaken_nce() -> None:
         assert h.get("confirmation_required") is True
         assert h.get("opportunity_track") == "EMBEDDED_MATERIAL"
         assert "requires_document_confirmation" in (h.get("reason_codes") or [])
+        assert h.get("provenance") == "CONTEXT_PRIOR"
     assert out.get("DOCUMENT_RESEARCH_REQUIRED") is True
-    assert out.get("document_research_priority")
+    assert out.get("business_document_research_priority") or out.get("document_research_priority")
 
 
 def test_20228_awarded_school_capital_repair_coercion() -> None:
@@ -172,16 +176,21 @@ def test_20228_awarded_school_capital_repair_coercion() -> None:
         allowed_categories=ALLOWED,
     )
     assert out["routing_mode"] == "OBJECT_MODE"
-    assert out["procurement_form"] == "CONSTRUCTION_WORKS"
+    # Phase 6B: MODEL form preserved; coercion lives in business_procurement_form.
+    assert out["procurement_form"] == "DIRECT_GOODS_PURCHASE"
+    assert out.get("business_procurement_form") == "CONSTRUCTION_WORKS"
     assert out.get("post_award_commercial_target") == "WINNER_CONTRACTOR"
     assert "ТРАСТ" in str(out.get("post_award_commercial_target_name") or "").upper()
-    obj = out["object_classification"]
+    # MODEL object_classification may be absent on this raw; business classification holds school.
+    obj = out.get("business_object_classification") or out["object_classification"]
     assert obj["object_sector"] == "SOCIAL_INFRASTRUCTURE"
     assert obj["object_type"] == "SCHOOL"
     assert obj["work_stage"] == "CAPITAL_REPAIR"
-    hyps = out["commercial_category_hypotheses"]
+    hyps = out.get("business_category_hypotheses") or out["commercial_category_hypotheses"]
     assert len(hyps) >= 1
-    assert out["overall_research_action"] == "PRIORITY_DOCS"
+    assert (
+        out.get("business_overall_research_action") or out["overall_research_action"]
+    ) == "PRIORITY_DOCS"
 
 
 def test_10753_no_direct_supply_from_contextual() -> None:

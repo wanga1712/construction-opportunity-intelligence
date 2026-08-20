@@ -35,13 +35,39 @@ def _proc(mi: dict) -> dict:
 
 
 def _run(raw: dict, proc: dict) -> dict:
-    return enrich_object_mode_routing(
+    """Enrich then expose BUSINESS working view (tests assert pipeline semantics).
+
+    MODEL authority fields remain on the enrich output under their original keys
+    and are also mirrored under ``_model`` for Phase 6B assertions.
+    """
+    out = enrich_object_mode_routing(
         normalize_v3_output(
             raw, allowed_categories=ALLOWED, allowed_subcategories={}, has_okpd=True
         ),
         proc,
         allowed_categories=ALLOWED,
     )
+    view = dict(out)
+    view["_model"] = {
+        "procurement_form": out.get("procurement_form"),
+        "commercial_category_hypotheses": list(out.get("commercial_category_hypotheses") or []),
+        "object_classification": out.get("object_classification"),
+        "empty_hypothesis_status": out.get("empty_hypothesis_status"),
+        "overall_research_action": out.get("overall_research_action"),
+    }
+    if out.get("business_procurement_form"):
+        view["procurement_form"] = out["business_procurement_form"]
+    if out.get("business_category_hypotheses") is not None:
+        view["commercial_category_hypotheses"] = list(out["business_category_hypotheses"])
+    if out.get("business_object_classification") is not None:
+        view["object_classification"] = out["business_object_classification"]
+    if out.get("business_overall_research_action"):
+        view["overall_research_action"] = out["business_overall_research_action"]
+    if "business_empty_hypothesis_status" in out:
+        view["empty_hypothesis_status"] = out.get("business_empty_hypothesis_status")
+    if out.get("business_document_research_priority"):
+        view["document_research_priority"] = out["business_document_research_priority"]
+    return view
 
 
 def _mi_17723() -> dict:

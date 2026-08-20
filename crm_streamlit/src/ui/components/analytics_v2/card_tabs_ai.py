@@ -33,6 +33,7 @@ from src.services.expert_annotation_service import (
     collect_expert_object_subtypes,
 )
 from src.ui.components.analytics_v2.card_tabs_ai_readonly import (
+    render_business_readonly_block,
     render_model_readonly_block,
 )
 from src.ui.components.analytics_v2.card_tabs_ai_expert_form import (
@@ -82,6 +83,9 @@ def render_ai_tab(
 
     # ── MODEL read-only block ──────────────────────────────────────────────
     render_model_readonly_block(assessment, ai_status)
+    # ── BUSINESS read-only block (rules — never labeled as model) ─────────
+    if ai_status == "ASSESSED":
+        render_business_readonly_block(assessment)
 
     # Show saved annotation banner if exists
     if existing_annotation:
@@ -173,7 +177,10 @@ def _handle_save(
         # Write audit trail (non-blocking)
         write_audit_row(
             procurement_id=procurement_id,
-            model_raw=assessment.get("normalized_result") if assessment else None,
+            model_raw=(
+                (assessment.get("validated_model_result") if assessment else None)
+                or (assessment.get("normalized_result") if assessment else None)
+            ),
             annotation_payload=payload,
             crm_db=crm_db,
         )

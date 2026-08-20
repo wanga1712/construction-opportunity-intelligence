@@ -369,8 +369,37 @@ def enrich_object_mode_routing(
     *,
     allowed_categories: Set[str],
 ) -> Dict[str, Any]:
-    """Apply OBJECT MODE semantics; block mistaken NCE for genuine object procurements."""
-    out = enforce_direct_supply_product_evidence(dict(normalized or {}), procurement)
+    """Apply OBJECT MODE business semantics without mutating MODEL namespace fields.
+
+    Phase 6B invariants:
+    - ``object_classification`` stays MODEL (validated) — never overwritten
+    - ``commercial_category_hypotheses`` stays MODEL — priors go to contextual/business
+    - ``procurement_form`` stays MODEL — coercion stored as business_procurement_form
+    """
+    import copy
+
+    # Freeze MODEL namespace from the validated input BEFORE any business mutation.
+    src = dict(normalized or {})
+    model_object_classification = copy.deepcopy(src.get("object_classification"))
+    model_hyps = [
+        copy.deepcopy(h)
+        for h in (src.get("commercial_category_hypotheses") or [])
+        if isinstance(h, dict)
+    ]
+    model_procurement_form = src.get("procurement_form")
+    model_empty_status = src.get("empty_hypothesis_status")
+    model_overall_action = src.get("overall_research_action")
+    model_doc_priority = copy.deepcopy(src.get("document_research_priority"))
+
+    # Business working copy — may be mutated by product-evidence / coercion / priors.
+    out = enforce_direct_supply_product_evidence(copy.deepcopy(src), procurement)
+    # Business hyps start from post-enforce working set (MODEL snapshot stays pristine).
+    enforced_hyps = [
+        copy.deepcopy(h)
+        for h in (out.get("commercial_category_hypotheses") or [])
+        if isinstance(h, dict)
+    ]
+
     mi = _model_input(procurement)
     lc = str(
         mi.get("normalized_lifecycle") or procurement.get("normalized_lifecycle") or ""
@@ -392,80 +421,126 @@ def enrich_object_mode_routing(
         out["post_award_commercial_target_name"] = winner
 
     form = _coerce_object_form(out, procurement)
+    out["business_procurement_form"] = form
+    # Restore MODEL procurement_form (coercion must not impersonate model).
+    out["procurement_form"] = model_procurement_form
+
     if not is_object_procurement_form(form):
         out["routing_mode"] = "DIRECT_OR_OTHER"
+        out["object_classification"] = model_object_classification
+        out["commercial_category_hypotheses"] = model_hyps
+        out["business_category_hypotheses"] = list(enforced_hyps)
+        out["contextual_prior_hypotheses"] = []
         return out
 
     obj = classify_object(procurement, form=form)
     genuine, genuine_reason = is_genuine_object_procurement(procurement, form=form)
     out["routing_mode"] = "OBJECT_MODE" if genuine else "OBJECT_MODE_NON_TARGET"
-    out["object_classification"] = obj
-    out["document_research_priority"] = document_research_priority(form=form)
+    out["business_object_classification"] = obj
+    # MODEL object_classification is never replaced by Python classify_object.
+    out["object_classification"] = model_object_classification
+    out["document_research_priority"] = (
+        model_doc_priority
+        if model_doc_priority is not None
+        else document_research_priority(form=form)
+    )
+    out["business_document_research_priority"] = document_research_priority(form=form)
     out["object_mode_genuine"] = genuine
     out["object_mode_genuine_reason"] = genuine_reason
 
     if not genuine:
+        out["commercial_category_hypotheses"] = model_hyps
+        out["business_category_hypotheses"] = list(enforced_hyps)
+        out["contextual_prior_hypotheses"] = []
         return out
 
-    hyps = list(out.get("commercial_category_hypotheses") or [])
-    empty = str(out.get("empty_hypothesis_status") or "").upper() or None
+    empty = str(model_empty_status or "").upper() or None
     mistaken_nce = empty == "NO_COMMERCIAL_ENTRY" or (
-        not hyps and empty in (None, "NO_COMMERCIAL_ENTRY")
+        not model_hyps and empty in (None, "NO_COMMERCIAL_ENTRY")
     )
 
-    if mistaken_nce or len(hyps) < 1:
-        built = build_object_mode_hypotheses(
+    built: List[Dict[str, Any]] = []
+    if mistaken_nce or len(model_hyps) < 1:
+        tagged: List[Dict[str, Any]] = []
+        for h in build_object_mode_hypotheses(
             procurement,
             form=form,
             allowed_categories=allowed_categories,
             object_classification=obj,
-        )
-        by_cat = {h["category_code"]: h for h in hyps if h.get("category_code")}
-        for h in built:
-            by_cat.setdefault(h["category_code"], h)
-        hyps = list(by_cat.values())[:5]
-        out["commercial_category_hypotheses"] = hyps
-        out["empty_hypothesis_status"] = None
-        out["discovery_required"] = True
-        out["review_required"] = False
-        out["overall_research_action"] = ResearchAction.LIGHT_RESEARCH.value
+        ):
+            row = dict(h)
+            row["provenance"] = "CONTEXT_PRIOR"
+            rc = list(row.get("reason_codes") or [])
+            if "object_mode_contextual_prior" not in rc:
+                rc.append("object_mode_contextual_prior")
+            row["reason_codes"] = rc[:6]
+            tagged.append(row)
+        built = tagged
+        out["object_mode_nce_override"] = bool(mistaken_nce)
         if mistaken_nce:
-            out["object_mode_nce_override"] = True
             out["empty_hypothesis_reason_codes"] = list(
                 out.get("empty_hypothesis_reason_codes") or []
             ) + ["object_mode_blocked_mistaken_nce"]
+        # Business may clear empty status for scoring; MODEL empty status restored below.
+        out["business_empty_hypothesis_status"] = None
+        out["discovery_required"] = True
+        out["review_required"] = False
+        out["business_overall_research_action"] = ResearchAction.LIGHT_RESEARCH.value
 
-    # Ensure object hypotheses carry confirmation contract
+    # Business working set = post-enforce hyps + contextual priors (priors never enter MODEL list).
+    business_hyps: List[Dict[str, Any]] = [dict(h) for h in enforced_hyps]
+    by_cat = {h["category_code"]: h for h in business_hyps if h.get("category_code")}
+    for h in built:
+        by_cat.setdefault(h["category_code"], dict(h))
+    business_hyps = list(by_cat.values())[:5]
+
     fixed: List[Dict[str, Any]] = []
-    for h in hyps:
+    for h in business_hyps:
         row = dict(h)
+        is_prior = (
+            row.get("provenance") == "CONTEXT_PRIOR"
+            or "object_mode_contextual_prior" in list(row.get("reason_codes") or [])
+        )
         if str(row.get("opportunity_track") or "").upper() == "DIRECT_SUPPLY":
             row["opportunity_track"] = _default_track(form)
-            row["reason_codes"] = list(row.get("reason_codes") or []) + ["track_coerced_object_mode"]
-        row.setdefault("evidence_role", "CONTEXTUAL_RESEARCH_PRIOR")
-        row.setdefault("confirmation_required", True)
-        if row.get("evidence_role") == "CONTEXTUAL_RESEARCH_PRIOR":
+            row["reason_codes"] = list(row.get("reason_codes") or []) + [
+                "track_coerced_object_mode"
+            ]
+        if is_prior:
+            row.setdefault("evidence_role", "CONTEXTUAL_RESEARCH_PRIOR")
+            row.setdefault("confirmation_required", True)
+            row["provenance"] = "CONTEXT_PRIOR"
             rc = list(row.get("reason_codes") or [])
             if "requires_document_confirmation" not in rc:
                 rc.append("requires_document_confirmation")
             row["reason_codes"] = rc[:6]
+        else:
+            row.setdefault("provenance", "MODEL_VALIDATED")
         fixed.append(row)
-    out["commercial_category_hypotheses"] = fixed
 
-    if fixed and str(out.get("overall_research_action") or "").upper() in (
-        "SKIP",
-        "METADATA_ONLY",
-    ):
-        out["overall_research_action"] = ResearchAction.LIGHT_RESEARCH.value
+    if fixed and str(
+        out.get("business_overall_research_action") or model_overall_action or ""
+    ).upper() in ("SKIP", "METADATA_ONLY"):
+        out["business_overall_research_action"] = ResearchAction.LIGHT_RESEARCH.value
 
     if lc == "AWARDED" and fixed:
-        out["overall_research_action"] = ResearchAction.PRIORITY_DOCS.value
+        out["business_overall_research_action"] = ResearchAction.PRIORITY_DOCS.value
         for row in fixed:
             rc = list(row.get("reason_codes") or [])
             if "post_award_winner_target" not in rc:
                 rc.append("post_award_winner_target")
             row["reason_codes"] = rc[:6]
-        out["commercial_category_hypotheses"] = fixed
 
     out["DOCUMENT_RESEARCH_REQUIRED"] = bool(fixed)
+
+    # Restore MODEL namespace — priors live only under contextual/business keys.
+    out["object_classification"] = model_object_classification
+    out["procurement_form"] = model_procurement_form
+    out["commercial_category_hypotheses"] = model_hyps
+    out["empty_hypothesis_status"] = model_empty_status
+    out["overall_research_action"] = model_overall_action
+    out["contextual_prior_hypotheses"] = [
+        h for h in fixed if h.get("provenance") == "CONTEXT_PRIOR"
+    ]
+    out["business_category_hypotheses"] = fixed
     return out

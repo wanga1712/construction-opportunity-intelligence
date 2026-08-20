@@ -267,7 +267,9 @@ def test_object_mode_road_regression() -> None:
         allowed_categories=ALLOWED,
     )
     assert out["routing_mode"] == "OBJECT_MODE"
-    assert len(out["commercial_category_hypotheses"]) >= 1
+    # Phase 6B: priors live in business/contextual lists, not MODEL hypotheses.
+    assert out["commercial_category_hypotheses"] == []
+    assert len(out.get("business_category_hypotheses") or out.get("contextual_prior_hypotheses") or []) >= 1
 
 
 def test_awarded_school_regression() -> None:

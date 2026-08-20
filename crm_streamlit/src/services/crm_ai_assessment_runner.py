@@ -885,6 +885,31 @@ def process_item(c: Dict[str, Any], rules: List[Any], medians: Dict[str, Any], r
                     v3_normalized_result = decision_to_normalized_result(
                         decision=decision, procurement=procurement
                     )
+                    # Attach frozen MODEL + BUSINESS sidecar onto normalized compatibility blob.
+                    model_validated_frozen = getattr(decision, "_model_validated", None) or dict(
+                        model_for_enrichment
+                    )
+                    business_sidecar = getattr(decision, "_business_result", None) or {}
+                    v3_normalized_result["model_validated_ref"] = {
+                        "inference_run_id": inference_run_id,
+                        # Compact pointer — full body lives in crm_v3_model_inference_runs.
+                    }
+                    v3_normalized_result["contextual_prior_hypotheses"] = list(
+                        business_sidecar.get("contextual_prior_hypotheses") or []
+                    )
+                    v3_normalized_result["business_object_classification"] = business_sidecar.get(
+                        "business_object_classification"
+                    )
+                    # MODEL commercial hyps only (no medals/priors).
+                    v3_normalized_result["commercial_category_hypotheses"] = list(
+                        model_validated_frozen.get("commercial_category_hypotheses") or []
+                    )
+                    v3_normalized_result["object_classification"] = model_validated_frozen.get(
+                        "object_classification"
+                    )
+                    v3_normalized_result["procurement_form"] = model_validated_frozen.get(
+                        "procurement_form"
+                    )
                     v3_used = True
                     rejected = list(v3_normalized_result.get("rejected_category_codes") or [])
                     empty_st = (v3_normalized_result.get("empty_hypothesis_status") or "").upper()
@@ -901,25 +926,42 @@ def process_item(c: Dict[str, Any], rules: List[Any], medians: Dict[str, Any], r
                         for o in v3_normalized_result.get("category_opportunities") or []
                         if o.get("category_code")
                     ]
-                    confidence = 0.5
-                    opps = v3_normalized_result.get("category_opportunities") or []
-                    if opps:
-                        confidence = max(
-                            float(o.get("confidence") or 0.0) for o in opps
-                        )
+                    # MODEL_DERIVED overall confidence from validated model hyps only.
+                    from src.services.commercial_routing_v3.routing_outcome import (
+                        model_derived_overall_confidence,
+                    )
+
+                    confidence = model_derived_overall_confidence(model_validated_frozen)
+                    if confidence is None:
+                        # No model hyp confidences → do not invent 100%/0.5 as model;
+                        # business pipeline may still score opportunities separately.
+                        confidence = 0.0
+                    oc = model_validated_frozen.get("object_classification") or {}
+                    if not isinstance(oc, dict):
+                        oc = {}
                     ai_res = {
                         "proposed_route_profile": route_profile,
-                        "proposed_object_type": "unknown",
-                        "proposed_procurement_type": procurement.get(
-                            "procurement_form", route_profile
-                        ),
+                        "proposed_object_type": oc.get("object_type") or "unknown",
+                        "object_subtype": oc.get("object_subtype") or "unknown",
+                        "project_stage": oc.get("work_stage") or "unknown",
+                        "proposed_procurement_type": model_validated_frozen.get(
+                            "procurement_form"
+                        )
+                        or procurement.get("procurement_form")
+                        or route_profile,
                         "expected_categories": proposed_cats,
                         "confidence": confidence,
+                        "confidence_provenance": "MODEL_DERIVED",
                         "reasons": "v3_routing_success",
                         "reason_codes": [],
-                        "category_opportunities": opps,
+                        "category_opportunities": list(
+                            v3_normalized_result.get("category_opportunities") or []
+                        ),
                         "inference_run_id": inference_run_id,
+                        "_model_validated": model_validated_frozen,
+                        "_business_result": business_sidecar,
                     }
+                    opps = ai_res["category_opportunities"]
                 except OllamaJsonParseError as json_exc:
                     logger.warning("V3 Ollama JSON parse failed: %s", json_exc)
                     return _fail(RoutingErrorClass.INVALID_JSON)
@@ -1088,12 +1130,15 @@ def process_item(c: Dict[str, Any], rules: List[Any], medians: Dict[str, Any], r
                     if p_level != cand_level: change_fields.append("candidate_level")
 
         normalized_result = {
+            # COMPATIBILITY / BUSINESS-ENRICHED blob — NOT model authority.
+            # Model authority: crm_v3_model_inference_runs.validated_model_result
+            # via procurement_ai_assessments.inference_run_id.
             "route_profile": route_profile,
             "object_domain": ai_res.get("object_domain") if ai_res else "unknown",
             "object_type": proposed_obj,
-            "object_subtype": ai_res.get("object_subtype") if ai_res else "unknown",
+            "object_subtype": (ai_res.get("object_subtype") if ai_res else None) or "unknown",
             "procurement_type": proposed_proc,
-            "project_stage": ai_res.get("project_stage") if ai_res else "unknown",
+            "project_stage": (ai_res.get("project_stage") if ai_res else None) or "unknown",
             "expected_categories": proposed_cats,
             "unlikely_categories": ai_res.get("unlikely_categories") if ai_res else [],
             "document_search_plan": ai_res.get("document_search_plan") if ai_res else [],
@@ -1115,10 +1160,15 @@ def process_item(c: Dict[str, Any], rules: List[Any], medians: Dict[str, Any], r
             "registry_hash": registry_hash,
             "candidate_level": cand_level,
             "candidate_score": cand_score,
+            "business_candidate_medal": cand_level,
+            "business_candidate_score": cand_score,
             "cohort_key": cohort_key,
             "cohort_size": median_info["cohort_size"] if median_info else 0,
             "cohort_median": median_price,
             "confidence": confidence,
+            "confidence_provenance": (
+                (ai_res or {}).get("confidence_provenance") or "UNKNOWN_LEGACY"
+            ),
             "reason_codes": reason_codes,
             "normalized_summary": reasons,
             "model_version": CURRENT_MODEL,
@@ -1143,6 +1193,9 @@ def process_item(c: Dict[str, Any], rules: List[Any], medians: Dict[str, Any], r
                 "application_areas",
                 "brands",
                 "commercial_category_hypotheses",
+                "contextual_prior_hypotheses",
+                "object_classification",
+                "business_object_classification",
                 "registry_version",
                 "registry_hash",
                 "prompt_version",
@@ -1217,6 +1270,49 @@ def process_item(c: Dict[str, Any], rules: List[Any], medians: Dict[str, Any], r
             effective_level = None
             effective_score = None
 
+        from src.services.commercial_routing_v3.field_provenance import (
+            MODEL_DERIVED,
+            build_field_provenance,
+        )
+
+        model_validated_for_prov = (ai_res or {}).get("_model_validated") if ai_res else None
+        field_provenance = build_field_provenance(
+            model_validated=model_validated_for_prov
+            if isinstance(model_validated_for_prov, dict)
+            else None,
+            has_inference_run=inference_run_id is not None,
+            overall_confidence_source=(
+                MODEL_DERIVED
+                if (ai_res or {}).get("confidence_provenance") == "MODEL_DERIVED"
+                else (
+                    "UNKNOWN_LEGACY"
+                    if inference_run_id is None
+                    else MODEL_DERIVED
+                )
+            ),
+        )
+        business_rule_result = {
+            "route_profile": route_profile,
+            "business_scope_status": business_scope_status,
+            "contextual_prior_hypotheses": list(
+                normalized_result.get("contextual_prior_hypotheses") or []
+            ),
+            "business_object_classification": normalized_result.get(
+                "business_object_classification"
+            ),
+            "business_candidate_score": cand_score,
+            "business_candidate_medal": cand_level,
+            "effective_medal": effective_level,
+            "effective_score": effective_score,
+            "download_action": download_action,
+            "pipeline_reasons": list(reason_codes or []),
+        }
+        normalized_result["field_provenance"] = field_provenance
+        normalized_result["business_rule_result"] = business_rule_result
+        normalized_result["effective_medal"] = effective_level
+        normalized_result["business_candidate_medal"] = cand_level
+        normalized_result["business_candidate_score"] = cand_score
+
         # S13 CRM is authoritative; S7 assessment dual-write removed (SOURCE_DB_READONLY).
         auth_id = 0
         conn_c = crm_db._connection
@@ -1235,7 +1331,40 @@ def process_item(c: Dict[str, Any], rules: List[Any], medians: Dict[str, Any], r
                     """
                 )
                 has_inference_run_col = cur.fetchone() is not None
-                if has_inference_run_col:
+                cur.execute(
+                    """
+                    SELECT 1
+                    FROM information_schema.columns
+                    WHERE table_schema = 'public'
+                      AND table_name = 'procurement_ai_assessments'
+                      AND column_name = 'business_rule_result'
+                    LIMIT 1
+                    """
+                )
+                has_business_rule_col = cur.fetchone() is not None
+                if has_inference_run_col and has_business_rule_col:
+                    cur.execute(
+                        """
+                        INSERT INTO procurement_ai_assessments (
+                            authoritative_id, procurement_id, assessment_version, is_current, status, input_fingerprint,
+                            model_version, prompt_version, rules_version, proposed_route_profile,
+                            proposed_object_type, proposed_procurement_type, proposed_categories,
+                            proposed_level, confidence, reasons, reason_codes, started_at, completed_at,
+                            assessment_stability, stability_count, stable_since, assessment_changed,
+                            previous_assessment_id, change_fields, normalized_result, inference_run_id,
+                            business_rule_result, field_provenance
+                        ) VALUES (%s, %s, %s, TRUE, 'SUCCESS', %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, NOW(), NOW(), %s, %s, """ + stable_since_clause + """, %s, %s, %s, %s, %s, %s, %s)
+                        RETURNING id
+                        """,
+                        (
+                            auth_id, crm_id, new_version, fp, CURRENT_MODEL, CURRENT_PROMPT_VERSION, rules_ver, route_profile,
+                            proposed_obj, proposed_proc, json.dumps(proposed_cats), cand_level, confidence, reasons,
+                            json.dumps(reason_codes), stability_status, stability_count, changed, prev_id,
+                            json.dumps(change_fields), json.dumps(normalized_result), inference_run_id,
+                            json.dumps(business_rule_result), json.dumps(field_provenance),
+                        )
+                    )
+                elif has_inference_run_col:
                     cur.execute(
                         """
                         INSERT INTO procurement_ai_assessments (

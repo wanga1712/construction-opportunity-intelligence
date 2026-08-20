@@ -77,21 +77,62 @@ def load_model_assessment_for_annotation(
     Fields returned:
         id, assessment_version, status, normalized_result (dict),
         proposed_route_profile, proposed_object_type, proposed_procurement_type,
-        confidence, reasons, model_version, prompt_version
+        confidence, reasons, model_version, prompt_version,
+        inference_run_id, validated_model_result, model_provenance,
+        business_rule_result, field_provenance
     """
-    rows = crm_db.execute_query(
-        """
-        SELECT id, assessment_version, status,
-               normalized_result,
-               proposed_route_profile, proposed_object_type,
-               proposed_procurement_type, confidence, reasons,
-               model_version, prompt_version
-        FROM procurement_ai_assessments
-        WHERE procurement_id = %s AND is_current = TRUE
-        LIMIT 1
-        """,
-        (procurement_id,),
-    )
+    # Prefer columns added in Phase 6A/6B when present.
+    rows = None
+    try:
+        rows = crm_db.execute_query(
+            """
+            SELECT id, assessment_version, status,
+                   normalized_result,
+                   proposed_route_profile, proposed_object_type,
+                   proposed_procurement_type, confidence, reasons,
+                   model_version, prompt_version,
+                   inference_run_id,
+                   business_rule_result,
+                   field_provenance
+            FROM procurement_ai_assessments
+            WHERE procurement_id = %s AND is_current = TRUE
+            LIMIT 1
+            """,
+            (procurement_id,),
+        )
+    except Exception:
+        rows = None
+    if not rows:
+        # Fallback without Phase 6B columns (pre-migration environments).
+        try:
+            rows = crm_db.execute_query(
+                """
+                SELECT id, assessment_version, status,
+                       normalized_result,
+                       proposed_route_profile, proposed_object_type,
+                       proposed_procurement_type, confidence, reasons,
+                       model_version, prompt_version,
+                       inference_run_id
+                FROM procurement_ai_assessments
+                WHERE procurement_id = %s AND is_current = TRUE
+                LIMIT 1
+                """,
+                (procurement_id,),
+            )
+        except Exception:
+            rows = crm_db.execute_query(
+                """
+                SELECT id, assessment_version, status,
+                       normalized_result,
+                       proposed_route_profile, proposed_object_type,
+                       proposed_procurement_type, confidence, reasons,
+                       model_version, prompt_version
+                FROM procurement_ai_assessments
+                WHERE procurement_id = %s AND is_current = TRUE
+                LIMIT 1
+                """,
+                (procurement_id,),
+            )
     if not rows:
         return None
     row = rows[0]
@@ -101,6 +142,48 @@ def load_model_assessment_for_annotation(
             nr = json.loads(nr)
         except Exception:
             nr = {}
+    inference_run_id = row.get("inference_run_id")
+    validated_model_result = None
+    model_provenance = "UNKNOWN_LEGACY"
+    if inference_run_id is not None:
+        model_provenance = "MODEL_VALIDATED"
+        try:
+            ir = crm_db.execute_query(
+                """
+                SELECT validated_model_result, validation_status, raw_model_sha256
+                FROM crm_v3_model_inference_runs
+                WHERE id = %s
+                LIMIT 1
+                """,
+                (inference_run_id,),
+            )
+            if ir:
+                validated_model_result = ir[0].get("validated_model_result")
+                if isinstance(validated_model_result, str):
+                    try:
+                        validated_model_result = json.loads(validated_model_result)
+                    except Exception:
+                        validated_model_result = None
+        except Exception:
+            validated_model_result = None
+
+    brr = row.get("business_rule_result")
+    if isinstance(brr, str):
+        try:
+            brr = json.loads(brr)
+        except Exception:
+            brr = None
+    fp = row.get("field_provenance")
+    if isinstance(fp, str):
+        try:
+            fp = json.loads(fp)
+        except Exception:
+            fp = None
+    if not isinstance(fp, dict):
+        fp = (nr.get("field_provenance") if isinstance(nr, dict) else None) or {}
+    if not isinstance(brr, dict):
+        brr = (nr.get("business_rule_result") if isinstance(nr, dict) else None) or {}
+
     return {
         "id": row["id"],
         "assessment_version": row["assessment_version"],
@@ -113,6 +196,11 @@ def load_model_assessment_for_annotation(
         "reasons": row.get("reasons"),
         "model_version": row.get("model_version"),
         "prompt_version": row.get("prompt_version"),
+        "inference_run_id": inference_run_id,
+        "validated_model_result": validated_model_result,
+        "model_provenance": model_provenance,
+        "business_rule_result": brr,
+        "field_provenance": fp,
     }
 
 

@@ -1,39 +1,58 @@
 # MODEL_AUTHORITY_MATRIX.md
 
 WIP: `CRM-V3-MODEL-AUTHORITY-RESTORATION-1`  
-Phase: 6–7 — MODEL RAW immutability & Authority separation
+Phase: 6B — Semantic namespace separation
 
-## Intended field authority matrix (user-visible)
+## Authority classes
 
-Conventions:
-- `MODEL` = Qwen/Ollama is explicitly prompted to output this field (via the V3 prompt contract).
-- `BUSINESS_RULE` = deterministic / scoring / routing / timing derived in Python (CandidatePolicy, timing, visibility, priors, fallbacks, etc.).
-- `EXPERT` = human annotation workflow.
-- `SOURCE` = persisted source-data from CRM/tender entities.
-- `DERIVED_UI` = only reformatting/renaming for display.
+| Class | Meaning |
+|---|---|
+| `MODEL_VALIDATED` | Value exists in `crm_v3_model_inference_runs.validated_model_result` and originates from Qwen RAW (schema validation only). |
+| `MODEL_DERIVED` | Deterministic transform using **only** validated model fields (no source/prior/business inputs). UI: «Рассчитано из ответа модели». |
+| `BUSINESS_RULE` | Python routing / scoring / timing / scope. |
+| `CONTEXT_PRIOR` | OKPD / title / object_mode contextual prior — never MODEL. |
+| `SOURCE_DATA` | Procurement / tender source fields. |
+| `EXPERT` | Human annotation. |
+| `UI_DERIVED` | Display rename only. |
+| `UNKNOWN_LEGACY` | Assessment with `inference_run_id IS NULL` — model provenance unavailable. |
 
-| User-visible field | Intended authority | Qwen explicitly asked? | Python creates? | Notes |
-|---|---|---|---|---|
-| `route_profile` | `BUSINESS_RULE` | NO | YES | Derived from prefilter / routing lane logic. |
-| `object_type` | `MODEL` | YES | YES (currently overwrites) | Prompt contract requests `object_classification.object_type`, but current runtime may replace it deterministically. |
-| `object_subtype` | `MODEL` | YES | YES (currently overwrites) | Same as above: `object_classification.object_subtype`. |
-| `project_stage` | `MODEL` | YES | YES (currently overwrites) | Prompt contract requests `object_classification.work_stage` (mapped to UI “project_stage”). |
-| `procurement_type` | `MODEL` | YES (via `procurement_form`) | YES | Model is asked for `procurement_form`; UI maps it to `procurement_type`. |
-| `business_scope_status` | `BUSINESS_RULE` | NO | YES | Canonicalized by `business_scope.py` / runtime gate; fail-closed and NEVER inferred from categories. |
-| `category` | `MODEL` | YES | YES (normalized → stored) | Comes from `commercial_category_hypotheses[*].commercial_category_code`. |
-| `subcategory` | `MODEL` | YES (optional) | YES | From `commercial_subcategory_code` (may be null/omitted). |
-| `opportunity_track` | `MODEL` | YES | YES (normalized → stored) | From `opportunity_track`. |
-| `category_confidence` | `MODEL` | YES | YES | From model per-hypothesis `confidence` (0.0–1.0). |
-| `candidate_score` | `BUSINESS_RULE` | NO | YES | Computed by CandidatePolicy / timing rules. |
-| `candidate_medal` | `BUSINESS_RULE` | NO | YES | Computed from CandidatePolicy scoring outputs. |
-| `deadline/window cap` | `BUSINESS_RULE` | NO | YES | Derived from timing window & execution clock logic. |
-| `effective/final medal` | `BUSINESS_RULE` | NO | YES | Final displayed medal from effective assessment & overrides. |
-| `overall confidence` | `MODEL` | YES (implicitly) | YES | Derived from model hypothesis confidences (runner computes aggregation). |
-| `reason/evidence` | `MODEL` (per-hypothesis) + `BUSINESS_RULE` (pipeline reasons) | YES (per-hypothesis) | YES | Must be separated by provenance; do not collapse to “AI category = …”. |
+`MODEL` in older docs maps to `MODEL_VALIDATED` only.  
+A Python aggregation of model fields is **`MODEL_DERIVED`**, not MODEL.
+
+## Canonical MODEL authority
+
+**Count = 1:** `crm_v3_model_inference_runs.validated_model_result`  
+via `procurement_ai_assessments.inference_run_id`.
+
+`procurement_ai_assessments.normalized_result` = **COMPATIBILITY / BUSINESS-ENRICHED**  
+→ `NORMALIZED_RESULT_IS_MODEL_AUTHORITY=NO`
+
+## Field matrix (user-visible)
+
+| Field | Authority | Qwen asked? | Notes |
+|---|---|---|---|
+| `object_type` | `MODEL_VALIDATED` | YES (`object_classification.object_type`) | Python classify_object → `business_object_classification` only. |
+| `object_subtype` | `MODEL_VALIDATED` | YES | Same. |
+| `project_stage` / `work_stage` | `MODEL_VALIDATED` | YES (`work_stage`) | Same. |
+| `procurement_type` / `procurement_form` | `MODEL_VALIDATED` | YES (`procurement_form`) | Form coercion → `business_procurement_form`. |
+| `category` / hyp | `MODEL_VALIDATED` | YES | Only `commercial_category_hypotheses` from validated. |
+| `subcategory` | `MODEL_VALIDATED` | YES (optional) | |
+| `opportunity_track` | `MODEL_VALIDATED` | YES | Business may coerce track on **business** hyps only. |
+| `category_confidence` | `MODEL_VALIDATED` | YES | Per-hypothesis. |
+| `overall confidence` | `MODEL_DERIVED` | NO | Max of model hyp confidences; UI «Рассчитано из ответа модели». |
+| `route_profile` | `BUSINESS_RULE` | NO | Never labeled as model. |
+| `business_scope_status` | `BUSINESS_RULE` | NO | Phase 5 contract. |
+| `contextual prior category` | `CONTEXT_PRIOR` | NO | `contextual_prior_hypotheses`. |
+| `candidate_score` | `BUSINESS_RULE` | NO | UI: бизнес-оценка. |
+| `candidate_medal` | `BUSINESS_RULE` | NO | UI: базовая бизнес-медаль. |
+| `effective_medal` | `BUSINESS_RULE` | NO | Timing/window; labeled separately when ≠ base. |
+| `reason/evidence` | split | YES/NO | Model reasons vs pipeline reasons. |
 
 ## Required flags
 
-MODEL_FIELDS_EXPLICITLY_DEFINED=YES  
-BUSINESS_RULE_FIELDS_EXPLICITLY_DEFINED=YES  
-NO_AMBIGUOUS_USER_VISIBLE_FIELDS=YES
-
+```
+AUTHORITY_MATRIX_SEMANTICALLY_CONSISTENT=YES
+PYTHON_AGGREGATE_LABELED_MODEL=NO
+MODEL_NAMESPACE_AUTHORITY_COUNT=1
+NORMALIZED_RESULT_IS_MODEL_AUTHORITY=NO
+```
