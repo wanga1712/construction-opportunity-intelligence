@@ -121,7 +121,9 @@ def run_shadow(tender_db, limit: int = 100) -> Dict[str, Any]:
                 proposed_obj = ai_res.get("proposed_object_type")
                 proposed_proc = ai_res.get("proposed_procurement_type")
                 proposed_cats = ai_res.get("proposed_categories") or []
-                confidence = float(ai_res.get("confidence") or 1.0)
+                raw_conf = ai_res.get("confidence")
+                # Preserve 0.0; missing/None does not become 1.0.
+                confidence = float(raw_conf) if raw_conf is not None else 0.0
                 reasons = ai_res.get("reasons")
                 reason_codes = ai_res.get("reason_codes") or []
                 status = "SUCCESS"

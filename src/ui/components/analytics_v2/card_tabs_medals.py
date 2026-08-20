@@ -33,9 +33,9 @@ def render_medals_tab(crm_db, procurement_id: int, eff_opps: list,
     score_disp  = f"{ai_cand_score:.2f}/100" if ai_cand_score is not None else "—"
     st.markdown(
         f'<div style="background:#f1f5f9; padding: 10px; border-radius: 4px; font-size:13px; margin-bottom: 12px;">'
-        f'🤖 <b>AI (procurement level):</b> <span style="font-weight:bold;">{medal_disp}</span>'
+        f'⚙️ <b>Бизнес-оценка (procurement level):</b> <span style="font-weight:bold;">{medal_disp}</span>'
         f' ({score_disp})<br>'
-        f'<i>Обоснование AI:</i> {ai_reasons}'
+        f'<i>Обоснование правил:</i> {ai_reasons}'
         f'</div>',
         unsafe_allow_html=True
     )

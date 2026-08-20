@@ -69,7 +69,7 @@ def render_ai_tab(
     ai_status: str = "UNASSESSED",
 ) -> None:
     """Render MODEL read-only block + expert annotation form."""
-    st.markdown("### 🤖 AI / Категории")
+    st.markdown("### 🤖 Модель / Категории")
 
     # ── Load data ──────────────────────────────────────────────────────────
     assessment         = _load_assessment_safe(crm_db, procurement_id)

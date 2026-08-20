@@ -34,7 +34,9 @@ class CandidatePolicy:
                 "candidate_level": v3_level,
                 "details": {"v3_track_specific": True},
             }
-        opp_conf = float(opp.get("confidence") or 1.0)
+        raw_conf = opp.get("confidence")
+        # Preserve 0.0; missing/None does not become 1.0.
+        opp_conf = float(raw_conf) if raw_conf is not None else 0.0
         price = float(item.get("price") or item.get("initial_price") or 0.0)
         median = cohort_median if cohort_median > 0 else 5000000.0
         ratio = price / median
@@ -111,15 +113,17 @@ class CandidatePolicy:
             # Обратная совместимость
             proposed_cats = ai_result.get("proposed_categories") or ["UNKNOWN"]
             opps = []
+            raw_ai_conf = ai_result.get("confidence")
+            ai_conf = float(raw_ai_conf) if raw_ai_conf is not None else 0.0
             for cat in proposed_cats:
                 opps.append({
                     "category_code": cat,
                     "subcategory_code": None,
-                    "opportunity_status": "CONFIRMED_SOURCE" if ai_result.get("confidence", 1.0) >= 0.7 else "POSSIBLE",
+                    "opportunity_status": "CONFIRMED_SOURCE" if ai_conf >= 0.7 else "POSSIBLE",
                     "expected_role": "PRIMARY_SUPPLY",
                     "commercial_entry_point": "DIRECT_SUPPLY",
                     "expected_volume": "HIGH" if float(item.get("initial_price") or 0.0) >= cohort_median else "MEDIUM",
-                    "confidence": float(ai_result.get("confidence") or 1.0),
+                    "confidence": ai_conf,
                     "priority": 1.0,
                     "research_action": "PRIORITY_DOCS"
                 })
