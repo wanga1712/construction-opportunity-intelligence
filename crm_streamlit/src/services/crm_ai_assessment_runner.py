@@ -561,7 +561,7 @@ def aggregate_research_action(opportunities: List[Dict[str, Any]]) -> str:
     return max_action
 
 def process_item(c: Dict[str, Any], rules: List[Any], medians: Dict[str, Any], registry: List[Dict[str, Any]], registry_hash: str, examples: List[Dict[str, Any]], tender_db, crm_db) -> bool:
-    from src.services.ai_assessment_runner import match_okpd_rule, check_egrz_expertise, call_ollama_qwen, DEFAULT_MEDIAN_PRICES
+    from src.services.ai_assessment_runner import match_okpd_rule, check_egrz_expertise, DEFAULT_MEDIAN_PRICES
     from src.services.candidate_policy import CandidatePolicy
     from src.services.commercial_routing_v3.routing_runtime_config import (
         MAX_ROUTING_ATTEMPTS,
@@ -693,6 +693,7 @@ def process_item(c: Dict[str, Any], rules: List[Any], medians: Dict[str, Any], r
         v3_runtime_execution_allowed = False
         v3_schema_missing_components: List[str] = []
         use_v3_runtime = v3_runtime_enabled()
+        inference_run_id: Optional[int] = None
 
         # Production: V3 required; never automatic V2 fallback.
         if PRODUCTION_REQUIRES_V3 and not use_v3_runtime:
@@ -780,7 +781,16 @@ def process_item(c: Dict[str, Any], rules: List[Any], medians: Dict[str, Any], r
                     __import__("json").dumps(model_input, ensure_ascii=False, default=str)
                 )
                 try:
-                    from src.services.ai_assessment_runner import OllamaJsonParseError
+                    from src.services.ai_assessment_runner import (
+                        OllamaJsonParseError,
+                        call_ollama_qwen_bundle,
+                    )
+                    from src.services.commercial_routing_v3.model_inference_runs import (
+                        RUN_KIND_PRODUCTION,
+                        RUN_KIND_SHADOW,
+                        capture_and_persist_inference_run,
+                    )
+                    from src.services.commercial_routing_v3.prompt import PROMPT_VERSION
                     import hashlib
 
                     input_hash = hashlib.sha256(
@@ -788,20 +798,90 @@ def process_item(c: Dict[str, Any], rules: List[Any], medians: Dict[str, Any], r
                         .dumps(model_input, ensure_ascii=False, sort_keys=True, default=str)
                         .encode("utf-8")
                     ).hexdigest()
-                    raw_ai = call_ollama_qwen(
-                        prompt,
-                        procurement_id=crm_id,
-                        crm_db=crm_db,
-                        input_hash=input_hash,
-                        prompt_version="v3_routing",
-                        persist_dry_run=False,
-                        acquire_gpu=True,
+                    registry, allowed_cats, allowed_subs = v3_engine.load_registry()
+                    del registry
+                    run_kind = (
+                        RUN_KIND_SHADOW if qwen_shadow_mode() else RUN_KIND_PRODUCTION
                     )
-                except OllamaJsonParseError as json_exc:
-                    logger.warning("V3 Ollama JSON parse failed: %s", json_exc)
-                    return _fail(RoutingErrorClass.INVALID_JSON)
-                if raw_ai:
-                    decision = v3_engine.route_with_ai(procurement, raw_ai)
+                    try:
+                        bundle = call_ollama_qwen_bundle(
+                            prompt,
+                            procurement_id=crm_id,
+                            crm_db=crm_db,
+                            input_hash=input_hash,
+                            prompt_version=PROMPT_VERSION,
+                            persist_dry_run=False,
+                            acquire_gpu=True,
+                        )
+                        if bundle is None:
+                            # Persist call-failed evidence when possible (no raw).
+                            failed_run = capture_and_persist_inference_run(
+                                crm_db,
+                                procurement_id=crm_id,
+                                run_kind=run_kind,
+                                prompt=prompt,
+                                raw_text=None,
+                                parsed=None,
+                                model_call_failed=True,
+                                ollama_metadata={},
+                                retry_count=0,
+                                allowed_categories=allowed_cats,
+                                allowed_subcategories=allowed_subs,
+                                model_name=CURRENT_MODEL,
+                                prompt_version=PROMPT_VERSION,
+                                dry_run=False,
+                            )
+                            inference_run_id = failed_run.id
+                            return _fail(RoutingErrorClass.OLLAMA_TIMEOUT)
+
+                        # Freeze RAW+validated BEFORE object_mode / scoring enrichment.
+                        inf = capture_and_persist_inference_run(
+                            crm_db,
+                            procurement_id=crm_id,
+                            run_kind=run_kind,
+                            prompt=prompt,
+                            raw_text=bundle.raw_text,
+                            parsed=bundle.parsed,
+                            ollama_metadata=bundle.meta,
+                            retry_count=bundle.retry_count,
+                            allowed_categories=allowed_cats,
+                            allowed_subcategories=allowed_subs,
+                            model_name=str(bundle.meta.get("model") or CURRENT_MODEL),
+                            prompt_version=PROMPT_VERSION,
+                            dry_run=False,
+                        )
+                        inference_run_id = inf.id
+                        if inf.validation_status != "VALIDATED_SUCCESS" or not inf.validated_model_result:
+                            return _fail(RoutingErrorClass.INVALID_JSON)
+                        model_for_enrichment = dict(inf.validated_model_result)
+                    except OllamaJsonParseError as json_exc:
+                        # PARSE_FAILURE_PRESERVES_RAW=YES
+                        raw_salvage = getattr(json_exc, "raw_text", None)
+                        meta_salvage = dict(getattr(json_exc, "meta", None) or {})
+                        retry_salvage = int(getattr(json_exc, "retry_count", 0) or 0)
+                        inf = capture_and_persist_inference_run(
+                            crm_db,
+                            procurement_id=crm_id,
+                            run_kind=run_kind,
+                            prompt=prompt,
+                            raw_text=raw_salvage,
+                            parsed=None,
+                            parse_error=str(json_exc),
+                            model_call_failed=False,
+                            ollama_metadata=meta_salvage,
+                            retry_count=retry_salvage,
+                            allowed_categories=allowed_cats,
+                            allowed_subcategories=allowed_subs,
+                            model_name=CURRENT_MODEL,
+                            prompt_version=PROMPT_VERSION,
+                            dry_run=False,
+                        )
+                        inference_run_id = inf.id
+                        logger.warning("V3 Ollama JSON parse failed: %s", json_exc)
+                        return _fail(RoutingErrorClass.INVALID_JSON)
+
+                    # Business enrichment only after immutable run snapshot.
+                    decision = v3_engine.route_with_ai(procurement, model_for_enrichment)
                     v3_normalized_result = decision_to_normalized_result(
                         decision=decision, procurement=procurement
                     )
@@ -838,9 +918,11 @@ def process_item(c: Dict[str, Any], rules: List[Any], medians: Dict[str, Any], r
                         "reasons": "v3_routing_success",
                         "reason_codes": [],
                         "category_opportunities": opps,
+                        "inference_run_id": inference_run_id,
                     }
-                else:
-                    return _fail(RoutingErrorClass.OLLAMA_TIMEOUT)
+                except OllamaJsonParseError as json_exc:
+                    logger.warning("V3 Ollama JSON parse failed: %s", json_exc)
+                    return _fail(RoutingErrorClass.INVALID_JSON)
             except Exception as v3_exc:
                 logger.warning("V3 runtime failed: %s", v3_exc)
                 return _fail(RoutingErrorClass.UNEXPECTED_EXCEPTION)
@@ -1047,6 +1129,8 @@ def process_item(c: Dict[str, Any], rules: List[Any], medians: Dict[str, Any], r
             "assessment_changed": changed,
             "stability_count": stability_count
         }
+        if inference_run_id is not None:
+            normalized_result["inference_run_id"] = inference_run_id
         if v3_used and v3_normalized_result:
             for k in (
                 "source_contour",
@@ -1142,23 +1226,55 @@ def process_item(c: Dict[str, Any], rules: List[Any], medians: Dict[str, Any], r
                 cur.execute("UPDATE procurement_ai_assessments SET is_current = FALSE WHERE procurement_id = %s", (crm_id,))
                 cur.execute(
                     """
-                    INSERT INTO procurement_ai_assessments (
-                        authoritative_id, procurement_id, assessment_version, is_current, status, input_fingerprint,
-                        model_version, prompt_version, rules_version, proposed_route_profile,
-                        proposed_object_type, proposed_procurement_type, proposed_categories,
-                        proposed_level, confidence, reasons, reason_codes, started_at, completed_at,
-                        assessment_stability, stability_count, stable_since, assessment_changed,
-                        previous_assessment_id, change_fields, normalized_result
-                    ) VALUES (%s, %s, %s, TRUE, 'SUCCESS', %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, NOW(), NOW(), %s, %s, """ + stable_since_clause + """, %s, %s, %s, %s)
-                    RETURNING id
-                    """,
-                    (
-                        auth_id, crm_id, new_version, fp, CURRENT_MODEL, CURRENT_PROMPT_VERSION, rules_ver, route_profile,
-                        proposed_obj, proposed_proc, json.dumps(proposed_cats), cand_level, confidence, reasons,
-                        json.dumps(reason_codes), stability_status, stability_count, changed, prev_id,
-                        json.dumps(change_fields), json.dumps(normalized_result)
-                    )
+                    SELECT 1
+                    FROM information_schema.columns
+                    WHERE table_schema = 'public'
+                      AND table_name = 'procurement_ai_assessments'
+                      AND column_name = 'inference_run_id'
+                    LIMIT 1
+                    """
                 )
+                has_inference_run_col = cur.fetchone() is not None
+                if has_inference_run_col:
+                    cur.execute(
+                        """
+                        INSERT INTO procurement_ai_assessments (
+                            authoritative_id, procurement_id, assessment_version, is_current, status, input_fingerprint,
+                            model_version, prompt_version, rules_version, proposed_route_profile,
+                            proposed_object_type, proposed_procurement_type, proposed_categories,
+                            proposed_level, confidence, reasons, reason_codes, started_at, completed_at,
+                            assessment_stability, stability_count, stable_since, assessment_changed,
+                            previous_assessment_id, change_fields, normalized_result, inference_run_id
+                        ) VALUES (%s, %s, %s, TRUE, 'SUCCESS', %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, NOW(), NOW(), %s, %s, """ + stable_since_clause + """, %s, %s, %s, %s, %s)
+                        RETURNING id
+                        """,
+                        (
+                            auth_id, crm_id, new_version, fp, CURRENT_MODEL, CURRENT_PROMPT_VERSION, rules_ver, route_profile,
+                            proposed_obj, proposed_proc, json.dumps(proposed_cats), cand_level, confidence, reasons,
+                            json.dumps(reason_codes), stability_status, stability_count, changed, prev_id,
+                            json.dumps(change_fields), json.dumps(normalized_result), inference_run_id
+                        )
+                    )
+                else:
+                    cur.execute(
+                        """
+                        INSERT INTO procurement_ai_assessments (
+                            authoritative_id, procurement_id, assessment_version, is_current, status, input_fingerprint,
+                            model_version, prompt_version, rules_version, proposed_route_profile,
+                            proposed_object_type, proposed_procurement_type, proposed_categories,
+                            proposed_level, confidence, reasons, reason_codes, started_at, completed_at,
+                            assessment_stability, stability_count, stable_since, assessment_changed,
+                            previous_assessment_id, change_fields, normalized_result
+                        ) VALUES (%s, %s, %s, TRUE, 'SUCCESS', %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, NOW(), NOW(), %s, %s, """ + stable_since_clause + """, %s, %s, %s, %s)
+                        RETURNING id
+                        """,
+                        (
+                            auth_id, crm_id, new_version, fp, CURRENT_MODEL, CURRENT_PROMPT_VERSION, rules_ver, route_profile,
+                            proposed_obj, proposed_proc, json.dumps(proposed_cats), cand_level, confidence, reasons,
+                            json.dumps(reason_codes), stability_status, stability_count, changed, prev_id,
+                            json.dumps(change_fields), json.dumps(normalized_result)
+                        )
+                    )
                 row = cur.fetchone()
                 crm_assessment_id = row[0] if not isinstance(row, dict) else row["id"]
                 

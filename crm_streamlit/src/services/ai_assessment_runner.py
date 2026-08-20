@@ -15,6 +15,7 @@ import os
 import sys
 import uuid
 from datetime import datetime, timezone
+from dataclasses import dataclass
 from typing import Any, Dict, List, Optional
 
 logger = logging.getLogger("ai_assessment_runner")
@@ -207,7 +208,17 @@ class OllamaJsonParseError(ValueError):
     """Model returned text that is not a JSON object — not a transport timeout."""
 
 
-def call_ollama_qwen(
+@dataclass
+class OllamaInferenceBundle:
+    """Model response + telemetry kept outside the model JSON namespace."""
+
+    parsed: Dict[str, Any]
+    raw_text: str
+    meta: Dict[str, Any]
+    retry_count: int
+
+
+def call_ollama_qwen_bundle(
     prompt: str,
     *,
     procurement_id: Any = None,
@@ -216,13 +227,13 @@ def call_ollama_qwen(
     prompt_version: str | None = None,
     persist_dry_run: bool = False,
     acquire_gpu: bool = True,
-) -> Optional[Dict[str, Any]]:
-    """Production V3 path: qwen2.5:7b + structured JSON + bounded retry (locked stack).
+) -> Optional[OllamaInferenceBundle]:
+    """Production V3 path returning parsed model JSON without telemetry mutation.
 
+    Telemetry lives in ``meta`` / ``retry_count`` only.
+    Raises OllamaJsonParseError on persistent JSON extraction failure
+    (bundle.meta may still carry last raw_text for RAW persistence).
     Returns None only for transport/timeouts/unavailable.
-    Raises OllamaJsonParseError when all attempts fail JSON extraction
-    (must NOT be labeled OLLAMA_TIMEOUT).
-    Persists attempt_history to crm_v3_inference_attempts when crm_db is set.
     """
     from datetime import datetime, timezone
 
@@ -292,7 +303,15 @@ def call_ollama_qwen(
         if exc.meta:
             durable.setdefault("prompt_sha256", exc.meta.get("prompt_sha256"))
         _persist(durable)
-        raise OllamaJsonParseError(str(exc)) from exc
+        # Transport/timeouts → None (OLLAMA_TIMEOUT path). JSON/format → raise.
+        fc = str(exc.failure_class or "").upper()
+        if fc in {"TIMEOUT", "OLLAMA_TRANSPORT_ERROR"}:
+            return None
+        err = OllamaJsonParseError(str(exc))
+        err.meta = dict(exc.meta or {})  # type: ignore[attr-defined]
+        err.raw_text = (exc.meta or {}).get("raw_text")  # type: ignore[attr-defined]
+        err.retry_count = int((exc.meta or {}).get("model_format_retry_count") or 0)  # type: ignore[attr-defined]
+        raise err from exc
     except Exception as e:
         msg = str(e).lower()
         logger.error("Ollama call exception: %s", e)
@@ -301,10 +320,41 @@ def call_ollama_qwen(
         return None
 
     if isinstance(parsed, dict):
-        parsed["_ollama_meta"] = meta
-        parsed["_model_format_retry_count"] = retries
-        return parsed
+        # TELEMETRY_MUTATES_MODEL_JSON=NO — strip any accidental underscore keys.
+        clean = {k: v for k, v in parsed.items() if not str(k).startswith("_")}
+        return OllamaInferenceBundle(
+            parsed=clean,
+            raw_text=str(meta.get("raw_text") or ""),
+            meta=dict(meta),
+            retry_count=int(retries),
+        )
     raise OllamaJsonParseError("model response is not a JSON object")
+
+
+def call_ollama_qwen(
+    prompt: str,
+    *,
+    procurement_id: Any = None,
+    crm_db: Any = None,
+    input_hash: str | None = None,
+    prompt_version: str | None = None,
+    persist_dry_run: bool = False,
+    acquire_gpu: bool = True,
+) -> Optional[Dict[str, Any]]:
+    """Compatibility wrapper: returns clean model JSON only (no telemetry keys)."""
+    bundle = call_ollama_qwen_bundle(
+        prompt,
+        procurement_id=procurement_id,
+        crm_db=crm_db,
+        input_hash=input_hash,
+        prompt_version=prompt_version,
+        persist_dry_run=persist_dry_run,
+        acquire_gpu=acquire_gpu,
+    )
+    if bundle is None:
+        return None
+    # Defense-in-depth: never return telemetry/underscore keys as model JSON.
+    return {k: v for k, v in bundle.parsed.items() if not str(k).startswith("_")}
 
 def build_ai_prompt(item: Dict[str, Any]) -> str:
     """Формирует промпт для классификации закупки."""

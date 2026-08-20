@@ -231,6 +231,7 @@ def generate_v3_routing_with_bounded_retry(
     last_failure_class = "OTHER"
     last_error: Exception | None = None
     last_meta: dict[str, Any] = {}
+    last_raw_text: str | None = None
     attempts_used = 0
 
     for attempt in range(1, int(max_attempts) + 1):
@@ -245,6 +246,7 @@ def generate_v3_routing_with_bounded_retry(
             attempt_predict = NUM_PREDICT_TRUNCATION_RETRY
             attempt_options_note = TRUNCATION_RETRY_REASON
         try:
+            # RAW capture point: exact Ollama response text before any mutation.
             raw_text, meta = generate_v3_routing(
                 prompt,
                 timeout=timeout,
@@ -252,6 +254,7 @@ def generate_v3_routing_with_bounded_retry(
                 format_json=format_json,
                 experiment_model=experiment_model,
             )
+            last_raw_text = raw_text
         except Exception as exc:
             last_error = exc
             last_failure_class = classify_format_failure("", exc=exc)
@@ -294,6 +297,7 @@ def generate_v3_routing_with_bounded_retry(
                 }
             )
             last_meta = dict(meta)
+            last_meta["raw_text"] = raw_text
             if attempt < int(max_attempts):
                 continue
             break
@@ -301,6 +305,7 @@ def generate_v3_routing_with_bounded_retry(
         meta = dict(meta)
         meta.update(
             {
+                "raw_text": raw_text,
                 "model_format_retry_count": retries,
                 "attempt_count": attempt,
                 "attempt_history": history
@@ -345,6 +350,7 @@ def generate_v3_routing_with_bounded_retry(
     fail_meta = dict(last_meta)
     fail_meta.update(
         {
+            "raw_text": last_raw_text,
             "model_format_retry_count": retries,
             "attempt_count": attempts_used,
             "attempt_history": history,

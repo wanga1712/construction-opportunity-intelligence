@@ -15,7 +15,10 @@ Phase 3 complete (golden bad-case snapshot — 67 cases, SHA256 frozen).
 Phase 3.5 complete (live runtime reconciliation — canonical Git ready).
 Phase 4 complete (torgi visibility gate deployed; live acceptance PASS).
 Phase 5 complete (business scope fail-closed; live deploy PASS).
-Phase 6+ not started.
+Phase 6–7 IN_PROGRESS.
+Phase 6A structural storage implemented in Git (DDL/live smoke pending).
+
+PHASE67_BOUNDARY_COMMIT=e50eb40f1b7db60dd778c22c90abdcf9bb5095db
 
 ## Phase 0 Results
 
