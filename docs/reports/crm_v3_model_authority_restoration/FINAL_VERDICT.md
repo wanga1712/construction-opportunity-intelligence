@@ -15,11 +15,13 @@ Phase 3 complete (golden bad-case snapshot — 67 cases, SHA256 frozen).
 Phase 3.5 complete (live runtime reconciliation — canonical Git ready).
 Phase 4 complete (torgi visibility gate deployed; live acceptance PASS).
 Phase 5 complete (business scope fail-closed; live deploy PASS).
-Phase 6–7 IN_PROGRESS (authority restoration continues after 6A).
-Phase 6A complete — immutable model inference storage PASS (DDL + smoke + golden SHADOW).
+Phase 6A complete — immutable model inference storage PASS.
+Phase 6B complete — semantic namespace separation PASS (MODEL vs BUSINESS; production linkage).
 
 PHASE67_BOUNDARY_COMMIT=e50eb40f1b7db60dd778c22c90abdcf9bb5095db
 PHASE6A_STORAGE_COMMIT=a781228bec42e1893511461a7a066ace5bc796ea
+PHASE6A_RESULTS_COMMIT=6c6e2e736cd1b8ad37f14d5811e4bfce1fdb227a
+PHASE6B_SEPARATION_COMMIT=71b042def75ef3dbcc3af24a5c56653494d50770
 
 ## Phase 0 Results
 
@@ -57,8 +59,9 @@ PHASE6A_STORAGE_COMMIT=a781228bec42e1893511461a7a066ace5bc796ea
 - [x] Phase 3.5: Live runtime reconciliation → LIVE_RUNTIME_RECONCILIATION.md
 - [x] Phase 4: Visibility gate fix → VISIBILITY_GATE.md (live deploy)
 - [x] Phase 5: Remove IN_PROFILE default → BUSINESS_SCOPE_AUTHORITY.md
-- [x] Phase 6A: Immutable RAW inference runs → RAW_INFERENCE_PERSISTENCE.md (SHADOW smoke+golden PASS)
-- [ ] Phase 6–7 remainder: Model RAW authority productization beyond storage boundary
+- [x] Phase 6A: Immutable RAW inference runs → RAW_INFERENCE_PERSISTENCE.md
+- [x] Phase 6B: Semantic namespace separation → MODEL_AUTHORITY_MATRIX.md / PYTHON_IMPERSONATION_AUDIT.md
+- [ ] Phase 6–7 remainder: bulk reassessment / productization beyond authority boundary
 - [ ] Phase 8: OKPD priors audit
 - [ ] Phase 9: ASSESSED contract validation
 - [ ] Phase 10: Medal authority separation

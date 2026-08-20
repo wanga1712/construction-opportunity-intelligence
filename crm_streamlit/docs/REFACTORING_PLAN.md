@@ -13,9 +13,9 @@
 
 ## CURRENT WIP — 2026-08-20
 
-**CRM-V3-MODEL-AUTHORITY-RESTORATION-1** — `[~]` **PHASE 6B IN PROGRESS / 6A PASS**. Semantic namespace separation: validated model vs business-rule result; UI MODEL reads inference_run only. Do not merge `main`.
+**CRM-V3-MODEL-AUTHORITY-RESTORATION-1** — `[~]` **PHASE 6B PASS / REMAINDER OPEN**. Validated model is sole MODEL authority; business_rule_result + field_provenance additive; 10 PRODUCTION assessments linked; legacy UI labeled UNKNOWN_LEGACY. Do not merge `main`. Bulk reassessment not started.
 
-PHASE67_BOUNDARY=`e50eb40` · PHASE6A_STORAGE=`a781228` · PHASE6A_RESULTS=`6c6e2e7`
+PHASE6B_SEPARATION=`71b042d`
 
 ## PRIOR CURRENT WIP — 2026-08-17
 
