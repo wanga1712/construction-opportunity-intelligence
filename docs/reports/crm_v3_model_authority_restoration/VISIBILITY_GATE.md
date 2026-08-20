@@ -150,6 +150,6 @@ Restore `tabs.py` from the backup alias; remove `torgi_publication.py`; restart 
 
 ```
 PHASE4_COMMIT=d6e7b7e1e52f1b4cf58df0dfc1d13c9afb05ed22
-PHASE4_FINAL_COMMIT=<pending>
+PHASE4_FINAL_COMMIT=f5a10c9937c11786c3778e0bdef98366a039026c
 PHASE_4=PASS
 ```
