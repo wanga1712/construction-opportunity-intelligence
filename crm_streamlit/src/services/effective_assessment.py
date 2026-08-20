@@ -145,9 +145,10 @@ def _compute_effective_assessment(
     ea.confidence          = ai_row.get("confidence")
     ea.reasons             = ai_row.get("reasons")
 
-    # scope
-    scope_status = (nr.get("business_scope_status") or "IN_PROFILE").upper()
-    ea.business_relevance = scope_status  # IN_PROFILE | OUT_OF_PROFILE
+    # scope — fail closed: missing/invalid never become IN_PROFILE
+    from src.services.business_scope import canonicalize_business_scope
+
+    ea.business_relevance = canonicalize_business_scope(nr.get("business_scope_status"))
 
     # AI opportunities (baseline)
     ai_opps: list[dict] = nr.get("category_opportunities") or []

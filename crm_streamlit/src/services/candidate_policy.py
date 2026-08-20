@@ -85,7 +85,7 @@ class CandidatePolicy:
         ai_result: Dict[str, Any],
         cohort_median: float,
         egrz_info: Optional[Dict[str, Any]] = None,
-        business_scope_status: str = "IN_PROFILE"
+        business_scope_status: str = "UNKNOWN"
     ) -> Dict[str, Any]:
         """
         Вычисляет баллы и медали по всем категориям и находит лучшую.

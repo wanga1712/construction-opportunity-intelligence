@@ -19,6 +19,9 @@ from src.services.commercial_routing_v3.projection import (
     active_feed_includes_procurement,
     opportunity_is_visible,
 )
+from src.services.business_scope import (
+    scope_is_usable_for_publication,
+)
 
 log = logging.getLogger(__name__)
 
@@ -36,6 +39,7 @@ class TorgiHideReason(StrEnum):
     FAILED = "FAILED"
     INCOMPLETE = "INCOMPLETE"
     MALFORMED = "MALFORMED"
+    SCOPE_UNKNOWN = "SCOPE_UNKNOWN"
     NO_VISIBLE_OPPORTUNITY = "NO_VISIBLE_OPPORTUNITY"
     SCHEMA_NOT_READY = "SCHEMA_NOT_READY"
 
@@ -73,6 +77,16 @@ def assessment_publication_status(
         return False, TorgiHideReason.INCOMPLETE
     if not normalized_result_is_publication_valid(nr):
         return False, TorgiHideReason.MALFORMED
+    nr_obj = nr
+    if isinstance(nr, str):
+        try:
+            nr_obj = json.loads(nr)
+        except Exception:
+            return False, TorgiHideReason.MALFORMED
+    if isinstance(nr_obj, dict) and not scope_is_usable_for_publication(
+        nr_obj.get("business_scope_status")
+    ):
+        return False, TorgiHideReason.SCOPE_UNKNOWN
     return True, None
 
 
@@ -163,6 +177,8 @@ def torgi_publication_sql_filters() -> str:
                           OR ai_pub.normalized_result ? 'category_opportunities'
                           OR ai_pub.normalized_result ? 'candidate_level'
                         )
+                        AND upper(coalesce(ai_pub.normalized_result->>'business_scope_status', ''))
+                            IN ('IN_PROFILE', 'OUT_OF_PROFILE')
                   )
                   AND EXISTS (
                       SELECT 1

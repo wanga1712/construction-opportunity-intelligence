@@ -877,22 +877,16 @@ def process_item(c: Dict[str, Any], rules: List[Any], medians: Dict[str, Any], r
         if status == "FAILED":
             return _fail(RoutingErrorClass.OLLAMA_UNAVAILABLE)
 
-        # BUSINESS SCOPE GATE
-        business_scope_status = "OUT_OF_PROFILE"
-        category_fit = "OUT_OF_PROFILE"
-        download_action = "SKIP"
+        # BUSINESS SCOPE GATE — model-explicit only. Do not infer IN_PROFILE
+        # from proposed_cats / V3 discovery (those are not model scope).
+        from src.services.business_scope import resolve_pipeline_scope
 
-        if route_profile == "EXCLUDED":
-            business_scope_status = "OUT_OF_PROFILE"
-            category_fit = "OUT_OF_PROFILE"
-        else:
-            v3_discovery = bool(v3_normalized_result and v3_normalized_result.get("discovery_required"))
-            if proposed_cats or v3_discovery:
-                business_scope_status = "IN_PROFILE"
-                category_fit = "IN_PROFILE"
-            else:
-                business_scope_status = "OUT_OF_PROFILE"
-                category_fit = "OUT_OF_PROFILE"
+        download_action = "SKIP"
+        business_scope_status = resolve_pipeline_scope(
+            route_profile=route_profile,
+            model_payload=ai_res if isinstance(ai_res, dict) else None,
+        )
+        category_fit = business_scope_status
 
         # Формируем ИИ-возможности
         cohort_key = f"{law}_{lifecycle}_{route_profile}"
@@ -1126,7 +1120,9 @@ def process_item(c: Dict[str, Any], rules: List[Any], medians: Dict[str, Any], r
             effective_level = best_eff_level
             effective_score = best_eff_score
         else:
-            effective_relevance = "OUT_OF_PROFILE" if business_scope_status == "OUT_OF_PROFILE" else "HIGH"
+            from src.services.business_scope import effective_relevance_from_scope
+
+            effective_relevance = effective_relevance_from_scope(business_scope_status)
             effective_research_action = download_action
             effective_level = cand_level
             effective_score = cand_score
