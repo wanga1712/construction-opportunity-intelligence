@@ -42,6 +42,8 @@ def run_shadow_inference(
     acquire_gpu: bool = True,
     dry_run_persist: bool = False,
     compute_business_preview: bool = True,
+    prompt_version: Optional[str] = None,
+    prompt_text: Optional[str] = None,
 ) -> Dict[str, Any]:
     """Run one SHADOW inference for a procurement.
 
@@ -53,13 +55,20 @@ def run_shadow_inference(
       - opportunity CURRENT writes
       - torgi visibility changes
       - expert annotation writes
+
+    Optional ``prompt_text`` / ``prompt_version`` override production v5 builder
+    (Phase 7 A/B calibration). Default remains production v5 path.
     """
     engine = CommercialRoutingV3Engine(crm_db=crm_db)
     registry, allowed, subs = engine.load_registry()
     cats = set(allowed_categories or allowed)
     submap = allowed_subcategories if allowed_subcategories is not None else subs
 
-    prompt = engine.build_prompt_context(procurement)
+    pv = prompt_version or PROMPT_VERSION
+    if prompt_text is not None:
+        prompt = prompt_text
+    else:
+        prompt = engine.build_prompt_context(procurement)
     mi = model_input if isinstance(model_input, dict) else {}
     ih = _input_hash(mi) if mi else _input_hash({"procurement_id": procurement_id, "prompt": prompt[:200]})
 
@@ -76,7 +85,7 @@ def run_shadow_inference(
             procurement_id=procurement_id,
             crm_db=crm_db,
             input_hash=ih,
-            prompt_version=PROMPT_VERSION,
+            prompt_version=pv,
             persist_dry_run=True,  # do not upsert attempt telemetry as production side-effect path
             acquire_gpu=acquire_gpu,
         )
@@ -107,7 +116,7 @@ def run_shadow_inference(
         allowed_categories=cats,
         allowed_subcategories=submap,
         model_name=str(meta.get("model") or "qwen2.5:7b"),
-        prompt_version=PROMPT_VERSION,
+        prompt_version=pv,
         dry_run=dry_run_persist,
     )
 
