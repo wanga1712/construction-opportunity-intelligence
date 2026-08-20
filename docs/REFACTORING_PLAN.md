@@ -13,9 +13,9 @@
 
 ## CURRENT WIP — 2026-08-20
 
-**CRM-V3-MODEL-AUTHORITY-RESTORATION-1** — `[~]` **PHASE 6A PASS / PHASE 6–7 REMAINDER OPEN**. Immutable `crm_v3_model_inference_runs` additive DDL applied; SHADOW smoke 5/5 PASS; golden SHADOW 67/67 PASS with zero production assessment/opportunity mutations. Do not merge `main` yet. Next stage only on explicit request.
+**CRM-V3-MODEL-AUTHORITY-RESTORATION-1** — `[~]` **PHASE 6B IN PROGRESS / 6A PASS**. Semantic namespace separation: validated model vs business-rule result; UI MODEL reads inference_run only. Do not merge `main`.
 
-PHASE67_BOUNDARY_COMMIT=`e50eb40` · PHASE6A_STORAGE_COMMIT=`a781228` · Report: `docs/reports/crm_v3_model_authority_restoration/RAW_INFERENCE_PERSISTENCE.md`.
+PHASE67_BOUNDARY=`e50eb40` · PHASE6A_STORAGE=`a781228` · PHASE6A_RESULTS=`6c6e2e7`
 
 ## PRIOR CURRENT WIP — 2026-08-17
 
