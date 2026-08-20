@@ -141,10 +141,96 @@ Module: `shadow_inference.py`
 
 ## Smoke / golden
 
-Pending live DDL + deploy:
+Live S13 (after additive DDL + runtime deploy of Phase 6A storage):
 
-SHADOW_SMOKE=PENDING  
-GOLDEN_SHADOW_RUNS=PENDING
+### Controlled shadow smoke (5 cases)
+
+IDs: `840, 1, 8003, 21782, 13248`
+
+| Check | Result |
+|---|---|
+| SHADOW_SMOKE | PASS |
+| RAW_CAPTURE_SUCCESS | 5/5 |
+| VALIDATION_SUCCESS | 5/5 |
+| PRODUCTION_ASSESSMENTS_MUTATED | 0 |
+| PRODUCTION_OPPORTUNITIES_MUTATED | 0 |
+| TORGI_VISIBILITY_UNCHANGED | YES (829→829 stage/status fingerprint) |
+
+### Immutability probes
+
+| Check | Result |
+|---|---|
+| DB trigger blocks UPDATE of raw payload | YES |
+| Second SHADOW on procurement 840 → new run id=6 | YES |
+| First run id=1 raw/validated hashes unchanged | YES |
+| REASSESSMENT_CREATES_NEW_RUN | YES |
+| MODEL_RAW_MUTATED_AFTER_INFERENCE | NO |
+
+### Golden SHADOW (67 frozen cases)
+
+Artifact: `phase6a_golden_shadow_summary.json`
+
+| Metric | Value |
+|---|---|
+| GOLDEN_SHADOW_RUNS | 67 |
+| RAW_CAPTURE_SUCCESS | 67 |
+| PARSE_SUCCESS | 67 |
+| PARSE_FAILURE | 0 |
+| VALIDATION_SUCCESS | 67 |
+| VALIDATION_FAILURE | 0 |
+| MODEL_CALL_FAILED | 0 |
+| PRODUCTION_ASSESSMENTS_MUTATED | 0 |
+| PRODUCTION_OPPORTUNITIES_MUTATED | 0 |
+| elapsed_sec | 1909.2 |
+| GOLDEN_SHADOW | PASS |
+
+Live inventory after smoke+reassessment+golden:
+
+- `crm_v3_model_inference_runs` rows: 73 (68 distinct procurements)
+- Current assessments with `inference_run_id IS NULL`: 3693 (historical provenance unavailable)
+- Current assessments linked to inference runs: 0 (shadow-only; production link on next production assess)
+- New table owner: `postgres` (created by DDL admin route)
+- Existing `procurement_ai_assessments` owner unchanged: `crm_app`
+- `TABLE_OWNERSHIP_CHANGED=NO` for existing tables
+- `HISTORICAL_INFERENCE_RUNS_SYNTHESIZED=0`
+
+## Phase 6A final checklist
+
+```
+RAW_STORAGE_TABLE=crm_v3_model_inference_runs
+RAW_CAPTURE_BEFORE_NORMALIZATION=YES
+RAW_HASH_IS_EXACT_MODEL_TEXT_HASH=YES
+RAW_MODEL_SHA256_PRESENT=YES
+
+TELEMETRY_MUTATES_MODEL_JSON=NO
+VALIDATOR_CREATES_COMMERCIAL_HYPOTHESIS=NO
+
+INFERENCE_RUN_PERSISTED_BEFORE_BUSINESS_ENRICHMENT=YES
+MODEL_RAW_MUTATED_AFTER_INFERENCE=NO
+REASSESSMENT_CREATES_NEW_RUN=YES
+
+PARSE_FAILURE_PRESERVES_RAW=YES
+VALIDATED_HASH_DETERMINISTIC=YES
+
+SHADOW_MUTATES_PRODUCTION_ASSESSMENT=NO
+SHADOW_MUTATES_OPPORTUNITIES=NO
+SHADOW_MUTATES_VISIBILITY=NO
+
+SHADOW_SMOKE=PASS
+GOLDEN_SHADOW_RUNS=67
+RAW_CAPTURE_SUCCESS=67
+
+HISTORICAL_INFERENCE_RUNS_SYNTHESIZED=0
+TABLE_OWNERSHIP_CHANGED=NO
+
+TESTS=PASS (45 targeted: phase6a + phase67 boundary + phase4 + phase5)
+REPO_HYGIENE_CHECK=PASS (at report commit)
+
+PHASE67_BOUNDARY_COMMIT=e50eb40f1b7db60dd778c22c90abdcf9bb5095db
+PHASE6A_STORAGE_COMMIT=a781228bec42e1893511461a7a066ace5bc796ea
+
+PHASE_6A=PASS
+```
 
 ## Local tests
 

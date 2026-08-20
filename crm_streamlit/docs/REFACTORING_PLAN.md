@@ -11,7 +11,13 @@
 - Размер рабочего Python-модуля: до 300 строк — желательно; 300–450 допустимо при цельности; свыше 450 требуется записанное объяснение или декомпозиция.
 - Изменение поведения сначала фиксируется тестом или явно записанным ожидаемым результатом.
 
-## CURRENT WIP — 2026-08-17
+## CURRENT WIP — 2026-08-20
+
+**CRM-V3-MODEL-AUTHORITY-RESTORATION-1** — `[~]` **PHASE 6A PASS / PHASE 6–7 REMAINDER OPEN**. Immutable `crm_v3_model_inference_runs` additive DDL applied; SHADOW smoke 5/5 PASS; golden SHADOW 67/67 PASS with zero production assessment/opportunity mutations. Do not merge `main` yet. Next stage only on explicit request.
+
+PHASE67_BOUNDARY_COMMIT=`e50eb40` · PHASE6A_STORAGE_COMMIT=`a781228` · Report: `docs/reports/crm_v3_model_authority_restoration/RAW_INFERENCE_PERSISTENCE.md`.
+
+## PRIOR CURRENT WIP — 2026-08-17
 
 **CRM-V3-PRODUCTION-RECOVERY-EXPERT-CALIBRATION-AND-DOCUMENT-LEARNING-BASELINE-1** — `[~]` **PHASE 2–3 CODE COMPLETE / PHASE 1 UI FROZEN**. Operator accepted Phase 1 nested procurement view as the last working look. Do not merge to `main` any commit that changes that appearance.
 

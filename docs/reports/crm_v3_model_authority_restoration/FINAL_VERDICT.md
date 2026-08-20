@@ -15,10 +15,11 @@ Phase 3 complete (golden bad-case snapshot — 67 cases, SHA256 frozen).
 Phase 3.5 complete (live runtime reconciliation — canonical Git ready).
 Phase 4 complete (torgi visibility gate deployed; live acceptance PASS).
 Phase 5 complete (business scope fail-closed; live deploy PASS).
-Phase 6–7 IN_PROGRESS.
-Phase 6A structural storage implemented in Git (DDL/live smoke pending).
+Phase 6–7 IN_PROGRESS (authority restoration continues after 6A).
+Phase 6A complete — immutable model inference storage PASS (DDL + smoke + golden SHADOW).
 
 PHASE67_BOUNDARY_COMMIT=e50eb40f1b7db60dd778c22c90abdcf9bb5095db
+PHASE6A_STORAGE_COMMIT=a781228bec42e1893511461a7a066ace5bc796ea
 
 ## Phase 0 Results
 
@@ -56,7 +57,8 @@ PHASE67_BOUNDARY_COMMIT=e50eb40f1b7db60dd778c22c90abdcf9bb5095db
 - [x] Phase 3.5: Live runtime reconciliation → LIVE_RUNTIME_RECONCILIATION.md
 - [x] Phase 4: Visibility gate fix → VISIBILITY_GATE.md (live deploy)
 - [x] Phase 5: Remove IN_PROFILE default → BUSINESS_SCOPE_AUTHORITY.md
-- [ ] Phase 6–7: Model RAW immutability + Python impersonation audit
+- [x] Phase 6A: Immutable RAW inference runs → RAW_INFERENCE_PERSISTENCE.md (SHADOW smoke+golden PASS)
+- [ ] Phase 6–7 remainder: Model RAW authority productization beyond storage boundary
 - [ ] Phase 8: OKPD priors audit
 - [ ] Phase 9: ASSESSED contract validation
 - [ ] Phase 10: Medal authority separation
