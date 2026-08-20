@@ -27,8 +27,8 @@ account, host, credential или key path. Запрещено пробовать
 
 | Host | Authority and purpose | Approved human/SSH access |
 |---|---|---|
-| S13 | `S13`, alias `S13`; CRM, Candidate routing, Qwen/Ollama, document intelligence runtime, canonical CRM DB | primary operator and OS user `<S13_SSH_USER>`; `ssh <S13_SSH_USER>@S13` or `ssh <S13_SSH_USER>@S13` |
-| S7 | `S7`, hostname `S7`; source/history authority, source procurement data and source lifecycle/status | approved OS user `<S7_SSH_USER>`; `ssh <S7_SSH_USER>@S7` |
+| S13 | Logical name `S13`; CRM, Candidate routing, Qwen/Ollama, document intelligence runtime, canonical CRM DB | primary operator `<S13_SSH_USER>`; connect via the **existing Host block** in local Windows SSH config that is already bound to this CRM host (User + IdentityFile from that block). There is **no** `Host S13` stanza. Do not invent aliases, users, or extra network setup. |
+| S7 | Logical name `S7`; source/history authority, source procurement data and source lifecycle/status | approved OS user `<S7_SSH_USER>`; connect via the existing Host block in the same local SSH config for this source host. |
 
 Не вводить дополнительные canonical hosts без отдельного project decision.
 
@@ -54,12 +54,21 @@ file**, не Linux username, DB user, application user или service user. Не
 печатать и не документировать содержимое ключа. Approved explicit form:
 
 ```text
-ssh -i <HOME>\.ssh\<SSH_IDENTITY> <S13_SSH_USER>@S13
+ssh -i <HOME>\.ssh\<SSH_IDENTITY> <S13_SSH_USER>@<S13_SSH_HOST>
 ```
 
-Локальный SSH config отдельно содержит approved alias `S13` с
-`HostName S13` и `User <S13_SSH_USER>`; команда через alias использует identity,
-уже назначенную этому alias в SSH config. Не подменять и не угадывать её.
+Proven local SSH config (inspected, not modified):
+
+- There is **no** `Host S13` stanza. `ssh S13` is not a configured alias
+  and will fail hostname resolution.
+- Approved S13 CRM access is the **already-existing Host block** in
+  `%USERPROFILE%\.ssh\config` whose User is `<S13_SSH_USER>` and whose
+  IdentityFile is the Windows SSH identity documented above.
+- Use that Host alias as written. Do not invent another username, host,
+  identity file, ProxyJump, or network overlay.
+- Do not print HostName, addresses, usernames, or key contents in reports.
+
+OPERATING_RULES_MATCH_REAL_SSH_CONFIG=YES
 
 ## Canonical databases and technical roles
 
