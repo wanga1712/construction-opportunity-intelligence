@@ -91,7 +91,7 @@ No bulk reassessment. No Ollama/PostgreSQL/document/S7 restarts.
 ## Git
 
 PHASE5_COMMIT=e8a9a74aac98070cad660140c9e9358b3ecd040d  
-PHASE5_FINAL_COMMIT=pending this report
+PHASE5_FINAL_COMMIT=43b0bc122086d45db0b4ba22f2df20f3b9e44255
 
 ```
 PHASE_5=PASS
