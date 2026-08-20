@@ -13,10 +13,9 @@
 
 ## CURRENT WIP — 2026-08-20
 
-**CRM-V3-MODEL-AUTHORITY-RESTORATION-1** — `[~]` **PHASE 7 CALIBRATION FAIL (hard metrics) / ENGINEERING DONE**. Phase 6A/6B PASS. Zero-hypotheses diagnosed (silent empty / schema-copy). New SHADOW prompt `v3_category_centric_routing_7b_v6_1` recovers 14/16 clear directs (v5: 0/16); 2 direct misses + 2 unjustified negative FPs remain. Production stays on v5. Do not merge `main`.
+**CRM-V3-MODEL-AUTHORITY-RESTORATION-1** — `[~]` **PHASE 7.1 FAIL (hard gates)**. Residual forensics + label revalidation done; v6_1 frozen; v6_2/v6_3 SHADOW experimented; no prompt meets original+holdout hard acceptance together. Production stays on v5. Do not merge `main`.
 
-PHASE6B_SEPARATION=`71b042d`
-PHASE6B_FINAL=`7163749`
+PHASE7_COMMIT=`b40f53a`
 
 ## PRIOR CURRENT WIP — 2026-08-17
 

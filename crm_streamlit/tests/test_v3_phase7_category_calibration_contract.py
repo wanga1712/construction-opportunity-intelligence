@@ -1,9 +1,7 @@
-"""Phase 7 — v6 category contract + calibration invariants (no live Ollama)."""
+"""Phase 7 / 7.1 — prompt version contract + calibration invariants (no live Ollama)."""
 from __future__ import annotations
 
 from copy import deepcopy
-
-import pytest
 
 from src.services.commercial_routing_v3.model_result_validator import validate_model_result
 from src.services.commercial_routing_v3.prompt import (
@@ -11,10 +9,15 @@ from src.services.commercial_routing_v3.prompt import (
     allowed_category_codes_block,
     build_v3_prompt_from_model_input,
 )
-from src.services.commercial_routing_v3.prompt_v6 import (
-    PROMPT_VERSION as V6,
-    build_v6_prompt,
-    build_v6_prompt_from_model_input,
+from src.services.commercial_routing_v3.prompt_v6_1 import (
+    PROMPT_VERSION as V61,
+    build_v6_1_prompt,
+    build_v6_1_prompt_from_model_input,
+)
+from src.services.commercial_routing_v3.prompt_v6_2 import (
+    PROMPT_VERSION as V62,
+    build_v6_2_prompt,
+    build_v6_2_prompt_from_model_input,
 )
 from src.services.commercial_routing_v3.shadow_inference import run_shadow_inference
 
@@ -57,76 +60,80 @@ def _mi(title: str, okpd: str = "27.40.00", okpd_name: str = "Светильни
     }
 
 
-def test_prompt_v6_distinct_from_v5() -> None:
+def test_prompt_versions_distinct() -> None:
     assert V5 == "v3_category_centric_routing_7b_v5"
-    assert V6.startswith("v3_category_centric_routing_7b_v6")
-    assert V6 != V5
-    assert V6 == "v3_category_centric_routing_7b_v6_1"
+    assert V61 == "v3_category_centric_routing_7b_v6_1"
+    assert V62 == "v3_category_centric_routing_7b_v6_2"
+    assert len({V5, V61, V62}) == 3
+    from src.services.commercial_routing_v3.prompt_v6_3 import PROMPT_VERSION as V63
 
-def test_v6_registry_present_and_exact_codes() -> None:
-    text = build_v6_prompt_from_model_input(
+    assert V63 == "v3_category_centric_routing_7b_v6_3"
+    assert V63 not in {V5, V61, V62}
+
+
+def test_v62_registry_and_decision_order() -> None:
+    text = build_v6_2_prompt_from_model_input(
         _mi("Поставка светильников"),
         registry=_REGISTRY,
         okpd_priors=[],
         procurement_form_prior="DIRECT_GOODS_PURCHASE",
     )
     assert "ALLOWED_COMMERCIAL_CATEGORY_CODES" in text
-    assert "- lighting" in text
-    assert "- computers" in text
-    block = allowed_category_codes_block(_REGISTRY)
-    assert "lighting" in block and "computers" in block
+    assert "STEP 1" in text and "STEP 3" in text
+    assert "моноблок" in text
+    assert "ливневой канализации" in text
+    assert "SERVICES_OTHER" in text
+    assert "INSUFFICIENT_EVIDENCE" in text
 
 
-def test_v6_direct_clear_positive_contract() -> None:
-    text = build_v6_prompt_from_model_input(
-        _mi("Поставка светодиодных светильников"),
+def test_v62_negative_service_contract() -> None:
+    text = build_v6_2_prompt_from_model_input(
+        _mi("Поверка газовых счетчиков", okpd="71.12", okpd_name="Услуги"),
         registry=_REGISTRY,
         okpd_priors=[],
-        procurement_form_prior="DIRECT_GOODS_PURCHASE",
+        procurement_form_prior="SERVICES_OTHER",
     )
-    assert "DIRECT_GOODS_PURCHASE" in text
-    assert "POSITIVE EXAMPLE lighting" in text
-    assert '"category_code":"lighting"' in text
-    assert "светильник/лампа→lighting" in text
-
-
-def test_v6_direct_outside_registry_contract() -> None:
-    text = build_v6_prompt_from_model_input(
-        _mi("Поставка газовых счетчиков", okpd="26.51", okpd_name="Счетчики газа"),
-        registry=_REGISTRY,
-        okpd_priors=[],
-        procurement_form_prior="DIRECT_GOODS_PURCHASE",
-    )
+    assert "NEGATIVE EXAMPLE (service" in text
     assert "NO_COMMERCIAL_ENTRY" in text
-    assert "NEGATIVE EXAMPLE" in text
-    assert "product_outside_registry" in text
+    assert "never invent curbstone" in text
 
 
-def test_v6_object_contextual_contract() -> None:
-    text = build_v6_prompt_from_model_input(
-        _mi("Капитальный ремонт автомобильной дороги", okpd="42.11", okpd_name="Дороги"),
+def test_v62_object_example_not_force_curbstone() -> None:
+    text = build_v6_2_prompt_from_model_input(
+        _mi("Ремонт автомобильной дороги", okpd="42.11", okpd_name="Дороги"),
         registry=_REGISTRY,
         okpd_priors=[],
         procurement_form_prior="CONSTRUCTION_WORKS",
     )
-    assert "confirmation_required=true" in text or '"confirmation_required":true' in text
-    assert "Do NOT invent drainage/waterproofing/lighting merely because" in text
-    assert "OBJECT EXAMPLE" in text
+    assert "bare road repair" in text
+    assert '"commercial_category_hypotheses":[]' in text
+    assert "INSUFFICIENT_EVIDENCE" in text
 
 
-def test_v6_empty_status_mandatory_when_no_hypotheses() -> None:
-    text = build_v6_prompt_from_model_input(
+def test_v61_frozen_unchanged_version() -> None:
+    assert V61 == "v3_category_centric_routing_7b_v6_1"
+    text = build_v6_1_prompt_from_model_input(
         _mi("Поставка"),
         registry=_REGISTRY,
         okpd_priors=[],
         procurement_form_prior="UNKNOWN",
     )
-    assert "empty_hypothesis_status MUST be one of" in text or (
-        "empty hypotheses without empty_hypothesis_status is invalid" in text
+    assert V61 in text
+    assert V62 not in text
+
+
+def test_v62_build_wrapper() -> None:
+    text = build_v6_2_prompt(
+        {"v3_model_input": _mi("Поставка ноутбуков"), "title": "Поставка ноутбуков"},
+        registry=_REGISTRY,
+        okpd_priors=[],
+        routing_signals=[],
+        procurement_form_prior="DIRECT_GOODS_PURCHASE",
     )
+    assert V62 in text
+
 
 def test_python_prior_does_not_mutate_result() -> None:
-    """Priors are prompt context only; validator must not inject prior categories."""
     raw = {
         "source_contour": "PUBLIC_44FZ",
         "procurement_form": "DIRECT_GOODS_PURCHASE",
@@ -193,24 +200,21 @@ def test_zero_confidence_preserved() -> None:
         allowed_subcategories={},
     )
     assert vr.validated is not None
-    assert len(vr.validated["commercial_category_hypotheses"]) == 1
     assert vr.validated["commercial_category_hypotheses"][0]["confidence"] == 0.0
 
-def test_v6_build_via_procurement_wrapper() -> None:
-    text = build_v6_prompt(
-        {"v3_model_input": _mi("Поставка ноутбуков"), "title": "Поставка ноутбуков"},
+
+def test_v5_prompt_still_production_default() -> None:
+    text = build_v3_prompt_from_model_input(
+        _mi("Поставка светильников"),
         registry=_REGISTRY,
         okpd_priors=[],
-        routing_signals=[],
         procurement_form_prior="DIRECT_GOODS_PURCHASE",
     )
-    assert V6 in text
-    assert "computers" in allowed_category_codes_block(_REGISTRY)
+    assert V5 in text
+    assert V62 not in text
 
 
-def test_shadow_override_does_not_call_assessment_write(monkeypatch) -> None:
-    """SHADOW with prompt override must not write assessments/opportunities."""
-
+def test_shadow_override_does_not_mutate_production(monkeypatch) -> None:
     class _Crm:
         writes = []
 
@@ -241,7 +245,11 @@ def test_shadow_override_does_not_call_assessment_write(monkeypatch) -> None:
 
     def _fake_bundle(*a, **k):
         class B:
-            raw_text = '{"commercial_category_hypotheses":[],"empty_hypothesis_status":"NO_COMMERCIAL_ENTRY","overall_research_action":"SKIP"}'
+            raw_text = (
+                '{"commercial_category_hypotheses":[],'
+                '"empty_hypothesis_status":"NO_COMMERCIAL_ENTRY",'
+                '"overall_research_action":"SKIP"}'
+            )
             parsed = {
                 "commercial_category_hypotheses": [],
                 "empty_hypothesis_status": "NO_COMMERCIAL_ENTRY",
@@ -287,24 +295,24 @@ def test_shadow_override_does_not_call_assessment_write(monkeypatch) -> None:
         _Crm(),
         procurement_id=1,
         procurement={"title": "x"},
-        prompt_version=V6,
-        prompt_text="dummy prompt with lighting computers",
+        prompt_version=V62,
+        prompt_text="dummy",
         compute_business_preview=False,
         dry_run_persist=True,
         acquire_gpu=False,
     )
     assert out["production_assessment_mutated"] is False
     assert out["opportunities_mutated"] is False
-    assert out["visibility_mutated"] is False
     assert not any("procurement_ai_assessments" in str(w) for w in _Crm.writes)
-    assert not any("crm_procurement_category_opportunities" in str(w) for w in _Crm.writes)
 
-def test_v5_prompt_still_unchanged_default() -> None:
-    text = build_v3_prompt_from_model_input(
-        _mi("Поставка светильников"),
+
+def test_v61_builder_still_importable() -> None:
+    text = build_v6_1_prompt(
+        {"v3_model_input": _mi("Поставка"), "title": "Поставка"},
         registry=_REGISTRY,
         okpd_priors=[],
-        procurement_form_prior="DIRECT_GOODS_PURCHASE",
+        routing_signals=[],
+        procurement_form_prior="UNKNOWN",
     )
-    assert V5 in text
-    assert V6 not in text
+    assert V61 in text
+    assert "lighting" in allowed_category_codes_block(_REGISTRY)

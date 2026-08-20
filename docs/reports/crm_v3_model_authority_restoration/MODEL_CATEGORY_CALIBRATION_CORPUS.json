@@ -4,7 +4,7 @@
   "OLD_PYTHON_CATEGORY_IS_GROUND_TRUTH": false,
   "CALIBRATION_CASES": 65,
   "CLEAR_DIRECT_POSITIVES": 16,
-  "CLEAR_NEGATIVES": 16,
+  "CLEAR_NEGATIVES": 15,
   "OBJECT_CASES": 16,
   "PRIOR11_DIAGNOSTIC": 11,
   "ROAD_CASE_REVIEW": 4,
@@ -299,14 +299,17 @@
     },
     {
       "procurement_id": 34517,
-      "bucket": "CLEAR_NEGATIVE",
+      "bucket": "OBJECT_RELABELED",
       "title": "Выполнение работ по текущему ремонту помещений Пятигорского медико-фармацевтического института – филиала ФГБОУ ВО ВолгГМУ Минздрава России.",
       "okpd_code": "43.39.19.190",
       "okpd_name": "Работы завершающие и отделочные в зданиях и сооружениях, прочие, не включенные в другие группировки",
-      "expected_label_kind": "EXPECTED_EMPTY",
+      "expected_label_kind": "AMBIGUOUS_REVIEW",
       "expected_exact_category": null,
-      "label_note": "outside sellable registry product/service",
-      "OLD_PYTHON_CATEGORY_IS_GROUND_TRUTH": false
+      "label_note": "Phase7.1: room repair works — not CLEAR_NEGATIVE; was matched via institute name фармацевт",
+      "OLD_PYTHON_CATEGORY_IS_GROUND_TRUTH": false,
+      "label_correction_reason": "CURRENT_LABEL=CLEAR_NEGATIVE EXPECTED_EMPTY was wrong; construction finishing works → AMBIGUOUS_REVIEW object",
+      "LABEL_CORRECT": "NO",
+      "CORRECTED_LABEL": "AMBIGUOUS_REVIEW / OBJECT"
     },
     {
       "procurement_id": 34239,
@@ -735,6 +738,36 @@
     {
       "procurement_id": 13564,
       "reason": "multi-product bundle (tile+waterproofing+laminate) — not single exact category"
+    }
+  ],
+  "LABEL_REVALIDATION_PHASE71": [
+    {
+      "PROCUREMENT_ID": 37082,
+      "CURRENT_LABEL": "CLEAR_DIRECT/computers",
+      "LABEL_CORRECT": "YES",
+      "CORRECTED_LABEL": "unchanged",
+      "RATIONALE": "Поставка моноблока is unambiguous computers purchase"
+    },
+    {
+      "PROCUREMENT_ID": 27355,
+      "CURRENT_LABEL": "CLEAR_NEGATIVE/EXPECTED_EMPTY",
+      "LABEL_CORRECT": "YES",
+      "CORRECTED_LABEL": "unchanged",
+      "RATIONALE": "Metering verification service — outside sellable registry; curbstone FP unjustified"
+    },
+    {
+      "PROCUREMENT_ID": 34517,
+      "CURRENT_LABEL": "CLEAR_NEGATIVE/EXPECTED_EMPTY",
+      "LABEL_CORRECT": "NO",
+      "CORRECTED_LABEL": "AMBIGUOUS_REVIEW",
+      "RATIONALE": "CURRENT_LABEL=CLEAR_NEGATIVE EXPECTED_EMPTY was wrong; construction finishing works → AMBIGUOUS_REVIEW object"
+    },
+    {
+      "PROCUREMENT_ID": 23591,
+      "CURRENT_LABEL": "CLEAR_DIRECT/drainage_water_management",
+      "LABEL_CORRECT": "YES",
+      "CORRECTED_LABEL": "unchanged",
+      "RATIONALE": "Поставка оборудования ливневой канализации is DIRECT goods of storm-sewer equipment; OKPD pipes support drainage family"
     }
   ]
 }
