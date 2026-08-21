@@ -154,12 +154,28 @@ def _render_page(page: str, service: Optional[CompaniesService]) -> None:
 
 
 def main() -> None:
+    import os
+    import time
+
+    nav_trace = os.environ.get("CRM_UI_NAV_TRACE", "").strip() in {"1", "true", "YES"}
+    t_rerun = time.perf_counter()
     page = render_sidebar_nav()
     dep = page_dependency(page)
+    t_page_start = time.perf_counter()
 
     # Fast path: snapshot / non-Companies pages — no load_sync, no Radar designers.
     if dep == PageDependency.NO_SERVICE:
         _render_page(page, None)
+        if nav_trace:
+            import logging
+
+            logging.getLogger("crm.ui.nav").info(
+                "NAV_TRACE page=%s dep=%s click_to_body_ms=%.1f body_ms=%.1f",
+                page,
+                dep.value,
+                (t_page_start - t_rerun) * 1000.0,
+                (time.perf_counter() - t_page_start) * 1000.0,
+            )
         return
 
     if dep in (PageDependency.OTHER, PageDependency.CRM_DB_ONLY):

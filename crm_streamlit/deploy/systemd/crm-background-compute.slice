@@ -1,0 +1,12 @@
+# CRM background AI / model / document compute
+# Hard CPU headroom: interactive reserved CPUs are NOT available here.
+# Host: 8 logical CPUs (4c/8t). Reserve 0-1 for CRM/Postgres/OS; background 2-7.
+
+[Slice]
+Description=CRM background compute (AI, Ollama, docs, bake-offs)
+AllowedCPUs=2-7
+CPUQuota=600%
+CPUWeight=50
+IOWeight=50
+MemoryHigh=22G
+MemorySwapMax=8G
