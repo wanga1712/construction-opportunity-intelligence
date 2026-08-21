@@ -1,0 +1,2800 @@
+{
+  "wip": "CRM-V3-MODEL-AUTHORITY-RESTORATION-1",
+  "phase": "8",
+  "authority": {
+    "PRODUCTION_MODEL": "qwen2.5:7b",
+    "PRODUCTION_PROMPT_VERSION": "v3_category_centric_routing_7b_v5",
+    "AUDIT_PROMPT_VERSION": "v3_category_centric_routing_7b_v6_1",
+    "MODEL_INPUT_VERSION": "V3_ROUTING_MODEL_INPUT_V3",
+    "NOTE": "Deep residual forensics and Phase 7/7.1 immutable SHADOW runs use frozen v6_1. Production default remains v5 — not changed in Phase 8."
+  },
+  "TRACED_CASES": 34,
+  "DIRECT_CASES": 11,
+  "NEGATIVE_CASES": 11,
+  "OBJECT_CASES": 10,
+  "PRIMARY_FOCUS_RUNS": {
+    "37082": 239,
+    "23591": 283,
+    "27355": 259,
+    "34517": 271
+  },
+  "cases": [
+    {
+      "procurement_id": 37082,
+      "bucket": "CLEAR_DIRECT_POSITIVE",
+      "expected_label_kind": "EXPECTED_EXACT_CATEGORY",
+      "expected_exact_category": "computers",
+      "inference_run_id": 239,
+      "run_kind": "SHADOW",
+      "prompt_version": "v3_category_centric_routing_7b_v6_1",
+      "model_name": "qwen2.5:7b",
+      "prompt_hash": "7bd9c7b116d50551eddc1df5cea13d567ae0c8317d67ae02fc1e6f38be796112",
+      "raw_categories": [
+        "computer_components"
+      ],
+      "validated_categories": [],
+      "invalid_raw_categories": [
+        "computer_components"
+      ],
+      "procurement_form_raw": "DIRECT_GOODS_PURCHASE",
+      "object_type": "GOODS",
+      "object_subtype": "COMPUTER_COMPONENTS",
+      "work_stage": "SUPPLY",
+      "empty_hypothesis_status_raw": null,
+      "empty_hypothesis_status_validated": null,
+      "RAW_CATEGORY": "computer_components",
+      "VALIDATED_CATEGORY": null,
+      "RAW_CATEGORY_VALID_IN_REGISTRY": "NO",
+      "VALIDATOR_REMOVED_CATEGORY": "YES",
+      "VALIDATOR_CHANGED_SEMANTICS": "YES",
+      "title_hints_forensic": [
+        "computers"
+      ],
+      "okpd_priors_forensic": [
+        "computers"
+      ],
+      "form_prior_forensic": "DIRECT_GOODS_PURCHASE",
+      "flags": {
+        "SOURCE_DATA_GAP": "NO",
+        "MODEL_INPUT_GAP": "NO",
+        "PYTHON_PREBIAS": "NO",
+        "PROCUREMENT_FORM_ERROR": "NO",
+        "OBJECT_CLASSIFICATION_ERROR": "NO",
+        "ITEM_EXTRACTION_OR_UNDERSTANDING_ERROR": "NO",
+        "CATEGORY_MAPPING_ERROR": "YES",
+        "INVALID_REGISTRY_CODE_GENERATION": "YES",
+        "VALIDATOR_REJECTED_MODEL_CATEGORY": "YES",
+        "ABSTENTION_ERROR": "YES",
+        "OBJECT_PRIOR_OVERREACH": "NO",
+        "POST_MODEL_BUSINESS_ERROR": "NO",
+        "PRESENTATION_ERROR": "NO",
+        "NO_ERROR": "NO"
+      },
+      "PRIMARY_ROOT_CAUSE": "CATEGORY_MAPPING_ERROR",
+      "explanation": "Model understood monoblock/PC goods (object_subtype=COMPUTER_COMPONENTS) but emitted invalid registry code computer_components instead of computers; validator emptied hypotheses.",
+      "SHADOW_ONLY": true
+    },
+    {
+      "procurement_id": 23591,
+      "bucket": "CLEAR_DIRECT_POSITIVE",
+      "expected_label_kind": "EXPECTED_EXACT_CATEGORY",
+      "expected_exact_category": "drainage_water_management",
+      "inference_run_id": 283,
+      "run_kind": "SHADOW",
+      "prompt_version": "v3_category_centric_routing_7b_v6_1",
+      "model_name": "qwen2.5:7b",
+      "prompt_hash": "699a0d5ba5950f28baf93ccda453b13b36c447d65f3e75581ef747e13ca1ca11",
+      "raw_categories": [
+        "cable"
+      ],
+      "validated_categories": [],
+      "invalid_raw_categories": [
+        "cable"
+      ],
+      "procurement_form_raw": "DIRECT_GOODS_PURCHASE",
+      "object_type": "GOODS",
+      "object_subtype": "CABLE",
+      "work_stage": "SUPPLY",
+      "empty_hypothesis_status_raw": null,
+      "empty_hypothesis_status_validated": null,
+      "RAW_CATEGORY": "cable",
+      "VALIDATED_CATEGORY": null,
+      "RAW_CATEGORY_VALID_IN_REGISTRY": "NO",
+      "VALIDATOR_REMOVED_CATEGORY": "YES",
+      "VALIDATOR_CHANGED_SEMANTICS": "YES",
+      "title_hints_forensic": [
+        "drainage_water_management"
+      ],
+      "okpd_priors_forensic": [],
+      "form_prior_forensic": "DIRECT_GOODS_PURCHASE",
+      "flags": {
+        "SOURCE_DATA_GAP": "NO",
+        "MODEL_INPUT_GAP": "NO",
+        "PYTHON_PREBIAS": "NO",
+        "PROCUREMENT_FORM_ERROR": "NO",
+        "OBJECT_CLASSIFICATION_ERROR": "YES",
+        "ITEM_EXTRACTION_OR_UNDERSTANDING_ERROR": "YES",
+        "CATEGORY_MAPPING_ERROR": "NO",
+        "INVALID_REGISTRY_CODE_GENERATION": "YES",
+        "VALIDATOR_REJECTED_MODEL_CATEGORY": "YES",
+        "ABSTENTION_ERROR": "YES",
+        "OBJECT_PRIOR_OVERREACH": "NO",
+        "POST_MODEL_BUSINESS_ERROR": "NO",
+        "PRESENTATION_ERROR": "NO",
+        "NO_ERROR": "NO"
+      },
+      "PRIMARY_ROOT_CAUSE": "ITEM_EXTRACTION_OR_UNDERSTANDING_ERROR",
+      "explanation": "Title/hints/map rule all point to drainage_water_management; RAW emitted invalid cable with object_subtype=CABLE (wrong product family). Phase 7.1 re-run 476 emitted invalid equipment — still not drainage. Not the same near-miss taxonomy failure as 37082.",
+      "SHADOW_ONLY": true
+    },
+    {
+      "procurement_id": 18512,
+      "bucket": "CLEAR_DIRECT_POSITIVE",
+      "expected_label_kind": "EXPECTED_EXACT_CATEGORY",
+      "expected_exact_category": "cable_support_systems",
+      "inference_run_id": 245,
+      "run_kind": "SHADOW",
+      "prompt_version": "v3_category_centric_routing_7b_v6_1",
+      "model_name": "qwen2.5:7b",
+      "prompt_hash": "0e39c929480dfae2b6176587acbf199203cce2c94a769d47765a5cd25322fe15",
+      "raw_categories": [
+        "cable_support_systems"
+      ],
+      "validated_categories": [
+        "cable_support_systems"
+      ],
+      "invalid_raw_categories": [],
+      "procurement_form_raw": "DIRECT_GOODS_PURCHASE",
+      "object_type": "GOODS",
+      "object_subtype": "CABLE_SUPPORT",
+      "work_stage": "SUPPLY",
+      "empty_hypothesis_status_raw": null,
+      "empty_hypothesis_status_validated": null,
+      "RAW_CATEGORY": "cable_support_systems",
+      "VALIDATED_CATEGORY": "cable_support_systems",
+      "RAW_CATEGORY_VALID_IN_REGISTRY": "YES",
+      "VALIDATOR_REMOVED_CATEGORY": "NO",
+      "VALIDATOR_CHANGED_SEMANTICS": "NO",
+      "title_hints_forensic": [],
+      "okpd_priors_forensic": [],
+      "form_prior_forensic": null,
+      "flags": {
+        "SOURCE_DATA_GAP": "NO",
+        "MODEL_INPUT_GAP": "NO",
+        "PYTHON_PREBIAS": "NO",
+        "PROCUREMENT_FORM_ERROR": "NO",
+        "OBJECT_CLASSIFICATION_ERROR": "NO",
+        "ITEM_EXTRACTION_OR_UNDERSTANDING_ERROR": "NO",
+        "CATEGORY_MAPPING_ERROR": "NO",
+        "INVALID_REGISTRY_CODE_GENERATION": "NO",
+        "VALIDATOR_REJECTED_MODEL_CATEGORY": "NO",
+        "ABSTENTION_ERROR": "NO",
+        "OBJECT_PRIOR_OVERREACH": "NO",
+        "POST_MODEL_BUSINESS_ERROR": "NO",
+        "PRESENTATION_ERROR": "NO",
+        "NO_ERROR": "YES"
+      },
+      "PRIMARY_ROOT_CAUSE": "NO_ERROR",
+      "explanation": "Validated category matches expected.",
+      "SHADOW_ONLY": true
+    },
+    {
+      "procurement_id": 36596,
+      "bucket": "CLEAR_DIRECT_POSITIVE",
+      "expected_label_kind": "EXPECTED_EXACT_CATEGORY",
+      "expected_exact_category": "flooring",
+      "inference_run_id": 249,
+      "run_kind": "SHADOW",
+      "prompt_version": "v3_category_centric_routing_7b_v6_1",
+      "model_name": "qwen2.5:7b",
+      "prompt_hash": "74cc9e27282e75c847864880f665cf8354b096da1450ab9e344a61094eacf310",
+      "raw_categories": [
+        "flooring"
+      ],
+      "validated_categories": [
+        "flooring"
+      ],
+      "invalid_raw_categories": [],
+      "procurement_form_raw": "DIRECT_GOODS_PURCHASE",
+      "object_type": "GOODS",
+      "object_subtype": "FLOORING",
+      "work_stage": "SUPPLY",
+      "empty_hypothesis_status_raw": null,
+      "empty_hypothesis_status_validated": null,
+      "RAW_CATEGORY": "flooring",
+      "VALIDATED_CATEGORY": "flooring",
+      "RAW_CATEGORY_VALID_IN_REGISTRY": "YES",
+      "VALIDATOR_REMOVED_CATEGORY": "NO",
+      "VALIDATOR_CHANGED_SEMANTICS": "NO",
+      "title_hints_forensic": [],
+      "okpd_priors_forensic": [],
+      "form_prior_forensic": null,
+      "flags": {
+        "SOURCE_DATA_GAP": "NO",
+        "MODEL_INPUT_GAP": "NO",
+        "PYTHON_PREBIAS": "NO",
+        "PROCUREMENT_FORM_ERROR": "NO",
+        "OBJECT_CLASSIFICATION_ERROR": "NO",
+        "ITEM_EXTRACTION_OR_UNDERSTANDING_ERROR": "NO",
+        "CATEGORY_MAPPING_ERROR": "NO",
+        "INVALID_REGISTRY_CODE_GENERATION": "NO",
+        "VALIDATOR_REJECTED_MODEL_CATEGORY": "NO",
+        "ABSTENTION_ERROR": "NO",
+        "OBJECT_PRIOR_OVERREACH": "NO",
+        "POST_MODEL_BUSINESS_ERROR": "NO",
+        "PRESENTATION_ERROR": "NO",
+        "NO_ERROR": "YES"
+      },
+      "PRIMARY_ROOT_CAUSE": "NO_ERROR",
+      "explanation": "Validated category matches expected.",
+      "SHADOW_ONLY": true
+    },
+    {
+      "procurement_id": 36939,
+      "bucket": "CLEAR_DIRECT_POSITIVE",
+      "expected_label_kind": "EXPECTED_EXACT_CATEGORY",
+      "expected_exact_category": "flooring",
+      "inference_run_id": 247,
+      "run_kind": "SHADOW",
+      "prompt_version": "v3_category_centric_routing_7b_v6_1",
+      "model_name": "qwen2.5:7b",
+      "prompt_hash": "3cc968d0fc041fcd1b9c5b780a23313f019b1a084cae5a2d4dff74db94226aee",
+      "raw_categories": [
+        "flooring"
+      ],
+      "validated_categories": [
+        "flooring"
+      ],
+      "invalid_raw_categories": [],
+      "procurement_form_raw": "DIRECT_GOODS_PURCHASE",
+      "object_type": "GOODS",
+      "object_subtype": "FLOORING",
+      "work_stage": "SUPPLY",
+      "empty_hypothesis_status_raw": null,
+      "empty_hypothesis_status_validated": null,
+      "RAW_CATEGORY": "flooring",
+      "VALIDATED_CATEGORY": "flooring",
+      "RAW_CATEGORY_VALID_IN_REGISTRY": "YES",
+      "VALIDATOR_REMOVED_CATEGORY": "NO",
+      "VALIDATOR_CHANGED_SEMANTICS": "NO",
+      "title_hints_forensic": [],
+      "okpd_priors_forensic": [],
+      "form_prior_forensic": null,
+      "flags": {
+        "SOURCE_DATA_GAP": "NO",
+        "MODEL_INPUT_GAP": "NO",
+        "PYTHON_PREBIAS": "NO",
+        "PROCUREMENT_FORM_ERROR": "NO",
+        "OBJECT_CLASSIFICATION_ERROR": "NO",
+        "ITEM_EXTRACTION_OR_UNDERSTANDING_ERROR": "NO",
+        "CATEGORY_MAPPING_ERROR": "NO",
+        "INVALID_REGISTRY_CODE_GENERATION": "NO",
+        "VALIDATOR_REJECTED_MODEL_CATEGORY": "NO",
+        "ABSTENTION_ERROR": "NO",
+        "OBJECT_PRIOR_OVERREACH": "NO",
+        "POST_MODEL_BUSINESS_ERROR": "NO",
+        "PRESENTATION_ERROR": "NO",
+        "NO_ERROR": "YES"
+      },
+      "PRIMARY_ROOT_CAUSE": "NO_ERROR",
+      "explanation": "Validated category matches expected.",
+      "SHADOW_ONLY": true
+    },
+    {
+      "procurement_id": 37069,
+      "bucket": "CLEAR_DIRECT_POSITIVE",
+      "expected_label_kind": "EXPECTED_EXACT_CATEGORY",
+      "expected_exact_category": "computers",
+      "inference_run_id": 241,
+      "run_kind": "SHADOW",
+      "prompt_version": "v3_category_centric_routing_7b_v6_1",
+      "model_name": "qwen2.5:7b",
+      "prompt_hash": "4f98f4b158522c38c3ea97936b03a58e4fbe1e137b83820d2f8f53529ef12141",
+      "raw_categories": [
+        "computers"
+      ],
+      "validated_categories": [
+        "computers"
+      ],
+      "invalid_raw_categories": [],
+      "procurement_form_raw": "DIRECT_GOODS_PURCHASE",
+      "object_type": "GOODS",
+      "object_subtype": "COMPUTERS",
+      "work_stage": "SUPPLY",
+      "empty_hypothesis_status_raw": null,
+      "empty_hypothesis_status_validated": null,
+      "RAW_CATEGORY": "computers",
+      "VALIDATED_CATEGORY": "computers",
+      "RAW_CATEGORY_VALID_IN_REGISTRY": "YES",
+      "VALIDATOR_REMOVED_CATEGORY": "NO",
+      "VALIDATOR_CHANGED_SEMANTICS": "NO",
+      "title_hints_forensic": [],
+      "okpd_priors_forensic": [],
+      "form_prior_forensic": null,
+      "flags": {
+        "SOURCE_DATA_GAP": "NO",
+        "MODEL_INPUT_GAP": "NO",
+        "PYTHON_PREBIAS": "NO",
+        "PROCUREMENT_FORM_ERROR": "NO",
+        "OBJECT_CLASSIFICATION_ERROR": "NO",
+        "ITEM_EXTRACTION_OR_UNDERSTANDING_ERROR": "NO",
+        "CATEGORY_MAPPING_ERROR": "NO",
+        "INVALID_REGISTRY_CODE_GENERATION": "NO",
+        "VALIDATOR_REJECTED_MODEL_CATEGORY": "NO",
+        "ABSTENTION_ERROR": "NO",
+        "OBJECT_PRIOR_OVERREACH": "NO",
+        "POST_MODEL_BUSINESS_ERROR": "NO",
+        "PRESENTATION_ERROR": "NO",
+        "NO_ERROR": "YES"
+      },
+      "PRIMARY_ROOT_CAUSE": "NO_ERROR",
+      "explanation": "Validated category matches expected.",
+      "SHADOW_ONLY": true
+    },
+    {
+      "procurement_id": 37188,
+      "bucket": "CLEAR_DIRECT_POSITIVE",
+      "expected_label_kind": "EXPECTED_EXACT_CATEGORY",
+      "expected_exact_category": "computers",
+      "inference_run_id": 237,
+      "run_kind": "SHADOW",
+      "prompt_version": "v3_category_centric_routing_7b_v6_1",
+      "model_name": "qwen2.5:7b",
+      "prompt_hash": "1c021efc5e876d591769a078763be0597861762639bc757dcbc0a51e1ccf0556",
+      "raw_categories": [
+        "computers"
+      ],
+      "validated_categories": [
+        "computers"
+      ],
+      "invalid_raw_categories": [],
+      "procurement_form_raw": "DIRECT_GOODS_PURCHASE",
+      "object_type": "GOODS",
+      "object_subtype": "COMPUTER_PARTS_AND_ACCESSORIES",
+      "work_stage": "SUPPLY",
+      "empty_hypothesis_status_raw": null,
+      "empty_hypothesis_status_validated": null,
+      "RAW_CATEGORY": "computers",
+      "VALIDATED_CATEGORY": "computers",
+      "RAW_CATEGORY_VALID_IN_REGISTRY": "YES",
+      "VALIDATOR_REMOVED_CATEGORY": "NO",
+      "VALIDATOR_CHANGED_SEMANTICS": "NO",
+      "title_hints_forensic": [],
+      "okpd_priors_forensic": [],
+      "form_prior_forensic": null,
+      "flags": {
+        "SOURCE_DATA_GAP": "NO",
+        "MODEL_INPUT_GAP": "NO",
+        "PYTHON_PREBIAS": "NO",
+        "PROCUREMENT_FORM_ERROR": "NO",
+        "OBJECT_CLASSIFICATION_ERROR": "NO",
+        "ITEM_EXTRACTION_OR_UNDERSTANDING_ERROR": "NO",
+        "CATEGORY_MAPPING_ERROR": "NO",
+        "INVALID_REGISTRY_CODE_GENERATION": "NO",
+        "VALIDATOR_REJECTED_MODEL_CATEGORY": "NO",
+        "ABSTENTION_ERROR": "NO",
+        "OBJECT_PRIOR_OVERREACH": "NO",
+        "POST_MODEL_BUSINESS_ERROR": "NO",
+        "PRESENTATION_ERROR": "NO",
+        "NO_ERROR": "YES"
+      },
+      "PRIMARY_ROOT_CAUSE": "NO_ERROR",
+      "explanation": "Validated category matches expected.",
+      "SHADOW_ONLY": true
+    },
+    {
+      "procurement_id": 37401,
+      "bucket": "CLEAR_DIRECT_POSITIVE",
+      "expected_label_kind": "EXPECTED_EXACT_CATEGORY",
+      "expected_exact_category": "lighting",
+      "inference_run_id": 229,
+      "run_kind": "SHADOW",
+      "prompt_version": "v3_category_centric_routing_7b_v6_1",
+      "model_name": "qwen2.5:7b",
+      "prompt_hash": "3e53217cf606c51125081e5b556af4a9f5e27fcddac049f9ecf9ddb2374eeb3f",
+      "raw_categories": [
+        "lighting"
+      ],
+      "validated_categories": [
+        "lighting"
+      ],
+      "invalid_raw_categories": [],
+      "procurement_form_raw": "DIRECT_GOODS_PURCHASE",
+      "object_type": "GOODS",
+      "object_subtype": "LIGHTING",
+      "work_stage": "SUPPLY",
+      "empty_hypothesis_status_raw": null,
+      "empty_hypothesis_status_validated": null,
+      "RAW_CATEGORY": "lighting",
+      "VALIDATED_CATEGORY": "lighting",
+      "RAW_CATEGORY_VALID_IN_REGISTRY": "YES",
+      "VALIDATOR_REMOVED_CATEGORY": "NO",
+      "VALIDATOR_CHANGED_SEMANTICS": "NO",
+      "title_hints_forensic": [],
+      "okpd_priors_forensic": [],
+      "form_prior_forensic": null,
+      "flags": {
+        "SOURCE_DATA_GAP": "NO",
+        "MODEL_INPUT_GAP": "NO",
+        "PYTHON_PREBIAS": "NO",
+        "PROCUREMENT_FORM_ERROR": "NO",
+        "OBJECT_CLASSIFICATION_ERROR": "NO",
+        "ITEM_EXTRACTION_OR_UNDERSTANDING_ERROR": "NO",
+        "CATEGORY_MAPPING_ERROR": "NO",
+        "INVALID_REGISTRY_CODE_GENERATION": "NO",
+        "VALIDATOR_REJECTED_MODEL_CATEGORY": "NO",
+        "ABSTENTION_ERROR": "NO",
+        "OBJECT_PRIOR_OVERREACH": "NO",
+        "POST_MODEL_BUSINESS_ERROR": "NO",
+        "PRESENTATION_ERROR": "NO",
+        "NO_ERROR": "YES"
+      },
+      "PRIMARY_ROOT_CAUSE": "NO_ERROR",
+      "explanation": "Validated category matches expected.",
+      "SHADOW_ONLY": true
+    },
+    {
+      "procurement_id": 37599,
+      "bucket": "CLEAR_DIRECT_POSITIVE",
+      "expected_label_kind": "EXPECTED_EXACT_CATEGORY",
+      "expected_exact_category": "lighting",
+      "inference_run_id": 227,
+      "run_kind": "SHADOW",
+      "prompt_version": "v3_category_centric_routing_7b_v6_1",
+      "model_name": "qwen2.5:7b",
+      "prompt_hash": "9b6478bf866544c93929f0846c199e5ef636637c115f16d03f6286942fec3ef6",
+      "raw_categories": [
+        "lighting"
+      ],
+      "validated_categories": [
+        "lighting"
+      ],
+      "invalid_raw_categories": [],
+      "procurement_form_raw": "DIRECT_GOODS_PURCHASE",
+      "object_type": "GOODS",
+      "object_subtype": "LIGHTING",
+      "work_stage": "SUPPLY",
+      "empty_hypothesis_status_raw": null,
+      "empty_hypothesis_status_validated": null,
+      "RAW_CATEGORY": "lighting",
+      "VALIDATED_CATEGORY": "lighting",
+      "RAW_CATEGORY_VALID_IN_REGISTRY": "YES",
+      "VALIDATOR_REMOVED_CATEGORY": "NO",
+      "VALIDATOR_CHANGED_SEMANTICS": "NO",
+      "title_hints_forensic": [],
+      "okpd_priors_forensic": [],
+      "form_prior_forensic": null,
+      "flags": {
+        "SOURCE_DATA_GAP": "NO",
+        "MODEL_INPUT_GAP": "NO",
+        "PYTHON_PREBIAS": "NO",
+        "PROCUREMENT_FORM_ERROR": "NO",
+        "OBJECT_CLASSIFICATION_ERROR": "NO",
+        "ITEM_EXTRACTION_OR_UNDERSTANDING_ERROR": "NO",
+        "CATEGORY_MAPPING_ERROR": "NO",
+        "INVALID_REGISTRY_CODE_GENERATION": "NO",
+        "VALIDATOR_REJECTED_MODEL_CATEGORY": "NO",
+        "ABSTENTION_ERROR": "NO",
+        "OBJECT_PRIOR_OVERREACH": "NO",
+        "POST_MODEL_BUSINESS_ERROR": "NO",
+        "PRESENTATION_ERROR": "NO",
+        "NO_ERROR": "YES"
+      },
+      "PRIMARY_ROOT_CAUSE": "NO_ERROR",
+      "explanation": "Validated category matches expected.",
+      "SHADOW_ONLY": true
+    },
+    {
+      "procurement_id": 37650,
+      "bucket": "CLEAR_DIRECT_POSITIVE",
+      "expected_label_kind": "EXPECTED_EXACT_CATEGORY",
+      "expected_exact_category": "lighting",
+      "inference_run_id": 225,
+      "run_kind": "SHADOW",
+      "prompt_version": "v3_category_centric_routing_7b_v6_1",
+      "model_name": "qwen2.5:7b",
+      "prompt_hash": "8d214ee5c2a43aa0dd8c656d6baaefed6d1eec05e7322c0d554143081036d12b",
+      "raw_categories": [
+        "lighting"
+      ],
+      "validated_categories": [
+        "lighting"
+      ],
+      "invalid_raw_categories": [],
+      "procurement_form_raw": "DIRECT_GOODS_PURCHASE",
+      "object_type": "GOODS",
+      "object_subtype": "LIGHTING",
+      "work_stage": "SUPPLY",
+      "empty_hypothesis_status_raw": null,
+      "empty_hypothesis_status_validated": null,
+      "RAW_CATEGORY": "lighting",
+      "VALIDATED_CATEGORY": "lighting",
+      "RAW_CATEGORY_VALID_IN_REGISTRY": "YES",
+      "VALIDATOR_REMOVED_CATEGORY": "NO",
+      "VALIDATOR_CHANGED_SEMANTICS": "NO",
+      "title_hints_forensic": [],
+      "okpd_priors_forensic": [],
+      "form_prior_forensic": null,
+      "flags": {
+        "SOURCE_DATA_GAP": "NO",
+        "MODEL_INPUT_GAP": "NO",
+        "PYTHON_PREBIAS": "NO",
+        "PROCUREMENT_FORM_ERROR": "NO",
+        "OBJECT_CLASSIFICATION_ERROR": "NO",
+        "ITEM_EXTRACTION_OR_UNDERSTANDING_ERROR": "NO",
+        "CATEGORY_MAPPING_ERROR": "NO",
+        "INVALID_REGISTRY_CODE_GENERATION": "NO",
+        "VALIDATOR_REJECTED_MODEL_CATEGORY": "NO",
+        "ABSTENTION_ERROR": "NO",
+        "OBJECT_PRIOR_OVERREACH": "NO",
+        "POST_MODEL_BUSINESS_ERROR": "NO",
+        "PRESENTATION_ERROR": "NO",
+        "NO_ERROR": "YES"
+      },
+      "PRIMARY_ROOT_CAUSE": "NO_ERROR",
+      "explanation": "Validated category matches expected.",
+      "SHADOW_ONLY": true
+    },
+    {
+      "procurement_id": 27355,
+      "bucket": "CLEAR_NEGATIVE",
+      "expected_label_kind": "EXPECTED_EMPTY",
+      "expected_exact_category": null,
+      "inference_run_id": 259,
+      "run_kind": "SHADOW",
+      "prompt_version": "v3_category_centric_routing_7b_v6_1",
+      "model_name": "qwen2.5:7b",
+      "prompt_hash": "75b10c5644990c14660feaf853b13dcf0a48090ad6bffc0d722b56aa7c16feea",
+      "raw_categories": [
+        "curbstone"
+      ],
+      "validated_categories": [
+        "curbstone"
+      ],
+      "invalid_raw_categories": [],
+      "procurement_form_raw": "CONSTRUCTION_WORKS",
+      "object_type": "ROAD",
+      "object_subtype": "ROAD_REPAIR",
+      "work_stage": "REPAIR",
+      "empty_hypothesis_status_raw": null,
+      "empty_hypothesis_status_validated": null,
+      "RAW_CATEGORY": "curbstone",
+      "VALIDATED_CATEGORY": "curbstone",
+      "RAW_CATEGORY_VALID_IN_REGISTRY": "YES",
+      "VALIDATOR_REMOVED_CATEGORY": "NO",
+      "VALIDATOR_CHANGED_SEMANTICS": "NO",
+      "title_hints_forensic": [],
+      "okpd_priors_forensic": [],
+      "form_prior_forensic": "DESIGN_ONLY",
+      "flags": {
+        "SOURCE_DATA_GAP": "NO",
+        "MODEL_INPUT_GAP": "NO",
+        "PYTHON_PREBIAS": "NO",
+        "PROCUREMENT_FORM_ERROR": "YES",
+        "OBJECT_CLASSIFICATION_ERROR": "YES",
+        "ITEM_EXTRACTION_OR_UNDERSTANDING_ERROR": "YES",
+        "CATEGORY_MAPPING_ERROR": "NO",
+        "INVALID_REGISTRY_CODE_GENERATION": "NO",
+        "VALIDATOR_REJECTED_MODEL_CATEGORY": "NO",
+        "ABSTENTION_ERROR": "NO",
+        "OBJECT_PRIOR_OVERREACH": "YES",
+        "POST_MODEL_BUSINESS_ERROR": "NO",
+        "PRESENTATION_ERROR": "NO",
+        "NO_ERROR": "NO"
+      },
+      "PRIMARY_ROOT_CAUSE": "OBJECT_PRIOR_OVERREACH",
+      "explanation": "Service/metering verification; form prior DESIGN_ONLY but model copied OBJECT EXAMPLE (ROAD/ROAD_REPAIR + curbstone contextual).",
+      "SHADOW_ONLY": true
+    },
+    {
+      "procurement_id": 7846,
+      "bucket": "CLEAR_NEGATIVE",
+      "expected_label_kind": "EXPECTED_EMPTY",
+      "expected_exact_category": null,
+      "inference_run_id": 261,
+      "run_kind": "SHADOW",
+      "prompt_version": "v3_category_centric_routing_7b_v6_1",
+      "model_name": "qwen2.5:7b",
+      "prompt_hash": "8cd655f304686a8c9217b79cbc7d1025cc98073d35efadc22e9b94ef1cba0aaf",
+      "raw_categories": [
+        "gaz_meters"
+      ],
+      "validated_categories": [],
+      "invalid_raw_categories": [
+        "gaz_meters"
+      ],
+      "procurement_form_raw": "DIRECT_GOODS_PURCHASE",
+      "object_type": "GOODS",
+      "object_subtype": "GAZ_METERS",
+      "work_stage": "SUPPLY",
+      "empty_hypothesis_status_raw": null,
+      "empty_hypothesis_status_validated": null,
+      "RAW_CATEGORY": "gaz_meters",
+      "VALIDATED_CATEGORY": null,
+      "RAW_CATEGORY_VALID_IN_REGISTRY": "NO",
+      "VALIDATOR_REMOVED_CATEGORY": "YES",
+      "VALIDATOR_CHANGED_SEMANTICS": "YES",
+      "title_hints_forensic": [],
+      "okpd_priors_forensic": [],
+      "form_prior_forensic": null,
+      "flags": {
+        "SOURCE_DATA_GAP": "NO",
+        "MODEL_INPUT_GAP": "NO",
+        "PYTHON_PREBIAS": "NO",
+        "PROCUREMENT_FORM_ERROR": "NO",
+        "OBJECT_CLASSIFICATION_ERROR": "NO",
+        "ITEM_EXTRACTION_OR_UNDERSTANDING_ERROR": "NO",
+        "CATEGORY_MAPPING_ERROR": "NO",
+        "INVALID_REGISTRY_CODE_GENERATION": "YES",
+        "VALIDATOR_REJECTED_MODEL_CATEGORY": "YES",
+        "ABSTENTION_ERROR": "YES",
+        "OBJECT_PRIOR_OVERREACH": "NO",
+        "POST_MODEL_BUSINESS_ERROR": "NO",
+        "PRESENTATION_ERROR": "NO",
+        "NO_ERROR": "NO"
+      },
+      "PRIMARY_ROOT_CAUSE": "INVALID_REGISTRY_CODE_GENERATION",
+      "explanation": "Outside-registry item expressed as invented code ['gaz_meters']; validator emptied; should have been []+NO_COMMERCIAL_ENTRY.",
+      "SHADOW_ONLY": true
+    },
+    {
+      "procurement_id": 29384,
+      "bucket": "CLEAR_NEGATIVE",
+      "expected_label_kind": "EXPECTED_EMPTY",
+      "expected_exact_category": null,
+      "inference_run_id": 275,
+      "run_kind": "SHADOW",
+      "prompt_version": "v3_category_centric_routing_7b_v6_1",
+      "model_name": "qwen2.5:7b",
+      "prompt_hash": "a294e4e1524608698088646247383a58aa61e1c612df7989c984f935f7203b2f",
+      "raw_categories": [
+        "automobile_railroad_vehicles"
+      ],
+      "validated_categories": [],
+      "invalid_raw_categories": [
+        "automobile_railroad_vehicles"
+      ],
+      "procurement_form_raw": "DIRECT_GOODS_PURCHASE",
+      "object_type": "GOODS",
+      "object_subtype": "AUTOMOTIVE_EQUIPMENT",
+      "work_stage": "SUPPLY",
+      "empty_hypothesis_status_raw": null,
+      "empty_hypothesis_status_validated": null,
+      "RAW_CATEGORY": "automobile_railroad_vehicles",
+      "VALIDATED_CATEGORY": null,
+      "RAW_CATEGORY_VALID_IN_REGISTRY": "NO",
+      "VALIDATOR_REMOVED_CATEGORY": "YES",
+      "VALIDATOR_CHANGED_SEMANTICS": "YES",
+      "title_hints_forensic": [],
+      "okpd_priors_forensic": [],
+      "form_prior_forensic": null,
+      "flags": {
+        "SOURCE_DATA_GAP": "NO",
+        "MODEL_INPUT_GAP": "NO",
+        "PYTHON_PREBIAS": "NO",
+        "PROCUREMENT_FORM_ERROR": "NO",
+        "OBJECT_CLASSIFICATION_ERROR": "NO",
+        "ITEM_EXTRACTION_OR_UNDERSTANDING_ERROR": "NO",
+        "CATEGORY_MAPPING_ERROR": "NO",
+        "INVALID_REGISTRY_CODE_GENERATION": "YES",
+        "VALIDATOR_REJECTED_MODEL_CATEGORY": "YES",
+        "ABSTENTION_ERROR": "YES",
+        "OBJECT_PRIOR_OVERREACH": "NO",
+        "POST_MODEL_BUSINESS_ERROR": "NO",
+        "PRESENTATION_ERROR": "NO",
+        "NO_ERROR": "NO"
+      },
+      "PRIMARY_ROOT_CAUSE": "INVALID_REGISTRY_CODE_GENERATION",
+      "explanation": "Outside-registry item expressed as invented code ['automobile_railroad_vehicles']; validator emptied; should have been []+NO_COMMERCIAL_ENTRY.",
+      "SHADOW_ONLY": true
+    },
+    {
+      "procurement_id": 29451,
+      "bucket": "CLEAR_NEGATIVE",
+      "expected_label_kind": "EXPECTED_EMPTY",
+      "expected_exact_category": null,
+      "inference_run_id": 265,
+      "run_kind": "SHADOW",
+      "prompt_version": "v3_category_centric_routing_7b_v6_1",
+      "model_name": "qwen2.5:7b",
+      "prompt_hash": "27a63513a95cab8edb79a54de7e27c4bef504e6112abbd33aee9af6bb39a568d",
+      "raw_categories": [
+        "equipment"
+      ],
+      "validated_categories": [],
+      "invalid_raw_categories": [
+        "equipment"
+      ],
+      "procurement_form_raw": "DIRECT_GOODS_PURCHASE",
+      "object_type": "GOODS",
+      "object_subtype": "LABORATORY_EQUIPMENT",
+      "work_stage": "SUPPLY",
+      "empty_hypothesis_status_raw": null,
+      "empty_hypothesis_status_validated": null,
+      "RAW_CATEGORY": "equipment",
+      "VALIDATED_CATEGORY": null,
+      "RAW_CATEGORY_VALID_IN_REGISTRY": "NO",
+      "VALIDATOR_REMOVED_CATEGORY": "YES",
+      "VALIDATOR_CHANGED_SEMANTICS": "YES",
+      "title_hints_forensic": [],
+      "okpd_priors_forensic": [],
+      "form_prior_forensic": null,
+      "flags": {
+        "SOURCE_DATA_GAP": "NO",
+        "MODEL_INPUT_GAP": "NO",
+        "PYTHON_PREBIAS": "NO",
+        "PROCUREMENT_FORM_ERROR": "NO",
+        "OBJECT_CLASSIFICATION_ERROR": "NO",
+        "ITEM_EXTRACTION_OR_UNDERSTANDING_ERROR": "NO",
+        "CATEGORY_MAPPING_ERROR": "NO",
+        "INVALID_REGISTRY_CODE_GENERATION": "YES",
+        "VALIDATOR_REJECTED_MODEL_CATEGORY": "YES",
+        "ABSTENTION_ERROR": "YES",
+        "OBJECT_PRIOR_OVERREACH": "NO",
+        "POST_MODEL_BUSINESS_ERROR": "NO",
+        "PRESENTATION_ERROR": "NO",
+        "NO_ERROR": "NO"
+      },
+      "PRIMARY_ROOT_CAUSE": "INVALID_REGISTRY_CODE_GENERATION",
+      "explanation": "Outside-registry item expressed as invented code ['equipment']; validator emptied; should have been []+NO_COMMERCIAL_ENTRY.",
+      "SHADOW_ONLY": true
+    },
+    {
+      "procurement_id": 32155,
+      "bucket": "CLEAR_NEGATIVE",
+      "expected_label_kind": "EXPECTED_EMPTY",
+      "expected_exact_category": null,
+      "inference_run_id": 263,
+      "run_kind": "SHADOW",
+      "prompt_version": "v3_category_centric_routing_7b_v6_1",
+      "model_name": "qwen2.5:7b",
+      "prompt_hash": "a43cc5dc926ad61b1440ba4af4557a212918ed31f98f6b1f9648d731a9d22337",
+      "raw_categories": [
+        "laboratory_equipment"
+      ],
+      "validated_categories": [],
+      "invalid_raw_categories": [
+        "laboratory_equipment"
+      ],
+      "procurement_form_raw": "DIRECT_GOODS_PURCHASE",
+      "object_type": "GOODS",
+      "object_subtype": "LABORATORY_EQUIPMENT",
+      "work_stage": "SUPPLY",
+      "empty_hypothesis_status_raw": null,
+      "empty_hypothesis_status_validated": null,
+      "RAW_CATEGORY": "laboratory_equipment",
+      "VALIDATED_CATEGORY": null,
+      "RAW_CATEGORY_VALID_IN_REGISTRY": "NO",
+      "VALIDATOR_REMOVED_CATEGORY": "YES",
+      "VALIDATOR_CHANGED_SEMANTICS": "YES",
+      "title_hints_forensic": [],
+      "okpd_priors_forensic": [],
+      "form_prior_forensic": null,
+      "flags": {
+        "SOURCE_DATA_GAP": "NO",
+        "MODEL_INPUT_GAP": "NO",
+        "PYTHON_PREBIAS": "NO",
+        "PROCUREMENT_FORM_ERROR": "NO",
+        "OBJECT_CLASSIFICATION_ERROR": "NO",
+        "ITEM_EXTRACTION_OR_UNDERSTANDING_ERROR": "NO",
+        "CATEGORY_MAPPING_ERROR": "NO",
+        "INVALID_REGISTRY_CODE_GENERATION": "YES",
+        "VALIDATOR_REJECTED_MODEL_CATEGORY": "YES",
+        "ABSTENTION_ERROR": "YES",
+        "OBJECT_PRIOR_OVERREACH": "NO",
+        "POST_MODEL_BUSINESS_ERROR": "NO",
+        "PRESENTATION_ERROR": "NO",
+        "NO_ERROR": "NO"
+      },
+      "PRIMARY_ROOT_CAUSE": "INVALID_REGISTRY_CODE_GENERATION",
+      "explanation": "Outside-registry item expressed as invented code ['laboratory_equipment']; validator emptied; should have been []+NO_COMMERCIAL_ENTRY.",
+      "SHADOW_ONLY": true
+    },
+    {
+      "procurement_id": 34239,
+      "bucket": "CLEAR_NEGATIVE",
+      "expected_label_kind": "EXPECTED_EMPTY",
+      "expected_exact_category": null,
+      "inference_run_id": 273,
+      "run_kind": "SHADOW",
+      "prompt_version": "v3_category_centric_routing_7b_v6_1",
+      "model_name": "qwen2.5:7b",
+      "prompt_hash": "f08f2ff0fc76a22343bf0b3da296cd3669bca922fc8891486eecbdd297870595",
+      "raw_categories": [
+        "diabetes_monitoring_kits"
+      ],
+      "validated_categories": [],
+      "invalid_raw_categories": [
+        "diabetes_monitoring_kits"
+      ],
+      "procurement_form_raw": "DIRECT_GOODS_PURCHASE",
+      "object_type": "GOODS",
+      "object_subtype": "MEDICAL_EQUIPMENT",
+      "work_stage": "SUPPLY",
+      "empty_hypothesis_status_raw": null,
+      "empty_hypothesis_status_validated": null,
+      "RAW_CATEGORY": "diabetes_monitoring_kits",
+      "VALIDATED_CATEGORY": null,
+      "RAW_CATEGORY_VALID_IN_REGISTRY": "NO",
+      "VALIDATOR_REMOVED_CATEGORY": "YES",
+      "VALIDATOR_CHANGED_SEMANTICS": "YES",
+      "title_hints_forensic": [],
+      "okpd_priors_forensic": [],
+      "form_prior_forensic": null,
+      "flags": {
+        "SOURCE_DATA_GAP": "NO",
+        "MODEL_INPUT_GAP": "NO",
+        "PYTHON_PREBIAS": "NO",
+        "PROCUREMENT_FORM_ERROR": "NO",
+        "OBJECT_CLASSIFICATION_ERROR": "NO",
+        "ITEM_EXTRACTION_OR_UNDERSTANDING_ERROR": "NO",
+        "CATEGORY_MAPPING_ERROR": "NO",
+        "INVALID_REGISTRY_CODE_GENERATION": "YES",
+        "VALIDATOR_REJECTED_MODEL_CATEGORY": "YES",
+        "ABSTENTION_ERROR": "YES",
+        "OBJECT_PRIOR_OVERREACH": "NO",
+        "POST_MODEL_BUSINESS_ERROR": "NO",
+        "PRESENTATION_ERROR": "NO",
+        "NO_ERROR": "NO"
+      },
+      "PRIMARY_ROOT_CAUSE": "INVALID_REGISTRY_CODE_GENERATION",
+      "explanation": "Outside-registry item expressed as invented code ['diabetes_monitoring_kits']; validator emptied; should have been []+NO_COMMERCIAL_ENTRY.",
+      "SHADOW_ONLY": true
+    },
+    {
+      "procurement_id": 34524,
+      "bucket": "CLEAR_NEGATIVE",
+      "expected_label_kind": "EXPECTED_EMPTY",
+      "expected_exact_category": null,
+      "inference_run_id": 269,
+      "run_kind": "SHADOW",
+      "prompt_version": "v3_category_centric_routing_7b_v6_1",
+      "model_name": "qwen2.5:7b",
+      "prompt_hash": "8248263e5ba606b1a3d73c0d98b526efa4561020f752afe5b7cefdac9bbbd543",
+      "raw_categories": [
+        "building_construction"
+      ],
+      "validated_categories": [],
+      "invalid_raw_categories": [
+        "building_construction"
+      ],
+      "procurement_form_raw": "DIRECT_GOODS_PURCHASE",
+      "object_type": "GOODS",
+      "object_subtype": "BUILDING_CONSTRUCTION",
+      "work_stage": "SUPPLY",
+      "empty_hypothesis_status_raw": null,
+      "empty_hypothesis_status_validated": null,
+      "RAW_CATEGORY": "building_construction",
+      "VALIDATED_CATEGORY": null,
+      "RAW_CATEGORY_VALID_IN_REGISTRY": "NO",
+      "VALIDATOR_REMOVED_CATEGORY": "YES",
+      "VALIDATOR_CHANGED_SEMANTICS": "YES",
+      "title_hints_forensic": [],
+      "okpd_priors_forensic": [],
+      "form_prior_forensic": null,
+      "flags": {
+        "SOURCE_DATA_GAP": "NO",
+        "MODEL_INPUT_GAP": "NO",
+        "PYTHON_PREBIAS": "NO",
+        "PROCUREMENT_FORM_ERROR": "NO",
+        "OBJECT_CLASSIFICATION_ERROR": "NO",
+        "ITEM_EXTRACTION_OR_UNDERSTANDING_ERROR": "NO",
+        "CATEGORY_MAPPING_ERROR": "NO",
+        "INVALID_REGISTRY_CODE_GENERATION": "YES",
+        "VALIDATOR_REJECTED_MODEL_CATEGORY": "YES",
+        "ABSTENTION_ERROR": "YES",
+        "OBJECT_PRIOR_OVERREACH": "NO",
+        "POST_MODEL_BUSINESS_ERROR": "NO",
+        "PRESENTATION_ERROR": "NO",
+        "NO_ERROR": "NO"
+      },
+      "PRIMARY_ROOT_CAUSE": "INVALID_REGISTRY_CODE_GENERATION",
+      "explanation": "Outside-registry item expressed as invented code ['building_construction']; validator emptied; should have been []+NO_COMMERCIAL_ENTRY.",
+      "SHADOW_ONLY": true
+    },
+    {
+      "procurement_id": 36166,
+      "bucket": "CLEAR_NEGATIVE",
+      "expected_label_kind": "EXPECTED_EMPTY",
+      "expected_exact_category": null,
+      "inference_run_id": 267,
+      "run_kind": "SHADOW",
+      "prompt_version": "v3_category_centric_routing_7b_v6_1",
+      "model_name": "qwen2.5:7b",
+      "prompt_hash": "8db5e0f0f09050ef5dd440b05d1d3dc94c010608ea4cf15241815eec006e3141",
+      "raw_categories": [
+        "medical_equipment"
+      ],
+      "validated_categories": [],
+      "invalid_raw_categories": [
+        "medical_equipment"
+      ],
+      "procurement_form_raw": "DIRECT_GOODS_PURCHASE",
+      "object_type": "GOODS",
+      "object_subtype": "MEDICAL_EQUIPMENT",
+      "work_stage": "SUPPLY",
+      "empty_hypothesis_status_raw": null,
+      "empty_hypothesis_status_validated": null,
+      "RAW_CATEGORY": "medical_equipment",
+      "VALIDATED_CATEGORY": null,
+      "RAW_CATEGORY_VALID_IN_REGISTRY": "NO",
+      "VALIDATOR_REMOVED_CATEGORY": "YES",
+      "VALIDATOR_CHANGED_SEMANTICS": "YES",
+      "title_hints_forensic": [],
+      "okpd_priors_forensic": [],
+      "form_prior_forensic": null,
+      "flags": {
+        "SOURCE_DATA_GAP": "NO",
+        "MODEL_INPUT_GAP": "NO",
+        "PYTHON_PREBIAS": "NO",
+        "PROCUREMENT_FORM_ERROR": "NO",
+        "OBJECT_CLASSIFICATION_ERROR": "NO",
+        "ITEM_EXTRACTION_OR_UNDERSTANDING_ERROR": "NO",
+        "CATEGORY_MAPPING_ERROR": "NO",
+        "INVALID_REGISTRY_CODE_GENERATION": "YES",
+        "VALIDATOR_REJECTED_MODEL_CATEGORY": "YES",
+        "ABSTENTION_ERROR": "YES",
+        "OBJECT_PRIOR_OVERREACH": "NO",
+        "POST_MODEL_BUSINESS_ERROR": "NO",
+        "PRESENTATION_ERROR": "NO",
+        "NO_ERROR": "NO"
+      },
+      "PRIMARY_ROOT_CAUSE": "INVALID_REGISTRY_CODE_GENERATION",
+      "explanation": "Outside-registry item expressed as invented code ['medical_equipment']; validator emptied; should have been []+NO_COMMERCIAL_ENTRY.",
+      "SHADOW_ONLY": true
+    },
+    {
+      "procurement_id": 36935,
+      "bucket": "CLEAR_NEGATIVE",
+      "expected_label_kind": "EXPECTED_EMPTY",
+      "expected_exact_category": null,
+      "inference_run_id": 281,
+      "run_kind": "SHADOW",
+      "prompt_version": "v3_category_centric_routing_7b_v6_1",
+      "model_name": "qwen2.5:7b",
+      "prompt_hash": "452a884faee0c514efe51a5f90abc98ef26dc1e0d1b618078207171e6c3da91f",
+      "raw_categories": [
+        "furniture"
+      ],
+      "validated_categories": [],
+      "invalid_raw_categories": [
+        "furniture"
+      ],
+      "procurement_form_raw": "DIRECT_GOODS_PURCHASE",
+      "object_type": "GOODS",
+      "object_subtype": "FURNITURE",
+      "work_stage": "SUPPLY",
+      "empty_hypothesis_status_raw": null,
+      "empty_hypothesis_status_validated": null,
+      "RAW_CATEGORY": "furniture",
+      "VALIDATED_CATEGORY": null,
+      "RAW_CATEGORY_VALID_IN_REGISTRY": "NO",
+      "VALIDATOR_REMOVED_CATEGORY": "YES",
+      "VALIDATOR_CHANGED_SEMANTICS": "YES",
+      "title_hints_forensic": [],
+      "okpd_priors_forensic": [],
+      "form_prior_forensic": null,
+      "flags": {
+        "SOURCE_DATA_GAP": "NO",
+        "MODEL_INPUT_GAP": "NO",
+        "PYTHON_PREBIAS": "NO",
+        "PROCUREMENT_FORM_ERROR": "NO",
+        "OBJECT_CLASSIFICATION_ERROR": "NO",
+        "ITEM_EXTRACTION_OR_UNDERSTANDING_ERROR": "NO",
+        "CATEGORY_MAPPING_ERROR": "NO",
+        "INVALID_REGISTRY_CODE_GENERATION": "YES",
+        "VALIDATOR_REJECTED_MODEL_CATEGORY": "YES",
+        "ABSTENTION_ERROR": "YES",
+        "OBJECT_PRIOR_OVERREACH": "NO",
+        "POST_MODEL_BUSINESS_ERROR": "NO",
+        "PRESENTATION_ERROR": "NO",
+        "NO_ERROR": "NO"
+      },
+      "PRIMARY_ROOT_CAUSE": "INVALID_REGISTRY_CODE_GENERATION",
+      "explanation": "Outside-registry item expressed as invented code ['furniture']; validator emptied; should have been []+NO_COMMERCIAL_ENTRY.",
+      "SHADOW_ONLY": true
+    },
+    {
+      "procurement_id": 37166,
+      "bucket": "CLEAR_NEGATIVE",
+      "expected_label_kind": "EXPECTED_EMPTY",
+      "expected_exact_category": null,
+      "inference_run_id": 279,
+      "run_kind": "SHADOW",
+      "prompt_version": "v3_category_centric_routing_7b_v6_1",
+      "model_name": "qwen2.5:7b",
+      "prompt_hash": "93f9570012fb9a85d62587431f336dca4927390343b368eb0df7a3a930044fc3",
+      "raw_categories": [
+        "furniture"
+      ],
+      "validated_categories": [],
+      "invalid_raw_categories": [
+        "furniture"
+      ],
+      "procurement_form_raw": "DIRECT_GOODS_PURCHASE",
+      "object_type": "GOODS",
+      "object_subtype": "FURNITURE",
+      "work_stage": "SUPPLY",
+      "empty_hypothesis_status_raw": null,
+      "empty_hypothesis_status_validated": null,
+      "RAW_CATEGORY": "furniture",
+      "VALIDATED_CATEGORY": null,
+      "RAW_CATEGORY_VALID_IN_REGISTRY": "NO",
+      "VALIDATOR_REMOVED_CATEGORY": "YES",
+      "VALIDATOR_CHANGED_SEMANTICS": "YES",
+      "title_hints_forensic": [],
+      "okpd_priors_forensic": [],
+      "form_prior_forensic": null,
+      "flags": {
+        "SOURCE_DATA_GAP": "NO",
+        "MODEL_INPUT_GAP": "NO",
+        "PYTHON_PREBIAS": "NO",
+        "PROCUREMENT_FORM_ERROR": "NO",
+        "OBJECT_CLASSIFICATION_ERROR": "NO",
+        "ITEM_EXTRACTION_OR_UNDERSTANDING_ERROR": "NO",
+        "CATEGORY_MAPPING_ERROR": "NO",
+        "INVALID_REGISTRY_CODE_GENERATION": "YES",
+        "VALIDATOR_REJECTED_MODEL_CATEGORY": "YES",
+        "ABSTENTION_ERROR": "YES",
+        "OBJECT_PRIOR_OVERREACH": "NO",
+        "POST_MODEL_BUSINESS_ERROR": "NO",
+        "PRESENTATION_ERROR": "NO",
+        "NO_ERROR": "NO"
+      },
+      "PRIMARY_ROOT_CAUSE": "INVALID_REGISTRY_CODE_GENERATION",
+      "explanation": "Outside-registry item expressed as invented code ['furniture']; validator emptied; should have been []+NO_COMMERCIAL_ENTRY.",
+      "SHADOW_ONLY": true
+    },
+    {
+      "procurement_id": 34517,
+      "bucket": "OBJECT_RELABELED",
+      "expected_label_kind": "AMBIGUOUS_REVIEW",
+      "expected_exact_category": null,
+      "inference_run_id": 271,
+      "run_kind": "SHADOW",
+      "prompt_version": "v3_category_centric_routing_7b_v6_1",
+      "model_name": "qwen2.5:7b",
+      "prompt_hash": "45fe4fc1c4d22e1c093cf0bab303aad656b3569466a45ab4e5e0da75225db370",
+      "raw_categories": [
+        "lighting"
+      ],
+      "validated_categories": [
+        "lighting"
+      ],
+      "invalid_raw_categories": [],
+      "procurement_form_raw": "CONSTRUCTION_WORKS",
+      "object_type": "ROAD",
+      "object_subtype": "ROAD_LIGHTING",
+      "work_stage": "REPAIR",
+      "empty_hypothesis_status_raw": null,
+      "empty_hypothesis_status_validated": null,
+      "RAW_CATEGORY": "lighting",
+      "VALIDATED_CATEGORY": "lighting",
+      "RAW_CATEGORY_VALID_IN_REGISTRY": "YES",
+      "VALIDATOR_REMOVED_CATEGORY": "NO",
+      "VALIDATOR_CHANGED_SEMANTICS": "NO",
+      "title_hints_forensic": [],
+      "okpd_priors_forensic": [],
+      "form_prior_forensic": "CONSTRUCTION_WORKS",
+      "flags": {
+        "SOURCE_DATA_GAP": "NO",
+        "MODEL_INPUT_GAP": "NO",
+        "PYTHON_PREBIAS": "NO",
+        "PROCUREMENT_FORM_ERROR": "NO",
+        "OBJECT_CLASSIFICATION_ERROR": "YES",
+        "ITEM_EXTRACTION_OR_UNDERSTANDING_ERROR": "NO",
+        "CATEGORY_MAPPING_ERROR": "NO",
+        "INVALID_REGISTRY_CODE_GENERATION": "NO",
+        "VALIDATOR_REJECTED_MODEL_CATEGORY": "NO",
+        "ABSTENTION_ERROR": "NO",
+        "OBJECT_PRIOR_OVERREACH": "YES",
+        "POST_MODEL_BUSINESS_ERROR": "NO",
+        "PRESENTATION_ERROR": "NO",
+        "NO_ERROR": "NO"
+      },
+      "PRIMARY_ROOT_CAUSE": "OBJECT_PRIOR_OVERREACH",
+      "explanation": "Indoor room repair; model emitted lighting contextual with ROAD object skeleton (example leakage / object-mode overreach). Corpus later OBJECT_RELABELED — not a hard CLEAR_NEGATIVE.",
+      "SHADOW_ONLY": true
+    },
+    {
+      "procurement_id": 31936,
+      "bucket": "OBJECT_CONSTRUCTION",
+      "expected_label_kind": "AMBIGUOUS_REVIEW",
+      "expected_exact_category": null,
+      "inference_run_id": 407,
+      "run_kind": "SHADOW",
+      "prompt_version": "v3_category_centric_routing_7b_v6_1",
+      "model_name": "qwen2.5:7b",
+      "prompt_hash": "480f03b30d15baca92b9f6b00239acd03244e4278f8408c8e1fdb93999619b73",
+      "raw_categories": [
+        "curbstone"
+      ],
+      "validated_categories": [
+        "curbstone"
+      ],
+      "invalid_raw_categories": [],
+      "procurement_form_raw": null,
+      "object_type": "ROAD",
+      "object_subtype": "CURBSTONE_REPAIR",
+      "work_stage": "REPAIR",
+      "empty_hypothesis_status_raw": null,
+      "empty_hypothesis_status_validated": null,
+      "RAW_CATEGORY": "curbstone",
+      "VALIDATED_CATEGORY": "curbstone",
+      "RAW_CATEGORY_VALID_IN_REGISTRY": "YES",
+      "VALIDATOR_REMOVED_CATEGORY": "NO",
+      "VALIDATOR_CHANGED_SEMANTICS": "NO",
+      "title_hints_forensic": [],
+      "okpd_priors_forensic": [],
+      "form_prior_forensic": null,
+      "flags": {
+        "SOURCE_DATA_GAP": "NO",
+        "MODEL_INPUT_GAP": "NO",
+        "PYTHON_PREBIAS": "NO",
+        "PROCUREMENT_FORM_ERROR": "NO",
+        "OBJECT_CLASSIFICATION_ERROR": "NO",
+        "ITEM_EXTRACTION_OR_UNDERSTANDING_ERROR": "NO",
+        "CATEGORY_MAPPING_ERROR": "NO",
+        "INVALID_REGISTRY_CODE_GENERATION": "NO",
+        "VALIDATOR_REJECTED_MODEL_CATEGORY": "NO",
+        "ABSTENTION_ERROR": "NO",
+        "OBJECT_PRIOR_OVERREACH": "YES",
+        "POST_MODEL_BUSINESS_ERROR": "NO",
+        "PRESENTATION_ERROR": "NO",
+        "NO_ERROR": "NO"
+      },
+      "PRIMARY_ROOT_CAUSE": "OBJECT_PRIOR_OVERREACH",
+      "explanation": "Object case emitted DIRECT_SUPPLY track.",
+      "SHADOW_ONLY": true
+    },
+    {
+      "procurement_id": 32813,
+      "bucket": "OBJECT_CONSTRUCTION",
+      "expected_label_kind": "AMBIGUOUS_REVIEW",
+      "expected_exact_category": null,
+      "inference_run_id": 404,
+      "run_kind": "SHADOW",
+      "prompt_version": "v3_category_centric_routing_7b_v6_1",
+      "model_name": "qwen2.5:7b",
+      "prompt_hash": "5aa9c724601bc929fb534be4160f612cbf4c2fb4d8a4038046d85a4b35b11a10",
+      "raw_categories": [
+        "road_repair_materials"
+      ],
+      "validated_categories": [],
+      "invalid_raw_categories": [
+        "road_repair_materials"
+      ],
+      "procurement_form_raw": "CONSTRUCTION_WORKS",
+      "object_type": "ROAD",
+      "object_subtype": "REPAIR_MATERIALS",
+      "work_stage": "REPAIR",
+      "empty_hypothesis_status_raw": null,
+      "empty_hypothesis_status_validated": null,
+      "RAW_CATEGORY": "road_repair_materials",
+      "VALIDATED_CATEGORY": null,
+      "RAW_CATEGORY_VALID_IN_REGISTRY": "NO",
+      "VALIDATOR_REMOVED_CATEGORY": "YES",
+      "VALIDATOR_CHANGED_SEMANTICS": "YES",
+      "title_hints_forensic": [],
+      "okpd_priors_forensic": [],
+      "form_prior_forensic": null,
+      "flags": {
+        "SOURCE_DATA_GAP": "NO",
+        "MODEL_INPUT_GAP": "NO",
+        "PYTHON_PREBIAS": "NO",
+        "PROCUREMENT_FORM_ERROR": "NO",
+        "OBJECT_CLASSIFICATION_ERROR": "NO",
+        "ITEM_EXTRACTION_OR_UNDERSTANDING_ERROR": "NO",
+        "CATEGORY_MAPPING_ERROR": "NO",
+        "INVALID_REGISTRY_CODE_GENERATION": "YES",
+        "VALIDATOR_REJECTED_MODEL_CATEGORY": "YES",
+        "ABSTENTION_ERROR": "NO",
+        "OBJECT_PRIOR_OVERREACH": "NO",
+        "POST_MODEL_BUSINESS_ERROR": "NO",
+        "PRESENTATION_ERROR": "NO",
+        "NO_ERROR": "NO"
+      },
+      "PRIMARY_ROOT_CAUSE": "INVALID_REGISTRY_CODE_GENERATION",
+      "explanation": "Object case invalid codes ['road_repair_materials'].",
+      "SHADOW_ONLY": true
+    },
+    {
+      "procurement_id": 34327,
+      "bucket": "OBJECT_CONSTRUCTION",
+      "expected_label_kind": "AMBIGUOUS_REVIEW",
+      "expected_exact_category": null,
+      "inference_run_id": 401,
+      "run_kind": "SHADOW",
+      "prompt_version": "v3_category_centric_routing_7b_v6_1",
+      "model_name": "qwen2.5:7b",
+      "prompt_hash": "67934ff5e9e7bde103a404e5e836b0b663cf0fca9eeca8e55e6f463536facb1c",
+      "raw_categories": [
+        "project_design_services"
+      ],
+      "validated_categories": [],
+      "invalid_raw_categories": [
+        "project_design_services"
+      ],
+      "procurement_form_raw": "CONSTRUCTION_WORKS",
+      "object_type": "SERVICE",
+      "object_subtype": "DESIGN_PROJECT",
+      "work_stage": "PROJECT_DESIGN",
+      "empty_hypothesis_status_raw": null,
+      "empty_hypothesis_status_validated": null,
+      "RAW_CATEGORY": "project_design_services",
+      "VALIDATED_CATEGORY": null,
+      "RAW_CATEGORY_VALID_IN_REGISTRY": "NO",
+      "VALIDATOR_REMOVED_CATEGORY": "YES",
+      "VALIDATOR_CHANGED_SEMANTICS": "YES",
+      "title_hints_forensic": [],
+      "okpd_priors_forensic": [],
+      "form_prior_forensic": null,
+      "flags": {
+        "SOURCE_DATA_GAP": "NO",
+        "MODEL_INPUT_GAP": "NO",
+        "PYTHON_PREBIAS": "NO",
+        "PROCUREMENT_FORM_ERROR": "NO",
+        "OBJECT_CLASSIFICATION_ERROR": "NO",
+        "ITEM_EXTRACTION_OR_UNDERSTANDING_ERROR": "NO",
+        "CATEGORY_MAPPING_ERROR": "NO",
+        "INVALID_REGISTRY_CODE_GENERATION": "YES",
+        "VALIDATOR_REJECTED_MODEL_CATEGORY": "YES",
+        "ABSTENTION_ERROR": "NO",
+        "OBJECT_PRIOR_OVERREACH": "NO",
+        "POST_MODEL_BUSINESS_ERROR": "NO",
+        "PRESENTATION_ERROR": "NO",
+        "NO_ERROR": "NO"
+      },
+      "PRIMARY_ROOT_CAUSE": "INVALID_REGISTRY_CODE_GENERATION",
+      "explanation": "Object case invalid codes ['project_design_services'].",
+      "SHADOW_ONLY": true
+    },
+    {
+      "procurement_id": 35948,
+      "bucket": "OBJECT_CONSTRUCTION",
+      "expected_label_kind": "AMBIGUOUS_REVIEW",
+      "expected_exact_category": null,
+      "inference_run_id": 398,
+      "run_kind": "SHADOW",
+      "prompt_version": "v3_category_centric_routing_7b_v6_1",
+      "model_name": "qwen2.5:7b",
+      "prompt_hash": "8e3fba9f723323eda27ec03f2169fec08e1c370cd1b974d0c436d6f9e717cc57",
+      "raw_categories": [
+        "road_markings"
+      ],
+      "validated_categories": [],
+      "invalid_raw_categories": [
+        "road_markings"
+      ],
+      "procurement_form_raw": "DIRECT_GOODS_PURCHASE",
+      "object_type": "GOODS",
+      "object_subtype": "ROAD_MARKINGS",
+      "work_stage": "SUPPLY",
+      "empty_hypothesis_status_raw": null,
+      "empty_hypothesis_status_validated": null,
+      "RAW_CATEGORY": "road_markings",
+      "VALIDATED_CATEGORY": null,
+      "RAW_CATEGORY_VALID_IN_REGISTRY": "NO",
+      "VALIDATOR_REMOVED_CATEGORY": "YES",
+      "VALIDATOR_CHANGED_SEMANTICS": "YES",
+      "title_hints_forensic": [],
+      "okpd_priors_forensic": [],
+      "form_prior_forensic": null,
+      "flags": {
+        "SOURCE_DATA_GAP": "NO",
+        "MODEL_INPUT_GAP": "NO",
+        "PYTHON_PREBIAS": "NO",
+        "PROCUREMENT_FORM_ERROR": "NO",
+        "OBJECT_CLASSIFICATION_ERROR": "NO",
+        "ITEM_EXTRACTION_OR_UNDERSTANDING_ERROR": "NO",
+        "CATEGORY_MAPPING_ERROR": "NO",
+        "INVALID_REGISTRY_CODE_GENERATION": "YES",
+        "VALIDATOR_REJECTED_MODEL_CATEGORY": "YES",
+        "ABSTENTION_ERROR": "NO",
+        "OBJECT_PRIOR_OVERREACH": "NO",
+        "POST_MODEL_BUSINESS_ERROR": "NO",
+        "PRESENTATION_ERROR": "NO",
+        "NO_ERROR": "NO"
+      },
+      "PRIMARY_ROOT_CAUSE": "INVALID_REGISTRY_CODE_GENERATION",
+      "explanation": "Object case invalid codes ['road_markings'].",
+      "SHADOW_ONLY": true
+    },
+    {
+      "procurement_id": 38125,
+      "bucket": "OBJECT_CONSTRUCTION",
+      "expected_label_kind": "AMBIGUOUS_REVIEW",
+      "expected_exact_category": null,
+      "inference_run_id": 395,
+      "run_kind": "SHADOW",
+      "prompt_version": "v3_category_centric_routing_7b_v6_1",
+      "model_name": "qwen2.5:7b",
+      "prompt_hash": "2c2c35ff7fb333bb47d2e96004a1c22b2ff643c8faf4419f8a618be8e1b66fba",
+      "raw_categories": [
+        "composite_structures"
+      ],
+      "validated_categories": [
+        "composite_structures"
+      ],
+      "invalid_raw_categories": [],
+      "procurement_form_raw": "CONSTRUCTION_WORKS",
+      "object_type": "ROAD",
+      "object_subtype": "ROAD_REPAIR",
+      "work_stage": "REPAIR",
+      "empty_hypothesis_status_raw": null,
+      "empty_hypothesis_status_validated": null,
+      "RAW_CATEGORY": "composite_structures",
+      "VALIDATED_CATEGORY": "composite_structures",
+      "RAW_CATEGORY_VALID_IN_REGISTRY": "YES",
+      "VALIDATOR_REMOVED_CATEGORY": "NO",
+      "VALIDATOR_CHANGED_SEMANTICS": "NO",
+      "title_hints_forensic": [],
+      "okpd_priors_forensic": [],
+      "form_prior_forensic": null,
+      "flags": {
+        "SOURCE_DATA_GAP": "NO",
+        "MODEL_INPUT_GAP": "NO",
+        "PYTHON_PREBIAS": "NO",
+        "PROCUREMENT_FORM_ERROR": "NO",
+        "OBJECT_CLASSIFICATION_ERROR": "NO",
+        "ITEM_EXTRACTION_OR_UNDERSTANDING_ERROR": "NO",
+        "CATEGORY_MAPPING_ERROR": "NO",
+        "INVALID_REGISTRY_CODE_GENERATION": "NO",
+        "VALIDATOR_REJECTED_MODEL_CATEGORY": "NO",
+        "ABSTENTION_ERROR": "NO",
+        "OBJECT_PRIOR_OVERREACH": "NO",
+        "POST_MODEL_BUSINESS_ERROR": "NO",
+        "PRESENTATION_ERROR": "NO",
+        "NO_ERROR": "YES"
+      },
+      "PRIMARY_ROOT_CAUSE": "NO_ERROR",
+      "explanation": "Object contextual hyps retained: ['composite_structures'].",
+      "SHADOW_ONLY": true
+    },
+    {
+      "procurement_id": 38130,
+      "bucket": "OBJECT_CONSTRUCTION",
+      "expected_label_kind": "AMBIGUOUS_REVIEW",
+      "expected_exact_category": null,
+      "inference_run_id": 392,
+      "run_kind": "SHADOW",
+      "prompt_version": "v3_category_centric_routing_7b_v6_1",
+      "model_name": "qwen2.5:7b",
+      "prompt_hash": "4d40cafe523290b7d0646f2a4a29b4cb57399932fb5d6c4a44ecd4938d1bc898",
+      "raw_categories": [],
+      "validated_categories": [],
+      "invalid_raw_categories": [],
+      "procurement_form_raw": null,
+      "object_type": "ROAD",
+      "object_subtype": "REPAIR",
+      "work_stage": "REPAIR",
+      "empty_hypothesis_status_raw": null,
+      "empty_hypothesis_status_validated": null,
+      "RAW_CATEGORY": null,
+      "VALIDATED_CATEGORY": null,
+      "RAW_CATEGORY_VALID_IN_REGISTRY": "N/A",
+      "VALIDATOR_REMOVED_CATEGORY": "NO",
+      "VALIDATOR_CHANGED_SEMANTICS": "NO",
+      "title_hints_forensic": [],
+      "okpd_priors_forensic": [],
+      "form_prior_forensic": null,
+      "flags": {
+        "SOURCE_DATA_GAP": "NO",
+        "MODEL_INPUT_GAP": "NO",
+        "PYTHON_PREBIAS": "NO",
+        "PROCUREMENT_FORM_ERROR": "NO",
+        "OBJECT_CLASSIFICATION_ERROR": "NO",
+        "ITEM_EXTRACTION_OR_UNDERSTANDING_ERROR": "NO",
+        "CATEGORY_MAPPING_ERROR": "NO",
+        "INVALID_REGISTRY_CODE_GENERATION": "NO",
+        "VALIDATOR_REJECTED_MODEL_CATEGORY": "NO",
+        "ABSTENTION_ERROR": "YES",
+        "OBJECT_PRIOR_OVERREACH": "NO",
+        "POST_MODEL_BUSINESS_ERROR": "NO",
+        "PRESENTATION_ERROR": "NO",
+        "NO_ERROR": "NO"
+      },
+      "PRIMARY_ROOT_CAUSE": "ABSTENTION_ERROR",
+      "explanation": "Empty object result without empty_hypothesis_status.",
+      "SHADOW_ONLY": true
+    },
+    {
+      "procurement_id": 38141,
+      "bucket": "OBJECT_CONSTRUCTION",
+      "expected_label_kind": "AMBIGUOUS_REVIEW",
+      "expected_exact_category": null,
+      "inference_run_id": 389,
+      "run_kind": "SHADOW",
+      "prompt_version": "v3_category_centric_routing_7b_v6_1",
+      "model_name": "qwen2.5:7b",
+      "prompt_hash": "eb66c1e927717a2a8825af83c606cbb1fae6b6c408fd1b2caad57983d0f31412",
+      "raw_categories": [
+        "composite_structures"
+      ],
+      "validated_categories": [
+        "composite_structures"
+      ],
+      "invalid_raw_categories": [],
+      "procurement_form_raw": "DIRECT_GOODS_PURCHASE",
+      "object_type": "GOODS",
+      "object_subtype": "COMPOSITE_STRUCTURES",
+      "work_stage": "INSTALLATION",
+      "empty_hypothesis_status_raw": null,
+      "empty_hypothesis_status_validated": null,
+      "RAW_CATEGORY": "composite_structures",
+      "VALIDATED_CATEGORY": "composite_structures",
+      "RAW_CATEGORY_VALID_IN_REGISTRY": "YES",
+      "VALIDATOR_REMOVED_CATEGORY": "NO",
+      "VALIDATOR_CHANGED_SEMANTICS": "NO",
+      "title_hints_forensic": [],
+      "okpd_priors_forensic": [],
+      "form_prior_forensic": null,
+      "flags": {
+        "SOURCE_DATA_GAP": "NO",
+        "MODEL_INPUT_GAP": "NO",
+        "PYTHON_PREBIAS": "NO",
+        "PROCUREMENT_FORM_ERROR": "NO",
+        "OBJECT_CLASSIFICATION_ERROR": "NO",
+        "ITEM_EXTRACTION_OR_UNDERSTANDING_ERROR": "NO",
+        "CATEGORY_MAPPING_ERROR": "NO",
+        "INVALID_REGISTRY_CODE_GENERATION": "NO",
+        "VALIDATOR_REJECTED_MODEL_CATEGORY": "NO",
+        "ABSTENTION_ERROR": "NO",
+        "OBJECT_PRIOR_OVERREACH": "NO",
+        "POST_MODEL_BUSINESS_ERROR": "NO",
+        "PRESENTATION_ERROR": "NO",
+        "NO_ERROR": "YES"
+      },
+      "PRIMARY_ROOT_CAUSE": "NO_ERROR",
+      "explanation": "Object contextual hyps retained: ['composite_structures'].",
+      "SHADOW_ONLY": true
+    },
+    {
+      "procurement_id": 38142,
+      "bucket": "OBJECT_CONSTRUCTION",
+      "expected_label_kind": "AMBIGUOUS_REVIEW",
+      "expected_exact_category": null,
+      "inference_run_id": 386,
+      "run_kind": "SHADOW",
+      "prompt_version": "v3_category_centric_routing_7b_v6_1",
+      "model_name": "qwen2.5:7b",
+      "prompt_hash": "5211ada2942370844d1b4ae7a66bd0d66293e3a1b2ceddd55d3a653d1b7d19b0",
+      "raw_categories": [],
+      "validated_categories": [],
+      "invalid_raw_categories": [],
+      "procurement_form_raw": null,
+      "object_type": null,
+      "object_subtype": null,
+      "work_stage": null,
+      "empty_hypothesis_status_raw": null,
+      "empty_hypothesis_status_validated": null,
+      "RAW_CATEGORY": null,
+      "VALIDATED_CATEGORY": null,
+      "RAW_CATEGORY_VALID_IN_REGISTRY": "N/A",
+      "VALIDATOR_REMOVED_CATEGORY": "NO",
+      "VALIDATOR_CHANGED_SEMANTICS": "NO",
+      "title_hints_forensic": [],
+      "okpd_priors_forensic": [],
+      "form_prior_forensic": null,
+      "flags": {
+        "SOURCE_DATA_GAP": "NO",
+        "MODEL_INPUT_GAP": "NO",
+        "PYTHON_PREBIAS": "NO",
+        "PROCUREMENT_FORM_ERROR": "NO",
+        "OBJECT_CLASSIFICATION_ERROR": "NO",
+        "ITEM_EXTRACTION_OR_UNDERSTANDING_ERROR": "NO",
+        "CATEGORY_MAPPING_ERROR": "NO",
+        "INVALID_REGISTRY_CODE_GENERATION": "NO",
+        "VALIDATOR_REJECTED_MODEL_CATEGORY": "NO",
+        "ABSTENTION_ERROR": "YES",
+        "OBJECT_PRIOR_OVERREACH": "NO",
+        "POST_MODEL_BUSINESS_ERROR": "NO",
+        "PRESENTATION_ERROR": "NO",
+        "NO_ERROR": "NO"
+      },
+      "PRIMARY_ROOT_CAUSE": "ABSTENTION_ERROR",
+      "explanation": "Empty object result without empty_hypothesis_status.",
+      "SHADOW_ONLY": true
+    },
+    {
+      "procurement_id": 38143,
+      "bucket": "OBJECT_CONSTRUCTION",
+      "expected_label_kind": "AMBIGUOUS_REVIEW",
+      "expected_exact_category": null,
+      "inference_run_id": 383,
+      "run_kind": "SHADOW",
+      "prompt_version": "v3_category_centric_routing_7b_v6_1",
+      "model_name": "qwen2.5:7b",
+      "prompt_hash": "c2f796e94978a13f414e976530a8c80367d909a6335f55e66a5ef25685f78b3c",
+      "raw_categories": [],
+      "validated_categories": [],
+      "invalid_raw_categories": [],
+      "procurement_form_raw": null,
+      "object_type": null,
+      "object_subtype": null,
+      "work_stage": null,
+      "empty_hypothesis_status_raw": null,
+      "empty_hypothesis_status_validated": null,
+      "RAW_CATEGORY": null,
+      "VALIDATED_CATEGORY": null,
+      "RAW_CATEGORY_VALID_IN_REGISTRY": "N/A",
+      "VALIDATOR_REMOVED_CATEGORY": "NO",
+      "VALIDATOR_CHANGED_SEMANTICS": "NO",
+      "title_hints_forensic": [],
+      "okpd_priors_forensic": [],
+      "form_prior_forensic": null,
+      "flags": {
+        "SOURCE_DATA_GAP": "NO",
+        "MODEL_INPUT_GAP": "NO",
+        "PYTHON_PREBIAS": "NO",
+        "PROCUREMENT_FORM_ERROR": "NO",
+        "OBJECT_CLASSIFICATION_ERROR": "NO",
+        "ITEM_EXTRACTION_OR_UNDERSTANDING_ERROR": "NO",
+        "CATEGORY_MAPPING_ERROR": "NO",
+        "INVALID_REGISTRY_CODE_GENERATION": "NO",
+        "VALIDATOR_REJECTED_MODEL_CATEGORY": "NO",
+        "ABSTENTION_ERROR": "YES",
+        "OBJECT_PRIOR_OVERREACH": "NO",
+        "POST_MODEL_BUSINESS_ERROR": "NO",
+        "PRESENTATION_ERROR": "NO",
+        "NO_ERROR": "NO"
+      },
+      "PRIMARY_ROOT_CAUSE": "ABSTENTION_ERROR",
+      "explanation": "Empty object result without empty_hypothesis_status.",
+      "SHADOW_ONLY": true
+    },
+    {
+      "procurement_id": 13564,
+      "bucket": "CLEAR_DIRECT_RELABELED",
+      "expected_label_kind": "AMBIGUOUS_REVIEW",
+      "expected_exact_category": null,
+      "inference_run_id": 243,
+      "run_kind": "SHADOW",
+      "prompt_version": "v3_category_centric_routing_7b_v6_1",
+      "model_name": "qwen2.5:7b",
+      "prompt_hash": "0280fdd380b8fa343dec51298e5a793d2634cdf9f17ab61a355bb54b8c9941f0",
+      "raw_categories": [
+        "flooring"
+      ],
+      "validated_categories": [
+        "flooring"
+      ],
+      "invalid_raw_categories": [],
+      "procurement_form_raw": "DIRECT_GOODS_PURCHASE",
+      "object_type": "GOODS",
+      "object_subtype": "FLOORING",
+      "work_stage": "SUPPLY",
+      "empty_hypothesis_status_raw": null,
+      "empty_hypothesis_status_validated": null,
+      "RAW_CATEGORY": "flooring",
+      "VALIDATED_CATEGORY": "flooring",
+      "RAW_CATEGORY_VALID_IN_REGISTRY": "YES",
+      "VALIDATOR_REMOVED_CATEGORY": "NO",
+      "VALIDATOR_CHANGED_SEMANTICS": "NO",
+      "title_hints_forensic": [],
+      "okpd_priors_forensic": [],
+      "form_prior_forensic": null,
+      "flags": {
+        "SOURCE_DATA_GAP": "NO",
+        "MODEL_INPUT_GAP": "NO",
+        "PYTHON_PREBIAS": "NO",
+        "PROCUREMENT_FORM_ERROR": "NO",
+        "OBJECT_CLASSIFICATION_ERROR": "NO",
+        "ITEM_EXTRACTION_OR_UNDERSTANDING_ERROR": "NO",
+        "CATEGORY_MAPPING_ERROR": "NO",
+        "INVALID_REGISTRY_CODE_GENERATION": "NO",
+        "VALIDATOR_REJECTED_MODEL_CATEGORY": "NO",
+        "ABSTENTION_ERROR": "NO",
+        "OBJECT_PRIOR_OVERREACH": "NO",
+        "POST_MODEL_BUSINESS_ERROR": "NO",
+        "PRESENTATION_ERROR": "NO",
+        "NO_ERROR": "NO"
+      },
+      "PRIMARY_ROOT_CAUSE": "NO_ERROR",
+      "explanation": "Bucket CLEAR_DIRECT_RELABELED — heuristic only.",
+      "SHADOW_ONLY": true
+    },
+    {
+      "procurement_id": 37167,
+      "bucket": "CLEAR_NEGATIVE",
+      "expected_label_kind": "EXPECTED_EMPTY",
+      "expected_exact_category": null,
+      "inference_run_id": 277,
+      "run_kind": "SHADOW",
+      "prompt_version": "v3_category_centric_routing_7b_v6_1",
+      "model_name": "qwen2.5:7b",
+      "prompt_hash": "7001b094ee5cc483288f950bd05a07d146fcc0b580b866302263382d04a9dd31",
+      "raw_categories": [
+        "furniture"
+      ],
+      "validated_categories": [],
+      "invalid_raw_categories": [
+        "furniture"
+      ],
+      "procurement_form_raw": "DIRECT_GOODS_PURCHASE",
+      "object_type": "GOODS",
+      "object_subtype": "FURNITURE",
+      "work_stage": "SUPPLY",
+      "empty_hypothesis_status_raw": null,
+      "empty_hypothesis_status_validated": null,
+      "RAW_CATEGORY": "furniture",
+      "VALIDATED_CATEGORY": null,
+      "RAW_CATEGORY_VALID_IN_REGISTRY": "NO",
+      "VALIDATOR_REMOVED_CATEGORY": "YES",
+      "VALIDATOR_CHANGED_SEMANTICS": "YES",
+      "title_hints_forensic": [],
+      "okpd_priors_forensic": [],
+      "form_prior_forensic": null,
+      "flags": {
+        "SOURCE_DATA_GAP": "NO",
+        "MODEL_INPUT_GAP": "NO",
+        "PYTHON_PREBIAS": "NO",
+        "PROCUREMENT_FORM_ERROR": "NO",
+        "OBJECT_CLASSIFICATION_ERROR": "NO",
+        "ITEM_EXTRACTION_OR_UNDERSTANDING_ERROR": "NO",
+        "CATEGORY_MAPPING_ERROR": "NO",
+        "INVALID_REGISTRY_CODE_GENERATION": "YES",
+        "VALIDATOR_REJECTED_MODEL_CATEGORY": "YES",
+        "ABSTENTION_ERROR": "YES",
+        "OBJECT_PRIOR_OVERREACH": "NO",
+        "POST_MODEL_BUSINESS_ERROR": "NO",
+        "PRESENTATION_ERROR": "NO",
+        "NO_ERROR": "NO"
+      },
+      "PRIMARY_ROOT_CAUSE": "INVALID_REGISTRY_CODE_GENERATION",
+      "explanation": "Outside-registry item expressed as invented code ['furniture']; validator emptied; should have been []+NO_COMMERCIAL_ENTRY.",
+      "SHADOW_ONLY": true
+    },
+    {
+      "procurement_id": 37605,
+      "bucket": "CLEAR_DIRECT_RELABELED",
+      "expected_label_kind": "AMBIGUOUS_REVIEW",
+      "expected_exact_category": null,
+      "inference_run_id": 235,
+      "run_kind": "SHADOW",
+      "prompt_version": "v3_category_centric_routing_7b_v6_1",
+      "model_name": "qwen2.5:7b",
+      "prompt_hash": "4a01cf56457e0e4042f577928eb7a67c149e5f2a36558977236ada985fba0750",
+      "raw_categories": [
+        "electric_equipment_parts"
+      ],
+      "validated_categories": [],
+      "invalid_raw_categories": [
+        "electric_equipment_parts"
+      ],
+      "procurement_form_raw": "DIRECT_GOODS_PURCHASE",
+      "object_type": "GOODS",
+      "object_subtype": "ELECTRICAL_EQUIPMENT_PARTS",
+      "work_stage": "SUPPLY",
+      "empty_hypothesis_status_raw": null,
+      "empty_hypothesis_status_validated": null,
+      "RAW_CATEGORY": "electric_equipment_parts",
+      "VALIDATED_CATEGORY": null,
+      "RAW_CATEGORY_VALID_IN_REGISTRY": "NO",
+      "VALIDATOR_REMOVED_CATEGORY": "YES",
+      "VALIDATOR_CHANGED_SEMANTICS": "YES",
+      "title_hints_forensic": [],
+      "okpd_priors_forensic": [],
+      "form_prior_forensic": null,
+      "flags": {
+        "SOURCE_DATA_GAP": "NO",
+        "MODEL_INPUT_GAP": "NO",
+        "PYTHON_PREBIAS": "NO",
+        "PROCUREMENT_FORM_ERROR": "NO",
+        "OBJECT_CLASSIFICATION_ERROR": "NO",
+        "ITEM_EXTRACTION_OR_UNDERSTANDING_ERROR": "NO",
+        "CATEGORY_MAPPING_ERROR": "NO",
+        "INVALID_REGISTRY_CODE_GENERATION": "YES",
+        "VALIDATOR_REJECTED_MODEL_CATEGORY": "YES",
+        "ABSTENTION_ERROR": "NO",
+        "OBJECT_PRIOR_OVERREACH": "NO",
+        "POST_MODEL_BUSINESS_ERROR": "NO",
+        "PRESENTATION_ERROR": "NO",
+        "NO_ERROR": "NO"
+      },
+      "PRIMARY_ROOT_CAUSE": "NO_ERROR",
+      "explanation": "Bucket CLEAR_DIRECT_RELABELED — heuristic only.",
+      "SHADOW_ONLY": true
+    },
+    {
+      "procurement_id": 37750,
+      "bucket": "CLEAR_DIRECT_POSITIVE",
+      "expected_label_kind": "EXPECTED_EXACT_CATEGORY",
+      "expected_exact_category": "computers",
+      "inference_run_id": 233,
+      "run_kind": "SHADOW",
+      "prompt_version": "v3_category_centric_routing_7b_v6_1",
+      "model_name": "qwen2.5:7b",
+      "prompt_hash": "aa21c3b4f73f79ad68ffe91c10d088aa3409e1311a81ce22acde05d65df06f5b",
+      "raw_categories": [
+        "computers"
+      ],
+      "validated_categories": [
+        "computers"
+      ],
+      "invalid_raw_categories": [],
+      "procurement_form_raw": "DIRECT_GOODS_PURCHASE",
+      "object_type": "GOODS",
+      "object_subtype": "COMPUTERS",
+      "work_stage": "SUPPLY",
+      "empty_hypothesis_status_raw": null,
+      "empty_hypothesis_status_validated": null,
+      "RAW_CATEGORY": "computers",
+      "VALIDATED_CATEGORY": "computers",
+      "RAW_CATEGORY_VALID_IN_REGISTRY": "YES",
+      "VALIDATOR_REMOVED_CATEGORY": "NO",
+      "VALIDATOR_CHANGED_SEMANTICS": "NO",
+      "title_hints_forensic": [],
+      "okpd_priors_forensic": [],
+      "form_prior_forensic": null,
+      "flags": {
+        "SOURCE_DATA_GAP": "NO",
+        "MODEL_INPUT_GAP": "NO",
+        "PYTHON_PREBIAS": "NO",
+        "PROCUREMENT_FORM_ERROR": "NO",
+        "OBJECT_CLASSIFICATION_ERROR": "NO",
+        "ITEM_EXTRACTION_OR_UNDERSTANDING_ERROR": "NO",
+        "CATEGORY_MAPPING_ERROR": "NO",
+        "INVALID_REGISTRY_CODE_GENERATION": "NO",
+        "VALIDATOR_REJECTED_MODEL_CATEGORY": "NO",
+        "ABSTENTION_ERROR": "NO",
+        "OBJECT_PRIOR_OVERREACH": "NO",
+        "POST_MODEL_BUSINESS_ERROR": "NO",
+        "PRESENTATION_ERROR": "NO",
+        "NO_ERROR": "YES"
+      },
+      "PRIMARY_ROOT_CAUSE": "NO_ERROR",
+      "explanation": "Validated category matches expected.",
+      "SHADOW_ONLY": true
+    }
+  ],
+  "deep_forensic": {
+    "37082": {
+      "TITLE": "Поставка компьютера персонального настольного (моноблока)",
+      "OKPD_CODE": "26.2",
+      "OKPD_NAME": "Компьютеры и периферийное оборудование",
+      "model_input_version": "V3_ROUTING_MODEL_INPUT_V3",
+      "model_input_hash": "e7eafabaeb0edf3e9719f17546a1b718cb5d75b12469f82480eab4c2c89483e9",
+      "PROCUREMENT_FORM_PRIOR": "DIRECT_GOODS_PURCHASE",
+      "TITLE_HINTS_VISIBLE_TO_MODEL": [
+        "computers"
+      ],
+      "OKPD_PRIORS_VISIBLE_TO_MODEL": [
+        "computers"
+      ],
+      "REGISTRY_CODES_VISIBLE_TO_MODEL": [
+        "cable_support_systems",
+        "composite_structures",
+        "computers",
+        "curbstone",
+        "drainage_water_management",
+        "flooring",
+        "lighting",
+        "waterproofing"
+      ],
+      "PROMPT_VERSION_REBUILT": "v3_category_centric_routing_7b_v6_1",
+      "PROMPT_CHARS": 23508,
+      "INFERENCE_RUN_ID": 239,
+      "RAW_RESPONSE": {
+        "brands": [],
+        "work_methods": [],
+        "analysis_modes": [
+          "DIRECT_PRODUCT"
+        ],
+        "object_context": [],
+        "source_contour": "PUBLIC_44FZ",
+        "material_signals": [],
+        "procurement_form": "DIRECT_GOODS_PURCHASE",
+        "application_areas": [],
+        "discovery_required": false,
+        "object_classification": {
+          "work_stage": "SUPPLY",
+          "object_type": "GOODS",
+          "object_sector": "SUPPLY",
+          "object_context": [],
+          "object_subtype": "COMPUTER_COMPONENTS"
+        },
+        "empty_hypothesis_status": null,
+        "overall_research_action": "LIGHT_RESEARCH",
+        "document_research_priority": [],
+        "preferred_opportunity_track": null,
+        "empty_hypothesis_reason_codes": [],
+        "commercial_category_hypotheses": [
+          {
+            "confidence": 0.85,
+            "reason_codes": [
+              "title_product_match"
+            ],
+            "category_code": "computer_components",
+            "evidence_role": "DIRECT_CATEGORY_EVIDENCE",
+            "research_action": "LIGHT_RESEARCH",
+            "subcategory_code": "SUBCATEGORY_NOT_ASSIGNED",
+            "opportunity_track": "DIRECT_SUPPLY",
+            "confirmation_required": false
+          }
+        ]
+      },
+      "VALIDATED_RESPONSE": {
+        "brands": [],
+        "work_methods": [],
+        "analysis_modes": [
+          "DIRECT_PRODUCT"
+        ],
+        "object_context": [],
+        "schema_version": "v3_model_validated_1",
+        "source_contour": "PUBLIC_44FZ",
+        "material_signals": [],
+        "procurement_form": "DIRECT_GOODS_PURCHASE",
+        "application_areas": [],
+        "discovery_required": false,
+        "object_classification": {
+          "work_stage": "SUPPLY",
+          "object_type": "GOODS",
+          "object_sector": "SUPPLY",
+          "object_context": [],
+          "object_subtype": "COMPUTER_COMPONENTS"
+        },
+        "empty_hypothesis_status": null,
+        "overall_research_action": "LIGHT_RESEARCH",
+        "document_research_priority": [],
+        "preferred_opportunity_track": null,
+        "empty_hypothesis_reason_codes": [],
+        "commercial_category_hypotheses": []
+      },
+      "COMMERCIAL_PRODUCT_PRIORS": [
+        {
+          "category": "computers",
+          "okpd_pattern": "26.2",
+          "weight": 50.0,
+          "prior_kind": "COMMERCIAL_PRODUCT_PRIOR",
+          "match_type": "EXACT",
+          "evidence_role": "COMMERCIAL_PRODUCT_PRIOR",
+          "matched_okpd_branch_root_code": "26.2"
+        }
+      ],
+      "CONTEXTUAL_RESEARCH_PRIORS": [],
+      "DIRECT_CABLE_EXPECTED_RESULT": "NO_COMMERCIAL_ENTRY",
+      "document_link_count": 8,
+      "unique_document_count": 8,
+      "official_description": null
+    },
+    "23591": {
+      "TITLE": "Поставка оборудования ливневой канализации БМК Сосневская, г. Иваново 2026 г. для нужд филиала \"Владимирский\" ПАО \"Т Плюс\"(ИвТС) (4548581)",
+      "OKPD_CODE": "22.23.13.194",
+      "OKPD_NAME": "Резервуары, цистерны, баки и аналогичные емкости пластмассовые вместимостью свыше 300 л из поливинилхлорида",
+      "model_input_version": "V3_ROUTING_MODEL_INPUT_V3",
+      "model_input_hash": "3b7aa959b14d028d7376bf478bc09384d2109bd40d41266ae6b4dff2f9237678",
+      "PROCUREMENT_FORM_PRIOR": "DIRECT_GOODS_PURCHASE",
+      "TITLE_HINTS_VISIBLE_TO_MODEL": [
+        "drainage_water_management"
+      ],
+      "OKPD_PRIORS_VISIBLE_TO_MODEL": [],
+      "REGISTRY_CODES_VISIBLE_TO_MODEL": [
+        "cable_support_systems",
+        "composite_structures",
+        "computers",
+        "curbstone",
+        "drainage_water_management",
+        "flooring",
+        "lighting",
+        "waterproofing"
+      ],
+      "PROMPT_VERSION_REBUILT": "v3_category_centric_routing_7b_v6_1",
+      "PROMPT_CHARS": 21203,
+      "INFERENCE_RUN_ID": 283,
+      "RAW_RESPONSE": {
+        "brands": [],
+        "work_methods": [],
+        "analysis_modes": [
+          "DIRECT_PRODUCT"
+        ],
+        "object_context": [],
+        "source_contour": "CORPORATE_223FZ",
+        "material_signals": [],
+        "procurement_form": "DIRECT_GOODS_PURCHASE",
+        "application_areas": [],
+        "discovery_required": false,
+        "object_classification": {
+          "work_stage": "SUPPLY",
+          "object_type": "GOODS",
+          "object_sector": "SUPPLY",
+          "object_context": [],
+          "object_subtype": "CABLE"
+        },
+        "empty_hypothesis_status": null,
+        "overall_research_action": "LIGHT_RESEARCH",
+        "document_research_priority": [],
+        "preferred_opportunity_track": null,
+        "empty_hypothesis_reason_codes": [],
+        "commercial_category_hypotheses": [
+          {
+            "confidence": 0.8,
+            "reason_codes": [
+              "title_product_match"
+            ],
+            "category_code": "cable",
+            "evidence_role": "DIRECT_CATEGORY_EVIDENCE",
+            "research_action": "LIGHT_RESEARCH",
+            "subcategory_code": "SUBCATEGORY_NOT_ASSIGNED",
+            "opportunity_track": "DIRECT_SUPPLY",
+            "confirmation_required": false
+          }
+        ]
+      },
+      "VALIDATED_RESPONSE": {
+        "brands": [],
+        "work_methods": [],
+        "analysis_modes": [
+          "DIRECT_PRODUCT"
+        ],
+        "object_context": [],
+        "schema_version": "v3_model_validated_1",
+        "source_contour": "CORPORATE_223FZ",
+        "material_signals": [],
+        "procurement_form": "DIRECT_GOODS_PURCHASE",
+        "application_areas": [],
+        "discovery_required": false,
+        "object_classification": {
+          "work_stage": "SUPPLY",
+          "object_type": "GOODS",
+          "object_sector": "SUPPLY",
+          "object_context": [],
+          "object_subtype": "CABLE"
+        },
+        "empty_hypothesis_status": null,
+        "overall_research_action": "LIGHT_RESEARCH",
+        "document_research_priority": [],
+        "preferred_opportunity_track": null,
+        "empty_hypothesis_reason_codes": [],
+        "commercial_category_hypotheses": []
+      },
+      "COMMERCIAL_PRODUCT_PRIORS": [],
+      "CONTEXTUAL_RESEARCH_PRIORS": [],
+      "DIRECT_CABLE_EXPECTED_RESULT": "NO_COMMERCIAL_ENTRY",
+      "document_link_count": 2,
+      "unique_document_count": 2,
+      "official_description": null
+    },
+    "27355": {
+      "TITLE": "Оказание услуг по проведению поверки газоанализаторов, сигнализаторов загазованности, корректоров, газовых счетчиков в котельных зданиях районных (городских) судов Тамбовской области",
+      "OKPD_CODE": "71.12",
+      "OKPD_NAME": "Услуги в области инженерно-технического проектирования и связанные технические консультативные услуги",
+      "model_input_version": "V3_ROUTING_MODEL_INPUT_V3",
+      "model_input_hash": "5520832949d6d663ca44f5be47d2e79b72eb4dc24837727ede8dfed9f7773303",
+      "PROCUREMENT_FORM_PRIOR": "DESIGN_ONLY",
+      "TITLE_HINTS_VISIBLE_TO_MODEL": [],
+      "OKPD_PRIORS_VISIBLE_TO_MODEL": [],
+      "REGISTRY_CODES_VISIBLE_TO_MODEL": [
+        "cable_support_systems",
+        "composite_structures",
+        "computers",
+        "curbstone",
+        "drainage_water_management",
+        "flooring",
+        "lighting",
+        "waterproofing"
+      ],
+      "PROMPT_VERSION_REBUILT": "v3_category_centric_routing_7b_v6_1",
+      "PROMPT_CHARS": 22613,
+      "INFERENCE_RUN_ID": 259,
+      "RAW_RESPONSE": {
+        "brands": [],
+        "work_methods": [],
+        "analysis_modes": [
+          "EMBEDDED_MATERIAL_DISCOVERY"
+        ],
+        "object_context": [],
+        "source_contour": "PUBLIC_44FZ",
+        "material_signals": [],
+        "procurement_form": "CONSTRUCTION_WORKS",
+        "application_areas": [],
+        "discovery_required": true,
+        "object_classification": {
+          "work_stage": "REPAIR",
+          "object_type": "ROAD",
+          "object_sector": "TRANSPORT_INFRASTRUCTURE",
+          "object_context": [
+            "REPAIR"
+          ],
+          "object_subtype": "ROAD_REPAIR"
+        },
+        "empty_hypothesis_status": null,
+        "overall_research_action": "LIGHT_RESEARCH",
+        "document_research_priority": [
+          "LOCAL_ESTIMATE",
+          "SPECIFICATION"
+        ],
+        "preferred_opportunity_track": null,
+        "empty_hypothesis_reason_codes": [],
+        "commercial_category_hypotheses": [
+          {
+            "confidence": 0.4,
+            "reason_codes": [
+              "object_context_plausible"
+            ],
+            "category_code": "curbstone",
+            "evidence_role": "CONTEXTUAL_RESEARCH_PRIOR",
+            "research_action": "LIGHT_RESEARCH",
+            "subcategory_code": "SUBCATEGORY_NOT_ASSIGNED",
+            "opportunity_track": "EMBEDDED_MATERIAL",
+            "confirmation_required": true
+          }
+        ]
+      },
+      "VALIDATED_RESPONSE": {
+        "brands": [],
+        "work_methods": [],
+        "analysis_modes": [
+          "EMBEDDED_MATERIAL_DISCOVERY"
+        ],
+        "object_context": [],
+        "schema_version": "v3_model_validated_1",
+        "source_contour": "PUBLIC_44FZ",
+        "material_signals": [],
+        "procurement_form": "CONSTRUCTION_WORKS",
+        "application_areas": [],
+        "discovery_required": true,
+        "object_classification": {
+          "work_stage": "REPAIR",
+          "object_type": "ROAD",
+          "object_sector": "TRANSPORT_INFRASTRUCTURE",
+          "object_context": [
+            "REPAIR"
+          ],
+          "object_subtype": "ROAD_REPAIR"
+        },
+        "empty_hypothesis_status": null,
+        "overall_research_action": "LIGHT_RESEARCH",
+        "document_research_priority": [
+          "LOCAL_ESTIMATE",
+          "SPECIFICATION"
+        ],
+        "preferred_opportunity_track": null,
+        "empty_hypothesis_reason_codes": [],
+        "commercial_category_hypotheses": [
+          {
+            "confidence": 0.4,
+            "reason_codes": [
+              "object_context_plausible"
+            ],
+            "why_category": null,
+            "category_code": "curbstone",
+            "evidence_role": "CONTEXTUAL_RESEARCH_PRIOR",
+            "candidate_medal": null,
+            "candidate_score": null,
+            "research_action": "LIGHT_RESEARCH",
+            "subcategory_code": null,
+            "negative_evidence": [],
+            "opportunity_track": "EMBEDDED_MATERIAL",
+            "positive_evidence": [],
+            "research_value_score": null,
+            "confirmation_required": true,
+            "model_raw_category_code": "curbstone",
+            "commercial_priority_score": null
+          }
+        ]
+      },
+      "COMMERCIAL_PRODUCT_PRIORS": [],
+      "CONTEXTUAL_RESEARCH_PRIORS": [],
+      "DIRECT_CABLE_EXPECTED_RESULT": "NO_COMMERCIAL_ENTRY",
+      "document_link_count": 6,
+      "unique_document_count": 6,
+      "official_description": null
+    },
+    "34517": {
+      "TITLE": "Выполнение работ по текущему ремонту помещений Пятигорского медико-фармацевтического института – филиала ФГБОУ ВО ВолгГМУ Минздрава России.",
+      "OKPD_CODE": "43.39.19.190",
+      "OKPD_NAME": "Работы завершающие и отделочные в зданиях и сооружениях, прочие, не включенные в другие группировки",
+      "model_input_version": "V3_ROUTING_MODEL_INPUT_V3",
+      "model_input_hash": "b19d2f2d8b8717b43dd576c16c9495e9824252504ddd84ca06d25c2da2511073",
+      "PROCUREMENT_FORM_PRIOR": "CONSTRUCTION_WORKS",
+      "TITLE_HINTS_VISIBLE_TO_MODEL": [],
+      "OKPD_PRIORS_VISIBLE_TO_MODEL": [],
+      "REGISTRY_CODES_VISIBLE_TO_MODEL": [
+        "cable_support_systems",
+        "composite_structures",
+        "computers",
+        "curbstone",
+        "drainage_water_management",
+        "flooring",
+        "lighting",
+        "waterproofing"
+      ],
+      "PROMPT_VERSION_REBUILT": "v3_category_centric_routing_7b_v6_1",
+      "PROMPT_CHARS": 23041,
+      "INFERENCE_RUN_ID": 271,
+      "RAW_RESPONSE": {
+        "brands": [],
+        "work_methods": [],
+        "analysis_modes": [
+          "EMBEDDED_MATERIAL_DISCOVERY"
+        ],
+        "object_context": [],
+        "source_contour": "PUBLIC_44FZ",
+        "material_signals": [],
+        "procurement_form": "CONSTRUCTION_WORKS",
+        "application_areas": [],
+        "discovery_required": true,
+        "object_classification": {
+          "work_stage": "REPAIR",
+          "object_type": "ROAD",
+          "object_sector": "TRANSPORT_INFRASTRUCTURE",
+          "object_context": [],
+          "object_subtype": "ROAD_LIGHTING"
+        },
+        "empty_hypothesis_status": null,
+        "overall_research_action": "LIGHT_RESEARCH",
+        "document_research_priority": [
+          "LOCAL_ESTIMATE",
+          "SPECIFICATION"
+        ],
+        "preferred_opportunity_track": null,
+        "empty_hypothesis_reason_codes": [],
+        "commercial_category_hypotheses": [
+          {
+            "confidence": 0.4,
+            "reason_codes": [
+              "object_context_plausible"
+            ],
+            "category_code": "lighting",
+            "evidence_role": "CONTEXTUAL_RESEARCH_PRIOR",
+            "research_action": "LIGHT_RESEARCH",
+            "subcategory_code": "SUBCATEGORY_NOT_ASSIGNED",
+            "opportunity_track": "EMBEDDED_MATERIAL",
+            "confirmation_required": true
+          }
+        ]
+      },
+      "VALIDATED_RESPONSE": {
+        "brands": [],
+        "work_methods": [],
+        "analysis_modes": [
+          "EMBEDDED_MATERIAL_DISCOVERY"
+        ],
+        "object_context": [],
+        "schema_version": "v3_model_validated_1",
+        "source_contour": "PUBLIC_44FZ",
+        "material_signals": [],
+        "procurement_form": "CONSTRUCTION_WORKS",
+        "application_areas": [],
+        "discovery_required": true,
+        "object_classification": {
+          "work_stage": "REPAIR",
+          "object_type": "ROAD",
+          "object_sector": "TRANSPORT_INFRASTRUCTURE",
+          "object_context": [],
+          "object_subtype": "ROAD_LIGHTING"
+        },
+        "empty_hypothesis_status": null,
+        "overall_research_action": "LIGHT_RESEARCH",
+        "document_research_priority": [
+          "LOCAL_ESTIMATE",
+          "SPECIFICATION"
+        ],
+        "preferred_opportunity_track": null,
+        "empty_hypothesis_reason_codes": [],
+        "commercial_category_hypotheses": [
+          {
+            "confidence": 0.4,
+            "reason_codes": [
+              "object_context_plausible"
+            ],
+            "why_category": null,
+            "category_code": "lighting",
+            "evidence_role": "CONTEXTUAL_RESEARCH_PRIOR",
+            "candidate_medal": null,
+            "candidate_score": null,
+            "research_action": "LIGHT_RESEARCH",
+            "subcategory_code": null,
+            "negative_evidence": [],
+            "opportunity_track": "EMBEDDED_MATERIAL",
+            "positive_evidence": [],
+            "research_value_score": null,
+            "confirmation_required": true,
+            "model_raw_category_code": "lighting",
+            "commercial_priority_score": null
+          }
+        ]
+      },
+      "COMMERCIAL_PRODUCT_PRIORS": [],
+      "CONTEXTUAL_RESEARCH_PRIORS": [],
+      "DIRECT_CABLE_EXPECTED_RESULT": "NO_COMMERCIAL_ENTRY",
+      "document_link_count": 4,
+      "unique_document_count": 4,
+      "official_description": null
+    }
+  },
+  "compare_37082_vs_23591": {
+    "DO_37082_AND_23591_SHARE_THE_SAME_FAILURE_MECHANISM": "NO",
+    "table": [
+      {
+        "Dimension": "Source sufficient?",
+        "37082": "YES",
+        "23591": "YES"
+      },
+      {
+        "Dimension": "Correct procurement form?",
+        "37082": "YES (DIRECT_GOODS_PURCHASE)",
+        "23591": "YES (DIRECT_GOODS_PURCHASE)"
+      },
+      {
+        "Dimension": "Model understood literal item?",
+        "37082": "YES (computer/monoblock family)",
+        "23591": "NO (RAW subtype CABLE / later EQUIPMENT)"
+      },
+      {
+        "Dimension": "Model understood object?",
+        "37082": "N/A (goods supply)",
+        "23591": "N/A (goods supply)"
+      },
+      {
+        "Dimension": "Correct registry category visible?",
+        "37082": "YES (computers)",
+        "23591": "YES (drainage_water_management)"
+      },
+      {
+        "Dimension": "Correct category prior visible?",
+        "37082": "YES (OKPD prior computers + title_hints)",
+        "23591": "YES (title_hints=[drainage_water_management]; OKPD priors=[])"
+      },
+      {
+        "Dimension": "Model emitted semantic equivalent?",
+        "37082": "NEAR (computer_components)",
+        "23591": "NO (cable / equipment)"
+      },
+      {
+        "Dimension": "Model emitted invalid code?",
+        "37082": "YES",
+        "23591": "YES"
+      },
+      {
+        "Dimension": "Validator caused empty result?",
+        "37082": "YES",
+        "23591": "YES"
+      },
+      {
+        "Dimension": "True abstention?",
+        "37082": "NO",
+        "23591": "NO"
+      },
+      {
+        "Dimension": "Primary failure class",
+        "37082": "CATEGORY_MAPPING_ERROR",
+        "23591": "ITEM_EXTRACTION_OR_UNDERSTANDING_ERROR"
+      }
+    ],
+    "shared_surface": "Both SHADOW runs end as validated empty after invalid RAW category rejection; that shared surface is NOT the same root mechanism."
+  },
+  "CASE_37082_PRIMARY_ROOT_CAUSE": "CATEGORY_MAPPING_ERROR",
+  "CASE_23591_PRIMARY_ROOT_CAUSE": "ITEM_EXTRACTION_OR_UNDERSTANDING_ERROR",
+  "failure_distribution": {
+    "CATEGORY_MAPPING_ERROR": 1,
+    "ITEM_EXTRACTION_OR_UNDERSTANDING_ERROR": 1,
+    "NO_ERROR": 13,
+    "OBJECT_PRIOR_OVERREACH": 3,
+    "INVALID_REGISTRY_CODE_GENERATION": 13,
+    "ABSTENTION_ERROR": 3
+  },
+  "flag_case_lists": {
+    "CATEGORY_MAPPING_ERROR": [
+      37082
+    ],
+    "INVALID_REGISTRY_CODE_GENERATION": [
+      37082,
+      23591,
+      7846,
+      29384,
+      29451,
+      32155,
+      34239,
+      34524,
+      36166,
+      36935,
+      37166,
+      32813,
+      34327,
+      35948,
+      37167,
+      37605
+    ],
+    "VALIDATOR_REJECTED_MODEL_CATEGORY": [
+      37082,
+      23591,
+      7846,
+      29384,
+      29451,
+      32155,
+      34239,
+      34524,
+      36166,
+      36935,
+      37166,
+      32813,
+      34327,
+      35948,
+      37167,
+      37605
+    ],
+    "ABSTENTION_ERROR": [
+      37082,
+      23591,
+      7846,
+      29384,
+      29451,
+      32155,
+      34239,
+      34524,
+      36166,
+      36935,
+      37166,
+      38130,
+      38142,
+      38143,
+      37167
+    ],
+    "OBJECT_CLASSIFICATION_ERROR": [
+      23591,
+      27355,
+      34517
+    ],
+    "ITEM_EXTRACTION_OR_UNDERSTANDING_ERROR": [
+      23591,
+      27355
+    ],
+    "PROCUREMENT_FORM_ERROR": [
+      27355
+    ],
+    "OBJECT_PRIOR_OVERREACH": [
+      27355,
+      34517,
+      31936
+    ]
+  },
+  "document_boundary": {
+    "DOCUMENT_CONTENT_SENT_TO_ROUTING_MODEL": "NO",
+    "DOCUMENT_TEXT_SENT_TO_ROUTING_MODEL": "NO",
+    "DOCUMENT_NAMES_SENT_TO_ROUTING_MODEL": "NO",
+    "DOCUMENT_EVIDENCE_SENT_TO_ROUTING_MODEL": "NO",
+    "WHAT_IS_SENT": [
+      "document_link_count",
+      "unique_document_count"
+    ],
+    "NOTE": "Canonical card may resolve document_links_summary (names/URLs) but V3_ROUTING_MODEL_INPUT_V3 excludes link arrays; only counts enter the prompt JSON.",
+    "FIELDS_ASKING_UNSEEN_DOCUMENTS": [
+      "document_research_priority",
+      "confirmation_required for CONTEXTUAL_RESEARCH_PRIOR",
+      "evidence that products are confirmed in documents (Q7)",
+      "MODE B object hypotheses framed as requiring document confirmation"
+    ]
+  },
+  "semantic_split": {
+    "ACTUAL_PURCHASE_VS_REGISTRY_MAPPING_MIXED": "YES",
+    "ACTUAL_PURCHASE_VS_OBJECT_PRIOR_MIXED": "YES",
+    "OBJECT_PRIOR_VS_CONFIRMED_DOCUMENT_EVIDENCE_MIXED": "YES",
+    "EVIDENCE": "Single inference asks form + object_classification + registry category_code + contextual object priors + document_research_priority/confirmation_required without document text. Prompt MODE A/B and examples mix purchase mapping with object-prior prediction."
+  },
+  "questions": [
+    {
+      "QUESTION_ID": "Q1_PROCUREMENT_FORM",
+      "PLAIN_RUSSIAN_QUESTION": "Какая форма закупки (поставка товара / СМР / проектирование / услуги / иное)?",
+      "OUTPUT_FIELD": "procurement_form",
+      "INPUT_FACTS_USED": [
+        "title",
+        "okpd_codes",
+        "okpd_names",
+        "source_contour"
+      ],
+      "PYTHON_PRIORS_USED": [
+        "procurement_form_prior"
+      ],
+      "REQUIRES_COMMERCIAL_TAXONOMY": "no",
+      "REQUIRES_DOCUMENT_CONTENT": "no",
+      "CAN_BE_RELIABLY_ANSWERED_BEFORE_DOCUMENT_RESEARCH": "yes",
+      "CLASS": "SEMANTIC_CLASSIFICATION"
+    },
+    {
+      "QUESTION_ID": "Q2_OBJECT_CLASSIFICATION",
+      "PLAIN_RUSSIAN_QUESTION": "Что это за объект/товар и на какой стадии работ?",
+      "OUTPUT_FIELD": "object_classification",
+      "INPUT_FACTS_USED": [
+        "title",
+        "okpd_names"
+      ],
+      "PYTHON_PRIORS_USED": [],
+      "REQUIRES_COMMERCIAL_TAXONOMY": "no",
+      "REQUIRES_DOCUMENT_CONTENT": "no",
+      "CAN_BE_RELIABLY_ANSWERED_BEFORE_DOCUMENT_RESEARCH": "yes",
+      "CLASS": "FACT_EXTRACTION"
+    },
+    {
+      "QUESTION_ID": "Q3_ACTUAL_PURCHASE_ITEM",
+      "PLAIN_RUSSIAN_QUESTION": "Что фактически закупается по заголовку/ОКПД?",
+      "OUTPUT_FIELD": "object_classification.object_subtype + reason_codes",
+      "INPUT_FACTS_USED": [
+        "title",
+        "official_description",
+        "okpd_codes",
+        "okpd_names"
+      ],
+      "PYTHON_PRIORS_USED": [
+        "title_hints (subcategory exposure only)"
+      ],
+      "REQUIRES_COMMERCIAL_TAXONOMY": "no",
+      "REQUIRES_DOCUMENT_CONTENT": "no",
+      "CAN_BE_RELIABLY_ANSWERED_BEFORE_DOCUMENT_RESEARCH": "yes",
+      "CLASS": "FACT_EXTRACTION"
+    },
+    {
+      "QUESTION_ID": "Q4_REGISTRY_CATEGORY_MAP",
+      "PLAIN_RUSSIAN_QUESTION": "Какой ACTIVE код коммерческого реестра соответствует закупаемому?",
+      "OUTPUT_FIELD": "commercial_category_hypotheses[].category_code",
+      "INPUT_FACTS_USED": [
+        "title",
+        "okpd_*",
+        "ALLOWED_COMMERCIAL_CATEGORY_CODES",
+        "registry_desc"
+      ],
+      "PYTHON_PRIORS_USED": [
+        "COMMERCIAL_PRODUCT_PRIORS",
+        "OKPD priors",
+        "title_hints"
+      ],
+      "REQUIRES_COMMERCIAL_TAXONOMY": "yes",
+      "REQUIRES_DOCUMENT_CONTENT": "no",
+      "CAN_BE_RELIABLY_ANSWERED_BEFORE_DOCUMENT_RESEARCH": "yes",
+      "CLASS": "COMMERCIAL_TAXONOMY_MAPPING"
+    },
+    {
+      "QUESTION_ID": "Q5_OPPORTUNITY_TRACK",
+      "PLAIN_RUSSIAN_QUESTION": "Это прямая поставка или встроенный/проектный материал объекта?",
+      "OUTPUT_FIELD": "commercial_category_hypotheses[].opportunity_track",
+      "INPUT_FACTS_USED": [
+        "procurement_form",
+        "title"
+      ],
+      "PYTHON_PRIORS_USED": [
+        "CONTEXTUAL_RESEARCH_PRIORS"
+      ],
+      "REQUIRES_COMMERCIAL_TAXONOMY": "yes",
+      "REQUIRES_DOCUMENT_CONTENT": "no",
+      "CAN_BE_RELIABLY_ANSWERED_BEFORE_DOCUMENT_RESEARCH": "partial",
+      "CLASS": "SEMANTIC_CLASSIFICATION"
+    },
+    {
+      "QUESTION_ID": "Q6_OBJECT_PRIOR_PRODUCTS",
+      "PLAIN_RUSSIAN_QUESTION": "Какие продукты реестра правдоподобны на этом объекте строительства/проектирования?",
+      "OUTPUT_FIELD": "commercial_category_hypotheses (contextual) + object_context",
+      "INPUT_FACTS_USED": [
+        "title",
+        "okpd_*",
+        "procurement_form"
+      ],
+      "PYTHON_PRIORS_USED": [
+        "CONTEXTUAL_RESEARCH_PRIORS"
+      ],
+      "REQUIRES_COMMERCIAL_TAXONOMY": "yes",
+      "REQUIRES_DOCUMENT_CONTENT": "no",
+      "CAN_BE_RELIABLY_ANSWERED_BEFORE_DOCUMENT_RESEARCH": "yes",
+      "CLASS": "OBJECT_CONTEXT_PREDICTION"
+    },
+    {
+      "QUESTION_ID": "Q7_DOCUMENT_CONFIRMED_PRODUCTS",
+      "PLAIN_RUSSIAN_QUESTION": "Какие продукты уже подтверждены документами?",
+      "OUTPUT_FIELD": "evidence_role / confirmation_required / document_research_priority",
+      "INPUT_FACTS_USED": [
+        "document_link_count",
+        "unique_document_count"
+      ],
+      "PYTHON_PRIORS_USED": [],
+      "REQUIRES_COMMERCIAL_TAXONOMY": "yes",
+      "REQUIRES_DOCUMENT_CONTENT": "yes",
+      "CAN_BE_RELIABLY_ANSWERED_BEFORE_DOCUMENT_RESEARCH": "no",
+      "CLASS": "RESEARCH_PLANNING"
+    },
+    {
+      "QUESTION_ID": "Q8_ABSTENTION",
+      "PLAIN_RUSSIAN_QUESTION": "Нужно ли отказаться от гипотез и с каким статусом пустоты?",
+      "OUTPUT_FIELD": "empty_hypothesis_status + empty_hypothesis_reason_codes",
+      "INPUT_FACTS_USED": [
+        "title",
+        "okpd_*",
+        "registry allow-list"
+      ],
+      "PYTHON_PRIORS_USED": [
+        "DIRECT_CABLE_EXPECTED_RESULT"
+      ],
+      "REQUIRES_COMMERCIAL_TAXONOMY": "yes",
+      "REQUIRES_DOCUMENT_CONTENT": "no",
+      "CAN_BE_RELIABLY_ANSWERED_BEFORE_DOCUMENT_RESEARCH": "yes",
+      "CLASS": "ABSTENTION"
+    },
+    {
+      "QUESTION_ID": "Q9_RESEARCH_ACTION",
+      "PLAIN_RUSSIAN_QUESTION": "Какую глубину исследования документов назначить?",
+      "OUTPUT_FIELD": "overall_research_action + document_research_priority",
+      "INPUT_FACTS_USED": [
+        "document_*_count",
+        "procurement_form",
+        "hypotheses"
+      ],
+      "PYTHON_PRIORS_USED": [],
+      "REQUIRES_COMMERCIAL_TAXONOMY": "no",
+      "REQUIRES_DOCUMENT_CONTENT": "no",
+      "CAN_BE_RELIABLY_ANSWERED_BEFORE_DOCUMENT_RESEARCH": "yes",
+      "CLASS": "RESEARCH_PLANNING"
+    },
+    {
+      "QUESTION_ID": "Q10_MATERIAL_SIGNALS",
+      "PLAIN_RUSSIAN_QUESTION": "Какие материальные/брендовые сигналы видны из карточки?",
+      "OUTPUT_FIELD": "material_signals / brands / work_methods / application_areas",
+      "INPUT_FACTS_USED": [
+        "title",
+        "okpd_names"
+      ],
+      "PYTHON_PRIORS_USED": [],
+      "REQUIRES_COMMERCIAL_TAXONOMY": "no",
+      "REQUIRES_DOCUMENT_CONTENT": "no",
+      "CAN_BE_RELIABLY_ANSWERED_BEFORE_DOCUMENT_RESEARCH": "yes",
+      "CLASS": "FACT_EXTRACTION"
+    }
+  ],
+  "field_audit": [
+    {
+      "field": "model_input_version",
+      "class": "NOT_REQUIRED_FOR_ROUTING"
+    },
+    {
+      "field": "procurement_id",
+      "class": "NOT_REQUIRED_FOR_ROUTING"
+    },
+    {
+      "field": "procurement_number",
+      "class": "NOT_REQUIRED_FOR_ROUTING"
+    },
+    {
+      "field": "source_contour",
+      "class": "SEMANTIC_CLASSIFICATION_REQUIRED"
+    },
+    {
+      "field": "source_table",
+      "class": "NOT_REQUIRED_FOR_ROUTING"
+    },
+    {
+      "field": "source_id",
+      "class": "NOT_REQUIRED_FOR_ROUTING"
+    },
+    {
+      "field": "source_origin",
+      "class": "NOT_REQUIRED_FOR_ROUTING"
+    },
+    {
+      "field": "title",
+      "class": "SEMANTIC_CLASSIFICATION_REQUIRED"
+    },
+    {
+      "field": "official_description",
+      "class": "SEMANTIC_CLASSIFICATION_REQUIRED"
+    },
+    {
+      "field": "normalized_lifecycle",
+      "class": "LIFECYCLE_ONLY"
+    },
+    {
+      "field": "source_start_date",
+      "class": "LIFECYCLE_ONLY"
+    },
+    {
+      "field": "source_end_date",
+      "class": "LIFECYCLE_ONLY"
+    },
+    {
+      "field": "procurement_start_at",
+      "class": "LIFECYCLE_ONLY"
+    },
+    {
+      "field": "procurement_end_at",
+      "class": "LIFECYCLE_ONLY"
+    },
+    {
+      "field": "procurement_start_at_provenance",
+      "class": "LIFECYCLE_ONLY"
+    },
+    {
+      "field": "procurement_end_at_provenance",
+      "class": "LIFECYCLE_ONLY"
+    },
+    {
+      "field": "published_at",
+      "class": "LIFECYCLE_ONLY"
+    },
+    {
+      "field": "published_at_provenance",
+      "class": "LIFECYCLE_ONLY"
+    },
+    {
+      "field": "source_created_at",
+      "class": "LIFECYCLE_ONLY"
+    },
+    {
+      "field": "procurement_duration_days",
+      "class": "LIFECYCLE_ONLY"
+    },
+    {
+      "field": "remaining_days",
+      "class": "LATER_SCORING_ONLY"
+    },
+    {
+      "field": "remaining_ratio",
+      "class": "LATER_SCORING_ONLY"
+    },
+    {
+      "field": "deadline_pressure",
+      "class": "LATER_SCORING_ONLY"
+    },
+    {
+      "field": "procurement_age_days",
+      "class": "LATER_SCORING_ONLY"
+    },
+    {
+      "field": "award_age_days",
+      "class": "LATER_SCORING_ONLY"
+    },
+    {
+      "field": "execution_remaining_days",
+      "class": "LATER_SCORING_ONLY"
+    },
+    {
+      "field": "commercial_timing_value",
+      "class": "LATER_SCORING_ONLY"
+    },
+    {
+      "field": "commercial_timing_version",
+      "class": "LATER_SCORING_ONLY"
+    },
+    {
+      "field": "commercial_timing_confidence",
+      "class": "LATER_SCORING_ONLY"
+    },
+    {
+      "field": "commercial_timing_start_provenance",
+      "class": "LATER_SCORING_ONLY"
+    },
+    {
+      "field": "source_delivery_start_date",
+      "class": "LIFECYCLE_ONLY"
+    },
+    {
+      "field": "source_delivery_end_date",
+      "class": "LIFECYCLE_ONLY"
+    },
+    {
+      "field": "delivery_start_at",
+      "class": "LIFECYCLE_ONLY"
+    },
+    {
+      "field": "delivery_end_at",
+      "class": "LIFECYCLE_ONLY"
+    },
+    {
+      "field": "customer_name",
+      "class": "UI_ONLY"
+    },
+    {
+      "field": "customer_inn",
+      "class": "NOT_REQUIRED_FOR_ROUTING"
+    },
+    {
+      "field": "purchasing_organization",
+      "class": "UI_ONLY"
+    },
+    {
+      "field": "winner_name",
+      "class": "LIFECYCLE_ONLY"
+    },
+    {
+      "field": "winner_inn",
+      "class": "LIFECYCLE_ONLY"
+    },
+    {
+      "field": "winner_role",
+      "class": "LIFECYCLE_ONLY"
+    },
+    {
+      "field": "award_at",
+      "class": "LIFECYCLE_ONLY"
+    },
+    {
+      "field": "initial_price",
+      "class": "LATER_SCORING_ONLY"
+    },
+    {
+      "field": "final_contract_price",
+      "class": "LATER_SCORING_ONLY"
+    },
+    {
+      "field": "price_reduction_percent",
+      "class": "LATER_SCORING_ONLY"
+    },
+    {
+      "field": "contract_execution_end_at",
+      "class": "LIFECYCLE_ONLY"
+    },
+    {
+      "field": "execution_active",
+      "class": "LIFECYCLE_ONLY"
+    },
+    {
+      "field": "primary_commercial_region",
+      "class": "NOT_REQUIRED_FOR_ROUTING"
+    },
+    {
+      "field": "region_provenance",
+      "class": "NOT_REQUIRED_FOR_ROUTING"
+    },
+    {
+      "field": "okpd_codes",
+      "class": "COMMERCIAL_MAPPING_REQUIRED"
+    },
+    {
+      "field": "okpd_names",
+      "class": "COMMERCIAL_MAPPING_REQUIRED"
+    },
+    {
+      "field": "okpd_hierarchy",
+      "class": "COMMERCIAL_MAPPING_REQUIRED"
+    },
+    {
+      "field": "COMMERCIAL_PRODUCT_PRIORS",
+      "class": "POTENTIALLY_HARMFUL_ANCHOR"
+    },
+    {
+      "field": "CONTEXTUAL_RESEARCH_PRIORS",
+      "class": "POTENTIALLY_HARMFUL_ANCHOR"
+    },
+    {
+      "field": "DIRECT_CABLE_EXPECTED_RESULT",
+      "class": "POTENTIALLY_HARMFUL_ANCHOR"
+    },
+    {
+      "field": "source_card_url",
+      "class": "UI_ONLY"
+    },
+    {
+      "field": "source_card_url_type",
+      "class": "UI_ONLY"
+    },
+    {
+      "field": "document_link_count",
+      "class": "POTENTIALLY_HARMFUL_ANCHOR"
+    },
+    {
+      "field": "unique_document_count",
+      "class": "POTENTIALLY_HARMFUL_ANCHOR"
+    }
+  ],
+  "MODEL_VALIDATED_MUTATED": "NO",
+  "PRODUCTION_MODEL_CHANGED": "NO",
+  "PRODUCTION_PROMPT_CHANGED": "NO",
+  "PRODUCTION_MUTATIONS": 0,
+  "active_registry_at_dump": [
+    "bridge_road_infrastructure",
+    "cable_support_systems",
+    "composite_structures",
+    "composites",
+    "computers",
+    "concrete_materials",
+    "curbstone",
+    "drainage_water_management",
+    "external_utility_networks",
+    "flooring",
+    "lighting",
+    "structural_reinforcement",
+    "waterproofing",
+    "waterproofing_concrete_repair"
+  ],
+  "23591_rerun_note": {
+    "phase7_run_283": "RAW cable / CABLE",
+    "phase71_run_476": "RAW equipment / EQUIPMENT",
+    "both": "invalid + validator empty; neither drainage_water_management"
+  }
+}

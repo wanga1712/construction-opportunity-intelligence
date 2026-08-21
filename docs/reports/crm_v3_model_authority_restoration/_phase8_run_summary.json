@@ -1,0 +1,1352 @@
+﻿{
+  "summary": [
+    {
+      "inference_run_id": 219,
+      "procurement_id": 37958,
+      "prompt_version": "v3_category_centric_routing_7b_v6_1",
+      "run_kind": "SHADOW",
+      "raw_cats": [
+        "lighting"
+      ],
+      "val_cats": [
+        "lighting"
+      ],
+      "invalid_raw_cats": [],
+      "raw_form": "DIRECT_GOODS_PURCHASE",
+      "val_form": "DIRECT_GOODS_PURCHASE",
+      "object_type": "GOODS",
+      "object_subtype": "LIGHTING",
+      "work_stage": "SUPPLY",
+      "empty_raw": null,
+      "empty_val": null,
+      "validator_removed": false
+    },
+    {
+      "inference_run_id": 221,
+      "procurement_id": 37885,
+      "prompt_version": "v3_category_centric_routing_7b_v6_1",
+      "run_kind": "SHADOW",
+      "raw_cats": [
+        "lighting"
+      ],
+      "val_cats": [
+        "lighting"
+      ],
+      "invalid_raw_cats": [],
+      "raw_form": "DIRECT_GOODS_PURCHASE",
+      "val_form": "DIRECT_GOODS_PURCHASE",
+      "object_type": "GOODS",
+      "object_subtype": "LIGHTING",
+      "work_stage": "SUPPLY",
+      "empty_raw": null,
+      "empty_val": null,
+      "validator_removed": false
+    },
+    {
+      "inference_run_id": 223,
+      "procurement_id": 37784,
+      "prompt_version": "v3_category_centric_routing_7b_v6_1",
+      "run_kind": "SHADOW",
+      "raw_cats": [
+        "lighting"
+      ],
+      "val_cats": [
+        "lighting"
+      ],
+      "invalid_raw_cats": [],
+      "raw_form": "DIRECT_GOODS_PURCHASE",
+      "val_form": "DIRECT_GOODS_PURCHASE",
+      "object_type": "GOODS",
+      "object_subtype": "LIGHTING",
+      "work_stage": "SUPPLY",
+      "empty_raw": null,
+      "empty_val": null,
+      "validator_removed": false
+    },
+    {
+      "inference_run_id": 225,
+      "procurement_id": 37650,
+      "prompt_version": "v3_category_centric_routing_7b_v6_1",
+      "run_kind": "SHADOW",
+      "raw_cats": [
+        "lighting"
+      ],
+      "val_cats": [
+        "lighting"
+      ],
+      "invalid_raw_cats": [],
+      "raw_form": "DIRECT_GOODS_PURCHASE",
+      "val_form": "DIRECT_GOODS_PURCHASE",
+      "object_type": "GOODS",
+      "object_subtype": "LIGHTING",
+      "work_stage": "SUPPLY",
+      "empty_raw": null,
+      "empty_val": null,
+      "validator_removed": false
+    },
+    {
+      "inference_run_id": 227,
+      "procurement_id": 37599,
+      "prompt_version": "v3_category_centric_routing_7b_v6_1",
+      "run_kind": "SHADOW",
+      "raw_cats": [
+        "lighting"
+      ],
+      "val_cats": [
+        "lighting"
+      ],
+      "invalid_raw_cats": [],
+      "raw_form": "DIRECT_GOODS_PURCHASE",
+      "val_form": "DIRECT_GOODS_PURCHASE",
+      "object_type": "GOODS",
+      "object_subtype": "LIGHTING",
+      "work_stage": "SUPPLY",
+      "empty_raw": null,
+      "empty_val": null,
+      "validator_removed": false
+    },
+    {
+      "inference_run_id": 229,
+      "procurement_id": 37401,
+      "prompt_version": "v3_category_centric_routing_7b_v6_1",
+      "run_kind": "SHADOW",
+      "raw_cats": [
+        "lighting"
+      ],
+      "val_cats": [
+        "lighting"
+      ],
+      "invalid_raw_cats": [],
+      "raw_form": "DIRECT_GOODS_PURCHASE",
+      "val_form": "DIRECT_GOODS_PURCHASE",
+      "object_type": "GOODS",
+      "object_subtype": "LIGHTING",
+      "work_stage": "SUPPLY",
+      "empty_raw": null,
+      "empty_val": null,
+      "validator_removed": false
+    },
+    {
+      "inference_run_id": 231,
+      "procurement_id": 37988,
+      "prompt_version": "v3_category_centric_routing_7b_v6_1",
+      "run_kind": "SHADOW",
+      "raw_cats": [
+        "computers"
+      ],
+      "val_cats": [
+        "computers"
+      ],
+      "invalid_raw_cats": [],
+      "raw_form": "DIRECT_GOODS_PURCHASE",
+      "val_form": "DIRECT_GOODS_PURCHASE",
+      "object_type": "GOODS",
+      "object_subtype": "COMPUTER_EQUIPMENT",
+      "work_stage": "SUPPLY",
+      "empty_raw": null,
+      "empty_val": null,
+      "validator_removed": false
+    },
+    {
+      "inference_run_id": 233,
+      "procurement_id": 37750,
+      "prompt_version": "v3_category_centric_routing_7b_v6_1",
+      "run_kind": "SHADOW",
+      "raw_cats": [
+        "computers"
+      ],
+      "val_cats": [
+        "computers"
+      ],
+      "invalid_raw_cats": [],
+      "raw_form": "DIRECT_GOODS_PURCHASE",
+      "val_form": "DIRECT_GOODS_PURCHASE",
+      "object_type": "GOODS",
+      "object_subtype": "COMPUTERS",
+      "work_stage": "SUPPLY",
+      "empty_raw": null,
+      "empty_val": null,
+      "validator_removed": false
+    },
+    {
+      "inference_run_id": 235,
+      "procurement_id": 37605,
+      "prompt_version": "v3_category_centric_routing_7b_v6_1",
+      "run_kind": "SHADOW",
+      "raw_cats": [
+        "electric_equipment_parts"
+      ],
+      "val_cats": [],
+      "invalid_raw_cats": [
+        "electric_equipment_parts"
+      ],
+      "raw_form": "DIRECT_GOODS_PURCHASE",
+      "val_form": "DIRECT_GOODS_PURCHASE",
+      "object_type": "GOODS",
+      "object_subtype": "ELECTRICAL_EQUIPMENT_PARTS",
+      "work_stage": "SUPPLY",
+      "empty_raw": null,
+      "empty_val": null,
+      "validator_removed": true
+    },
+    {
+      "inference_run_id": 237,
+      "procurement_id": 37188,
+      "prompt_version": "v3_category_centric_routing_7b_v6_1",
+      "run_kind": "SHADOW",
+      "raw_cats": [
+        "computers"
+      ],
+      "val_cats": [
+        "computers"
+      ],
+      "invalid_raw_cats": [],
+      "raw_form": "DIRECT_GOODS_PURCHASE",
+      "val_form": "DIRECT_GOODS_PURCHASE",
+      "object_type": "GOODS",
+      "object_subtype": "COMPUTER_PARTS_AND_ACCESSORIES",
+      "work_stage": "SUPPLY",
+      "empty_raw": null,
+      "empty_val": null,
+      "validator_removed": false
+    },
+    {
+      "inference_run_id": 239,
+      "procurement_id": 37082,
+      "prompt_version": "v3_category_centric_routing_7b_v6_1",
+      "run_kind": "SHADOW",
+      "raw_cats": [
+        "computer_components"
+      ],
+      "val_cats": [],
+      "invalid_raw_cats": [
+        "computer_components"
+      ],
+      "raw_form": "DIRECT_GOODS_PURCHASE",
+      "val_form": "DIRECT_GOODS_PURCHASE",
+      "object_type": "GOODS",
+      "object_subtype": "COMPUTER_COMPONENTS",
+      "work_stage": "SUPPLY",
+      "empty_raw": null,
+      "empty_val": null,
+      "validator_removed": true
+    },
+    {
+      "inference_run_id": 241,
+      "procurement_id": 37069,
+      "prompt_version": "v3_category_centric_routing_7b_v6_1",
+      "run_kind": "SHADOW",
+      "raw_cats": [
+        "computers"
+      ],
+      "val_cats": [
+        "computers"
+      ],
+      "invalid_raw_cats": [],
+      "raw_form": "DIRECT_GOODS_PURCHASE",
+      "val_form": "DIRECT_GOODS_PURCHASE",
+      "object_type": "GOODS",
+      "object_subtype": "COMPUTERS",
+      "work_stage": "SUPPLY",
+      "empty_raw": null,
+      "empty_val": null,
+      "validator_removed": false
+    },
+    {
+      "inference_run_id": 243,
+      "procurement_id": 13564,
+      "prompt_version": "v3_category_centric_routing_7b_v6_1",
+      "run_kind": "SHADOW",
+      "raw_cats": [
+        "flooring"
+      ],
+      "val_cats": [
+        "flooring"
+      ],
+      "invalid_raw_cats": [],
+      "raw_form": "DIRECT_GOODS_PURCHASE",
+      "val_form": "DIRECT_GOODS_PURCHASE",
+      "object_type": "GOODS",
+      "object_subtype": "FLOORING",
+      "work_stage": "SUPPLY",
+      "empty_raw": null,
+      "empty_val": null,
+      "validator_removed": false
+    },
+    {
+      "inference_run_id": 245,
+      "procurement_id": 18512,
+      "prompt_version": "v3_category_centric_routing_7b_v6_1",
+      "run_kind": "SHADOW",
+      "raw_cats": [
+        "cable_support_systems"
+      ],
+      "val_cats": [
+        "cable_support_systems"
+      ],
+      "invalid_raw_cats": [],
+      "raw_form": "DIRECT_GOODS_PURCHASE",
+      "val_form": "DIRECT_GOODS_PURCHASE",
+      "object_type": "GOODS",
+      "object_subtype": "CABLE_SUPPORT",
+      "work_stage": "SUPPLY",
+      "empty_raw": null,
+      "empty_val": null,
+      "validator_removed": false
+    },
+    {
+      "inference_run_id": 247,
+      "procurement_id": 36939,
+      "prompt_version": "v3_category_centric_routing_7b_v6_1",
+      "run_kind": "SHADOW",
+      "raw_cats": [
+        "flooring"
+      ],
+      "val_cats": [
+        "flooring"
+      ],
+      "invalid_raw_cats": [],
+      "raw_form": "DIRECT_GOODS_PURCHASE",
+      "val_form": "DIRECT_GOODS_PURCHASE",
+      "object_type": "GOODS",
+      "object_subtype": "FLOORING",
+      "work_stage": "SUPPLY",
+      "empty_raw": null,
+      "empty_val": null,
+      "validator_removed": false
+    },
+    {
+      "inference_run_id": 249,
+      "procurement_id": 36596,
+      "prompt_version": "v3_category_centric_routing_7b_v6_1",
+      "run_kind": "SHADOW",
+      "raw_cats": [
+        "flooring"
+      ],
+      "val_cats": [
+        "flooring"
+      ],
+      "invalid_raw_cats": [],
+      "raw_form": "DIRECT_GOODS_PURCHASE",
+      "val_form": "DIRECT_GOODS_PURCHASE",
+      "object_type": "GOODS",
+      "object_subtype": "FLOORING",
+      "work_stage": "SUPPLY",
+      "empty_raw": null,
+      "empty_val": null,
+      "validator_removed": false
+    },
+    {
+      "inference_run_id": 251,
+      "procurement_id": 38139,
+      "prompt_version": "v3_category_centric_routing_7b_v6_1",
+      "run_kind": "SHADOW",
+      "raw_cats": [
+        "medical_equipment"
+      ],
+      "val_cats": [],
+      "invalid_raw_cats": [
+        "medical_equipment"
+      ],
+      "raw_form": "DIRECT_GOODS_PURCHASE",
+      "val_form": "DIRECT_GOODS_PURCHASE",
+      "object_type": "GOODS",
+      "object_subtype": "MEDICAL_EQUIPMENT",
+      "work_stage": "SUPPLY",
+      "empty_raw": null,
+      "empty_val": null,
+      "validator_removed": true
+    },
+    {
+      "inference_run_id": 253,
+      "procurement_id": 38127,
+      "prompt_version": "v3_category_centric_routing_7b_v6_1",
+      "run_kind": "SHADOW",
+      "raw_cats": [
+        "medical_equipment"
+      ],
+      "val_cats": [],
+      "invalid_raw_cats": [
+        "medical_equipment"
+      ],
+      "raw_form": "DIRECT_GOODS_PURCHASE",
+      "val_form": "DIRECT_GOODS_PURCHASE",
+      "object_type": "GOODS",
+      "object_subtype": "MEDICAL_EQUIPMENT",
+      "work_stage": "SUPPLY",
+      "empty_raw": null,
+      "empty_val": null,
+      "validator_removed": true
+    },
+    {
+      "inference_run_id": 255,
+      "procurement_id": 38121,
+      "prompt_version": "v3_category_centric_routing_7b_v6_1",
+      "run_kind": "SHADOW",
+      "raw_cats": [
+        "medical_equipment"
+      ],
+      "val_cats": [],
+      "invalid_raw_cats": [
+        "medical_equipment"
+      ],
+      "raw_form": "DIRECT_GOODS_PURCHASE",
+      "val_form": "DIRECT_GOODS_PURCHASE",
+      "object_type": "GOODS",
+      "object_subtype": "MEDICAL_EQUIPMENT",
+      "work_stage": "SUPPLY",
+      "empty_raw": null,
+      "empty_val": null,
+      "validator_removed": true
+    },
+    {
+      "inference_run_id": 257,
+      "procurement_id": 38025,
+      "prompt_version": "v3_category_centric_routing_7b_v6_1",
+      "run_kind": "SHADOW",
+      "raw_cats": [
+        "medical_equipment"
+      ],
+      "val_cats": [],
+      "invalid_raw_cats": [
+        "medical_equipment"
+      ],
+      "raw_form": "DIRECT_GOODS_PURCHASE",
+      "val_form": "DIRECT_GOODS_PURCHASE",
+      "object_type": "GOODS",
+      "object_subtype": "MEDICAL_EQUIPMENT",
+      "work_stage": "SUPPLY",
+      "empty_raw": null,
+      "empty_val": null,
+      "validator_removed": true
+    },
+    {
+      "inference_run_id": 259,
+      "procurement_id": 27355,
+      "prompt_version": "v3_category_centric_routing_7b_v6_1",
+      "run_kind": "SHADOW",
+      "raw_cats": [
+        "curbstone"
+      ],
+      "val_cats": [
+        "curbstone"
+      ],
+      "invalid_raw_cats": [],
+      "raw_form": "CONSTRUCTION_WORKS",
+      "val_form": "CONSTRUCTION_WORKS",
+      "object_type": "ROAD",
+      "object_subtype": "ROAD_REPAIR",
+      "work_stage": "REPAIR",
+      "empty_raw": null,
+      "empty_val": null,
+      "validator_removed": false
+    },
+    {
+      "inference_run_id": 261,
+      "procurement_id": 7846,
+      "prompt_version": "v3_category_centric_routing_7b_v6_1",
+      "run_kind": "SHADOW",
+      "raw_cats": [
+        "gaz_meters"
+      ],
+      "val_cats": [],
+      "invalid_raw_cats": [
+        "gaz_meters"
+      ],
+      "raw_form": "DIRECT_GOODS_PURCHASE",
+      "val_form": "DIRECT_GOODS_PURCHASE",
+      "object_type": "GOODS",
+      "object_subtype": "GAZ_METERS",
+      "work_stage": "SUPPLY",
+      "empty_raw": null,
+      "empty_val": null,
+      "validator_removed": true
+    },
+    {
+      "inference_run_id": 263,
+      "procurement_id": 32155,
+      "prompt_version": "v3_category_centric_routing_7b_v6_1",
+      "run_kind": "SHADOW",
+      "raw_cats": [
+        "laboratory_equipment"
+      ],
+      "val_cats": [],
+      "invalid_raw_cats": [
+        "laboratory_equipment"
+      ],
+      "raw_form": "DIRECT_GOODS_PURCHASE",
+      "val_form": "DIRECT_GOODS_PURCHASE",
+      "object_type": "GOODS",
+      "object_subtype": "LABORATORY_EQUIPMENT",
+      "work_stage": "SUPPLY",
+      "empty_raw": null,
+      "empty_val": null,
+      "validator_removed": true
+    },
+    {
+      "inference_run_id": 265,
+      "procurement_id": 29451,
+      "prompt_version": "v3_category_centric_routing_7b_v6_1",
+      "run_kind": "SHADOW",
+      "raw_cats": [
+        "equipment"
+      ],
+      "val_cats": [],
+      "invalid_raw_cats": [
+        "equipment"
+      ],
+      "raw_form": "DIRECT_GOODS_PURCHASE",
+      "val_form": "DIRECT_GOODS_PURCHASE",
+      "object_type": "GOODS",
+      "object_subtype": "LABORATORY_EQUIPMENT",
+      "work_stage": "SUPPLY",
+      "empty_raw": null,
+      "empty_val": null,
+      "validator_removed": true
+    },
+    {
+      "inference_run_id": 267,
+      "procurement_id": 36166,
+      "prompt_version": "v3_category_centric_routing_7b_v6_1",
+      "run_kind": "SHADOW",
+      "raw_cats": [
+        "medical_equipment"
+      ],
+      "val_cats": [],
+      "invalid_raw_cats": [
+        "medical_equipment"
+      ],
+      "raw_form": "DIRECT_GOODS_PURCHASE",
+      "val_form": "DIRECT_GOODS_PURCHASE",
+      "object_type": "GOODS",
+      "object_subtype": "MEDICAL_EQUIPMENT",
+      "work_stage": "SUPPLY",
+      "empty_raw": null,
+      "empty_val": null,
+      "validator_removed": true
+    },
+    {
+      "inference_run_id": 269,
+      "procurement_id": 34524,
+      "prompt_version": "v3_category_centric_routing_7b_v6_1",
+      "run_kind": "SHADOW",
+      "raw_cats": [
+        "building_construction"
+      ],
+      "val_cats": [],
+      "invalid_raw_cats": [
+        "building_construction"
+      ],
+      "raw_form": "DIRECT_GOODS_PURCHASE",
+      "val_form": "DIRECT_GOODS_PURCHASE",
+      "object_type": "GOODS",
+      "object_subtype": "BUILDING_CONSTRUCTION",
+      "work_stage": "SUPPLY",
+      "empty_raw": null,
+      "empty_val": null,
+      "validator_removed": true
+    },
+    {
+      "inference_run_id": 271,
+      "procurement_id": 34517,
+      "prompt_version": "v3_category_centric_routing_7b_v6_1",
+      "run_kind": "SHADOW",
+      "raw_cats": [
+        "lighting"
+      ],
+      "val_cats": [
+        "lighting"
+      ],
+      "invalid_raw_cats": [],
+      "raw_form": "CONSTRUCTION_WORKS",
+      "val_form": "CONSTRUCTION_WORKS",
+      "object_type": "ROAD",
+      "object_subtype": "ROAD_LIGHTING",
+      "work_stage": "REPAIR",
+      "empty_raw": null,
+      "empty_val": null,
+      "validator_removed": false
+    },
+    {
+      "inference_run_id": 273,
+      "procurement_id": 34239,
+      "prompt_version": "v3_category_centric_routing_7b_v6_1",
+      "run_kind": "SHADOW",
+      "raw_cats": [
+        "diabetes_monitoring_kits"
+      ],
+      "val_cats": [],
+      "invalid_raw_cats": [
+        "diabetes_monitoring_kits"
+      ],
+      "raw_form": "DIRECT_GOODS_PURCHASE",
+      "val_form": "DIRECT_GOODS_PURCHASE",
+      "object_type": "GOODS",
+      "object_subtype": "MEDICAL_EQUIPMENT",
+      "work_stage": "SUPPLY",
+      "empty_raw": null,
+      "empty_val": null,
+      "validator_removed": true
+    },
+    {
+      "inference_run_id": 275,
+      "procurement_id": 29384,
+      "prompt_version": "v3_category_centric_routing_7b_v6_1",
+      "run_kind": "SHADOW",
+      "raw_cats": [
+        "automobile_railroad_vehicles"
+      ],
+      "val_cats": [],
+      "invalid_raw_cats": [
+        "automobile_railroad_vehicles"
+      ],
+      "raw_form": "DIRECT_GOODS_PURCHASE",
+      "val_form": "DIRECT_GOODS_PURCHASE",
+      "object_type": "GOODS",
+      "object_subtype": "AUTOMOTIVE_EQUIPMENT",
+      "work_stage": "SUPPLY",
+      "empty_raw": null,
+      "empty_val": null,
+      "validator_removed": true
+    },
+    {
+      "inference_run_id": 277,
+      "procurement_id": 37167,
+      "prompt_version": "v3_category_centric_routing_7b_v6_1",
+      "run_kind": "SHADOW",
+      "raw_cats": [
+        "furniture"
+      ],
+      "val_cats": [],
+      "invalid_raw_cats": [
+        "furniture"
+      ],
+      "raw_form": "DIRECT_GOODS_PURCHASE",
+      "val_form": "DIRECT_GOODS_PURCHASE",
+      "object_type": "GOODS",
+      "object_subtype": "FURNITURE",
+      "work_stage": "SUPPLY",
+      "empty_raw": null,
+      "empty_val": null,
+      "validator_removed": true
+    },
+    {
+      "inference_run_id": 279,
+      "procurement_id": 37166,
+      "prompt_version": "v3_category_centric_routing_7b_v6_1",
+      "run_kind": "SHADOW",
+      "raw_cats": [
+        "furniture"
+      ],
+      "val_cats": [],
+      "invalid_raw_cats": [
+        "furniture"
+      ],
+      "raw_form": "DIRECT_GOODS_PURCHASE",
+      "val_form": "DIRECT_GOODS_PURCHASE",
+      "object_type": "GOODS",
+      "object_subtype": "FURNITURE",
+      "work_stage": "SUPPLY",
+      "empty_raw": null,
+      "empty_val": null,
+      "validator_removed": true
+    },
+    {
+      "inference_run_id": 281,
+      "procurement_id": 36935,
+      "prompt_version": "v3_category_centric_routing_7b_v6_1",
+      "run_kind": "SHADOW",
+      "raw_cats": [
+        "furniture"
+      ],
+      "val_cats": [],
+      "invalid_raw_cats": [
+        "furniture"
+      ],
+      "raw_form": "DIRECT_GOODS_PURCHASE",
+      "val_form": "DIRECT_GOODS_PURCHASE",
+      "object_type": "GOODS",
+      "object_subtype": "FURNITURE",
+      "work_stage": "SUPPLY",
+      "empty_raw": null,
+      "empty_val": null,
+      "validator_removed": true
+    },
+    {
+      "inference_run_id": 283,
+      "procurement_id": 23591,
+      "prompt_version": "v3_category_centric_routing_7b_v6_1",
+      "run_kind": "SHADOW",
+      "raw_cats": [
+        "cable"
+      ],
+      "val_cats": [],
+      "invalid_raw_cats": [
+        "cable"
+      ],
+      "raw_form": "DIRECT_GOODS_PURCHASE",
+      "val_form": "DIRECT_GOODS_PURCHASE",
+      "object_type": "GOODS",
+      "object_subtype": "CABLE",
+      "work_stage": "SUPPLY",
+      "empty_raw": null,
+      "empty_val": null,
+      "validator_removed": true
+    },
+    {
+      "inference_run_id": 285,
+      "procurement_id": 38690,
+      "prompt_version": "v3_category_centric_routing_7b_v6_1",
+      "run_kind": "SHADOW",
+      "raw_cats": [
+        "lighting"
+      ],
+      "val_cats": [
+        "lighting"
+      ],
+      "invalid_raw_cats": [],
+      "raw_form": "DIRECT_GOODS_PURCHASE",
+      "val_form": "DIRECT_GOODS_PURCHASE",
+      "object_type": "GOODS",
+      "object_subtype": "LIGHTING",
+      "work_stage": "SUPPLY",
+      "empty_raw": null,
+      "empty_val": null,
+      "validator_removed": false
+    },
+    {
+      "inference_run_id": 287,
+      "procurement_id": 37958,
+      "prompt_version": "v3_category_centric_routing_7b_v6_1",
+      "run_kind": "SHADOW",
+      "raw_cats": [
+        "lighting"
+      ],
+      "val_cats": [
+        "lighting"
+      ],
+      "invalid_raw_cats": [],
+      "raw_form": "DIRECT_GOODS_PURCHASE",
+      "val_form": "DIRECT_GOODS_PURCHASE",
+      "object_type": "GOODS",
+      "object_subtype": "LIGHTING",
+      "work_stage": "SUPPLY",
+      "empty_raw": null,
+      "empty_val": null,
+      "validator_removed": false
+    },
+    {
+      "inference_run_id": 290,
+      "procurement_id": 37885,
+      "prompt_version": "v3_category_centric_routing_7b_v6_1",
+      "run_kind": "SHADOW",
+      "raw_cats": [
+        "lighting"
+      ],
+      "val_cats": [
+        "lighting"
+      ],
+      "invalid_raw_cats": [],
+      "raw_form": "DIRECT_GOODS_PURCHASE",
+      "val_form": "DIRECT_GOODS_PURCHASE",
+      "object_type": "GOODS",
+      "object_subtype": "LIGHTING",
+      "work_stage": "SUPPLY",
+      "empty_raw": null,
+      "empty_val": null,
+      "validator_removed": false
+    },
+    {
+      "inference_run_id": 293,
+      "procurement_id": 37784,
+      "prompt_version": "v3_category_centric_routing_7b_v6_1",
+      "run_kind": "SHADOW",
+      "raw_cats": [
+        "lighting"
+      ],
+      "val_cats": [
+        "lighting"
+      ],
+      "invalid_raw_cats": [],
+      "raw_form": "DIRECT_GOODS_PURCHASE",
+      "val_form": "DIRECT_GOODS_PURCHASE",
+      "object_type": "GOODS",
+      "object_subtype": "LIGHTING",
+      "work_stage": "SUPPLY",
+      "empty_raw": null,
+      "empty_val": null,
+      "validator_removed": false
+    },
+    {
+      "inference_run_id": 296,
+      "procurement_id": 37650,
+      "prompt_version": "v3_category_centric_routing_7b_v6_1",
+      "run_kind": "SHADOW",
+      "raw_cats": [
+        "lighting"
+      ],
+      "val_cats": [
+        "lighting"
+      ],
+      "invalid_raw_cats": [],
+      "raw_form": "DIRECT_GOODS_PURCHASE",
+      "val_form": "DIRECT_GOODS_PURCHASE",
+      "object_type": "GOODS",
+      "object_subtype": "LIGHTING",
+      "work_stage": "SUPPLY",
+      "empty_raw": null,
+      "empty_val": null,
+      "validator_removed": false
+    },
+    {
+      "inference_run_id": 299,
+      "procurement_id": 37599,
+      "prompt_version": "v3_category_centric_routing_7b_v6_1",
+      "run_kind": "SHADOW",
+      "raw_cats": [
+        "lighting"
+      ],
+      "val_cats": [
+        "lighting"
+      ],
+      "invalid_raw_cats": [],
+      "raw_form": "DIRECT_GOODS_PURCHASE",
+      "val_form": "DIRECT_GOODS_PURCHASE",
+      "object_type": "GOODS",
+      "object_subtype": "LIGHTING",
+      "work_stage": "SUPPLY",
+      "empty_raw": null,
+      "empty_val": null,
+      "validator_removed": false
+    },
+    {
+      "inference_run_id": 302,
+      "procurement_id": 37401,
+      "prompt_version": "v3_category_centric_routing_7b_v6_1",
+      "run_kind": "SHADOW",
+      "raw_cats": [
+        "lighting"
+      ],
+      "val_cats": [
+        "lighting"
+      ],
+      "invalid_raw_cats": [],
+      "raw_form": "DIRECT_GOODS_PURCHASE",
+      "val_form": "DIRECT_GOODS_PURCHASE",
+      "object_type": "GOODS",
+      "object_subtype": "LIGHTING",
+      "work_stage": "SUPPLY",
+      "empty_raw": null,
+      "empty_val": null,
+      "validator_removed": false
+    },
+    {
+      "inference_run_id": 305,
+      "procurement_id": 37988,
+      "prompt_version": "v3_category_centric_routing_7b_v6_1",
+      "run_kind": "SHADOW",
+      "raw_cats": [
+        "computers"
+      ],
+      "val_cats": [
+        "computers"
+      ],
+      "invalid_raw_cats": [],
+      "raw_form": "DIRECT_GOODS_PURCHASE",
+      "val_form": "DIRECT_GOODS_PURCHASE",
+      "object_type": "GOODS",
+      "object_subtype": "COMPUTERS",
+      "work_stage": "SUPPLY",
+      "empty_raw": null,
+      "empty_val": null,
+      "validator_removed": false
+    },
+    {
+      "inference_run_id": 308,
+      "procurement_id": 37750,
+      "prompt_version": "v3_category_centric_routing_7b_v6_1",
+      "run_kind": "SHADOW",
+      "raw_cats": [
+        "computers"
+      ],
+      "val_cats": [
+        "computers"
+      ],
+      "invalid_raw_cats": [],
+      "raw_form": "DIRECT_GOODS_PURCHASE",
+      "val_form": "DIRECT_GOODS_PURCHASE",
+      "object_type": "GOODS",
+      "object_subtype": "COMPUTER_PARTS_AND_ACCESSORIES",
+      "work_stage": "SUPPLY",
+      "empty_raw": null,
+      "empty_val": null,
+      "validator_removed": false
+    },
+    {
+      "inference_run_id": 317,
+      "procurement_id": 37082,
+      "prompt_version": "v3_category_centric_routing_7b_v6_1",
+      "run_kind": "SHADOW",
+      "raw_cats": [
+        "computer_components"
+      ],
+      "val_cats": [],
+      "invalid_raw_cats": [
+        "computer_components"
+      ],
+      "raw_form": "DIRECT_GOODS_PURCHASE",
+      "val_form": "DIRECT_GOODS_PURCHASE",
+      "object_type": "GOODS",
+      "object_subtype": "COMPUTER_COMPONENTS",
+      "work_stage": "SUPPLY",
+      "empty_raw": null,
+      "empty_val": null,
+      "validator_removed": true
+    },
+    {
+      "inference_run_id": 335,
+      "procurement_id": 38139,
+      "prompt_version": "v3_category_centric_routing_7b_v6_1",
+      "run_kind": "SHADOW",
+      "raw_cats": [
+        "medical_equipment"
+      ],
+      "val_cats": [],
+      "invalid_raw_cats": [
+        "medical_equipment"
+      ],
+      "raw_form": "DIRECT_GOODS_PURCHASE",
+      "val_form": "DIRECT_GOODS_PURCHASE",
+      "object_type": "GOODS",
+      "object_subtype": "MEDICAL_EQUIPMENT",
+      "work_stage": "SUPPLY",
+      "empty_raw": null,
+      "empty_val": null,
+      "validator_removed": true
+    },
+    {
+      "inference_run_id": 338,
+      "procurement_id": 38127,
+      "prompt_version": "v3_category_centric_routing_7b_v6_1",
+      "run_kind": "SHADOW",
+      "raw_cats": [
+        "optical_biomarkers"
+      ],
+      "val_cats": [],
+      "invalid_raw_cats": [
+        "optical_biomarkers"
+      ],
+      "raw_form": "DIRECT_GOODS_PURCHASE",
+      "val_form": "DIRECT_GOODS_PURCHASE",
+      "object_type": "GOODS",
+      "object_subtype": "OPTICAL_BIOMARKERS",
+      "work_stage": "SUPPLY",
+      "empty_raw": null,
+      "empty_val": null,
+      "validator_removed": true
+    },
+    {
+      "inference_run_id": 341,
+      "procurement_id": 38121,
+      "prompt_version": "v3_category_centric_routing_7b_v6_1",
+      "run_kind": "SHADOW",
+      "raw_cats": [
+        "medical_equipment"
+      ],
+      "val_cats": [],
+      "invalid_raw_cats": [
+        "medical_equipment"
+      ],
+      "raw_form": "DIRECT_GOODS_PURCHASE",
+      "val_form": "DIRECT_GOODS_PURCHASE",
+      "object_type": "GOODS",
+      "object_subtype": "MEDICAL_EQUIPMENT",
+      "work_stage": "SUPPLY",
+      "empty_raw": null,
+      "empty_val": null,
+      "validator_removed": true
+    },
+    {
+      "inference_run_id": 344,
+      "procurement_id": 38025,
+      "prompt_version": "v3_category_centric_routing_7b_v6_1",
+      "run_kind": "SHADOW",
+      "raw_cats": [
+        "medical_equipment"
+      ],
+      "val_cats": [],
+      "invalid_raw_cats": [
+        "medical_equipment"
+      ],
+      "raw_form": "DIRECT_GOODS_PURCHASE",
+      "val_form": "DIRECT_GOODS_PURCHASE",
+      "object_type": "GOODS",
+      "object_subtype": "MEDICAL_EQUIPMENT",
+      "work_stage": "SUPPLY",
+      "empty_raw": null,
+      "empty_val": null,
+      "validator_removed": true
+    },
+    {
+      "inference_run_id": 347,
+      "procurement_id": 27355,
+      "prompt_version": "v3_category_centric_routing_7b_v6_1",
+      "run_kind": "SHADOW",
+      "raw_cats": [
+        "service"
+      ],
+      "val_cats": [],
+      "invalid_raw_cats": [
+        "service"
+      ],
+      "raw_form": "DIRECT_GOODS_PURCHASE",
+      "val_form": "DIRECT_GOODS_PURCHASE",
+      "object_type": "SERVICES",
+      "object_subtype": "SERVICE",
+      "work_stage": "PERFORMANCE",
+      "empty_raw": null,
+      "empty_val": null,
+      "validator_removed": true
+    },
+    {
+      "inference_run_id": 350,
+      "procurement_id": 7846,
+      "prompt_version": "v3_category_centric_routing_7b_v6_1",
+      "run_kind": "SHADOW",
+      "raw_cats": [
+        "gas_metering_equipment"
+      ],
+      "val_cats": [],
+      "invalid_raw_cats": [
+        "gas_metering_equipment"
+      ],
+      "raw_form": "DIRECT_GOODS_PURCHASE",
+      "val_form": "DIRECT_GOODS_PURCHASE",
+      "object_type": "GOODS",
+      "object_subtype": "METERING_EQUIPMENT",
+      "work_stage": "SUPPLY",
+      "empty_raw": null,
+      "empty_val": null,
+      "validator_removed": true
+    },
+    {
+      "inference_run_id": 353,
+      "procurement_id": 32155,
+      "prompt_version": "v3_category_centric_routing_7b_v6_1",
+      "run_kind": "SHADOW",
+      "raw_cats": [
+        "lab_equipment"
+      ],
+      "val_cats": [],
+      "invalid_raw_cats": [
+        "lab_equipment"
+      ],
+      "raw_form": "DIRECT_GOODS_PURCHASE",
+      "val_form": "DIRECT_GOODS_PURCHASE",
+      "object_type": "GOODS",
+      "object_subtype": "LAB_EQUIPMENT",
+      "work_stage": "SUPPLY",
+      "empty_raw": null,
+      "empty_val": null,
+      "validator_removed": true
+    },
+    {
+      "inference_run_id": 356,
+      "procurement_id": 29451,
+      "prompt_version": "v3_category_centric_routing_7b_v6_1",
+      "run_kind": "SHADOW",
+      "raw_cats": [
+        "laboratory_equipment"
+      ],
+      "val_cats": [],
+      "invalid_raw_cats": [
+        "laboratory_equipment"
+      ],
+      "raw_form": "DIRECT_GOODS_PURCHASE",
+      "val_form": "DIRECT_GOODS_PURCHASE",
+      "object_type": "GOODS",
+      "object_subtype": "LABORATORY_EQUIPMENT",
+      "work_stage": "SUPPLY",
+      "empty_raw": null,
+      "empty_val": null,
+      "validator_removed": true
+    },
+    {
+      "inference_run_id": 359,
+      "procurement_id": 36166,
+      "prompt_version": "v3_category_centric_routing_7b_v6_1",
+      "run_kind": "SHADOW",
+      "raw_cats": [
+        "medical_equipment"
+      ],
+      "val_cats": [],
+      "invalid_raw_cats": [
+        "medical_equipment"
+      ],
+      "raw_form": "DIRECT_GOODS_PURCHASE",
+      "val_form": "DIRECT_GOODS_PURCHASE",
+      "object_type": "GOODS",
+      "object_subtype": "MEDICAL_EQUIPMENT",
+      "work_stage": "SUPPLY",
+      "empty_raw": null,
+      "empty_val": null,
+      "validator_removed": true
+    },
+    {
+      "inference_run_id": 362,
+      "procurement_id": 34524,
+      "prompt_version": "v3_category_centric_routing_7b_v6_1",
+      "run_kind": "SHADOW",
+      "raw_cats": [
+        "lighting"
+      ],
+      "val_cats": [
+        "lighting"
+      ],
+      "invalid_raw_cats": [],
+      "raw_form": "DIRECT_GOODS_PURCHASE",
+      "val_form": "DIRECT_GOODS_PURCHASE",
+      "object_type": "GOODS",
+      "object_subtype": "LIGHTING",
+      "work_stage": "SUPPLY",
+      "empty_raw": null,
+      "empty_val": null,
+      "validator_removed": false
+    },
+    {
+      "inference_run_id": 365,
+      "procurement_id": 34517,
+      "prompt_version": "v3_category_centric_routing_7b_v6_1",
+      "run_kind": "SHADOW",
+      "raw_cats": [
+        "construction_works"
+      ],
+      "val_cats": [],
+      "invalid_raw_cats": [
+        "construction_works"
+      ],
+      "raw_form": "DIRECT_GOODS_PURCHASE",
+      "val_form": "DIRECT_GOODS_PURCHASE",
+      "object_type": "GOODS",
+      "object_subtype": "CONSTRUCTION_WORKS",
+      "work_stage": "SUPPLY",
+      "empty_raw": null,
+      "empty_val": null,
+      "validator_removed": true
+    },
+    {
+      "inference_run_id": 383,
+      "procurement_id": 38143,
+      "prompt_version": "v3_category_centric_routing_7b_v6_1",
+      "run_kind": "SHADOW",
+      "raw_cats": [],
+      "val_cats": [],
+      "invalid_raw_cats": [],
+      "raw_form": null,
+      "val_form": "UNKNOWN",
+      "object_type": null,
+      "object_subtype": null,
+      "work_stage": null,
+      "empty_raw": null,
+      "empty_val": null,
+      "validator_removed": false
+    },
+    {
+      "inference_run_id": 386,
+      "procurement_id": 38142,
+      "prompt_version": "v3_category_centric_routing_7b_v6_1",
+      "run_kind": "SHADOW",
+      "raw_cats": [],
+      "val_cats": [],
+      "invalid_raw_cats": [],
+      "raw_form": null,
+      "val_form": "UNKNOWN",
+      "object_type": null,
+      "object_subtype": null,
+      "work_stage": null,
+      "empty_raw": null,
+      "empty_val": null,
+      "validator_removed": false
+    },
+    {
+      "inference_run_id": 389,
+      "procurement_id": 38141,
+      "prompt_version": "v3_category_centric_routing_7b_v6_1",
+      "run_kind": "SHADOW",
+      "raw_cats": [
+        "composite_structures"
+      ],
+      "val_cats": [
+        "composite_structures"
+      ],
+      "invalid_raw_cats": [],
+      "raw_form": "DIRECT_GOODS_PURCHASE",
+      "val_form": "DIRECT_GOODS_PURCHASE",
+      "object_type": "GOODS",
+      "object_subtype": "COMPOSITE_STRUCTURES",
+      "work_stage": "INSTALLATION",
+      "empty_raw": null,
+      "empty_val": null,
+      "validator_removed": false
+    },
+    {
+      "inference_run_id": 392,
+      "procurement_id": 38130,
+      "prompt_version": "v3_category_centric_routing_7b_v6_1",
+      "run_kind": "SHADOW",
+      "raw_cats": [],
+      "val_cats": [],
+      "invalid_raw_cats": [],
+      "raw_form": null,
+      "val_form": "UNKNOWN",
+      "object_type": "ROAD",
+      "object_subtype": "REPAIR",
+      "work_stage": "REPAIR",
+      "empty_raw": null,
+      "empty_val": null,
+      "validator_removed": false
+    },
+    {
+      "inference_run_id": 395,
+      "procurement_id": 38125,
+      "prompt_version": "v3_category_centric_routing_7b_v6_1",
+      "run_kind": "SHADOW",
+      "raw_cats": [
+        "composite_structures"
+      ],
+      "val_cats": [
+        "composite_structures"
+      ],
+      "invalid_raw_cats": [],
+      "raw_form": "CONSTRUCTION_WORKS",
+      "val_form": "CONSTRUCTION_WORKS",
+      "object_type": "ROAD",
+      "object_subtype": "ROAD_REPAIR",
+      "work_stage": "REPAIR",
+      "empty_raw": null,
+      "empty_val": null,
+      "validator_removed": false
+    },
+    {
+      "inference_run_id": 398,
+      "procurement_id": 35948,
+      "prompt_version": "v3_category_centric_routing_7b_v6_1",
+      "run_kind": "SHADOW",
+      "raw_cats": [
+        "road_markings"
+      ],
+      "val_cats": [],
+      "invalid_raw_cats": [
+        "road_markings"
+      ],
+      "raw_form": "DIRECT_GOODS_PURCHASE",
+      "val_form": "DIRECT_GOODS_PURCHASE",
+      "object_type": "GOODS",
+      "object_subtype": "ROAD_MARKINGS",
+      "work_stage": "SUPPLY",
+      "empty_raw": null,
+      "empty_val": null,
+      "validator_removed": true
+    },
+    {
+      "inference_run_id": 401,
+      "procurement_id": 34327,
+      "prompt_version": "v3_category_centric_routing_7b_v6_1",
+      "run_kind": "SHADOW",
+      "raw_cats": [
+        "project_design_services"
+      ],
+      "val_cats": [],
+      "invalid_raw_cats": [
+        "project_design_services"
+      ],
+      "raw_form": "CONSTRUCTION_WORKS",
+      "val_form": "CONSTRUCTION_WORKS",
+      "object_type": "SERVICE",
+      "object_subtype": "DESIGN_PROJECT",
+      "work_stage": "PROJECT_DESIGN",
+      "empty_raw": null,
+      "empty_val": null,
+      "validator_removed": true
+    },
+    {
+      "inference_run_id": 404,
+      "procurement_id": 32813,
+      "prompt_version": "v3_category_centric_routing_7b_v6_1",
+      "run_kind": "SHADOW",
+      "raw_cats": [
+        "road_repair_materials"
+      ],
+      "val_cats": [],
+      "invalid_raw_cats": [
+        "road_repair_materials"
+      ],
+      "raw_form": "CONSTRUCTION_WORKS",
+      "val_form": "CONSTRUCTION_WORKS",
+      "object_type": "ROAD",
+      "object_subtype": "REPAIR_MATERIALS",
+      "work_stage": "REPAIR",
+      "empty_raw": null,
+      "empty_val": null,
+      "validator_removed": true
+    },
+    {
+      "inference_run_id": 407,
+      "procurement_id": 31936,
+      "prompt_version": "v3_category_centric_routing_7b_v6_1",
+      "run_kind": "SHADOW",
+      "raw_cats": [
+        "curbstone"
+      ],
+      "val_cats": [
+        "curbstone"
+      ],
+      "invalid_raw_cats": [],
+      "raw_form": null,
+      "val_form": "UNKNOWN",
+      "object_type": "ROAD",
+      "object_subtype": "CURBSTONE_REPAIR",
+      "work_stage": "REPAIR",
+      "empty_raw": null,
+      "empty_val": null,
+      "validator_removed": false
+    },
+    {
+      "inference_run_id": 476,
+      "procurement_id": 23591,
+      "prompt_version": "v3_category_centric_routing_7b_v6_1",
+      "run_kind": "SHADOW",
+      "raw_cats": [
+        "equipment"
+      ],
+      "val_cats": [],
+      "invalid_raw_cats": [
+        "equipment"
+      ],
+      "raw_form": "DIRECT_GOODS_PURCHASE",
+      "val_form": "DIRECT_GOODS_PURCHASE",
+      "object_type": "GOODS",
+      "object_subtype": "EQUIPMENT",
+      "work_stage": "SUPPLY",
+      "empty_raw": null,
+      "empty_val": null,
+      "validator_removed": true
+    }
+  ],
+  "registry": [
+    "bridge_road_infrastructure",
+    "cable_support_systems",
+    "composite_structures",
+    "composites",
+    "computers",
+    "concrete_materials",
+    "curbstone",
+    "drainage_water_management",
+    "external_utility_networks",
+    "flooring",
+    "lighting",
+    "structural_reinforcement",
+    "waterproofing",
+    "waterproofing_concrete_repair"
+  ]
+}
