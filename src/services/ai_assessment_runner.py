@@ -227,6 +227,9 @@ def call_ollama_qwen_bundle(
     prompt_version: str | None = None,
     persist_dry_run: bool = False,
     acquire_gpu: bool = True,
+    experiment_model: str | None = None,
+    num_predict: int | None = None,
+    format_json: bool = True,
 ) -> Optional[OllamaInferenceBundle]:
     """Production V3 path returning parsed model JSON without telemetry mutation.
 
@@ -234,6 +237,9 @@ def call_ollama_qwen_bundle(
     Raises OllamaJsonParseError on persistent JSON extraction failure
     (bundle.meta may still carry last raw_text for RAW persistence).
     Returns None only for transport/timeouts/unavailable.
+
+    ``experiment_model`` / ``format_json`` overrides are SHADOW/bake-off only —
+    production callers must leave defaults (None / True).
     """
     from datetime import datetime, timezone
 
@@ -259,7 +265,9 @@ def call_ollama_qwen_bundle(
         return generate_v3_routing_with_bounded_retry(
             prompt,
             timeout=int(AI_TIMEOUT),
-            format_json=True,
+            format_json=format_json,
+            num_predict=num_predict,
+            experiment_model=experiment_model,
             procurement_id=procurement_id,
             input_hash=input_hash,
             prompt_version=prompt_version or "v3_routing",
