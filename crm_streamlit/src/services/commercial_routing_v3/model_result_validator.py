@@ -50,6 +50,8 @@ _ALLOWED_TOP_KEYS = frozenset(
         "application_areas",
         "brands",
         "commercial_category_hypotheses",
+        "commercial_category_candidates",  # Phase 9 SHADOW alias → normalized to hyps
+        "subject_interpretation",  # Phase 9 semantic subject (MODEL, not business)
         "empty_hypothesis_status",
         "preferred_opportunity_track",
         "empty_hypothesis_reason_codes",
@@ -59,6 +61,11 @@ _ALLOWED_TOP_KEYS = frozenset(
         "document_research_priority",
         "review_required",
     }
+)
+
+_VALID_RESEARCH_PRIORITY = frozenset({"HIGH", "MEDIUM", "LOW"})
+_VALID_CANDIDATE_ROLE = frozenset(
+    {"DIRECT_PURCHASE", "RESEARCH_CANDIDATE", "DIRECT_SUPPLY", "EMBEDDED_MATERIAL"}
 )
 
 
@@ -93,6 +100,54 @@ def _canonicalize_enum(raw: Any, allowed: Set[str], *, default: Optional[str] = 
     return None
 
 
+def _normalize_phase9_candidates(parsed: Dict[str, Any]) -> Dict[str, Any]:
+    """Map commercial_category_candidates → hypotheses without inventing codes.
+
+    Keeps subject_interpretation intact. Does not invent empty_hypothesis_status.
+    """
+    out = dict(parsed)
+    cands = out.get("commercial_category_candidates")
+    hyps = out.get("commercial_category_hypotheses")
+    if isinstance(cands, list) and cands and (not hyps):
+        mapped: List[Dict[str, Any]] = []
+        for c in cands[:5]:
+            if not isinstance(c, dict):
+                continue
+            role = str(c.get("candidate_role") or "").strip().upper()
+            track = c.get("opportunity_track")
+            if not track:
+                if role in {"DIRECT_PURCHASE", "DIRECT_SUPPLY"}:
+                    track = "DIRECT_SUPPLY"
+                elif role in {"RESEARCH_CANDIDATE", "EMBEDDED_MATERIAL"}:
+                    track = "EMBEDDED_MATERIAL"
+            evid = c.get("evidence_role")
+            if not evid:
+                evid = (
+                    "DIRECT_CATEGORY_EVIDENCE"
+                    if role in {"DIRECT_PURCHASE", "DIRECT_SUPPLY"}
+                    else "CONTEXTUAL_RESEARCH_CANDIDATE"
+                )
+            conf_req = c.get("confirmation_required")
+            if conf_req is None:
+                conf_req = role in {"RESEARCH_CANDIDATE", "EMBEDDED_MATERIAL"}
+            mapped.append(
+                {
+                    "category_code": c.get("category_code") or c.get("commercial_category_code"),
+                    "subcategory_code": c.get("subcategory_code") or "SUBCATEGORY_NOT_ASSIGNED",
+                    "opportunity_track": track,
+                    "confidence": c.get("confidence"),
+                    "research_action": c.get("research_action") or "LIGHT_RESEARCH",
+                    "reason_codes": c.get("reason_codes") or [],
+                    "evidence_role": evid,
+                    "confirmation_required": bool(conf_req),
+                    "research_priority": c.get("research_priority"),
+                    "candidate_role": c.get("candidate_role"),
+                }
+            )
+        out["commercial_category_hypotheses"] = mapped
+    return out
+
+
 def validate_model_result(
     parsed: Optional[Dict[str, Any]],
     *,
@@ -107,6 +162,8 @@ def validate_model_result(
             validated=None,
             errors=["parsed_not_object"],
         )
+
+    parsed = _normalize_phase9_candidates(parsed)
 
     # Drop unknown/telemetry keys — never invent business fields.
     out: Dict[str, Any] = {}
@@ -224,6 +281,24 @@ def validate_model_result(
                 conf = _as_float_or_none(h.get("category_confidence"))
             # Preserve explicit 0.0; missing stays None (not invented).
 
+            rp_raw = h.get("research_priority")
+            rp = None
+            if rp_raw is not None and str(rp_raw).strip():
+                rp_s = str(rp_raw).strip().upper()
+                if rp_s in _VALID_RESEARCH_PRIORITY:
+                    rp = rp_s
+                else:
+                    errors.append(f"invalid_research_priority:{rp_raw}")
+
+            role_raw = h.get("candidate_role")
+            role = None
+            if role_raw is not None and str(role_raw).strip():
+                role_s = str(role_raw).strip().upper()
+                if role_s in _VALID_CANDIDATE_ROLE:
+                    role = role_s
+                else:
+                    errors.append(f"invalid_candidate_role:{role_raw}")
+
             row = {
                 "category_code": cat,
                 "model_raw_category_code": raw_cat_s,
@@ -237,6 +312,8 @@ def validate_model_result(
                 "evidence_role": h.get("evidence_role"),
                 "confirmation_required": h.get("confirmation_required"),
                 "why_category": h.get("why_category"),
+                "research_priority": rp,
+                "candidate_role": role,
                 # Explicitly no score/medal invention.
                 "candidate_medal": None,
                 "candidate_score": None,
@@ -245,6 +322,51 @@ def validate_model_result(
             }
             hyps_out.append(row)
         out["commercial_category_hypotheses"] = hyps_out
+
+    # Preserve Phase 9 subject interpretation (semantic MODEL field only).
+    subj = out.get("subject_interpretation")
+    if subj is None:
+        pass
+    elif not isinstance(subj, dict):
+        errors.append("subject_interpretation_not_object")
+        out.pop("subject_interpretation", None)
+    else:
+        clean_subj: Dict[str, Any] = {}
+        for sk in (
+            "subject_type",
+            "normalized_subject",
+            "object_type",
+            "work_stage",
+            "object_subtype",
+        ):
+            if subj.get(sk) is not None and str(subj.get(sk)).strip():
+                clean_subj[sk] = str(subj.get(sk)).strip()[:240]
+        out["subject_interpretation"] = clean_subj
+
+    cands_in = out.get("commercial_category_candidates")
+    if cands_in is None:
+        pass
+    elif not isinstance(cands_in, list):
+        errors.append("commercial_category_candidates_not_list")
+        out["commercial_category_candidates"] = []
+    else:
+        valid_codes = {h["category_code"] for h in out.get("commercial_category_hypotheses") or []}
+        kept = []
+        for c in cands_in[:5]:
+            if not isinstance(c, dict):
+                continue
+            cc = str(c.get("category_code") or "").strip()
+            if cc in valid_codes:
+                kept.append(
+                    {
+                        "category_code": cc,
+                        "candidate_role": c.get("candidate_role"),
+                        "research_priority": c.get("research_priority"),
+                        "confirmation_required": c.get("confirmation_required"),
+                        "evidence_role": c.get("evidence_role"),
+                    }
+                )
+        out["commercial_category_candidates"] = kept
 
     empty = out.get("empty_hypothesis_status")
     if empty is None or empty == "":

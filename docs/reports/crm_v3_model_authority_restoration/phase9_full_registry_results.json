@@ -1,0 +1,2829 @@
+{
+  "prompt_version": "v3_full_registry_research_priority_7b_v9",
+  "production_prompt_unchanged": "v3_category_centric_routing_7b_v5",
+  "ACTIVE_CATEGORY_COUNT": 8,
+  "ACTIVE_CATEGORY_CODES": [
+    "cable_support_systems",
+    "composite_structures",
+    "computers",
+    "curbstone",
+    "drainage_water_management",
+    "flooring",
+    "lighting",
+    "waterproofing"
+  ],
+  "scale": {
+    "CURRENT_REGISTRY_COUNT": 8,
+    "CURRENT": {
+      "scale": 1,
+      "prompt_chars_est": 11043,
+      "prompt_tokens_est": 2760,
+      "registry_payload_chars": 5383
+    },
+    "2X": {
+      "scale": 2,
+      "prompt_chars_est": 16426,
+      "prompt_tokens_est": 4106,
+      "registry_payload_chars": 10766
+    },
+    "5X": {
+      "scale": 5,
+      "prompt_chars_est": 32575,
+      "prompt_tokens_est": 8143,
+      "registry_payload_chars": 26915
+    },
+    "10X": {
+      "scale": 10,
+      "prompt_chars_est": 59490,
+      "prompt_tokens_est": 14872,
+      "registry_payload_chars": 53830
+    },
+    "SUBCATEGORY_ARCHITECTURE": "DEFERRED_AFTER_CATEGORY_SELECTION",
+    "REGISTRY_FIELDS_SAMPLE": [
+      "category_code",
+      "category_name",
+      "description",
+      "aliases",
+      "positive_scope",
+      "negative_scope",
+      "lifecycle_state"
+    ]
+  },
+  "paint": {
+    "results": [
+      {
+        "label": "A_DIRECT",
+        "title": "Поставка краски акриловой фасадной",
+        "inference_run_id": null,
+        "categories": [
+          "paint"
+        ],
+        "subject_interpretation": {
+          "subject_type": "GOODS",
+          "normalized_subject": "краска акриловая фасадная"
+        },
+        "paint_selected": true,
+        "expect_paint": true
+      },
+      {
+        "label": "B_OBJECT",
+        "title": "Ремонт фасада здания",
+        "inference_run_id": null,
+        "categories": [],
+        "subject_interpretation": {
+          "subject_type": "OBJECT_WORKS",
+          "normalized_subject": "ремонт фасада здания"
+        },
+        "paint_selected": false,
+        "expect_paint": true
+      },
+      {
+        "label": "C_PC",
+        "title": "Поставка персональных компьютеров",
+        "inference_run_id": null,
+        "categories": [
+          "computers"
+        ],
+        "subject_interpretation": {
+          "subject_type": "GOODS",
+          "normalized_subject": "персональный настольный компьютер / моноблок"
+        },
+        "paint_selected": false,
+        "expect_paint": false
+      },
+      {
+        "label": "D_ROAD",
+        "title": "Ремонт автомобильной дороги",
+        "inference_run_id": null,
+        "categories": [],
+        "subject_interpretation": {
+          "subject_type": "OBJECT_WORKS",
+          "normalized_subject": "ремонт автомобильной дороги"
+        },
+        "paint_selected": false,
+        "expect_paint": false
+      }
+    ],
+    "PAINT_DIRECT_DISCOVERED": true,
+    "PAINT_OBJECT_RESEARCH_CANDIDATE": false,
+    "PAINT_IRRELEVANT_FP_COUNT": 0,
+    "PAINT_TEST_PROMPT_SOURCE_CHANGED": false,
+    "PAINT_TEST_PYTHON_HINT_ADDED": false,
+    "PAINT_TEST_OKPD_RULE_ADDED": false
+  },
+  "focus": {
+    "37082": {
+      "procurement_id": 37082,
+      "bucket": "CLEAR_DIRECT_POSITIVE",
+      "expected_label_kind": "EXPECTED_EXACT_CATEGORY",
+      "expected_exact_category": "computers",
+      "prompt_version": "v3_full_registry_research_priority_7b_v9",
+      "inference_run_id": 1171,
+      "parse_status": "PARSED_OK",
+      "validation_status": "VALIDATED_SUCCESS",
+      "raw_categories": [
+        "computers"
+      ],
+      "validated_categories": [
+        "computers"
+      ],
+      "invalid_category_codes": [],
+      "subject_interpretation": {
+        "subject_type": "GOODS",
+        "normalized_subject": "персональный настольный компьютер / моноблок"
+      },
+      "procurement_form": "DIRECT_GOODS_PURCHASE",
+      "empty_hypothesis_status": null,
+      "PRIMARY_ROOT_CAUSE": "NO_ERROR",
+      "object_research_candidate_presented_as_confirmed": 0,
+      "title": "Поставка компьютера персонального настольного (моноблока)",
+      "exact_match": true,
+      "missed": false,
+      "false_positive": null
+    },
+    "27355": {
+      "procurement_id": 27355,
+      "bucket": "CLEAR_NEGATIVE",
+      "expected_label_kind": "EXPECTED_EMPTY",
+      "expected_exact_category": null,
+      "prompt_version": "v3_full_registry_research_priority_7b_v9",
+      "inference_run_id": 1181,
+      "parse_status": "PARSED_OK",
+      "validation_status": "VALIDATED_SUCCESS",
+      "raw_categories": [],
+      "validated_categories": [],
+      "invalid_category_codes": [],
+      "subject_interpretation": {
+        "subject_type": "SERVICE"
+      },
+      "procurement_form": "SERVICES_OTHER",
+      "empty_hypothesis_status": "INSUFFICIENT_EVIDENCE",
+      "PRIMARY_ROOT_CAUSE": "NO_ERROR",
+      "object_research_candidate_presented_as_confirmed": 0,
+      "title": "Оказание услуг по проведению поверки газоанализаторов, сигнализаторов загазованности, корректоров, газовых счетчиков в к",
+      "exact_match": null,
+      "missed": null,
+      "false_positive": false,
+      "correct_empty": true
+    },
+    "34517": {
+      "procurement_id": 34517,
+      "bucket": "OBJECT_RELABELED",
+      "expected_label_kind": "AMBIGUOUS_REVIEW",
+      "expected_exact_category": null,
+      "prompt_version": "v3_full_registry_research_priority_7b_v9",
+      "inference_run_id": 1187,
+      "parse_status": "PARSED_OK",
+      "validation_status": "VALIDATED_SUCCESS",
+      "raw_categories": [
+        "renovation"
+      ],
+      "validated_categories": [],
+      "invalid_category_codes": [
+        "renovation"
+      ],
+      "subject_interpretation": {
+        "subject_type": "GOODS",
+        "normalized_subject": "ремонт помещений"
+      },
+      "procurement_form": "DIRECT_GOODS_PURCHASE",
+      "empty_hypothesis_status": null,
+      "PRIMARY_ROOT_CAUSE": "NO_ERROR",
+      "object_research_candidate_presented_as_confirmed": 0,
+      "title": "Выполнение работ по текущему ремонту помещений Пятигорского медико-фармацевтического института – филиала ФГБОУ ВО ВолгГМ",
+      "exact_match": null,
+      "missed": null,
+      "false_positive": null
+    },
+    "23591": {
+      "procurement_id": 23591,
+      "bucket": "CLEAR_DIRECT_POSITIVE",
+      "expected_label_kind": "EXPECTED_EXACT_CATEGORY",
+      "expected_exact_category": "drainage_water_management",
+      "prompt_version": "v3_full_registry_research_priority_7b_v9",
+      "inference_run_id": 1224,
+      "parse_status": "PARSED_OK",
+      "validation_status": "VALIDATED_SUCCESS",
+      "raw_categories": [
+        "drainage_water_management"
+      ],
+      "validated_categories": [
+        "drainage_water_management"
+      ],
+      "invalid_category_codes": [],
+      "subject_interpretation": {
+        "subject_type": "GOODS",
+        "normalized_subject": "оборудование ливневой канализации"
+      },
+      "procurement_form": "DIRECT_GOODS_PURCHASE",
+      "empty_hypothesis_status": "INSUFFICIENT_EVIDENCE",
+      "PRIMARY_ROOT_CAUSE": "NO_ERROR",
+      "object_research_candidate_presented_as_confirmed": 0,
+      "title": "Поставка оборудования ливневой канализации БМК Сосневская, г. Иваново 2026 г. для нужд филиала \"Владимирский\" ПАО \"Т Плю",
+      "exact_match": true,
+      "missed": false,
+      "false_positive": null
+    }
+  },
+  "calibration": {
+    "rows": [
+      {
+        "procurement_id": 37958,
+        "bucket": "CLEAR_DIRECT_POSITIVE",
+        "expected_label_kind": "EXPECTED_EXACT_CATEGORY",
+        "expected_exact_category": "lighting",
+        "prompt_version": "v3_full_registry_research_priority_7b_v9",
+        "inference_run_id": 1161,
+        "parse_status": "PARSED_OK",
+        "validation_status": "VALIDATED_SUCCESS",
+        "raw_categories": [
+          "lighting"
+        ],
+        "validated_categories": [
+          "lighting"
+        ],
+        "invalid_category_codes": [],
+        "subject_interpretation": {
+          "subject_type": "GOODS",
+          "normalized_subject": "лампы светодиодные"
+        },
+        "procurement_form": "DIRECT_GOODS_PURCHASE",
+        "empty_hypothesis_status": null,
+        "PRIMARY_ROOT_CAUSE": "NO_ERROR",
+        "object_research_candidate_presented_as_confirmed": 0,
+        "title": "Поставка  лампы светодиодные",
+        "exact_match": true,
+        "missed": false,
+        "false_positive": null
+      },
+      {
+        "procurement_id": 37885,
+        "bucket": "CLEAR_DIRECT_POSITIVE",
+        "expected_label_kind": "EXPECTED_EXACT_CATEGORY",
+        "expected_exact_category": "lighting",
+        "prompt_version": "v3_full_registry_research_priority_7b_v9",
+        "inference_run_id": 1162,
+        "parse_status": "PARSED_OK",
+        "validation_status": "VALIDATED_SUCCESS",
+        "raw_categories": [
+          "lighting"
+        ],
+        "validated_categories": [
+          "lighting"
+        ],
+        "invalid_category_codes": [],
+        "subject_interpretation": {
+          "subject_type": "GOODS",
+          "normalized_subject": "светильники светодиодные внутреннего освещения"
+        },
+        "procurement_form": "DIRECT_GOODS_PURCHASE",
+        "empty_hypothesis_status": null,
+        "PRIMARY_ROOT_CAUSE": "NO_ERROR",
+        "object_research_candidate_presented_as_confirmed": 0,
+        "title": "Поставка светильников светодиодных внутреннего освещения",
+        "exact_match": true,
+        "missed": false,
+        "false_positive": null
+      },
+      {
+        "procurement_id": 37784,
+        "bucket": "CLEAR_DIRECT_POSITIVE",
+        "expected_label_kind": "EXPECTED_EXACT_CATEGORY",
+        "expected_exact_category": "lighting",
+        "prompt_version": "v3_full_registry_research_priority_7b_v9",
+        "inference_run_id": 1163,
+        "parse_status": "PARSED_OK",
+        "validation_status": "VALIDATED_SUCCESS",
+        "raw_categories": [
+          "lighting"
+        ],
+        "validated_categories": [
+          "lighting"
+        ],
+        "invalid_category_codes": [],
+        "subject_interpretation": {
+          "subject_type": "GOODS",
+          "normalized_subject": "светильники"
+        },
+        "procurement_form": "DIRECT_GOODS_PURCHASE",
+        "empty_hypothesis_status": "INSUFFICIENT_EVIDENCE",
+        "PRIMARY_ROOT_CAUSE": "NO_ERROR",
+        "object_research_candidate_presented_as_confirmed": 0,
+        "title": "Поставка светильников",
+        "exact_match": true,
+        "missed": false,
+        "false_positive": null
+      },
+      {
+        "procurement_id": 37650,
+        "bucket": "CLEAR_DIRECT_POSITIVE",
+        "expected_label_kind": "EXPECTED_EXACT_CATEGORY",
+        "expected_exact_category": "lighting",
+        "prompt_version": "v3_full_registry_research_priority_7b_v9",
+        "inference_run_id": 1164,
+        "parse_status": "PARSED_OK",
+        "validation_status": "VALIDATED_SUCCESS",
+        "raw_categories": [
+          "lighting"
+        ],
+        "validated_categories": [
+          "lighting"
+        ],
+        "invalid_category_codes": [],
+        "subject_interpretation": {
+          "subject_type": "GOODS",
+          "normalized_subject": "уличные светильники"
+        },
+        "procurement_form": "DIRECT_GOODS_PURCHASE",
+        "empty_hypothesis_status": null,
+        "PRIMARY_ROOT_CAUSE": "NO_ERROR",
+        "object_research_candidate_presented_as_confirmed": 0,
+        "title": "Поставка уличных светильников",
+        "exact_match": true,
+        "missed": false,
+        "false_positive": null
+      },
+      {
+        "procurement_id": 37599,
+        "bucket": "CLEAR_DIRECT_POSITIVE",
+        "expected_label_kind": "EXPECTED_EXACT_CATEGORY",
+        "expected_exact_category": "lighting",
+        "prompt_version": "v3_full_registry_research_priority_7b_v9",
+        "inference_run_id": 1165,
+        "parse_status": "PARSED_OK",
+        "validation_status": "VALIDATED_SUCCESS",
+        "raw_categories": [
+          "lighting"
+        ],
+        "validated_categories": [
+          "lighting"
+        ],
+        "invalid_category_codes": [],
+        "subject_interpretation": {
+          "subject_type": "GOODS",
+          "normalized_subject": "передвижной светильник для проведения осмотра/терапевтических процедур"
+        },
+        "procurement_form": "DIRECT_GOODS_PURCHASE",
+        "empty_hypothesis_status": null,
+        "PRIMARY_ROOT_CAUSE": "NO_ERROR",
+        "object_research_candidate_presented_as_confirmed": 0,
+        "title": "2026-04321)) Поставка медицинских изделий (Светильник передвижной для проведения осмотра/терапевтических процедур)",
+        "exact_match": true,
+        "missed": false,
+        "false_positive": null
+      },
+      {
+        "procurement_id": 37401,
+        "bucket": "CLEAR_DIRECT_POSITIVE",
+        "expected_label_kind": "EXPECTED_EXACT_CATEGORY",
+        "expected_exact_category": "lighting",
+        "prompt_version": "v3_full_registry_research_priority_7b_v9",
+        "inference_run_id": 1166,
+        "parse_status": "PARSED_OK",
+        "validation_status": "VALIDATED_SUCCESS",
+        "raw_categories": [
+          "lighting"
+        ],
+        "validated_categories": [
+          "lighting"
+        ],
+        "invalid_category_codes": [],
+        "subject_interpretation": {
+          "subject_type": "GOODS",
+          "normalized_subject": "прожекторы светодиодные"
+        },
+        "procurement_form": "DIRECT_GOODS_PURCHASE",
+        "empty_hypothesis_status": null,
+        "PRIMARY_ROOT_CAUSE": "NO_ERROR",
+        "object_research_candidate_presented_as_confirmed": 0,
+        "title": "Поставка прожекторов светодиодных",
+        "exact_match": true,
+        "missed": false,
+        "false_positive": null
+      },
+      {
+        "procurement_id": 37988,
+        "bucket": "CLEAR_DIRECT_POSITIVE",
+        "expected_label_kind": "EXPECTED_EXACT_CATEGORY",
+        "expected_exact_category": "computers",
+        "prompt_version": "v3_full_registry_research_priority_7b_v9",
+        "inference_run_id": 1167,
+        "parse_status": "PARSED_OK",
+        "validation_status": "VALIDATED_SUCCESS",
+        "raw_categories": [
+          "computers"
+        ],
+        "validated_categories": [
+          "computers"
+        ],
+        "invalid_category_codes": [],
+        "subject_interpretation": {
+          "subject_type": "GOODS",
+          "normalized_subject": "МФУ, моноблоки"
+        },
+        "procurement_form": "DIRECT_GOODS_PURCHASE",
+        "empty_hypothesis_status": null,
+        "PRIMARY_ROOT_CAUSE": "NO_ERROR",
+        "object_research_candidate_presented_as_confirmed": 0,
+        "title": "Поставка оргтехники (МФУ, моноблоки)",
+        "exact_match": true,
+        "missed": false,
+        "false_positive": null
+      },
+      {
+        "procurement_id": 37750,
+        "bucket": "CLEAR_DIRECT_POSITIVE",
+        "expected_label_kind": "EXPECTED_EXACT_CATEGORY",
+        "expected_exact_category": "computers",
+        "prompt_version": "v3_full_registry_research_priority_7b_v9",
+        "inference_run_id": 1168,
+        "parse_status": "PARSED_OK",
+        "validation_status": "VALIDATED_SUCCESS",
+        "raw_categories": [
+          "computers"
+        ],
+        "validated_categories": [
+          "computers"
+        ],
+        "invalid_category_codes": [],
+        "subject_interpretation": {
+          "subject_type": "GOODS",
+          "normalized_subject": "комплектующие для персональных компьютеров"
+        },
+        "procurement_form": "DIRECT_GOODS_PURCHASE",
+        "empty_hypothesis_status": null,
+        "PRIMARY_ROOT_CAUSE": "NO_ERROR",
+        "object_research_candidate_presented_as_confirmed": 0,
+        "title": "Поставка комплектующих для персональных компьютеров",
+        "exact_match": true,
+        "missed": false,
+        "false_positive": null
+      },
+      {
+        "procurement_id": 37605,
+        "bucket": "CLEAR_DIRECT_RELABELED",
+        "expected_label_kind": "AMBIGUOUS_REVIEW",
+        "expected_exact_category": null,
+        "prompt_version": "v3_full_registry_research_priority_7b_v9",
+        "inference_run_id": 1169,
+        "parse_status": "PARSED_OK",
+        "validation_status": "VALIDATED_SUCCESS",
+        "raw_categories": [
+          "27.33.13.190"
+        ],
+        "validated_categories": [],
+        "invalid_category_codes": [
+          "27.33.13.190"
+        ],
+        "subject_interpretation": {
+          "subject_type": "GOODS",
+          "normalized_subject": "запасные части и расходные материалы для оборудования рабочих станций и ноутбуков"
+        },
+        "procurement_form": "DIRECT_GOODS_PURCHASE",
+        "empty_hypothesis_status": null,
+        "PRIMARY_ROOT_CAUSE": "NO_ERROR",
+        "object_research_candidate_presented_as_confirmed": 0,
+        "title": "Поставка запасных частей и расходных материалов для оборудования рабочих станций и ноутбуков",
+        "exact_match": null,
+        "missed": null,
+        "false_positive": null
+      },
+      {
+        "procurement_id": 37188,
+        "bucket": "CLEAR_DIRECT_POSITIVE",
+        "expected_label_kind": "EXPECTED_EXACT_CATEGORY",
+        "expected_exact_category": "computers",
+        "prompt_version": "v3_full_registry_research_priority_7b_v9",
+        "inference_run_id": 1170,
+        "parse_status": "PARSED_OK",
+        "validation_status": "VALIDATED_SUCCESS",
+        "raw_categories": [
+          "computers"
+        ],
+        "validated_categories": [
+          "computers"
+        ],
+        "invalid_category_codes": [],
+        "subject_interpretation": {
+          "subject_type": "GOODS",
+          "normalized_subject": "компьютерные запчасти для обеспечения работы арм и ноутбуков"
+        },
+        "procurement_form": "DIRECT_GOODS_PURCHASE",
+        "empty_hypothesis_status": null,
+        "PRIMARY_ROOT_CAUSE": "NO_ERROR",
+        "object_research_candidate_presented_as_confirmed": 0,
+        "title": "Поставка запчастей для обеспечения работоспособности АРМ и ноутбуков – накопителей данных внутренних",
+        "exact_match": true,
+        "missed": false,
+        "false_positive": null
+      },
+      {
+        "procurement_id": 37082,
+        "bucket": "CLEAR_DIRECT_POSITIVE",
+        "expected_label_kind": "EXPECTED_EXACT_CATEGORY",
+        "expected_exact_category": "computers",
+        "prompt_version": "v3_full_registry_research_priority_7b_v9",
+        "inference_run_id": 1171,
+        "parse_status": "PARSED_OK",
+        "validation_status": "VALIDATED_SUCCESS",
+        "raw_categories": [
+          "computers"
+        ],
+        "validated_categories": [
+          "computers"
+        ],
+        "invalid_category_codes": [],
+        "subject_interpretation": {
+          "subject_type": "GOODS",
+          "normalized_subject": "персональный настольный компьютер / моноблок"
+        },
+        "procurement_form": "DIRECT_GOODS_PURCHASE",
+        "empty_hypothesis_status": null,
+        "PRIMARY_ROOT_CAUSE": "NO_ERROR",
+        "object_research_candidate_presented_as_confirmed": 0,
+        "title": "Поставка компьютера персонального настольного (моноблока)",
+        "exact_match": true,
+        "missed": false,
+        "false_positive": null
+      },
+      {
+        "procurement_id": 37069,
+        "bucket": "CLEAR_DIRECT_POSITIVE",
+        "expected_label_kind": "EXPECTED_EXACT_CATEGORY",
+        "expected_exact_category": "computers",
+        "prompt_version": "v3_full_registry_research_priority_7b_v9",
+        "inference_run_id": 1172,
+        "parse_status": "PARSED_OK",
+        "validation_status": "VALIDATED_SUCCESS",
+        "raw_categories": [
+          "computers"
+        ],
+        "validated_categories": [
+          "computers"
+        ],
+        "invalid_category_codes": [],
+        "subject_interpretation": {
+          "subject_type": "GOODS",
+          "normalized_subject": "персональный настольный компьютер / моноблок"
+        },
+        "procurement_form": "DIRECT_GOODS_PURCHASE",
+        "empty_hypothesis_status": null,
+        "PRIMARY_ROOT_CAUSE": "NO_ERROR",
+        "object_research_candidate_presented_as_confirmed": 0,
+        "title": "Поставка персональных компьютеров (моноблоков)",
+        "exact_match": true,
+        "missed": false,
+        "false_positive": null
+      },
+      {
+        "procurement_id": 13564,
+        "bucket": "CLEAR_DIRECT_RELABELED",
+        "expected_label_kind": "AMBIGUOUS_REVIEW",
+        "expected_exact_category": null,
+        "prompt_version": "v3_full_registry_research_priority_7b_v9",
+        "inference_run_id": 1173,
+        "parse_status": "PARSED_OK",
+        "validation_status": "VALIDATED_SUCCESS",
+        "raw_categories": [
+          "flooring_materials"
+        ],
+        "validated_categories": [],
+        "invalid_category_codes": [
+          "flooring_materials"
+        ],
+        "subject_interpretation": {
+          "subject_type": "GOODS",
+          "normalized_subject": "строительные материалы для пола (плитка), гидроизоляция, ламинат"
+        },
+        "procurement_form": "DIRECT_GOODS_PURCHASE",
+        "empty_hypothesis_status": null,
+        "PRIMARY_ROOT_CAUSE": "NO_ERROR",
+        "object_research_candidate_presented_as_confirmed": 0,
+        "title": "Поставка строительных материалов (плитка для пола, гидроизоляция, ламинат)",
+        "exact_match": null,
+        "missed": null,
+        "false_positive": null
+      },
+      {
+        "procurement_id": 18512,
+        "bucket": "CLEAR_DIRECT_POSITIVE",
+        "expected_label_kind": "EXPECTED_EXACT_CATEGORY",
+        "expected_exact_category": "cable_support_systems",
+        "prompt_version": "v3_full_registry_research_priority_7b_v9",
+        "inference_run_id": 1174,
+        "parse_status": "PARSED_OK",
+        "validation_status": "VALIDATED_SUCCESS",
+        "raw_categories": [
+          "cable_support_systems"
+        ],
+        "validated_categories": [
+          "cable_support_systems"
+        ],
+        "invalid_category_codes": [],
+        "subject_interpretation": {
+          "subject_type": "GOODS",
+          "normalized_subject": "кабеленесущие системы"
+        },
+        "procurement_form": "DIRECT_GOODS_PURCHASE",
+        "empty_hypothesis_status": null,
+        "PRIMARY_ROOT_CAUSE": "NO_ERROR",
+        "object_research_candidate_presented_as_confirmed": 0,
+        "title": "Поставка кабеленесущих систем для нужд АО \"Газпром добыча Томск\" (0129952) (СМСП)",
+        "exact_match": true,
+        "missed": false,
+        "false_positive": null
+      },
+      {
+        "procurement_id": 36939,
+        "bucket": "CLEAR_DIRECT_POSITIVE",
+        "expected_label_kind": "EXPECTED_EXACT_CATEGORY",
+        "expected_exact_category": "flooring",
+        "prompt_version": "v3_full_registry_research_priority_7b_v9",
+        "inference_run_id": 1175,
+        "parse_status": "PARSED_OK",
+        "validation_status": "VALIDATED_SUCCESS",
+        "raw_categories": [
+          "floor_covering"
+        ],
+        "validated_categories": [],
+        "invalid_category_codes": [
+          "floor_covering"
+        ],
+        "subject_interpretation": {
+          "subject_type": "GOODS",
+          "normalized_subject": "напольное покрытие линолеум"
+        },
+        "procurement_form": "DIRECT_GOODS_PURCHASE",
+        "empty_hypothesis_status": null,
+        "PRIMARY_ROOT_CAUSE": "ITEM_EXTRACTION_OR_UNDERSTANDING_ERROR",
+        "object_research_candidate_presented_as_confirmed": 0,
+        "title": "Поставка линолеума",
+        "exact_match": false,
+        "missed": true,
+        "false_positive": null
+      },
+      {
+        "procurement_id": 36596,
+        "bucket": "CLEAR_DIRECT_POSITIVE",
+        "expected_label_kind": "EXPECTED_EXACT_CATEGORY",
+        "expected_exact_category": "flooring",
+        "prompt_version": "v3_full_registry_research_priority_7b_v9",
+        "inference_run_id": 1176,
+        "parse_status": "PARSED_OK",
+        "validation_status": "VALIDATED_SUCCESS",
+        "raw_categories": [
+          "flooring"
+        ],
+        "validated_categories": [
+          "flooring"
+        ],
+        "invalid_category_codes": [],
+        "subject_interpretation": {
+          "subject_type": "GOODS",
+          "normalized_subject": "линолеум для нужд Пермского института (филиала) РЭУ им. Г.В. Плеханова"
+        },
+        "procurement_form": "DIRECT_GOODS_PURCHASE",
+        "empty_hypothesis_status": null,
+        "PRIMARY_ROOT_CAUSE": "NO_ERROR",
+        "object_research_candidate_presented_as_confirmed": 0,
+        "title": "Поставка линолеума для нужд Пермского института (филиала) РЭУ им. Г.В. Плеханова",
+        "exact_match": true,
+        "missed": false,
+        "false_positive": null
+      },
+      {
+        "procurement_id": 38139,
+        "bucket": "CLEAR_NEGATIVE",
+        "expected_label_kind": "EXPECTED_EMPTY",
+        "expected_exact_category": null,
+        "prompt_version": "v3_full_registry_research_priority_7b_v9",
+        "inference_run_id": 1177,
+        "parse_status": "PARSED_OK",
+        "validation_status": "VALIDATED_SUCCESS",
+        "raw_categories": [
+          "medical_equipment"
+        ],
+        "validated_categories": [],
+        "invalid_category_codes": [
+          "medical_equipment"
+        ],
+        "subject_interpretation": {
+          "subject_type": "GOODS",
+          "normalized_subject": "медицинское оборудование для облучения"
+        },
+        "procurement_form": "DIRECT_GOODS_PURCHASE",
+        "empty_hypothesis_status": null,
+        "PRIMARY_ROOT_CAUSE": "NO_ERROR",
+        "object_research_candidate_presented_as_confirmed": 0,
+        "title": "Поставка медицинского оборудования (Система глубокой электромагнитной стимуляции тканей, профессиональная) для нужд Госу",
+        "exact_match": null,
+        "missed": null,
+        "false_positive": false,
+        "correct_empty": true
+      },
+      {
+        "procurement_id": 38127,
+        "bucket": "CLEAR_NEGATIVE",
+        "expected_label_kind": "EXPECTED_EMPTY",
+        "expected_exact_category": null,
+        "prompt_version": "v3_full_registry_research_priority_7b_v9",
+        "inference_run_id": 1178,
+        "parse_status": "PARSED_OK",
+        "validation_status": "VALIDATED_SUCCESS",
+        "raw_categories": [
+          "biometrics"
+        ],
+        "validated_categories": [],
+        "invalid_category_codes": [
+          "biometrics"
+        ],
+        "subject_interpretation": {
+          "subject_type": "GOODS",
+          "normalized_subject": "биометр оптический"
+        },
+        "procurement_form": "DIRECT_GOODS_PURCHASE",
+        "empty_hypothesis_status": null,
+        "PRIMARY_ROOT_CAUSE": "NO_ERROR",
+        "object_research_candidate_presented_as_confirmed": 0,
+        "title": "Поставка биометра оптического для нужд Государственного бюджетного учреждения здравоохранения \"Самарская областная клини",
+        "exact_match": null,
+        "missed": null,
+        "false_positive": false,
+        "correct_empty": true
+      },
+      {
+        "procurement_id": 38121,
+        "bucket": "CLEAR_NEGATIVE",
+        "expected_label_kind": "EXPECTED_EMPTY",
+        "expected_exact_category": null,
+        "prompt_version": "v3_full_registry_research_priority_7b_v9",
+        "inference_run_id": 1179,
+        "parse_status": "PARSED_OK",
+        "validation_status": "VALIDATED_SUCCESS",
+        "raw_categories": [
+          "medical_equipment"
+        ],
+        "validated_categories": [],
+        "invalid_category_codes": [
+          "medical_equipment"
+        ],
+        "subject_interpretation": {
+          "subject_type": "GOODS",
+          "normalized_subject": "медицинское оборудование для электростимуляции"
+        },
+        "procurement_form": "DIRECT_GOODS_PURCHASE",
+        "empty_hypothesis_status": null,
+        "PRIMARY_ROOT_CAUSE": "NO_ERROR",
+        "object_research_candidate_presented_as_confirmed": 0,
+        "title": "Поставка медицинского оборудования (Система физиотерапевтическая для электростимуляции, с питанием от сети) для нужд Гос",
+        "exact_match": null,
+        "missed": null,
+        "false_positive": false,
+        "correct_empty": true
+      },
+      {
+        "procurement_id": 38025,
+        "bucket": "CLEAR_NEGATIVE",
+        "expected_label_kind": "EXPECTED_EMPTY",
+        "expected_exact_category": null,
+        "prompt_version": "v3_full_registry_research_priority_7b_v9",
+        "inference_run_id": 1180,
+        "parse_status": "PARSED_OK",
+        "validation_status": "VALIDATED_SUCCESS",
+        "raw_categories": [
+          "ophthalmoscopy"
+        ],
+        "validated_categories": [],
+        "invalid_category_codes": [
+          "ophthalmoscopy"
+        ],
+        "subject_interpretation": {
+          "subject_type": "GOODS",
+          "normalized_subject": "офтальмоскоп непрямой бинокулярный"
+        },
+        "procurement_form": "DIRECT_GOODS_PURCHASE",
+        "empty_hypothesis_status": null,
+        "PRIMARY_ROOT_CAUSE": "NO_ERROR",
+        "object_research_candidate_presented_as_confirmed": 0,
+        "title": "Поставка медицинского оборудования (офтальмоскоп непрямой бинокулярный)",
+        "exact_match": null,
+        "missed": null,
+        "false_positive": false,
+        "correct_empty": true
+      },
+      {
+        "procurement_id": 27355,
+        "bucket": "CLEAR_NEGATIVE",
+        "expected_label_kind": "EXPECTED_EMPTY",
+        "expected_exact_category": null,
+        "prompt_version": "v3_full_registry_research_priority_7b_v9",
+        "inference_run_id": 1181,
+        "parse_status": "PARSED_OK",
+        "validation_status": "VALIDATED_SUCCESS",
+        "raw_categories": [],
+        "validated_categories": [],
+        "invalid_category_codes": [],
+        "subject_interpretation": {
+          "subject_type": "SERVICE"
+        },
+        "procurement_form": "SERVICES_OTHER",
+        "empty_hypothesis_status": "INSUFFICIENT_EVIDENCE",
+        "PRIMARY_ROOT_CAUSE": "NO_ERROR",
+        "object_research_candidate_presented_as_confirmed": 0,
+        "title": "Оказание услуг по проведению поверки газоанализаторов, сигнализаторов загазованности, корректоров, газовых счетчиков в к",
+        "exact_match": null,
+        "missed": null,
+        "false_positive": false,
+        "correct_empty": true
+      },
+      {
+        "procurement_id": 7846,
+        "bucket": "CLEAR_NEGATIVE",
+        "expected_label_kind": "EXPECTED_EMPTY",
+        "expected_exact_category": null,
+        "prompt_version": "v3_full_registry_research_priority_7b_v9",
+        "inference_run_id": 1182,
+        "parse_status": "PARSED_OK",
+        "validation_status": "VALIDATED_SUCCESS",
+        "raw_categories": [
+          "computers"
+        ],
+        "validated_categories": [
+          "computers"
+        ],
+        "invalid_category_codes": [],
+        "subject_interpretation": {
+          "subject_type": "GOODS",
+          "normalized_subject": "газовые счетчики и монтажные комплекты"
+        },
+        "procurement_form": "DIRECT_GOODS_PURCHASE",
+        "empty_hypothesis_status": null,
+        "PRIMARY_ROOT_CAUSE": "OBJECT_PRIOR_OVERREACH",
+        "object_research_candidate_presented_as_confirmed": 0,
+        "title": "Поставка и установка газовых счетчиков и монтажных комплектов для нужд ГБУ «Мензелинское РГВО»",
+        "exact_match": null,
+        "missed": null,
+        "false_positive": true,
+        "correct_empty": false
+      },
+      {
+        "procurement_id": 32155,
+        "bucket": "CLEAR_NEGATIVE",
+        "expected_label_kind": "EXPECTED_EMPTY",
+        "expected_exact_category": null,
+        "prompt_version": "v3_full_registry_research_priority_7b_v9",
+        "inference_run_id": 1183,
+        "parse_status": "PARSED_OK",
+        "validation_status": "VALIDATED_SUCCESS",
+        "raw_categories": [
+          "26.51.66.127"
+        ],
+        "validated_categories": [],
+        "invalid_category_codes": [
+          "26.51.66.127"
+        ],
+        "subject_interpretation": {
+          "subject_type": "GOODS",
+          "normalized_subject": "лабораторное оборудование"
+        },
+        "procurement_form": "DIRECT_GOODS_PURCHASE",
+        "empty_hypothesis_status": null,
+        "PRIMARY_ROOT_CAUSE": "NO_ERROR",
+        "object_research_candidate_presented_as_confirmed": 0,
+        "title": "(2692-эзк) Лабораторное оборудование",
+        "exact_match": null,
+        "missed": null,
+        "false_positive": false,
+        "correct_empty": true
+      },
+      {
+        "procurement_id": 29451,
+        "bucket": "CLEAR_NEGATIVE",
+        "expected_label_kind": "EXPECTED_EMPTY",
+        "expected_exact_category": null,
+        "prompt_version": "v3_full_registry_research_priority_7b_v9",
+        "inference_run_id": 1184,
+        "parse_status": "PARSED_OK",
+        "validation_status": "VALIDATED_SUCCESS",
+        "raw_categories": [
+          "computers"
+        ],
+        "validated_categories": [
+          "computers"
+        ],
+        "invalid_category_codes": [],
+        "subject_interpretation": {
+          "subject_type": "GOODS",
+          "normalized_subject": "лабораторное оборудование"
+        },
+        "procurement_form": "DIRECT_GOODS_PURCHASE",
+        "empty_hypothesis_status": "INSUFFICIENT_EVIDENCE",
+        "PRIMARY_ROOT_CAUSE": "OBJECT_PRIOR_OVERREACH",
+        "object_research_candidate_presented_as_confirmed": 0,
+        "title": "Лабораторное оборудование",
+        "exact_match": null,
+        "missed": null,
+        "false_positive": true,
+        "correct_empty": false
+      },
+      {
+        "procurement_id": 36166,
+        "bucket": "CLEAR_NEGATIVE",
+        "expected_label_kind": "EXPECTED_EMPTY",
+        "expected_exact_category": null,
+        "prompt_version": "v3_full_registry_research_priority_7b_v9",
+        "inference_run_id": 1185,
+        "parse_status": "PARSED_OK",
+        "validation_status": "VALIDATED_SUCCESS",
+        "raw_categories": [
+          "pharmaceuticals"
+        ],
+        "validated_categories": [],
+        "invalid_category_codes": [
+          "pharmaceuticals"
+        ],
+        "subject_interpretation": {
+          "subject_type": "GOODS",
+          "normalized_subject": "радиофармацевтические средства"
+        },
+        "procurement_form": "DIRECT_GOODS_PURCHASE",
+        "empty_hypothesis_status": null,
+        "PRIMARY_ROOT_CAUSE": "NO_ERROR",
+        "object_research_candidate_presented_as_confirmed": 0,
+        "title": "Поставка радиофармацевтических средств",
+        "exact_match": null,
+        "missed": null,
+        "false_positive": false,
+        "correct_empty": true
+      },
+      {
+        "procurement_id": 34524,
+        "bucket": "CLEAR_NEGATIVE",
+        "expected_label_kind": "EXPECTED_EMPTY",
+        "expected_exact_category": null,
+        "prompt_version": "v3_full_registry_research_priority_7b_v9",
+        "inference_run_id": 1186,
+        "parse_status": "PARSED_OK",
+        "validation_status": "VALIDATED_SUCCESS",
+        "raw_categories": [
+          "waterproofing"
+        ],
+        "validated_categories": [
+          "waterproofing"
+        ],
+        "invalid_category_codes": [],
+        "subject_interpretation": {
+          "subject_type": "GOODS",
+          "normalized_subject": "Сооружения жилищно-коммунального хозяйства прочие, не включенные в другие группировки"
+        },
+        "procurement_form": "DIRECT_GOODS_PURCHASE",
+        "empty_hypothesis_status": null,
+        "PRIMARY_ROOT_CAUSE": "OBJECT_PRIOR_OVERREACH",
+        "object_research_candidate_presented_as_confirmed": 0,
+        "title": "Поставка и монтаж блочно-модульного здания  для нужд ботанического сада Пятигорского медико-фармацевтического института ",
+        "exact_match": null,
+        "missed": null,
+        "false_positive": true,
+        "correct_empty": false
+      },
+      {
+        "procurement_id": 34517,
+        "bucket": "OBJECT_RELABELED",
+        "expected_label_kind": "AMBIGUOUS_REVIEW",
+        "expected_exact_category": null,
+        "prompt_version": "v3_full_registry_research_priority_7b_v9",
+        "inference_run_id": 1187,
+        "parse_status": "PARSED_OK",
+        "validation_status": "VALIDATED_SUCCESS",
+        "raw_categories": [
+          "renovation"
+        ],
+        "validated_categories": [],
+        "invalid_category_codes": [
+          "renovation"
+        ],
+        "subject_interpretation": {
+          "subject_type": "GOODS",
+          "normalized_subject": "ремонт помещений"
+        },
+        "procurement_form": "DIRECT_GOODS_PURCHASE",
+        "empty_hypothesis_status": null,
+        "PRIMARY_ROOT_CAUSE": "NO_ERROR",
+        "object_research_candidate_presented_as_confirmed": 0,
+        "title": "Выполнение работ по текущему ремонту помещений Пятигорского медико-фармацевтического института – филиала ФГБОУ ВО ВолгГМ",
+        "exact_match": null,
+        "missed": null,
+        "false_positive": null
+      },
+      {
+        "procurement_id": 34239,
+        "bucket": "CLEAR_NEGATIVE",
+        "expected_label_kind": "EXPECTED_EMPTY",
+        "expected_exact_category": null,
+        "prompt_version": "v3_full_registry_research_priority_7b_v9",
+        "inference_run_id": 1188,
+        "parse_status": "PARSED_OK",
+        "validation_status": "VALIDATED_SUCCESS",
+        "raw_categories": [
+          "diabetes_monitoring"
+        ],
+        "validated_categories": [],
+        "invalid_category_codes": [
+          "diabetes_monitoring"
+        ],
+        "subject_interpretation": {
+          "subject_type": "GOODS",
+          "normalized_subject": "комплекты изделий для мониторинга уровня глюкозы в интерстициальной жидкости, электрохимический метод"
+        },
+        "procurement_form": "DIRECT_GOODS_PURCHASE",
+        "empty_hypothesis_status": null,
+        "PRIMARY_ROOT_CAUSE": "NO_ERROR",
+        "object_research_candidate_presented_as_confirmed": 0,
+        "title": "Поставка Комплектов изделий чрескожного мониторинга уровня глюкозы в интерстициальной жидкости, электрохимический метод ",
+        "exact_match": null,
+        "missed": null,
+        "false_positive": false,
+        "correct_empty": true
+      },
+      {
+        "procurement_id": 29384,
+        "bucket": "CLEAR_NEGATIVE",
+        "expected_label_kind": "EXPECTED_EMPTY",
+        "expected_exact_category": null,
+        "prompt_version": "v3_full_registry_research_priority_7b_v9",
+        "inference_run_id": 1189,
+        "parse_status": "PARSED_OK",
+        "validation_status": "VALIDATED_SUCCESS",
+        "raw_categories": [],
+        "validated_categories": [],
+        "invalid_category_codes": [],
+        "subject_interpretation": {
+          "subject_type": "GOODS",
+          "normalized_subject": "автомобиль легкового рельсового с комбинированным железнодорожным ходом"
+        },
+        "procurement_form": "DIRECT_GOODS_PURCHASE",
+        "empty_hypothesis_status": "NO_COMMERCIAL_ENTRY",
+        "PRIMARY_ROOT_CAUSE": "NO_ERROR",
+        "object_research_candidate_presented_as_confirmed": 0,
+        "title": "Право заключения договора на поставка автомобиля легкового рельсового с комбинированным железнодорожным ходом для нужд К",
+        "exact_match": null,
+        "missed": null,
+        "false_positive": false,
+        "correct_empty": true
+      },
+      {
+        "procurement_id": 37167,
+        "bucket": "CLEAR_NEGATIVE",
+        "expected_label_kind": "EXPECTED_EMPTY",
+        "expected_exact_category": null,
+        "prompt_version": "v3_full_registry_research_priority_7b_v9",
+        "inference_run_id": 1190,
+        "parse_status": "PARSED_OK",
+        "validation_status": "VALIDATED_SUCCESS",
+        "raw_categories": [],
+        "validated_categories": [],
+        "invalid_category_codes": [],
+        "subject_interpretation": {
+          "subject_type": "GOODS",
+          "normalized_subject": "школьная мебель"
+        },
+        "procurement_form": "DIRECT_GOODS_PURCHASE",
+        "empty_hypothesis_status": "NO_COMMERCIAL_ENTRY",
+        "PRIMARY_ROOT_CAUSE": "NO_ERROR",
+        "object_research_candidate_presented_as_confirmed": 0,
+        "title": "Мебель школьная специальная",
+        "exact_match": null,
+        "missed": null,
+        "false_positive": false,
+        "correct_empty": true
+      },
+      {
+        "procurement_id": 37166,
+        "bucket": "CLEAR_NEGATIVE",
+        "expected_label_kind": "EXPECTED_EMPTY",
+        "expected_exact_category": null,
+        "prompt_version": "v3_full_registry_research_priority_7b_v9",
+        "inference_run_id": 1191,
+        "parse_status": "PARSED_OK",
+        "validation_status": "VALIDATED_SUCCESS",
+        "raw_categories": [
+          "cable_support_systems",
+          "computers",
+          "curbstone",
+          "lighting",
+          "waterproofing"
+        ],
+        "validated_categories": [
+          "cable_support_systems",
+          "computers",
+          "curbstone",
+          "lighting",
+          "waterproofing"
+        ],
+        "invalid_category_codes": [],
+        "subject_interpretation": {
+          "subject_type": "GOODS",
+          "normalized_subject": "школьная и офисная мебель"
+        },
+        "procurement_form": "DIRECT_GOODS_PURCHASE",
+        "empty_hypothesis_status": "INSUFFICIENT_EVIDENCE",
+        "PRIMARY_ROOT_CAUSE": "OBJECT_PRIOR_OVERREACH",
+        "object_research_candidate_presented_as_confirmed": 0,
+        "title": "Мебель школьная и офисная",
+        "exact_match": null,
+        "missed": null,
+        "false_positive": true,
+        "correct_empty": false
+      },
+      {
+        "procurement_id": 36935,
+        "bucket": "CLEAR_NEGATIVE",
+        "expected_label_kind": "EXPECTED_EMPTY",
+        "expected_exact_category": null,
+        "prompt_version": "v3_full_registry_research_priority_7b_v9",
+        "inference_run_id": 1192,
+        "parse_status": "PARSED_OK",
+        "validation_status": "VALIDATED_SUCCESS",
+        "raw_categories": [
+          "computers"
+        ],
+        "validated_categories": [
+          "computers"
+        ],
+        "invalid_category_codes": [],
+        "subject_interpretation": {
+          "subject_type": "GOODS",
+          "normalized_subject": "офисная мебель"
+        },
+        "procurement_form": "DIRECT_GOODS_PURCHASE",
+        "empty_hypothesis_status": "INSUFFICIENT_EVIDENCE",
+        "PRIMARY_ROOT_CAUSE": "OBJECT_PRIOR_OVERREACH",
+        "object_research_candidate_presented_as_confirmed": 0,
+        "title": "Поставка мебели офисной.",
+        "exact_match": null,
+        "missed": null,
+        "false_positive": true,
+        "correct_empty": false
+      },
+      {
+        "procurement_id": 38143,
+        "bucket": "OBJECT_CONSTRUCTION",
+        "expected_label_kind": "AMBIGUOUS_REVIEW",
+        "expected_exact_category": null,
+        "prompt_version": "v3_full_registry_research_priority_7b_v9",
+        "inference_run_id": 1193,
+        "parse_status": "PARSED_OK",
+        "validation_status": "VALIDATED_SUCCESS",
+        "raw_categories": [],
+        "validated_categories": [],
+        "invalid_category_codes": [],
+        "subject_interpretation": {
+          "subject_type": "OBJECT_WORKS",
+          "normalized_subject": "ремонт автомобильной дороги"
+        },
+        "procurement_form": "CONSTRUCTION_WORKS",
+        "empty_hypothesis_status": "INSUFFICIENT_EVIDENCE",
+        "PRIMARY_ROOT_CAUSE": "NO_ERROR",
+        "object_research_candidate_presented_as_confirmed": 0,
+        "title": "Ремонт автомобильных дорог общего пользования местного значения городского округа Сызрань",
+        "exact_match": null,
+        "missed": null,
+        "false_positive": null
+      },
+      {
+        "procurement_id": 38142,
+        "bucket": "OBJECT_CONSTRUCTION",
+        "expected_label_kind": "AMBIGUOUS_REVIEW",
+        "expected_exact_category": null,
+        "prompt_version": "v3_full_registry_research_priority_7b_v9",
+        "inference_run_id": 1194,
+        "parse_status": "PARSED_OK",
+        "validation_status": "VALIDATED_SUCCESS",
+        "raw_categories": [],
+        "validated_categories": [],
+        "invalid_category_codes": [],
+        "subject_interpretation": {
+          "subject_type": "OBJECT_WORKS",
+          "normalized_subject": "ремонт автомобильной дороги"
+        },
+        "procurement_form": "CONSTRUCTION_WORKS",
+        "empty_hypothesis_status": "INSUFFICIENT_EVIDENCE",
+        "PRIMARY_ROOT_CAUSE": "NO_ERROR",
+        "object_research_candidate_presented_as_confirmed": 0,
+        "title": "Ремонт автомобильной дороги общего пользования регионального значения в Самарской области мостовой переход «Кировский», ",
+        "exact_match": null,
+        "missed": null,
+        "false_positive": null
+      },
+      {
+        "procurement_id": 38141,
+        "bucket": "OBJECT_CONSTRUCTION",
+        "expected_label_kind": "AMBIGUOUS_REVIEW",
+        "expected_exact_category": null,
+        "prompt_version": "v3_full_registry_research_priority_7b_v9",
+        "inference_run_id": 1195,
+        "parse_status": "PARSED_OK",
+        "validation_status": "VALIDATED_SUCCESS",
+        "raw_categories": [],
+        "validated_categories": [],
+        "invalid_category_codes": [],
+        "subject_interpretation": {
+          "subject_type": "OBJECT_WORKS",
+          "normalized_subject": "ремонт автомобильной дороги"
+        },
+        "procurement_form": "CONSTRUCTION_WORKS",
+        "empty_hypothesis_status": "INSUFFICIENT_EVIDENCE",
+        "PRIMARY_ROOT_CAUSE": "NO_ERROR",
+        "object_research_candidate_presented_as_confirmed": 0,
+        "title": "Ремонт автомобильной дороги общего пользования регионального значения в Самарской области \"Сергиевск - Челно-Вершины\" - ",
+        "exact_match": null,
+        "missed": null,
+        "false_positive": null
+      },
+      {
+        "procurement_id": 38130,
+        "bucket": "OBJECT_CONSTRUCTION",
+        "expected_label_kind": "AMBIGUOUS_REVIEW",
+        "expected_exact_category": null,
+        "prompt_version": "v3_full_registry_research_priority_7b_v9",
+        "inference_run_id": 1196,
+        "parse_status": "PARSED_OK",
+        "validation_status": "VALIDATED_SUCCESS",
+        "raw_categories": [
+          "road_repair",
+          "trampling_surface_installation"
+        ],
+        "validated_categories": [],
+        "invalid_category_codes": [
+          "road_repair",
+          "trampling_surface_installation"
+        ],
+        "subject_interpretation": {
+          "subject_type": "OBJECT_WORKS",
+          "normalized_subject": "ремонт автомобильных дорог и устройство тротуаров"
+        },
+        "procurement_form": "CONSTRUCTION_WORKS",
+        "empty_hypothesis_status": null,
+        "PRIMARY_ROOT_CAUSE": "NO_ERROR",
+        "object_research_candidate_presented_as_confirmed": 0,
+        "title": "Ремонт автомобильных дорог и устройство тротуаров в сельском поселении Подстепки муниципального района Ставропольский Са",
+        "exact_match": null,
+        "missed": null,
+        "false_positive": null
+      },
+      {
+        "procurement_id": 38125,
+        "bucket": "OBJECT_CONSTRUCTION",
+        "expected_label_kind": "AMBIGUOUS_REVIEW",
+        "expected_exact_category": null,
+        "prompt_version": "v3_full_registry_research_priority_7b_v9",
+        "inference_run_id": 1197,
+        "parse_status": "PARSED_OK",
+        "validation_status": "VALIDATED_SUCCESS",
+        "raw_categories": [],
+        "validated_categories": [],
+        "invalid_category_codes": [],
+        "subject_interpretation": {
+          "subject_type": "OBJECT_WORKS",
+          "normalized_subject": "ремонт автомобильной дороги"
+        },
+        "procurement_form": "CONSTRUCTION_WORKS",
+        "empty_hypothesis_status": "INSUFFICIENT_EVIDENCE",
+        "PRIMARY_ROOT_CAUSE": "NO_ERROR",
+        "object_research_candidate_presented_as_confirmed": 0,
+        "title": "Выполнение работ по ремонту автомобильных дорог общего пользования местного значения на территории сельского поселения М",
+        "exact_match": null,
+        "missed": null,
+        "false_positive": null
+      },
+      {
+        "procurement_id": 35948,
+        "bucket": "OBJECT_CONSTRUCTION",
+        "expected_label_kind": "AMBIGUOUS_REVIEW",
+        "expected_exact_category": null,
+        "prompt_version": "v3_full_registry_research_priority_7b_v9",
+        "inference_run_id": 1198,
+        "parse_status": "PARSED_OK",
+        "validation_status": "VALIDATED_SUCCESS",
+        "raw_categories": [],
+        "validated_categories": [],
+        "invalid_category_codes": [],
+        "subject_interpretation": {
+          "subject_type": "OBJECT_WORKS",
+          "normalized_subject": "ремонт моста"
+        },
+        "procurement_form": "CONSTRUCTION_WORKS",
+        "empty_hypothesis_status": "INSUFFICIENT_EVIDENCE",
+        "PRIMARY_ROOT_CAUSE": "NO_ERROR",
+        "object_research_candidate_presented_as_confirmed": 0,
+        "title": "Капитальный ремонт моста через р. Уруп (левый) на км 170+440 автомобильной дороги Р-217 \"Кавказ\" автомобильная дорога М-",
+        "exact_match": null,
+        "missed": null,
+        "false_positive": null
+      },
+      {
+        "procurement_id": 34327,
+        "bucket": "OBJECT_CONSTRUCTION",
+        "expected_label_kind": "AMBIGUOUS_REVIEW",
+        "expected_exact_category": null,
+        "prompt_version": "v3_full_registry_research_priority_7b_v9",
+        "inference_run_id": 1199,
+        "parse_status": "PARSED_OK",
+        "validation_status": "VALIDATED_SUCCESS",
+        "raw_categories": [],
+        "validated_categories": [],
+        "invalid_category_codes": [],
+        "subject_interpretation": {
+          "subject_type": "OBJECT_WORKS",
+          "normalized_subject": "капитальный ремонт моста"
+        },
+        "procurement_form": "CONSTRUCTION_WORKS",
+        "empty_hypothesis_status": null,
+        "PRIMARY_ROOT_CAUSE": "NO_ERROR",
+        "object_research_candidate_presented_as_confirmed": 0,
+        "title": "Разработка проектной документации по объекту «Капитальный ремонт моста через ручей на км 2+520 а.д. Калинино – Батырево ",
+        "exact_match": null,
+        "missed": null,
+        "false_positive": null
+      },
+      {
+        "procurement_id": 32813,
+        "bucket": "OBJECT_CONSTRUCTION",
+        "expected_label_kind": "AMBIGUOUS_REVIEW",
+        "expected_exact_category": null,
+        "prompt_version": "v3_full_registry_research_priority_7b_v9",
+        "inference_run_id": 1200,
+        "parse_status": "PARSED_OK",
+        "validation_status": "VALIDATED_SUCCESS",
+        "raw_categories": [],
+        "validated_categories": [],
+        "invalid_category_codes": [],
+        "subject_interpretation": {
+          "subject_type": "OBJECT_WORKS",
+          "normalized_subject": "ремонт моста"
+        },
+        "procurement_form": "CONSTRUCTION_WORKS",
+        "empty_hypothesis_status": "INSUFFICIENT_EVIDENCE",
+        "PRIMARY_ROOT_CAUSE": "NO_ERROR",
+        "object_research_candidate_presented_as_confirmed": 0,
+        "title": "Капитальный ремонт моста через реку Средний Аниш на км 6+185 автомобильной дороги «Аниш» (а.д. «Волга» – Урмары – Канаш ",
+        "exact_match": null,
+        "missed": null,
+        "false_positive": null
+      },
+      {
+        "procurement_id": 31936,
+        "bucket": "OBJECT_CONSTRUCTION",
+        "expected_label_kind": "AMBIGUOUS_REVIEW",
+        "expected_exact_category": null,
+        "prompt_version": "v3_full_registry_research_priority_7b_v9",
+        "inference_run_id": 1201,
+        "parse_status": "PARSED_OK",
+        "validation_status": "VALIDATED_SUCCESS",
+        "raw_categories": [
+          "road_repair"
+        ],
+        "validated_categories": [],
+        "invalid_category_codes": [
+          "road_repair"
+        ],
+        "subject_interpretation": {
+          "subject_type": "OBJECT_WORKS",
+          "normalized_subject": "ремонт автомобильной дороги"
+        },
+        "procurement_form": "CONSTRUCTION_WORKS",
+        "empty_hypothesis_status": null,
+        "PRIMARY_ROOT_CAUSE": "NO_ERROR",
+        "object_research_candidate_presented_as_confirmed": 0,
+        "title": "Капитальный ремонт моста через р. Сюрва на автомобильной дороге \"Карагай-Ст. Пашня\"-Фролово\"",
+        "exact_match": null,
+        "missed": null,
+        "false_positive": null
+      },
+      {
+        "procurement_id": 26386,
+        "bucket": "OBJECT_CONSTRUCTION",
+        "expected_label_kind": "AMBIGUOUS_REVIEW",
+        "expected_exact_category": null,
+        "prompt_version": "v3_full_registry_research_priority_7b_v9",
+        "inference_run_id": 1202,
+        "parse_status": "PARSED_OK",
+        "validation_status": "VALIDATED_SUCCESS",
+        "raw_categories": [
+          "waterproofing"
+        ],
+        "validated_categories": [
+          "waterproofing"
+        ],
+        "invalid_category_codes": [],
+        "subject_interpretation": {
+          "subject_type": "OBJECT_WORKS",
+          "normalized_subject": "ремонт моста"
+        },
+        "procurement_form": "CONSTRUCTION_WORKS",
+        "empty_hypothesis_status": null,
+        "PRIMARY_ROOT_CAUSE": "OBJECT_PRIOR_OVERREACH",
+        "object_research_candidate_presented_as_confirmed": 0,
+        "title": "Капитальный ремонт моста на 53 км а/д Грозный - Ведено - гр. Дагестана",
+        "exact_match": null,
+        "missed": null,
+        "false_positive": null
+      },
+      {
+        "procurement_id": 38032,
+        "bucket": "OBJECT_CONSTRUCTION",
+        "expected_label_kind": "AMBIGUOUS_REVIEW",
+        "expected_exact_category": null,
+        "prompt_version": "v3_full_registry_research_priority_7b_v9",
+        "inference_run_id": 1203,
+        "parse_status": "PARSED_OK",
+        "validation_status": "VALIDATED_SUCCESS",
+        "raw_categories": [
+          "composite_structures"
+        ],
+        "validated_categories": [
+          "composite_structures"
+        ],
+        "invalid_category_codes": [],
+        "subject_interpretation": {
+          "subject_type": "OBJECT_WORKS",
+          "normalized_subject": "ремонт и эксплуатация мостов и путепроводов"
+        },
+        "procurement_form": "CONSTRUCTION_WORKS",
+        "empty_hypothesis_status": null,
+        "PRIMARY_ROOT_CAUSE": "OBJECT_PRIOR_OVERREACH",
+        "object_research_candidate_presented_as_confirmed": 1,
+        "title": "Выполнение работ по содержанию и эксплуатации мостов и путепроводов г. Ростова-на-Дону.",
+        "exact_match": null,
+        "missed": null,
+        "false_positive": null
+      },
+      {
+        "procurement_id": 37882,
+        "bucket": "OBJECT_CONSTRUCTION",
+        "expected_label_kind": "AMBIGUOUS_REVIEW",
+        "expected_exact_category": null,
+        "prompt_version": "v3_full_registry_research_priority_7b_v9",
+        "inference_run_id": 1204,
+        "parse_status": "PARSED_OK",
+        "validation_status": "VALIDATED_SUCCESS",
+        "raw_categories": [
+          "engineering_constructions"
+        ],
+        "validated_categories": [],
+        "invalid_category_codes": [
+          "engineering_constructions"
+        ],
+        "subject_interpretation": {
+          "subject_type": "OBJECT_WORKS",
+          "normalized_subject": "монтаж инженерных сооружений для обеспечения транспортной безопасности"
+        },
+        "procurement_form": "CONSTRUCTION_WORKS",
+        "empty_hypothesis_status": null,
+        "PRIMARY_ROOT_CAUSE": "NO_ERROR",
+        "object_research_candidate_presented_as_confirmed": 0,
+        "title": "Выполнение работ по монтажу инженерных сооружений обеспечения транспортной безопасности на устоях  путепровод через замы",
+        "exact_match": null,
+        "missed": null,
+        "false_positive": null
+      },
+      {
+        "procurement_id": 37651,
+        "bucket": "OBJECT_CONSTRUCTION",
+        "expected_label_kind": "AMBIGUOUS_REVIEW",
+        "expected_exact_category": null,
+        "prompt_version": "v3_full_registry_research_priority_7b_v9",
+        "inference_run_id": 1205,
+        "parse_status": "PARSED_OK",
+        "validation_status": "VALIDATED_SUCCESS",
+        "raw_categories": [],
+        "validated_categories": [],
+        "invalid_category_codes": [],
+        "subject_interpretation": {
+          "subject_type": "OBJECT_WORKS",
+          "normalized_subject": "устройство системы уличного освещения",
+          "object_type": "ROAD",
+          "work_stage": "INSTALLATION"
+        },
+        "procurement_form": "CONSTRUCTION_WORKS",
+        "empty_hypothesis_status": "INSUFFICIENT_EVIDENCE",
+        "PRIMARY_ROOT_CAUSE": "NO_ERROR",
+        "object_research_candidate_presented_as_confirmed": 0,
+        "title": "Выполнение работ по устройству системы уличного освещения на участке ул. Коммунистов от путепровода под железнодорожным ",
+        "exact_match": null,
+        "missed": null,
+        "false_positive": null
+      },
+      {
+        "procurement_id": 36324,
+        "bucket": "OBJECT_CONSTRUCTION",
+        "expected_label_kind": "AMBIGUOUS_REVIEW",
+        "expected_exact_category": null,
+        "prompt_version": "v3_full_registry_research_priority_7b_v9",
+        "inference_run_id": 1206,
+        "parse_status": "PARSED_OK",
+        "validation_status": "VALIDATED_SUCCESS",
+        "raw_categories": [],
+        "validated_categories": [],
+        "invalid_category_codes": [],
+        "subject_interpretation": {
+          "subject_type": "OBJECT_WORKS",
+          "normalized_subject": "ремонт автомобильной дороги"
+        },
+        "procurement_form": "CONSTRUCTION_WORKS",
+        "empty_hypothesis_status": "INSUFFICIENT_EVIDENCE",
+        "PRIMARY_ROOT_CAUSE": "NO_ERROR",
+        "object_research_candidate_presented_as_confirmed": 0,
+        "title": "Ремонт моста через реку Щеберёха на км 414+718 автомобильной дороги А-122 автомобильная дорога А-114 - Устюжна - Крестцы",
+        "exact_match": null,
+        "missed": null,
+        "false_positive": null
+      },
+      {
+        "procurement_id": 38150,
+        "bucket": "OBJECT_CONSTRUCTION",
+        "expected_label_kind": "AMBIGUOUS_REVIEW",
+        "expected_exact_category": null,
+        "prompt_version": "v3_full_registry_research_priority_7b_v9",
+        "inference_run_id": 1207,
+        "parse_status": "PARSED_OK",
+        "validation_status": "VALIDATED_SUCCESS",
+        "raw_categories": [
+          "waterproofing"
+        ],
+        "validated_categories": [
+          "waterproofing"
+        ],
+        "invalid_category_codes": [],
+        "subject_interpretation": {
+          "subject_type": "OBJECT_WORKS",
+          "normalized_subject": "ремонт спортзала в школе"
+        },
+        "procurement_form": "CONSTRUCTION_WORKS",
+        "empty_hypothesis_status": "INSUFFICIENT_EVIDENCE",
+        "PRIMARY_ROOT_CAUSE": "OBJECT_PRIOR_OVERREACH",
+        "object_research_candidate_presented_as_confirmed": 1,
+        "title": "Выполнение работ по капитальному ремонту объекта капитального строительства в сфере образования (Капитальный ремонт спор",
+        "exact_match": null,
+        "missed": null,
+        "false_positive": null
+      },
+      {
+        "procurement_id": 37999,
+        "bucket": "OBJECT_CONSTRUCTION",
+        "expected_label_kind": "AMBIGUOUS_REVIEW",
+        "expected_exact_category": null,
+        "prompt_version": "v3_full_registry_research_priority_7b_v9",
+        "inference_run_id": 1208,
+        "parse_status": "PARSED_OK",
+        "validation_status": "VALIDATED_SUCCESS",
+        "raw_categories": [],
+        "validated_categories": [],
+        "invalid_category_codes": [],
+        "subject_interpretation": {
+          "subject_type": "OBJECT_WORKS",
+          "normalized_subject": "пожарная сигнализация с системой оповещения и управления эвакуацией"
+        },
+        "procurement_form": "CONSTRUCTION_WORKS",
+        "empty_hypothesis_status": "INSUFFICIENT_EVIDENCE",
+        "PRIMARY_ROOT_CAUSE": "NO_ERROR",
+        "object_research_candidate_presented_as_confirmed": 0,
+        "title": "Капитальный ремонт здания филиала «Вязьевская школа» МБОУ «Дедовичская СШ №1» с зданием дошкольного отделения, расположе",
+        "exact_match": null,
+        "missed": null,
+        "false_positive": null
+      },
+      {
+        "procurement_id": 720,
+        "bucket": "PRIOR11_DIAGNOSTIC",
+        "expected_label_kind": "AMBIGUOUS_REVIEW",
+        "expected_exact_category": null,
+        "prompt_version": "v3_full_registry_research_priority_7b_v9",
+        "inference_run_id": 1209,
+        "parse_status": "PARSED_OK",
+        "validation_status": "VALIDATED_SUCCESS",
+        "raw_categories": [
+          "road_repair_and_streets"
+        ],
+        "validated_categories": [],
+        "invalid_category_codes": [
+          "road_repair_and_streets"
+        ],
+        "subject_interpretation": {
+          "subject_type": "OBJECT_WORKS",
+          "normalized_subject": "устройство тротуаров и ремонт автомобильной дороги"
+        },
+        "procurement_form": "CONSTRUCTION_WORKS",
+        "empty_hypothesis_status": "INSUFFICIENT_EVIDENCE",
+        "PRIMARY_ROOT_CAUSE": "NO_ERROR",
+        "object_research_candidate_presented_as_confirmed": 0,
+        "title": "Установка элементов обустройства автомобильных дорог общего пользования федерального значения. Устройство тротуаров на а",
+        "exact_match": null,
+        "missed": null,
+        "false_positive": null
+      },
+      {
+        "procurement_id": 886,
+        "bucket": "PRIOR11_DIAGNOSTIC",
+        "expected_label_kind": "AMBIGUOUS_REVIEW",
+        "expected_exact_category": null,
+        "prompt_version": "v3_full_registry_research_priority_7b_v9",
+        "inference_run_id": 1210,
+        "parse_status": "PARSED_OK",
+        "validation_status": "VALIDATED_SUCCESS",
+        "raw_categories": [
+          "flooring",
+          "composite_structures",
+          "waterproofing"
+        ],
+        "validated_categories": [
+          "flooring",
+          "composite_structures",
+          "waterproofing"
+        ],
+        "invalid_category_codes": [],
+        "subject_interpretation": {
+          "subject_type": "OBJECT_WORKS",
+          "normalized_subject": "благоустроенное жилое помещение для детей-сирот и оставшихся без попечения родителей"
+        },
+        "procurement_form": "CONSTRUCTION_WORKS",
+        "empty_hypothesis_status": null,
+        "PRIMARY_ROOT_CAUSE": "NO_ERROR",
+        "object_research_candidate_presented_as_confirmed": 1,
+        "title": "Благоустроенное жилое помещение (индивидуальный жилой дом, квартира, выделенное жилое помещение жилого дома блокированно",
+        "exact_match": null,
+        "missed": null,
+        "false_positive": null
+      },
+      {
+        "procurement_id": 949,
+        "bucket": "PRIOR11_DIAGNOSTIC",
+        "expected_label_kind": "AMBIGUOUS_REVIEW",
+        "expected_exact_category": null,
+        "prompt_version": "v3_full_registry_research_priority_7b_v9",
+        "inference_run_id": 1211,
+        "parse_status": "PARSED_OK",
+        "validation_status": "VALIDATED_SUCCESS",
+        "raw_categories": [
+          "flooring",
+          "composite_structures",
+          "waterproofing"
+        ],
+        "validated_categories": [
+          "flooring",
+          "composite_structures",
+          "waterproofing"
+        ],
+        "invalid_category_codes": [],
+        "subject_interpretation": {
+          "subject_type": "GOODS",
+          "normalized_subject": "благоустроенное жилое помещение"
+        },
+        "procurement_form": "DIRECT_GOODS_PURCHASE",
+        "empty_hypothesis_status": null,
+        "PRIMARY_ROOT_CAUSE": "NO_ERROR",
+        "object_research_candidate_presented_as_confirmed": 3,
+        "title": "Благоустроенное жилое помещение (индивидуальный жилой дом, квартира, выделенное жилое помещение жилого дома блокированно",
+        "exact_match": null,
+        "missed": null,
+        "false_positive": null
+      },
+      {
+        "procurement_id": 975,
+        "bucket": "PRIOR11_DIAGNOSTIC",
+        "expected_label_kind": "AMBIGUOUS_REVIEW",
+        "expected_exact_category": null,
+        "prompt_version": "v3_full_registry_research_priority_7b_v9",
+        "inference_run_id": 1212,
+        "parse_status": "PARSED_OK",
+        "validation_status": "VALIDATED_SUCCESS",
+        "raw_categories": [
+          "flooring",
+          "composite_structures",
+          "waterproofing"
+        ],
+        "validated_categories": [
+          "flooring",
+          "composite_structures",
+          "waterproofing"
+        ],
+        "invalid_category_codes": [],
+        "subject_interpretation": {
+          "subject_type": "OBJECT_WORKS",
+          "normalized_subject": "капитальный ремонт здания"
+        },
+        "procurement_form": "CONSTRUCTION_WORKS",
+        "empty_hypothesis_status": "INSUFFICIENT_EVIDENCE",
+        "PRIMARY_ROOT_CAUSE": "NO_ERROR",
+        "object_research_candidate_presented_as_confirmed": 3,
+        "title": "Капитальный ремонт здания МБДОУ \"Шумячский ЦРР - детский сад \"Солнышко\", расположенного по  Смоленская область, Шумячски",
+        "exact_match": null,
+        "missed": null,
+        "false_positive": null
+      },
+      {
+        "procurement_id": 1016,
+        "bucket": "PRIOR11_DIAGNOSTIC",
+        "expected_label_kind": "AMBIGUOUS_REVIEW",
+        "expected_exact_category": null,
+        "prompt_version": "v3_full_registry_research_priority_7b_v9",
+        "inference_run_id": 1213,
+        "parse_status": "PARSED_OK",
+        "validation_status": "VALIDATED_SUCCESS",
+        "raw_categories": [],
+        "validated_categories": [],
+        "invalid_category_codes": [],
+        "subject_interpretation": {
+          "subject_type": "OBJECT_WORKS",
+          "normalized_subject": "ремонт конструктивных элементов здания Городских бань"
+        },
+        "procurement_form": "UNKNOWN",
+        "empty_hypothesis_status": "INSUFFICIENT_EVIDENCE",
+        "PRIMARY_ROOT_CAUSE": "NO_ERROR",
+        "object_research_candidate_presented_as_confirmed": 0,
+        "title": "Текущий ремонт и техническое обслуживание инженерных коммуникаций, обслуживание бассейнов и ремонт конструктивных элемен",
+        "exact_match": null,
+        "missed": null,
+        "false_positive": null
+      },
+      {
+        "procurement_id": 6374,
+        "bucket": "PRIOR11_DIAGNOSTIC",
+        "expected_label_kind": "AMBIGUOUS_REVIEW",
+        "expected_exact_category": null,
+        "prompt_version": "v3_full_registry_research_priority_7b_v9",
+        "inference_run_id": 1214,
+        "parse_status": "PARSED_OK",
+        "validation_status": "VALIDATED_SUCCESS",
+        "raw_categories": [],
+        "validated_categories": [],
+        "invalid_category_codes": [],
+        "subject_interpretation": {
+          "subject_type": "OBJECT_WORKS",
+          "object_type": "HEATING_NETWORK",
+          "work_stage": "REPAIR"
+        },
+        "procurement_form": "CONSTRUCTION_WORKS",
+        "empty_hypothesis_status": "INSUFFICIENT_EVIDENCE",
+        "PRIMARY_ROOT_CAUSE": "NO_ERROR",
+        "object_research_candidate_presented_as_confirmed": 0,
+        "title": "Выполнение работ по реконструкции тепловых сетей Квартал 5 Гражданки, от дома пр. Непокоренных, 6 до ТК-10 и далее до ме",
+        "exact_match": null,
+        "missed": null,
+        "false_positive": null
+      },
+      {
+        "procurement_id": 8003,
+        "bucket": "PRIOR11_DIAGNOSTIC",
+        "expected_label_kind": "AMBIGUOUS_REVIEW",
+        "expected_exact_category": null,
+        "prompt_version": "v3_full_registry_research_priority_7b_v9",
+        "inference_run_id": 1215,
+        "parse_status": "PARSED_OK",
+        "validation_status": "VALIDATED_SUCCESS",
+        "raw_categories": [
+          "road_repair"
+        ],
+        "validated_categories": [],
+        "invalid_category_codes": [
+          "road_repair"
+        ],
+        "subject_interpretation": {
+          "subject_type": "OBJECT_WORKS",
+          "normalized_subject": "ремонт автомобильной дороги",
+          "object_type": "ROAD",
+          "work_stage": "REPAIR"
+        },
+        "procurement_form": "CONSTRUCTION_WORKS",
+        "empty_hypothesis_status": "INSUFFICIENT_EVIDENCE",
+        "PRIMARY_ROOT_CAUSE": "NO_ERROR",
+        "object_research_candidate_presented_as_confirmed": 0,
+        "title": "Выполнение работ по содержанию искусственных сооружений на сети автомобильных дорог общего пользования федерального знач",
+        "exact_match": null,
+        "missed": null,
+        "false_positive": null
+      },
+      {
+        "procurement_id": 8175,
+        "bucket": "PRIOR11_DIAGNOSTIC",
+        "expected_label_kind": "AMBIGUOUS_REVIEW",
+        "expected_exact_category": null,
+        "prompt_version": "v3_full_registry_research_priority_7b_v9",
+        "inference_run_id": 1216,
+        "parse_status": "PARSED_OK",
+        "validation_status": "VALIDATED_SUCCESS",
+        "raw_categories": [
+          "flooring",
+          "composite_structures",
+          "waterproofing"
+        ],
+        "validated_categories": [
+          "flooring",
+          "composite_structures",
+          "waterproofing"
+        ],
+        "invalid_category_codes": [],
+        "subject_interpretation": {
+          "subject_type": "OBJECT_WORKS",
+          "normalized_subject": "капитальный ремонт здания"
+        },
+        "procurement_form": "CONSTRUCTION_WORKS",
+        "empty_hypothesis_status": null,
+        "PRIMARY_ROOT_CAUSE": "NO_ERROR",
+        "object_research_candidate_presented_as_confirmed": 3,
+        "title": "зз-0017-30716 - 2026 Выполнение работ по капитальному ремонту здания лечебного корпуса № 24 и здания операционного блока",
+        "exact_match": null,
+        "missed": null,
+        "false_positive": null
+      },
+      {
+        "procurement_id": 10795,
+        "bucket": "PRIOR11_DIAGNOSTIC",
+        "expected_label_kind": "AMBIGUOUS_REVIEW",
+        "expected_exact_category": null,
+        "prompt_version": "v3_full_registry_research_priority_7b_v9",
+        "inference_run_id": 1217,
+        "parse_status": "PARSED_OK",
+        "validation_status": "VALIDATED_SUCCESS",
+        "raw_categories": [],
+        "validated_categories": [],
+        "invalid_category_codes": [],
+        "subject_interpretation": {
+          "subject_type": "OBJECT_WORKS",
+          "normalized_subject": "ремонт моста"
+        },
+        "procurement_form": "CONSTRUCTION_WORKS",
+        "empty_hypothesis_status": "INSUFFICIENT_EVIDENCE",
+        "PRIMARY_ROOT_CAUSE": "NO_ERROR",
+        "object_research_candidate_presented_as_confirmed": 0,
+        "title": "Капитальный ремонт моста через р. Иль на км 54+744 автомобильной дороги  А-146 Краснодар-Верхнебаканский, Краснодарский ",
+        "exact_match": null,
+        "missed": null,
+        "false_positive": null
+      },
+      {
+        "procurement_id": 10812,
+        "bucket": "PRIOR11_DIAGNOSTIC",
+        "expected_label_kind": "AMBIGUOUS_REVIEW",
+        "expected_exact_category": null,
+        "prompt_version": "v3_full_registry_research_priority_7b_v9",
+        "inference_run_id": 1218,
+        "parse_status": "PARSED_OK",
+        "validation_status": "VALIDATED_SUCCESS",
+        "raw_categories": [],
+        "validated_categories": [],
+        "invalid_category_codes": [],
+        "subject_interpretation": {
+          "subject_type": "OBJECT_WORKS",
+          "normalized_subject": "ремонт моста"
+        },
+        "procurement_form": "CONSTRUCTION_WORKS",
+        "empty_hypothesis_status": "INSUFFICIENT_EVIDENCE",
+        "PRIMARY_ROOT_CAUSE": "NO_ERROR",
+        "object_research_candidate_presented_as_confirmed": 0,
+        "title": "Капитальный ремонт моста через р. Неберджай на км 115+483 автомобильной дороги А-146 Краснодар-Верхнебаканский, Краснода",
+        "exact_match": null,
+        "missed": null,
+        "false_positive": null
+      },
+      {
+        "procurement_id": 13688,
+        "bucket": "PRIOR11_DIAGNOSTIC",
+        "expected_label_kind": "AMBIGUOUS_REVIEW",
+        "expected_exact_category": null,
+        "prompt_version": "v3_full_registry_research_priority_7b_v9",
+        "inference_run_id": 1219,
+        "parse_status": "PARSED_OK",
+        "validation_status": "VALIDATED_SUCCESS",
+        "raw_categories": [
+          "drainage_water_management",
+          "lighting",
+          "curbstone",
+          "composite_structures",
+          "waterproofing"
+        ],
+        "validated_categories": [
+          "drainage_water_management",
+          "lighting",
+          "curbstone",
+          "composite_structures",
+          "waterproofing"
+        ],
+        "invalid_category_codes": [],
+        "subject_interpretation": {
+          "subject_type": "OBJECT_WORKS",
+          "normalized_subject": "ремонт укрепительных (противооползневых) сооружений и дорожного полотна"
+        },
+        "procurement_form": "CONSTRUCTION_WORKS",
+        "empty_hypothesis_status": "INSUFFICIENT_EVIDENCE",
+        "PRIMARY_ROOT_CAUSE": "NO_ERROR",
+        "object_research_candidate_presented_as_confirmed": 1,
+        "title": "Капитальный ремонт укрепительных (противооползневых) сооружений на км 155+860 - км 155+880, км 157+630 - км 157+690, км ",
+        "exact_match": null,
+        "missed": null,
+        "false_positive": null
+      },
+      {
+        "procurement_id": 36526,
+        "bucket": "ROAD_CASE_REVIEW",
+        "expected_label_kind": "AMBIGUOUS_REVIEW",
+        "expected_exact_category": null,
+        "prompt_version": "v3_full_registry_research_priority_7b_v9",
+        "inference_run_id": 1220,
+        "parse_status": "PARSED_OK",
+        "validation_status": "VALIDATED_SUCCESS",
+        "raw_categories": [
+          "lighting",
+          "waterproofing",
+          "drainage_water_management"
+        ],
+        "validated_categories": [
+          "lighting",
+          "waterproofing",
+          "drainage_water_management"
+        ],
+        "invalid_category_codes": [],
+        "subject_interpretation": {
+          "subject_type": "OBJECT_WORKS",
+          "normalized_subject": "установка защитных слоев на автомобильной дороге"
+        },
+        "procurement_form": "CONSTRUCTION_WORKS",
+        "empty_hypothesis_status": null,
+        "PRIMARY_ROOT_CAUSE": "NO_ERROR",
+        "object_research_candidate_presented_as_confirmed": 0,
+        "title": "Содержание действующей сети автомобильных дорог общего пользования федерального значения. Устройство защитных слоев  на ",
+        "exact_match": null,
+        "missed": null,
+        "false_positive": null
+      },
+      {
+        "procurement_id": 37979,
+        "bucket": "ROAD_CASE_REVIEW",
+        "expected_label_kind": "AMBIGUOUS_REVIEW",
+        "expected_exact_category": null,
+        "prompt_version": "v3_full_registry_research_priority_7b_v9",
+        "inference_run_id": 1221,
+        "parse_status": "PARSED_OK",
+        "validation_status": "VALIDATED_SUCCESS",
+        "raw_categories": [
+          "road_maintenance"
+        ],
+        "validated_categories": [],
+        "invalid_category_codes": [
+          "road_maintenance"
+        ],
+        "subject_interpretation": {
+          "subject_type": "GOODS",
+          "normalized_subject": "работы по содержанию автомобильных дорог"
+        },
+        "procurement_form": "DIRECT_GOODS_PURCHASE",
+        "empty_hypothesis_status": null,
+        "PRIMARY_ROOT_CAUSE": "NO_ERROR",
+        "object_research_candidate_presented_as_confirmed": 0,
+        "title": "Содержание муниципальных автомобильных дорог и искусственных сооружений на них в с. Родники, п. Геологоразведка, д. Чашк",
+        "exact_match": null,
+        "missed": null,
+        "false_positive": null
+      },
+      {
+        "procurement_id": 37950,
+        "bucket": "ROAD_CASE_REVIEW",
+        "expected_label_kind": "AMBIGUOUS_REVIEW",
+        "expected_exact_category": null,
+        "prompt_version": "v3_full_registry_research_priority_7b_v9",
+        "inference_run_id": 1222,
+        "parse_status": "PARSED_OK",
+        "validation_status": "VALIDATED_SUCCESS",
+        "raw_categories": [
+          "road_repair"
+        ],
+        "validated_categories": [],
+        "invalid_category_codes": [
+          "road_repair"
+        ],
+        "subject_interpretation": {
+          "subject_type": "OBJECT_WORKS",
+          "normalized_subject": "ремонт улично-дорожной сети, пешеходных дорог и взлетно-посадочных полос аэродромов"
+        },
+        "procurement_form": "CONSTRUCTION_WORKS",
+        "empty_hypothesis_status": "INSUFFICIENT_EVIDENCE",
+        "PRIMARY_ROOT_CAUSE": "NO_ERROR",
+        "object_research_candidate_presented_as_confirmed": 0,
+        "title": "Выполнение работ по благоустройству территории, строительство тротуара по ул. Школьная в к.п. Озеро Карачи Чановского му",
+        "exact_match": null,
+        "missed": null,
+        "false_positive": null
+      },
+      {
+        "procurement_id": 38113,
+        "bucket": "ROAD_CASE_REVIEW",
+        "expected_label_kind": "AMBIGUOUS_REVIEW",
+        "expected_exact_category": null,
+        "prompt_version": "v3_full_registry_research_priority_7b_v9",
+        "inference_run_id": 1223,
+        "parse_status": "PARSED_OK",
+        "validation_status": "VALIDATED_SUCCESS",
+        "raw_categories": [],
+        "validated_categories": [],
+        "invalid_category_codes": [],
+        "subject_interpretation": {
+          "subject_type": "SERVICE",
+          "normalized_subject": "проектирование для благоустройства спортивной площадки"
+        },
+        "procurement_form": "DESIGN_ONLY",
+        "empty_hypothesis_status": "INSUFFICIENT_EVIDENCE",
+        "PRIMARY_ROOT_CAUSE": "NO_ERROR",
+        "object_research_candidate_presented_as_confirmed": 0,
+        "title": "Подготовка проектной документации для нужд городского округа Тольятти, по объекту благоустройства \"Многофункциональная с",
+        "exact_match": null,
+        "missed": null,
+        "false_positive": null
+      },
+      {
+        "procurement_id": 23591,
+        "bucket": "CLEAR_DIRECT_POSITIVE",
+        "expected_label_kind": "EXPECTED_EXACT_CATEGORY",
+        "expected_exact_category": "drainage_water_management",
+        "prompt_version": "v3_full_registry_research_priority_7b_v9",
+        "inference_run_id": 1224,
+        "parse_status": "PARSED_OK",
+        "validation_status": "VALIDATED_SUCCESS",
+        "raw_categories": [
+          "drainage_water_management"
+        ],
+        "validated_categories": [
+          "drainage_water_management"
+        ],
+        "invalid_category_codes": [],
+        "subject_interpretation": {
+          "subject_type": "GOODS",
+          "normalized_subject": "оборудование ливневой канализации"
+        },
+        "procurement_form": "DIRECT_GOODS_PURCHASE",
+        "empty_hypothesis_status": "INSUFFICIENT_EVIDENCE",
+        "PRIMARY_ROOT_CAUSE": "NO_ERROR",
+        "object_research_candidate_presented_as_confirmed": 0,
+        "title": "Поставка оборудования ливневой канализации БМК Сосневская, г. Иваново 2026 г. для нужд филиала \"Владимирский\" ПАО \"Т Плю",
+        "exact_match": true,
+        "missed": false,
+        "false_positive": null
+      },
+      {
+        "procurement_id": 38690,
+        "bucket": "CLEAR_DIRECT_POSITIVE",
+        "expected_label_kind": "EXPECTED_EXACT_CATEGORY",
+        "expected_exact_category": "lighting",
+        "prompt_version": "v3_full_registry_research_priority_7b_v9",
+        "inference_run_id": 1225,
+        "parse_status": "PARSED_OK",
+        "validation_status": "VALIDATED_SUCCESS",
+        "raw_categories": [
+          "lighting"
+        ],
+        "validated_categories": [
+          "lighting"
+        ],
+        "invalid_category_codes": [],
+        "subject_interpretation": {
+          "subject_type": "GOODS",
+          "normalized_subject": "светильники"
+        },
+        "procurement_form": "DIRECT_GOODS_PURCHASE",
+        "empty_hypothesis_status": null,
+        "PRIMARY_ROOT_CAUSE": "NO_ERROR",
+        "object_research_candidate_presented_as_confirmed": 0,
+        "title": "Поставка светильников",
+        "exact_match": true,
+        "missed": false,
+        "false_positive": null
+      }
+    ],
+    "agg": {
+      "n": 65,
+      "DIRECT_MISSED": 1,
+      "DIRECT_N": 16,
+      "NEGATIVE_FALSE_POSITIVE": 5,
+      "NEGATIVE_N": 15,
+      "INVALID_CATEGORY_CODE": 19,
+      "FORMAT_INVALID": 0,
+      "OBJECT_RESEARCH_CANDIDATE_PRESENTED_AS_CONFIRMED": 13,
+      "root_causes": {
+        "ITEM_EXTRACTION_OR_UNDERSTANDING_ERROR": 1,
+        "NO_ERROR": 56,
+        "OBJECT_PRIOR_OVERREACH": 8
+      }
+    }
+  },
+  "holdout": {
+    "rows": [
+      {
+        "procurement_id": 23,
+        "bucket": "CLEAR_DIRECT_POSITIVE",
+        "expected_label_kind": "EXPECTED_EXACT_CATEGORY",
+        "expected_exact_category": "lighting",
+        "prompt_version": "v3_full_registry_research_priority_7b_v9",
+        "inference_run_id": 1226,
+        "parse_status": "PARSED_OK",
+        "validation_status": "VALIDATED_SUCCESS",
+        "raw_categories": [
+          "lighting"
+        ],
+        "validated_categories": [
+          "lighting"
+        ],
+        "invalid_category_codes": [],
+        "subject_interpretation": {
+          "subject_type": "GOODS",
+          "normalized_subject": "светильник светодиодный внутреннего освещения"
+        },
+        "procurement_form": "DIRECT_GOODS_PURCHASE",
+        "empty_hypothesis_status": null,
+        "PRIMARY_ROOT_CAUSE": "NO_ERROR",
+        "object_research_candidate_presented_as_confirmed": 0,
+        "title": "Поставка электротехнических товаров (Светильник светодиодный внутреннего освещения )",
+        "exact_match": true,
+        "missed": false,
+        "false_positive": null
+      },
+      {
+        "procurement_id": 35,
+        "bucket": "CLEAR_DIRECT_POSITIVE",
+        "expected_label_kind": "EXPECTED_EXACT_CATEGORY",
+        "expected_exact_category": "lighting",
+        "prompt_version": "v3_full_registry_research_priority_7b_v9",
+        "inference_run_id": 1227,
+        "parse_status": "PARSED_OK",
+        "validation_status": "VALIDATED_SUCCESS",
+        "raw_categories": [
+          "lighting"
+        ],
+        "validated_categories": [
+          "lighting"
+        ],
+        "invalid_category_codes": [],
+        "subject_interpretation": {
+          "subject_type": "GOODS",
+          "normalized_subject": "передвижной бестеневой светильник"
+        },
+        "procurement_form": "DIRECT_GOODS_PURCHASE",
+        "empty_hypothesis_status": null,
+        "PRIMARY_ROOT_CAUSE": "NO_ERROR",
+        "object_research_candidate_presented_as_confirmed": 0,
+        "title": "Поставка светильника передвижного бестеневого  для нужд ГБУЗ ЛО \"Сертоловская ГБ\" на 2026 год",
+        "exact_match": true,
+        "missed": false,
+        "false_positive": null
+      },
+      {
+        "procurement_id": 40,
+        "bucket": "CLEAR_DIRECT_POSITIVE",
+        "expected_label_kind": "EXPECTED_EXACT_CATEGORY",
+        "expected_exact_category": "lighting",
+        "prompt_version": "v3_full_registry_research_priority_7b_v9",
+        "inference_run_id": 1228,
+        "parse_status": "PARSED_OK",
+        "validation_status": "VALIDATED_SUCCESS",
+        "raw_categories": [
+          "lighting"
+        ],
+        "validated_categories": [
+          "lighting"
+        ],
+        "invalid_category_codes": [],
+        "subject_interpretation": {
+          "subject_type": "GOODS",
+          "normalized_subject": "светильники аварийного освещения"
+        },
+        "procurement_form": "DIRECT_GOODS_PURCHASE",
+        "empty_hypothesis_status": null,
+        "PRIMARY_ROOT_CAUSE": "NO_ERROR",
+        "object_research_candidate_presented_as_confirmed": 0,
+        "title": "Поставка светильников  аварийного освещения",
+        "exact_match": true,
+        "missed": false,
+        "false_positive": null
+      },
+      {
+        "procurement_id": 41,
+        "bucket": "CLEAR_DIRECT_POSITIVE",
+        "expected_label_kind": "EXPECTED_EXACT_CATEGORY",
+        "expected_exact_category": "lighting",
+        "prompt_version": "v3_full_registry_research_priority_7b_v9",
+        "inference_run_id": 1229,
+        "parse_status": "PARSED_OK",
+        "validation_status": "VALIDATED_SUCCESS",
+        "raw_categories": [
+          "lighting"
+        ],
+        "validated_categories": [
+          "lighting"
+        ],
+        "invalid_category_codes": [],
+        "subject_interpretation": {
+          "subject_type": "GOODS",
+          "normalized_subject": "светильники светодиодные внутреннего освещения"
+        },
+        "procurement_form": "DIRECT_GOODS_PURCHASE",
+        "empty_hypothesis_status": null,
+        "PRIMARY_ROOT_CAUSE": "NO_ERROR",
+        "object_research_candidate_presented_as_confirmed": 0,
+        "title": "Поставка светильников светодиодных внутреннего освещения",
+        "exact_match": true,
+        "missed": false,
+        "false_positive": null
+      },
+      {
+        "procurement_id": 43,
+        "bucket": "CLEAR_DIRECT_POSITIVE",
+        "expected_label_kind": "EXPECTED_EXACT_CATEGORY",
+        "expected_exact_category": "lighting",
+        "prompt_version": "v3_full_registry_research_priority_7b_v9",
+        "inference_run_id": 1230,
+        "parse_status": "PARSED_OK",
+        "validation_status": "VALIDATED_SUCCESS",
+        "raw_categories": [
+          "lighting"
+        ],
+        "validated_categories": [
+          "lighting"
+        ],
+        "invalid_category_codes": [],
+        "subject_interpretation": {
+          "subject_type": "GOODS",
+          "normalized_subject": "светильники светодиодные внутреннего освещения"
+        },
+        "procurement_form": "DIRECT_GOODS_PURCHASE",
+        "empty_hypothesis_status": null,
+        "PRIMARY_ROOT_CAUSE": "NO_ERROR",
+        "object_research_candidate_presented_as_confirmed": 0,
+        "title": "Поставка светильников светодиодных внутреннего освещения",
+        "exact_match": true,
+        "missed": false,
+        "false_positive": null
+      },
+      {
+        "procurement_id": 47,
+        "bucket": "CLEAR_DIRECT_POSITIVE",
+        "expected_label_kind": "EXPECTED_EXACT_CATEGORY",
+        "expected_exact_category": "lighting",
+        "prompt_version": "v3_full_registry_research_priority_7b_v9",
+        "inference_run_id": 1231,
+        "parse_status": "PARSED_OK",
+        "validation_status": "VALIDATED_SUCCESS",
+        "raw_categories": [
+          "lighting"
+        ],
+        "validated_categories": [
+          "lighting"
+        ],
+        "invalid_category_codes": [],
+        "subject_interpretation": {
+          "subject_type": "GOODS",
+          "normalized_subject": "светильники светодиодные внутреннего освещения и комплектующие к ним"
+        },
+        "procurement_form": "DIRECT_GOODS_PURCHASE",
+        "empty_hypothesis_status": null,
+        "PRIMARY_ROOT_CAUSE": "NO_ERROR",
+        "object_research_candidate_presented_as_confirmed": 0,
+        "title": "Поставка светильников светодиодных внутреннего освещения и комплектующих к ним для нужд ГБУЗ \"ГВВ №3 ДЗМ\" в 2026 году (Л",
+        "exact_match": true,
+        "missed": false,
+        "false_positive": null
+      },
+      {
+        "procurement_id": 61,
+        "bucket": "CLEAR_DIRECT_POSITIVE",
+        "expected_label_kind": "EXPECTED_EXACT_CATEGORY",
+        "expected_exact_category": "lighting",
+        "prompt_version": "v3_full_registry_research_priority_7b_v9",
+        "inference_run_id": 1232,
+        "parse_status": "PARSED_OK",
+        "validation_status": "VALIDATED_SUCCESS",
+        "raw_categories": [
+          "lighting"
+        ],
+        "validated_categories": [
+          "lighting"
+        ],
+        "invalid_category_codes": [],
+        "subject_interpretation": {
+          "subject_type": "GOODS",
+          "normalized_subject": "светильники"
+        },
+        "procurement_form": "DIRECT_GOODS_PURCHASE",
+        "empty_hypothesis_status": null,
+        "PRIMARY_ROOT_CAUSE": "NO_ERROR",
+        "object_research_candidate_presented_as_confirmed": 0,
+        "title": "Поставка светильников",
+        "exact_match": true,
+        "missed": false,
+        "false_positive": null
+      },
+      {
+        "procurement_id": 63,
+        "bucket": "CLEAR_DIRECT_POSITIVE",
+        "expected_label_kind": "EXPECTED_EXACT_CATEGORY",
+        "expected_exact_category": "lighting",
+        "prompt_version": "v3_full_registry_research_priority_7b_v9",
+        "inference_run_id": 1233,
+        "parse_status": "PARSED_OK",
+        "validation_status": "VALIDATED_SUCCESS",
+        "raw_categories": [
+          "lighting"
+        ],
+        "validated_categories": [
+          "lighting"
+        ],
+        "invalid_category_codes": [],
+        "subject_interpretation": {
+          "subject_type": "GOODS",
+          "normalized_subject": "светильники светодиодные для внутреннего освещения"
+        },
+        "procurement_form": "DIRECT_GOODS_PURCHASE",
+        "empty_hypothesis_status": null,
+        "PRIMARY_ROOT_CAUSE": "NO_ERROR",
+        "object_research_candidate_presented_as_confirmed": 0,
+        "title": "2026-04507 = Поставка электротоваров (Светильник светодиодный внутреннего освещения; Держатель-клипса; Бокс навесной; Ко",
+        "exact_match": true,
+        "missed": false,
+        "false_positive": null
+      },
+      {
+        "procurement_id": 8613,
+        "bucket": "CLEAR_NEGATIVE",
+        "expected_label_kind": "EXPECTED_EMPTY",
+        "expected_exact_category": null,
+        "prompt_version": "v3_full_registry_research_priority_7b_v9",
+        "inference_run_id": 1234,
+        "parse_status": "PARSED_OK",
+        "validation_status": "VALIDATED_SUCCESS",
+        "raw_categories": [
+          "service_inspection_maintenance"
+        ],
+        "validated_categories": [],
+        "invalid_category_codes": [
+          "service_inspection_maintenance"
+        ],
+        "subject_interpretation": {
+          "subject_type": "SERVICES",
+          "normalized_subject": "проверка теплового счетчика ТСК-7"
+        },
+        "procurement_form": "UNKNOWN",
+        "empty_hypothesis_status": null,
+        "PRIMARY_ROOT_CAUSE": "NO_ERROR",
+        "object_research_candidate_presented_as_confirmed": 0,
+        "title": "Оказание услуг по поверке теплового счетчика ТСК-7",
+        "exact_match": null,
+        "missed": null,
+        "false_positive": false,
+        "correct_empty": true
+      },
+      {
+        "procurement_id": 10092,
+        "bucket": "CLEAR_NEGATIVE",
+        "expected_label_kind": "EXPECTED_EMPTY",
+        "expected_exact_category": null,
+        "prompt_version": "v3_full_registry_research_priority_7b_v9",
+        "inference_run_id": 1235,
+        "parse_status": "PARSED_OK",
+        "validation_status": "VALIDATED_SUCCESS",
+        "raw_categories": [],
+        "validated_categories": [],
+        "invalid_category_codes": [],
+        "subject_interpretation": {
+          "subject_type": "GOODS",
+          "normalized_subject": "проверка расходомера-счетчика газа ультразвукового"
+        },
+        "procurement_form": "DIRECT_GOODS_PURCHASE",
+        "empty_hypothesis_status": null,
+        "PRIMARY_ROOT_CAUSE": "NO_ERROR",
+        "object_research_candidate_presented_as_confirmed": 0,
+        "title": "Поверка расходомера-счетчика газа ультразвукового ПП ИРВИС-Ультра-Пп16-DN80 -ВП-ГОТ",
+        "exact_match": null,
+        "missed": null,
+        "false_positive": false,
+        "correct_empty": true
+      },
+      {
+        "procurement_id": 11776,
+        "bucket": "CLEAR_NEGATIVE",
+        "expected_label_kind": "EXPECTED_EMPTY",
+        "expected_exact_category": null,
+        "prompt_version": "v3_full_registry_research_priority_7b_v9",
+        "inference_run_id": 1236,
+        "parse_status": "PARSED_OK",
+        "validation_status": "VALIDATED_SUCCESS",
+        "raw_categories": [],
+        "validated_categories": [],
+        "invalid_category_codes": [],
+        "subject_interpretation": {
+          "subject_type": "SERVICE"
+        },
+        "procurement_form": "SERVICES_OTHER",
+        "empty_hypothesis_status": "NO_COMMERCIAL_ENTRY",
+        "PRIMARY_ROOT_CAUSE": "NO_ERROR",
+        "object_research_candidate_presented_as_confirmed": 0,
+        "title": "Поверка счетчиков МОУ Удельнинская гимназия",
+        "exact_match": null,
+        "missed": null,
+        "false_positive": false,
+        "correct_empty": true
+      },
+      {
+        "procurement_id": 7022,
+        "bucket": "CLEAR_NEGATIVE",
+        "expected_label_kind": "EXPECTED_EMPTY",
+        "expected_exact_category": null,
+        "prompt_version": "v3_full_registry_research_priority_7b_v9",
+        "inference_run_id": 1237,
+        "parse_status": "PARSED_OK",
+        "validation_status": "VALIDATED_SUCCESS",
+        "raw_categories": [
+          "biomedical_equipment"
+        ],
+        "validated_categories": [],
+        "invalid_category_codes": [
+          "biomedical_equipment"
+        ],
+        "subject_interpretation": {
+          "subject_type": "GOODS",
+          "normalized_subject": "ламинарная система микробиологической безопасности"
+        },
+        "procurement_form": "DIRECT_GOODS_PURCHASE",
+        "empty_hypothesis_status": null,
+        "PRIMARY_ROOT_CAUSE": "NO_ERROR",
+        "object_research_candidate_presented_as_confirmed": 0,
+        "title": "Поставка ламинарной системы микробиологической безопасности (ламинарный бокс микробиологической защиты второго класса бе",
+        "exact_match": null,
+        "missed": null,
+        "false_positive": false,
+        "correct_empty": true
+      },
+      {
+        "procurement_id": 9801,
+        "bucket": "CLEAR_NEGATIVE",
+        "expected_label_kind": "EXPECTED_EMPTY",
+        "expected_exact_category": null,
+        "prompt_version": "v3_full_registry_research_priority_7b_v9",
+        "inference_run_id": 1238,
+        "parse_status": "PARSED_OK",
+        "validation_status": "VALIDATED_SUCCESS",
+        "raw_categories": [
+          "32.50.30.119"
+        ],
+        "validated_categories": [],
+        "invalid_category_codes": [
+          "32.50.30.119"
+        ],
+        "subject_interpretation": {
+          "subject_type": "GOODS",
+          "normalized_subject": "шкаф для хранения лекарственных средств"
+        },
+        "procurement_form": "DIRECT_GOODS_PURCHASE",
+        "empty_hypothesis_status": null,
+        "PRIMARY_ROOT_CAUSE": "NO_ERROR",
+        "object_research_candidate_presented_as_confirmed": 0,
+        "title": "Поставка медицинских  Шкаф для хранения лекарственных средств",
+        "exact_match": null,
+        "missed": null,
+        "false_positive": false,
+        "correct_empty": true
+      },
+      {
+        "procurement_id": 10289,
+        "bucket": "CLEAR_NEGATIVE",
+        "expected_label_kind": "EXPECTED_EMPTY",
+        "expected_exact_category": null,
+        "prompt_version": "v3_full_registry_research_priority_7b_v9",
+        "inference_run_id": 1239,
+        "parse_status": "PARSED_OK",
+        "validation_status": "VALIDATED_SUCCESS",
+        "raw_categories": [
+          "32.50.30.119"
+        ],
+        "validated_categories": [],
+        "invalid_category_codes": [
+          "32.50.30.119"
+        ],
+        "subject_interpretation": {
+          "subject_type": "GOODS",
+          "normalized_subject": "металлический шкаф для хранения лекарственных средств"
+        },
+        "procurement_form": "DIRECT_GOODS_PURCHASE",
+        "empty_hypothesis_status": null,
+        "PRIMARY_ROOT_CAUSE": "NO_ERROR",
+        "object_research_candidate_presented_as_confirmed": 0,
+        "title": "Поставка медицинского оборудования (Шкаф металлический для хранения лекарственных средств)",
+        "exact_match": null,
+        "missed": null,
+        "false_positive": false,
+        "correct_empty": true
+      },
+      {
+        "procurement_id": 10859,
+        "bucket": "CLEAR_NEGATIVE",
+        "expected_label_kind": "EXPECTED_EMPTY",
+        "expected_exact_category": null,
+        "prompt_version": "v3_full_registry_research_priority_7b_v9",
+        "inference_run_id": 1240,
+        "parse_status": "PARSED_OK",
+        "validation_status": "VALIDATED_SUCCESS",
+        "raw_categories": [
+          "optical_fiber_cables"
+        ],
+        "validated_categories": [],
+        "invalid_category_codes": [
+          "optical_fiber_cables"
+        ],
+        "subject_interpretation": {
+          "subject_type": "GOODS",
+          "normalized_subject": "оптические кабели для капиллярного электрофореза"
+        },
+        "procurement_form": "DIRECT_GOODS_PURCHASE",
+        "empty_hypothesis_status": null,
+        "PRIMARY_ROOT_CAUSE": "NO_ERROR",
+        "object_research_candidate_presented_as_confirmed": 0,
+        "title": "Поставка оптических кабелей для капиллярного электрофореза MDQ Plus, Sciex для нужд Московской лаборатории контроля каче",
+        "exact_match": null,
+        "missed": null,
+        "false_positive": false,
+        "correct_empty": true
+      },
+      {
+        "procurement_id": 11033,
+        "bucket": "CLEAR_NEGATIVE",
+        "expected_label_kind": "EXPECTED_EMPTY",
+        "expected_exact_category": null,
+        "prompt_version": "v3_full_registry_research_priority_7b_v9",
+        "inference_run_id": 1241,
+        "parse_status": "PARSED_OK",
+        "validation_status": "VALIDATED_SUCCESS",
+        "raw_categories": [
+          "reconstruction_and_repair"
+        ],
+        "validated_categories": [],
+        "invalid_category_codes": [
+          "reconstruction_and_repair"
+        ],
+        "subject_interpretation": {
+          "subject_type": "OBJECT_WORKS",
+          "normalized_subject": "выполнение выборочных работ по капитальному ремонту нежилого здания"
+        },
+        "procurement_form": "UNKNOWN",
+        "empty_hypothesis_status": null,
+        "PRIMARY_ROOT_CAUSE": "NO_ERROR",
+        "object_research_candidate_presented_as_confirmed": 0,
+        "title": "Выполнение выборочных работ по капитальному ремонту нежилого здания по  г. Москва, вн. тер. г. муниципальный округ Север",
+        "exact_match": null,
+        "missed": null,
+        "false_positive": false,
+        "correct_empty": true
+      },
+      {
+        "procurement_id": 856,
+        "bucket": "OBJECT_CONSTRUCTION",
+        "expected_label_kind": "AMBIGUOUS_REVIEW",
+        "expected_exact_category": null,
+        "prompt_version": "v3_full_registry_research_priority_7b_v9",
+        "inference_run_id": 1242,
+        "parse_status": "PARSED_OK",
+        "validation_status": "VALIDATED_SUCCESS",
+        "raw_categories": [
+          "engineering_design"
+        ],
+        "validated_categories": [],
+        "invalid_category_codes": [
+          "engineering_design"
+        ],
+        "subject_interpretation": {
+          "subject_type": "SERVICE",
+          "normalized_subject": "разработка проектной документации"
+        },
+        "procurement_form": "UNKNOWN",
+        "empty_hypothesis_status": null,
+        "PRIMARY_ROOT_CAUSE": "NO_ERROR",
+        "object_research_candidate_presented_as_confirmed": 0,
+        "title": "Разработка проектной документации по  «Капитальный ремонт моста через реку Чардым на км 89+694 сооружения (Автомобильная",
+        "exact_match": null,
+        "missed": null,
+        "false_positive": null
+      },
+      {
+        "procurement_id": 858,
+        "bucket": "OBJECT_CONSTRUCTION",
+        "expected_label_kind": "AMBIGUOUS_REVIEW",
+        "expected_exact_category": null,
+        "prompt_version": "v3_full_registry_research_priority_7b_v9",
+        "inference_run_id": 1243,
+        "parse_status": "PARSED_OK",
+        "validation_status": "VALIDATED_SUCCESS",
+        "raw_categories": [
+          "project_design_services"
+        ],
+        "validated_categories": [],
+        "invalid_category_codes": [
+          "project_design_services"
+        ],
+        "subject_interpretation": {
+          "subject_type": "SERVICES",
+          "normalized_subject": "разработка проектной документации"
+        },
+        "procurement_form": "UNKNOWN",
+        "empty_hypothesis_status": null,
+        "PRIMARY_ROOT_CAUSE": "NO_ERROR",
+        "object_research_candidate_presented_as_confirmed": 0,
+        "title": "Разработка проектной документации по  «Капитальный ремонт моста через реку Шуварда на км 22+670 автодороги \"г. Каменка -",
+        "exact_match": null,
+        "missed": null,
+        "false_positive": null
+      },
+      {
+        "procurement_id": 859,
+        "bucket": "OBJECT_CONSTRUCTION",
+        "expected_label_kind": "AMBIGUOUS_REVIEW",
+        "expected_exact_category": null,
+        "prompt_version": "v3_full_registry_research_priority_7b_v9",
+        "inference_run_id": 1244,
+        "parse_status": "PARSED_OK",
+        "validation_status": "VALIDATED_SUCCESS",
+        "raw_categories": [
+          "project_engineering"
+        ],
+        "validated_categories": [],
+        "invalid_category_codes": [
+          "project_engineering"
+        ],
+        "subject_interpretation": {
+          "subject_type": "OBJECT_WORKS",
+          "normalized_subject": "проектирование моста"
+        },
+        "procurement_form": "CONSTRUCTION_WORKS",
+        "empty_hypothesis_status": null,
+        "PRIMARY_ROOT_CAUSE": "NO_ERROR",
+        "object_research_candidate_presented_as_confirmed": 0,
+        "title": "Разработка проектной документации по  «Капитальный ремонт моста через реку Муромка на км 9+200 автодороги «с. Плесс – с.",
+        "exact_match": null,
+        "missed": null,
+        "false_positive": null
+      },
+      {
+        "procurement_id": 947,
+        "bucket": "OBJECT_CONSTRUCTION",
+        "expected_label_kind": "AMBIGUOUS_REVIEW",
+        "expected_exact_category": null,
+        "prompt_version": "v3_full_registry_research_priority_7b_v9",
+        "inference_run_id": 1245,
+        "parse_status": "PARSED_OK",
+        "validation_status": "VALIDATED_SUCCESS",
+        "raw_categories": [
+          "road_repair",
+          "composite_structures_repair"
+        ],
+        "validated_categories": [],
+        "invalid_category_codes": [
+          "road_repair",
+          "composite_structures_repair"
+        ],
+        "subject_interpretation": {
+          "subject_type": "OBJECT_WORKS",
+          "normalized_subject": "капитальный ремонт моста"
+        },
+        "procurement_form": "CONSTRUCTION_WORKS",
+        "empty_hypothesis_status": null,
+        "PRIMARY_ROOT_CAUSE": "NO_ERROR",
+        "object_research_candidate_presented_as_confirmed": 0,
+        "title": "Капитальный ремонт моста на км. 6+688 автомобильной дороги Фарн-Коста-Мичурино",
+        "exact_match": null,
+        "missed": null,
+        "false_positive": null
+      },
+      {
+        "procurement_id": 1010,
+        "bucket": "OBJECT_CONSTRUCTION",
+        "expected_label_kind": "AMBIGUOUS_REVIEW",
+        "expected_exact_category": null,
+        "prompt_version": "v3_full_registry_research_priority_7b_v9",
+        "inference_run_id": 1246,
+        "parse_status": "PARSED_OK",
+        "validation_status": "VALIDATED_SUCCESS",
+        "raw_categories": [],
+        "validated_categories": [],
+        "invalid_category_codes": [],
+        "subject_interpretation": {
+          "subject_type": "OBJECT_WORKS",
+          "normalized_subject": "проектно-изыскательские работы"
+        },
+        "procurement_form": "CONSTRUCTION_WORKS",
+        "empty_hypothesis_status": "INSUFFICIENT_EVIDENCE",
+        "PRIMARY_ROOT_CAUSE": "NO_ERROR",
+        "object_research_candidate_presented_as_confirmed": 0,
+        "title": "Выполнение проектно-изыскательских работ по  «Капитальный ремонт моста через реку Охта на автомобильной дороге общего по",
+        "exact_match": null,
+        "missed": null,
+        "false_positive": null
+      },
+      {
+        "procurement_id": 1012,
+        "bucket": "OBJECT_CONSTRUCTION",
+        "expected_label_kind": "AMBIGUOUS_REVIEW",
+        "expected_exact_category": null,
+        "prompt_version": "v3_full_registry_research_priority_7b_v9",
+        "inference_run_id": 1247,
+        "parse_status": "PARSED_OK",
+        "validation_status": "VALIDATED_SUCCESS",
+        "raw_categories": [],
+        "validated_categories": [],
+        "invalid_category_codes": [],
+        "subject_interpretation": {
+          "subject_type": "OBJECT_WORKS",
+          "normalized_subject": "проектирование моста"
+        },
+        "procurement_form": "CONSTRUCTION_WORKS",
+        "empty_hypothesis_status": "INSUFFICIENT_EVIDENCE",
+        "PRIMARY_ROOT_CAUSE": "NO_ERROR",
+        "object_research_candidate_presented_as_confirmed": 0,
+        "title": "Выполнение проектно-изыскательских работ по  «Капитальный ремонт моста через реку Пчевжа на автомобильной дороге общего ",
+        "exact_match": null,
+        "missed": null,
+        "false_positive": null
+      },
+      {
+        "procurement_id": 1136,
+        "bucket": "OBJECT_CONSTRUCTION",
+        "expected_label_kind": "AMBIGUOUS_REVIEW",
+        "expected_exact_category": null,
+        "prompt_version": "v3_full_registry_research_priority_7b_v9",
+        "inference_run_id": 1248,
+        "parse_status": "PARSED_OK",
+        "validation_status": "VALIDATED_SUCCESS",
+        "raw_categories": [
+          "composite_structures"
+        ],
+        "validated_categories": [
+          "composite_structures"
+        ],
+        "invalid_category_codes": [],
+        "subject_interpretation": {
+          "subject_type": "OBJECT_WORKS",
+          "normalized_subject": "ремонт моста",
+          "object_type": "BRIDGE",
+          "work_stage": "REPAIR"
+        },
+        "procurement_form": "CONSTRUCTION_WORKS",
+        "empty_hypothesis_status": "INSUFFICIENT_EVIDENCE",
+        "PRIMARY_ROOT_CAUSE": "OBJECT_PRIOR_OVERREACH",
+        "object_research_candidate_presented_as_confirmed": 1,
+        "title": "Капитальный ремонт моста через ерик Кушумбет на км 40+375 автомобильной дороги общего пользования регионального значения",
+        "exact_match": null,
+        "missed": null,
+        "false_positive": null
+      },
+      {
+        "procurement_id": 1140,
+        "bucket": "OBJECT_CONSTRUCTION",
+        "expected_label_kind": "AMBIGUOUS_REVIEW",
+        "expected_exact_category": null,
+        "prompt_version": "v3_full_registry_research_priority_7b_v9",
+        "inference_run_id": 1249,
+        "parse_status": "PARSED_OK",
+        "validation_status": "VALIDATED_SUCCESS",
+        "raw_categories": [
+          "road_construction"
+        ],
+        "validated_categories": [],
+        "invalid_category_codes": [
+          "road_construction"
+        ],
+        "subject_interpretation": {
+          "subject_type": "OBJECT_WORKS",
+          "normalized_subject": "ремонт моста"
+        },
+        "procurement_form": "CONSTRUCTION_WORKS",
+        "empty_hypothesis_status": null,
+        "PRIMARY_ROOT_CAUSE": "NO_ERROR",
+        "object_research_candidate_presented_as_confirmed": 0,
+        "title": "Выполнение проектно-изыскательских работ по  Капитальный ремонт моста через реку Каринка на км 2+805 автомобильной дорог",
+        "exact_match": null,
+        "missed": null,
+        "false_positive": null
+      }
+    ],
+    "agg": {
+      "n": 24,
+      "DIRECT_MISSED": 0,
+      "DIRECT_N": 8,
+      "NEGATIVE_FALSE_POSITIVE": 0,
+      "NEGATIVE_N": 8,
+      "INVALID_CATEGORY_CODE": 12,
+      "FORMAT_INVALID": 0,
+      "OBJECT_RESEARCH_CANDIDATE_PRESENTED_AS_CONFIRMED": 1,
+      "root_causes": {
+        "NO_ERROR": 23,
+        "OBJECT_PRIOR_OVERREACH": 1
+      }
+    }
+  },
+  "PRODUCTION_ASSESSMENTS_MUTATED": 0,
+  "PRODUCTION_OPPORTUNITIES_MUTATED": 0,
+  "elapsed_sec": 3468.2
+}
