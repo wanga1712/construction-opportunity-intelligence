@@ -13,13 +13,14 @@
 
 ## CURRENT WIP — 2026-08-21
 
-**CRM-UI-INTERACTIVE-PERFORMANCE-AND-RESOURCE-GUARANTEE-1** — `[x]` **PASS**. Lightweight pages (`system_health`, `crm_profiles`, `customers`) skip `CompaniesService`/`load_sync`; nav no longer double-pings DB (`_get_service` ping=False; watchdog owns reconnect). systemd cgroup v2: CRM `CPUWeight=500`/`IOWeight=500`/`MemoryLow=512M`; Ollama/AI runner yield weights. Tests 13 PASS. Do not merge `main`.
+**CRM-UI-INTERACTIVE-PERFORMANCE-AND-RESOURCE-GUARANTEE-1** — `[~]` **AWAITING_OPERATOR_ACCEPTANCE**. App light-nav fixes kept. Hard CPU headroom: background `AllowedCPUs=2-7`, CRM MemorySwapMax=0. Weights alone revoked. Pause T-lite until operator confirms tabs under real contention. Do not merge `main`.
 
-Paused (not closed): **CRM-V3-MODEL-AUTHORITY-RESTORATION-1** / Phase 7.2 T-lite bake-off.
+PERFORMANCE_COMMIT=`51e18285869cbfcacf859d38d7a0f0100952cce8`
+RESOURCE_GUARANTEE_COMMIT=(pending this cycle)
 
-## PRIOR CURRENT WIP — 2026-08-20
+## PRIOR / PAUSED — 2026-08-21
 
-**CRM-V3-MODEL-AUTHORITY-RESTORATION-1** — `[~]` **PHASE 7.2 PAUSED** — T-lite-it-2.1 Q4_K_M SHADOW bake-off vs Qwen2.5:7b on frozen prompt `v3_category_centric_routing_7b_v6_1`. Model change only; no production cutover. Production stays on Qwen + v5.
+**CRM-V3-MODEL-AUTHORITY-RESTORATION-1** — `[~]` **PHASE 7.2 PAUSED** for UI contention fix. T-lite screening had advanced (PASS gate locally); full corpus deferred.
 
 PHASE71_COMMIT=`180486bd9cc4f3154a49eec045f98769bab0f510`
 T_LITE_MODEL_ID=`hf.co/t-tech/T-lite-it-2.1-GGUF:Q4_K_M`
