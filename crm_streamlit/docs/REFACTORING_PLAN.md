@@ -13,17 +13,18 @@
 
 ## CURRENT WIP — 2026-08-21
 
-**CRM-V3-MODEL-AUTHORITY-RESTORATION-1** — `[x]` **PHASE 7.2 FAIL (no cutover)**. T-lite screening/holdout looked better; full 65-case calibration does not meet hard gates vs Qwen on frozen v6_1. Production remains Qwen2.5:7b + v5. Decision: `TLITE_NOT_SUFFICIENT`. Do not merge `main`.
+**CRM-V3-CATEGORY-ARCHITECTURE-DECOMPOSITION-1** — `[x]` **FAIL / NOT_READY**. SHADOW A (two-pass) clears directs but fails NEG_FP; B perfect on holdout but not calibration. Production unchanged. Wait for operator review.
+
+
+## PRIOR CLOSED — 2026-08-21
+
+**CRM-V3-MODEL-AUTHORITY-RESTORATION-1** — `[x]` **PHASE 7.2 FAIL (no cutover)**. T-lite not sufficient. Production Qwen2.5:7b + v5.
 
 PHASE71_COMMIT=`180486bd9cc4f3154a49eec045f98769bab0f510`
 PHASE72_T_LITE_COMMIT=`540bad130e9a571591d8de65d1416b636f636bda`
-T_LITE_MODEL_ID=`hf.co/t-tech/T-lite-it-2.1-GGUF:Q4_K_M`
-PERFORMANCE_COMMIT=`51e18285869cbfcacf859d38d7a0f0100952cce8`
 RESOURCE_GUARANTEE_COMMIT=`0d1ba41951d3a5fa21ed2f85c809b7cb85071139`
 
-## PRIOR — 2026-08-21
-
-**CRM-UI-INTERACTIVE-PERFORMANCE-AND-RESOURCE-GUARANTEE-1** — `[x]` **CLOSED (operator accepted)**. Hard CPU headroom + background slice remain in force.
+**CRM-UI-INTERACTIVE-PERFORMANCE-AND-RESOURCE-GUARANTEE-1** — `[x]` **CLOSED**. Background slice AllowedCPUs=2-7 remains mandatory for heavy jobs.
 
 
 ## PRIOR CURRENT WIP — 2026-08-17
