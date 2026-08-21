@@ -16,6 +16,7 @@
 **CRM-V3-MODEL-AUTHORITY-RESTORATION-1** — `[~]` **PHASE 7.2 COMPLETE (no cutover)**. T-lite screening PASS; full 65-case bake-off vs Qwen on frozen v6_1: Qwen better on DIRECT/NEG; T-lite lower object spam but not enough. Production remains Qwen2.5:7b + v5. Do not merge `main`.
 
 PHASE71_COMMIT=`180486bd9cc4f3154a49eec045f98769bab0f510`
+PHASE72_T_LITE_COMMIT=`540bad130e9a571591d8de65d1416b636f636bda`
 T_LITE_MODEL_ID=`hf.co/t-tech/T-lite-it-2.1-GGUF:Q4_K_M`
 PERFORMANCE_COMMIT=`51e18285869cbfcacf859d38d7a0f0100952cce8`
 RESOURCE_GUARANTEE_COMMIT=`0d1ba41951d3a5fa21ed2f85c809b7cb85071139`
