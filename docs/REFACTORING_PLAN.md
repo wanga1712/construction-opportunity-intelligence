@@ -15,7 +15,7 @@
 
 **CRM-V3-MODEL-AUTHORITY-RESTORATION-1** — `[~]` **PHASE 9 PASS / CLOSE_CANDIDATE (SHADOW; STOP)**. Full ACTIVE registry + subject_interpretation + research-priority contract on v9 SHADOW. Production remains Qwen2.5:7b + v5. Paint discoverability YES; 37082/23591/27355 fixed on SHADOW; INVALID_CATEGORY_CODE surface still >0 (no Ollama enum). Do not cut over.
 
-PHASE9_COMMIT=`<pending>`
+PHASE9_COMMIT=`cbf7322`
 PHASE8_AUDIT_COMMIT=`d8b37bd08e8247bd7e60c9588cce69c0fab27328`
 PHASE71_COMMIT=`180486bd9cc4f3154a49eec045f98769bab0f510`
 PHASE72_T_LITE_COMMIT=`540bad130e9a571591d8de65d1416b636f636bda`
