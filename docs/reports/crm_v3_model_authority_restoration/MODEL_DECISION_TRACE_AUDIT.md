@@ -337,7 +337,7 @@ PRODUCTION_MUTATIONS=0
 TESTS=test_v3_phase8_decision_trace_audit.py PASS (2)
 REPO_HYGIENE_CHECK=PASS (Phase 8 artifacts only staged)
 
-AUDIT_COMMIT=<set on commit>
+AUDIT_COMMIT=`d8b37bd08e8247bd7e60c9588cce69c0fab27328`
 
 PHASE_8=PASS
 ```

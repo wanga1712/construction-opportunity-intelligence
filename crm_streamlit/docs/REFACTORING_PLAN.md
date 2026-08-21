@@ -17,6 +17,7 @@
 
 **Phase 8 results:** TRACED_CASES=34 (DIRECT=11, NEG=11, OBJECT=10). Case 37082=`CATEGORY_MAPPING_ERROR`; case 23591=`ITEM_EXTRACTION_OR_UNDERSTANDING_ERROR`; same failure mechanism=`NO`. Document content not sent to routing model. Purchase vs registry mapping mixed in one prompt=`YES`. Reports under `docs/reports/crm_v3_model_authority_restoration/MODEL_*` + `model_decision_trace_cases.json`.
 
+PHASE8_AUDIT_COMMIT=`d8b37bd08e8247bd7e60c9588cce69c0fab27328`
 PHASE71_COMMIT=`180486bd9cc4f3154a49eec045f98769bab0f510`
 PHASE72_T_LITE_COMMIT=`540bad130e9a571591d8de65d1416b636f636bda`
 T_LITE_MODEL_ID=`hf.co/t-tech/T-lite-it-2.1-GGUF:Q4_K_M`
