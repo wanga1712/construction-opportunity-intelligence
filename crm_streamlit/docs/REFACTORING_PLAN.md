@@ -16,7 +16,7 @@
 **CRM-UI-INTERACTIVE-PERFORMANCE-AND-RESOURCE-GUARANTEE-1** — `[~]` **AWAITING_OPERATOR_ACCEPTANCE**. App light-nav fixes kept. Hard CPU headroom: background `AllowedCPUs=2-7`, CRM MemorySwapMax=0. Weights alone revoked. Pause T-lite until operator confirms tabs under real contention. Do not merge `main`.
 
 PERFORMANCE_COMMIT=`51e18285869cbfcacf859d38d7a0f0100952cce8`
-RESOURCE_GUARANTEE_COMMIT=(pending this cycle)
+RESOURCE_GUARANTEE_COMMIT=`0d1ba41951d3a5fa21ed2f85c809b7cb85071139`
 
 ## PRIOR / PAUSED — 2026-08-21
 
