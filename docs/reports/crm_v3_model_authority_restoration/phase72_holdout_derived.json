@@ -1,0 +1,150 @@
+{
+  "HOLDOUT_CASES": 24,
+  "qwen_holdout": {
+    "n": 24,
+    "DIRECT_TOTAL": 8,
+    "DIRECT_CORRECT": 7,
+    "DIRECT_MISSED": 1,
+    "NEGATIVE_TOTAL": 8,
+    "NEGATIVE_CORRECT_EMPTY": 6,
+    "NEGATIVE_FALSE_POSITIVE": 2,
+    "OBJECT_TOTAL": 8,
+    "OBJECT_CATEGORY_SPAM": 3,
+    "INVALID_CATEGORY_CODE": 0,
+    "FORMAT_INVALID": 0,
+    "AVG_SECONDS": 26.97
+  },
+  "t_lite_holdout": {
+    "n": 24,
+    "DIRECT_TOTAL": 8,
+    "DIRECT_CORRECT": 8,
+    "DIRECT_MISSED": 0,
+    "NEGATIVE_TOTAL": 8,
+    "NEGATIVE_CORRECT_EMPTY": 7,
+    "NEGATIVE_FALSE_POSITIVE": 1,
+    "OBJECT_TOTAL": 8,
+    "OBJECT_CATEGORY_SPAM": 0,
+    "INVALID_CATEGORY_CODE": 0,
+    "FORMAT_INVALID": 0,
+    "AVG_SECONDS": 48.994
+  },
+  "screening_gate": "PASS",
+  "residuals": [
+    {
+      "PROCUREMENT_ID": 23591,
+      "EXPECTED": "drainage_water_management",
+      "QWEN_categories": [
+        "lighting"
+      ],
+      "QWEN_form": "DIRECT_GOODS_PURCHASE",
+      "QWEN_object_type": "GOODS",
+      "QWEN_missed": true,
+      "QWEN_fp": null,
+      "T_categories": [],
+      "T_form": "DIRECT_GOODS_PURCHASE",
+      "T_object_type": null,
+      "T_missed": true,
+      "T_fp": null,
+      "T_confidence": [],
+      "T_empty": null
+    },
+    {
+      "PROCUREMENT_ID": 27355,
+      "EXPECTED": "EXPECTED_EMPTY",
+      "QWEN_categories": [],
+      "QWEN_form": "DIRECT_GOODS_PURCHASE",
+      "QWEN_object_type": "GOODS",
+      "QWEN_missed": null,
+      "QWEN_fp": false,
+      "T_categories": [],
+      "T_form": "UNKNOWN",
+      "T_object_type": "SERVICE",
+      "T_missed": null,
+      "T_fp": false,
+      "T_confidence": [],
+      "T_empty": null
+    },
+    {
+      "PROCUREMENT_ID": 34517,
+      "EXPECTED": "AMBIGUOUS_REVIEW",
+      "QWEN_categories": [],
+      "QWEN_form": "DIRECT_GOODS_PURCHASE",
+      "QWEN_object_type": "GOODS",
+      "QWEN_missed": null,
+      "QWEN_fp": null,
+      "T_categories": [],
+      "T_form": "CONSTRUCTION_WORKS",
+      "T_object_type": "STRUCTURAL_ELEMENT",
+      "T_missed": null,
+      "T_fp": null,
+      "T_confidence": [],
+      "T_empty": null
+    },
+    {
+      "PROCUREMENT_ID": 37082,
+      "EXPECTED": "computers",
+      "QWEN_categories": [],
+      "QWEN_form": "DIRECT_GOODS_PURCHASE",
+      "QWEN_object_type": "GOODS",
+      "QWEN_missed": true,
+      "QWEN_fp": null,
+      "T_categories": [
+        "computers"
+      ],
+      "T_form": "DIRECT_GOODS_PURCHASE",
+      "T_object_type": "GOODS",
+      "T_missed": false,
+      "T_fp": null,
+      "T_confidence": [
+        0.95
+      ],
+      "T_empty": null
+    }
+  ],
+  "full_qwen": {
+    "n": 65,
+    "DIRECT_TOTAL": 16,
+    "DIRECT_CORRECT": 14,
+    "DIRECT_MISSED": 2,
+    "NEGATIVE_TOTAL": 15,
+    "NEGATIVE_CORRECT_EMPTY": 15,
+    "NEGATIVE_FALSE_POSITIVE": 0,
+    "OBJECT_TOTAL": 34,
+    "OBJECT_CONTEXTUAL": 7,
+    "OBJECT_CATEGORY_SPAM": 14,
+    "INVALID_CATEGORY_CODE": 0,
+    "FORMAT_INVALID": 0,
+    "AVG_SECONDS_PER_CASE": 28.037,
+    "P50_SECONDS": 28.816,
+    "P95_SECONDS": 30.172,
+    "PROCUREMENT_FORM_QUALITY": 1.0,
+    "OBJECT_TYPE_QUALITY": 0.938
+  },
+  "full_t_lite": {
+    "n": 65,
+    "DIRECT_TOTAL": 16,
+    "DIRECT_CORRECT": 11,
+    "DIRECT_MISSED": 5,
+    "NEGATIVE_TOTAL": 15,
+    "NEGATIVE_CORRECT_EMPTY": 14,
+    "NEGATIVE_FALSE_POSITIVE": 1,
+    "OBJECT_TOTAL": 34,
+    "OBJECT_CONTEXTUAL": 0,
+    "OBJECT_CATEGORY_SPAM": 8,
+    "INVALID_CATEGORY_CODE": 0,
+    "FORMAT_INVALID": 0,
+    "AVG_SECONDS_PER_CASE": 56.6,
+    "P50_SECONDS": 56.404,
+    "P95_SECONDS": 60.206,
+    "PROCUREMENT_FORM_QUALITY": 1.0,
+    "OBJECT_TYPE_QUALITY": 1.0
+  },
+  "mut_t": [
+    0,
+    0
+  ],
+  "mut_q": [
+    0,
+    0
+  ]
+}

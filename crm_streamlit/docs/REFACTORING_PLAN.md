@@ -13,7 +13,7 @@
 
 ## CURRENT WIP — 2026-08-21
 
-**CRM-V3-MODEL-AUTHORITY-RESTORATION-1** — `[~]` **PHASE 7.2 COMPLETE (no cutover)**. T-lite screening PASS; full 65-case bake-off vs Qwen on frozen v6_1: Qwen better on DIRECT/NEG; T-lite lower object spam but not enough. Production remains Qwen2.5:7b + v5. Do not merge `main`.
+**CRM-V3-MODEL-AUTHORITY-RESTORATION-1** — `[x]` **PHASE 7.2 FAIL (no cutover)**. T-lite screening/holdout looked better; full 65-case calibration does not meet hard gates vs Qwen on frozen v6_1. Production remains Qwen2.5:7b + v5. Decision: `TLITE_NOT_SUFFICIENT`. Do not merge `main`.
 
 PHASE71_COMMIT=`180486bd9cc4f3154a49eec045f98769bab0f510`
 PHASE72_T_LITE_COMMIT=`540bad130e9a571591d8de65d1416b636f636bda`
@@ -23,7 +23,7 @@ RESOURCE_GUARANTEE_COMMIT=`0d1ba41951d3a5fa21ed2f85c809b7cb85071139`
 
 ## PRIOR — 2026-08-21
 
-**CRM-UI-INTERACTIVE-PERFORMANCE-AND-RESOURCE-GUARANTEE-1** — `[~]` **AWAITING_OPERATOR_ACCEPTANCE** (hard CPU headroom deployed; keep policy).
+**CRM-UI-INTERACTIVE-PERFORMANCE-AND-RESOURCE-GUARANTEE-1** — `[x]` **CLOSED (operator accepted)**. Hard CPU headroom + background slice remain in force.
 
 
 ## PRIOR CURRENT WIP — 2026-08-17
