@@ -14,6 +14,7 @@ import logging
 import os
 import sys
 import uuid
+from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 
@@ -205,6 +206,139 @@ def check_egrz_expertise(tender_db, table_source: str, source_id: int) -> Dict[s
 
 class OllamaJsonParseError(ValueError):
     """Model returned text that is not a JSON object — not a transport timeout."""
+
+
+@dataclass
+class OllamaInferenceBundle:
+    """Model response + telemetry kept outside the model JSON namespace.
+
+    Phase 6A / Phase 7.2 bakeoff — returned by call_ollama_qwen_bundle().
+    Production callers that only need the parsed dict can use call_ollama_qwen().
+    """
+
+    parsed: Dict[str, Any]
+    raw_text: str
+    meta: Dict[str, Any]
+    retry_count: int
+
+
+def call_ollama_qwen_bundle(
+    prompt: str,
+    *,
+    procurement_id: Any = None,
+    crm_db: Any = None,
+    input_hash: str | None = None,
+    prompt_version: str | None = None,
+    persist_dry_run: bool = False,
+    acquire_gpu: bool = True,
+    experiment_model: str | None = None,
+    num_predict: int | None = None,
+    format_json: bool = True,
+) -> Optional[OllamaInferenceBundle]:
+    """Production V3 path returning parsed model JSON without telemetry mutation.
+
+    Telemetry lives in ``meta`` / ``retry_count`` only.
+    Raises OllamaJsonParseError on persistent JSON extraction failure
+    (bundle.meta may still carry last raw_text for RAW persistence).
+    Returns None only for transport/timeouts/unavailable.
+
+    ``experiment_model`` / ``num_predict`` / ``format_json`` overrides are
+    SHADOW/bake-off only — production callers must leave defaults (None / None / True).
+    """
+    from datetime import datetime, timezone
+
+    from src.services.ai_client import generate_v3_routing_with_bounded_retry
+    from src.services.commercial_routing_v3.gpu_arbiter import (
+        WORKLOAD_ROUTING,
+        acquire_gpu_inference,
+    )
+    from src.services.commercial_routing_v3.model_json import ModelInferenceFormatFailed
+    from src.services.commercial_routing_v3.opportunity_persistence import (
+        persist_inference_attempt,
+    )
+
+    def _persist(state: Dict[str, Any]) -> None:
+        if crm_db is None or procurement_id is None:
+            return
+        try:
+            persist_inference_attempt(crm_db, state, dry_run=persist_dry_run)
+        except Exception as exc:
+            logger.error("persist_inference_attempt failed: %s", exc)
+
+    def _run():
+        return generate_v3_routing_with_bounded_retry(
+            prompt,
+            timeout=int(AI_TIMEOUT),
+            format_json=format_json,
+            num_predict=num_predict,
+            experiment_model=experiment_model,
+            procurement_id=procurement_id,
+            input_hash=input_hash,
+            prompt_version=prompt_version or "v3_routing",
+        )
+
+    try:
+        if acquire_gpu:
+            with acquire_gpu_inference(WORKLOAD_ROUTING) as _slot:
+                parsed, meta, retries = _run()
+        else:
+            parsed, meta, retries = _run()
+        logger.info(
+            "V3 Ollama bundle model=%s request_model=%s retries=%s total_s=%s",
+            meta.get("model"),
+            meta.get("request_model"),
+            retries,
+            meta.get("total_duration_sec"),
+        )
+        _persist(
+            {
+                "status": "COMPLETED",
+                "procurement_id": procurement_id,
+                "attempt_count": meta.get("attempt_count") or (retries + 1),
+                "last_attempt_at": datetime.now(timezone.utc).isoformat(),
+                "next_retry_at": None,
+                "retry_eligible": False,
+                "input_hash": input_hash or meta.get("input_hash") or "",
+                "prompt_version": prompt_version or "v3_routing",
+                "prompt_sha256": meta.get("prompt_sha256"),
+                "model": meta.get("model"),
+                "failure_reason": None,
+                "failure_class": None,
+                "attempt_history": meta.get("attempt_history") or [],
+                "workload_type": "ROUTING",
+            }
+        )
+    except ModelInferenceFormatFailed as exc:
+        logger.error("V3 model bundle format failed after bounded retry: %s", exc)
+        durable = dict(exc.durable_state or {})
+        durable["attempt_history"] = list(exc.attempt_history or [])
+        if exc.meta:
+            durable.setdefault("prompt_sha256", exc.meta.get("prompt_sha256"))
+        _persist(durable)
+        fc = str(exc.failure_class or "").upper()
+        if fc in {"TIMEOUT", "OLLAMA_TRANSPORT_ERROR"}:
+            return None
+        err = OllamaJsonParseError(str(exc))
+        err.meta = dict(exc.meta or {})  # type: ignore[attr-defined]
+        err.raw_text = (exc.meta or {}).get("raw_text")  # type: ignore[attr-defined]
+        err.retry_count = int((exc.meta or {}).get("model_format_retry_count") or 0)  # type: ignore[attr-defined]
+        raise err from exc
+    except Exception as e:
+        msg = str(e).lower()
+        logger.error("Ollama bundle call exception: %s", e)
+        if "timeout" in msg or "timed out" in msg:
+            return None
+        return None
+
+    if isinstance(parsed, dict):
+        clean = {k: v for k, v in parsed.items() if not str(k).startswith("_")}
+        return OllamaInferenceBundle(
+            parsed=clean,
+            raw_text=str(meta.get("raw_text") or ""),
+            meta=dict(meta),
+            retry_count=int(retries),
+        )
+    raise OllamaJsonParseError("model response is not a JSON object")
 
 
 def call_ollama_qwen(
