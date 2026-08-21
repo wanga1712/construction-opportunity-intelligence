@@ -13,13 +13,19 @@
 
 ## CURRENT WIP — 2026-08-21
 
-**CRM-V3-MODEL-AUTHORITY-RESTORATION-1** — `[x]` **PHASE 7.2 FAIL (no cutover)**. T-lite screening/holdout looked better; full 65-case calibration does not meet hard gates vs Qwen on frozen v6_1. Production remains Qwen2.5:7b + v5. Decision: `TLITE_NOT_SUFFICIENT`. Do not merge `main`.
+**CRM-V3-MODEL-AUTHORITY-RESTORATION-1** — `[~]` **PHASE 8 PASS (audit only; STOP for operator review)**. Decision-trace audit of current V3 routing pipeline. Production unchanged (Qwen2.5:7b + v5). No prompt/model/architecture implementation.
+
+**Phase 8 results:** TRACED_CASES=34 (DIRECT=11, NEG=11, OBJECT=10). Case 37082=`CATEGORY_MAPPING_ERROR`; case 23591=`ITEM_EXTRACTION_OR_UNDERSTANDING_ERROR`; same failure mechanism=`NO`. Document content not sent to routing model. Purchase vs registry mapping mixed in one prompt=`YES`. Reports under `docs/reports/crm_v3_model_authority_restoration/MODEL_*` + `model_decision_trace_cases.json`.
 
 PHASE71_COMMIT=`180486bd9cc4f3154a49eec045f98769bab0f510`
 PHASE72_T_LITE_COMMIT=`540bad130e9a571591d8de65d1416b636f636bda`
 T_LITE_MODEL_ID=`hf.co/t-tech/T-lite-it-2.1-GGUF:Q4_K_M`
 PERFORMANCE_COMMIT=`51e18285869cbfcacf859d38d7a0f0100952cce8`
 RESOURCE_GUARANTEE_COMMIT=`0d1ba41951d3a5fa21ed2f85c809b7cb85071139`
+
+## PRIOR — 2026-08-21
+
+**CRM-V3-MODEL-AUTHORITY-RESTORATION-1** — `[x]` **PHASE 7.2 FAIL (no cutover)**. T-lite screening/holdout looked better; full 65-case calibration does not meet hard gates vs Qwen on frozen v6_1. Production remains Qwen2.5:7b + v5. Decision: `TLITE_NOT_SUFFICIENT`. Do not merge `main`.
 
 ## PRIOR — 2026-08-21
 
