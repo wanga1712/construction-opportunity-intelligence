@@ -44,6 +44,9 @@ def run_shadow_inference(
     compute_business_preview: bool = True,
     prompt_version: Optional[str] = None,
     prompt_text: Optional[str] = None,
+    experiment_model: Optional[str] = None,
+    num_predict: Optional[int] = None,
+    format_json: bool = True,
 ) -> Dict[str, Any]:
     """Run one SHADOW inference for a procurement.
 
@@ -58,6 +61,8 @@ def run_shadow_inference(
 
     Optional ``prompt_text`` / ``prompt_version`` override production v5 builder
     (Phase 7 A/B calibration). Default remains production v5 path.
+    Optional ``experiment_model`` / ``format_json`` are SHADOW bake-off only
+    (never production defaults).
     """
     engine = CommercialRoutingV3Engine(crm_db=crm_db)
     registry, allowed, subs = engine.load_registry()
@@ -88,6 +93,9 @@ def run_shadow_inference(
             prompt_version=pv,
             persist_dry_run=True,  # do not upsert attempt telemetry as production side-effect path
             acquire_gpu=acquire_gpu,
+            experiment_model=experiment_model,
+            num_predict=num_predict,
+            format_json=format_json,
         )
         if bundle is None:
             model_call_failed = True
@@ -115,7 +123,7 @@ def run_shadow_inference(
         retry_count=retry_count,
         allowed_categories=cats,
         allowed_subcategories=submap,
-        model_name=str(meta.get("model") or "qwen2.5:7b"),
+        model_name=str(meta.get("model") or experiment_model or "qwen2.5:7b"),
         prompt_version=pv,
         dry_run=dry_run_persist,
     )

@@ -13,17 +13,17 @@
 
 ## CURRENT WIP — 2026-08-21
 
-**CRM-UI-INTERACTIVE-PERFORMANCE-AND-RESOURCE-GUARANTEE-1** — `[~]` **AWAITING_OPERATOR_ACCEPTANCE**. App light-nav fixes kept. Hard CPU headroom: background `AllowedCPUs=2-7`, CRM MemorySwapMax=0. Weights alone revoked. Pause T-lite until operator confirms tabs under real contention. Do not merge `main`.
-
-PERFORMANCE_COMMIT=`51e18285869cbfcacf859d38d7a0f0100952cce8`
-RESOURCE_GUARANTEE_COMMIT=`0d1ba41951d3a5fa21ed2f85c809b7cb85071139`
-
-## PRIOR / PAUSED — 2026-08-21
-
-**CRM-V3-MODEL-AUTHORITY-RESTORATION-1** — `[~]` **PHASE 7.2 PAUSED** for UI contention fix. T-lite screening had advanced (PASS gate locally); full corpus deferred.
+**CRM-V3-MODEL-AUTHORITY-RESTORATION-1** — `[~]` **PHASE 7.2 COMPLETE (no cutover)**. T-lite screening PASS; full 65-case bake-off vs Qwen on frozen v6_1: Qwen better on DIRECT/NEG; T-lite lower object spam but not enough. Production remains Qwen2.5:7b + v5. Do not merge `main`.
 
 PHASE71_COMMIT=`180486bd9cc4f3154a49eec045f98769bab0f510`
 T_LITE_MODEL_ID=`hf.co/t-tech/T-lite-it-2.1-GGUF:Q4_K_M`
+PERFORMANCE_COMMIT=`51e18285869cbfcacf859d38d7a0f0100952cce8`
+RESOURCE_GUARANTEE_COMMIT=`0d1ba41951d3a5fa21ed2f85c809b7cb85071139`
+
+## PRIOR — 2026-08-21
+
+**CRM-UI-INTERACTIVE-PERFORMANCE-AND-RESOURCE-GUARANTEE-1** — `[~]` **AWAITING_OPERATOR_ACCEPTANCE** (hard CPU headroom deployed; keep policy).
+
 
 ## PRIOR CURRENT WIP — 2026-08-17
 
