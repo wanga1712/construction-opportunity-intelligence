@@ -11,11 +11,18 @@
 - Размер рабочего Python-модуля: до 300 строк — желательно; 300–450 допустимо при цельности; свыше 450 требуется записанное объяснение или декомпозиция.
 - Изменение поведения сначала фиксируется тестом или явно записанным ожидаемым результатом.
 
-## CURRENT WIP — 2026-08-20
+## CURRENT WIP — 2026-08-21
 
-**CRM-V3-MODEL-AUTHORITY-RESTORATION-1** — `[~]` **PHASE 7.1 FAIL (hard gates)**. Residual forensics + label revalidation done; v6_1 frozen; v6_2/v6_3 SHADOW experimented; no prompt meets original+holdout hard acceptance together. Production stays on v5. Do not merge `main`.
+**CRM-UI-INTERACTIVE-PERFORMANCE-AND-RESOURCE-GUARANTEE-1** — `[x]` **PASS**. Lightweight pages (`system_health`, `crm_profiles`, `customers`) skip `CompaniesService`/`load_sync`; nav no longer double-pings DB (`_get_service` ping=False; watchdog owns reconnect). systemd cgroup v2: CRM `CPUWeight=500`/`IOWeight=500`/`MemoryLow=512M`; Ollama/AI runner yield weights. Tests 13 PASS. Do not merge `main`.
 
-PHASE7_COMMIT=`b40f53a`
+Paused (not closed): **CRM-V3-MODEL-AUTHORITY-RESTORATION-1** / Phase 7.2 T-lite bake-off.
+
+## PRIOR CURRENT WIP — 2026-08-20
+
+**CRM-V3-MODEL-AUTHORITY-RESTORATION-1** — `[~]` **PHASE 7.2 PAUSED** — T-lite-it-2.1 Q4_K_M SHADOW bake-off vs Qwen2.5:7b on frozen prompt `v3_category_centric_routing_7b_v6_1`. Model change only; no production cutover. Production stays on Qwen + v5.
+
+PHASE71_COMMIT=`180486bd9cc4f3154a49eec045f98769bab0f510`
+T_LITE_MODEL_ID=`hf.co/t-tech/T-lite-it-2.1-GGUF:Q4_K_M`
 
 ## PRIOR CURRENT WIP — 2026-08-17
 

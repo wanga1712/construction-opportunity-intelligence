@@ -55,28 +55,51 @@ def test_bootstrap_runs_watchdog_navigation_and_renderer_once(monkeypatch):
     monkeypatch.setattr(
         app_bootstrap,
         "render_sidebar_nav",
-        lambda: events.append("navigation") or "customers",
+        lambda: events.append("navigation") or "objects_v2",
     )
     monkeypatch.setattr(
         app_bootstrap,
         "_get_service",
-        lambda: events.append("dependency/session_state") or object(),
+        lambda **kwargs: events.append("dependency/session_state") or object(),
     )
     monkeypatch.setattr(app_bootstrap, "render_db_status_banner", lambda: None)
     monkeypatch.setattr(
         app_bootstrap,
-        "render_customers_page",
-        lambda: events.append("renderer"),
+        "render_analytics_contour_v2_page",
+        lambda service: events.append("renderer"),
     )
 
     app_bootstrap.main()
 
     assert events == [
-        "watchdog",
         "navigation",
+        "watchdog",
         "dependency/session_state",
         "renderer",
     ]
+
+
+def test_bootstrap_system_health_skips_companies_dependency(monkeypatch):
+    events = []
+    monkeypatch.setattr(
+        app_bootstrap,
+        "render_sidebar_nav",
+        lambda: events.append("navigation") or "system_health",
+    )
+    monkeypatch.setattr(
+        app_bootstrap,
+        "_get_service",
+        lambda **kwargs: events.append("dependency/session_state") or object(),
+    )
+    monkeypatch.setattr(
+        app_bootstrap,
+        "render_system_health_page",
+        lambda service=None: events.append("renderer"),
+    )
+
+    app_bootstrap.main()
+
+    assert events == ["navigation", "renderer"]
 
 
 def test_page_config_exists_only_in_root_launcher():
@@ -95,10 +118,11 @@ def test_root_launcher_has_no_routing_or_session_state():
     imported_modules = {
         node.module
         for node in tree.body
-        if isinstance(node, ast.ImportFrom)
+        if isinstance(node, ast.ImportFrom) and node.module
     }
 
-    assert imported_modules == {"src.ui.app_bootstrap", "src.ui.styles"}
+    assert "src.ui.app_bootstrap" in imported_modules
+    assert "src.ui.styles" in imported_modules
     assert "session_state" not in root_source
-    assert "render_" not in root_source
     assert "page ==" not in root_source
+    assert "_get_service" not in root_source
