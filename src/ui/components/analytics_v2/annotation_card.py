@@ -308,6 +308,50 @@ def render_annotation_card(
         _persist(procurement_id, payload, assessment, created_by, crm_db, save_and_next=save_next)
 
 
+def render_annotation_section(
+    *, crm_db: Any, procurement_id: int, header: dict,
+    assessment: dict | None, existing_annotation: dict | None, section: str,
+) -> None:
+    """Render one lazy inline section without creating an eager tab set."""
+    created_by = st.session_state.get("user_name") or _CREATED_BY_FALLBACK
+    _init_fast_draft(procurement_id, assessment, existing_annotation)
+    categories = load_categories_for_selector(crm_db)
+    cat_codes = [c["code"] for c in categories]
+    cat_labels = [f"{c['code']} ({c['name']})" for c in categories]
+    if section == "Модель / Категории":
+        _render_ai_block(assessment)
+        _render_business_block(assessment)
+        _render_category_verdicts(procurement_id, assessment, categories, cat_codes, cat_labels)
+        return
+    card_view = load_annotation_card_view(procurement_id, header, crm_db)
+    if section == "Документы":
+        render_documents(procurement_id, card_view["documents"],
+                         st.session_state[_sk(procurement_id, "document_priorities")],
+                         card_view["orphan_observations"])
+        return
+    if section == "История":
+        render_history(card_view["history"])
+        return
+    expert_obj_types = collect_expert_object_types(crm_db)
+    expert_stages = collect_expert_work_stages(crm_db)
+    expert_subtypes = collect_expert_object_subtypes(crm_db)
+    _render_expert_object_stage(procurement_id, assessment, expert_obj_types, expert_subtypes, expert_stages)
+    _render_ranked_expert_categories(procurement_id, cat_codes, cat_labels)
+    _render_review_contract(procurement_id, card_view["documents"])
+    _render_technical_details(assessment, existing_annotation)
+    b1, b2, b3 = st.columns(3)
+    save = b1.button("💾 Сохранить", key=_sk(procurement_id, "wb_save"))
+    save_next = b2.button("💾 SAVE & NEXT →", key=_sk(procurement_id, "wb_save_next"), type="primary")
+    if b3.button("⛔ НЕ НАШ ПРОФИЛЬ", key=_sk(procurement_id, "wb_oop")):
+        payload = _build_out_of_profile_payload(assessment, created_by)
+        payload["document_review_priorities"] = _document_priority_payload(procurement_id)
+        _persist(procurement_id, payload, assessment, created_by, crm_db, save_and_next=True)
+        return
+    if save or save_next:
+        payload = _build_workbench_payload(procurement_id, assessment, created_by)
+        _persist(procurement_id, payload, assessment, created_by, crm_db, save_and_next=save_next)
+
+
 def _render_ai_block(assessment: dict | None) -> None:
     with st.container(border=True):
         st.markdown("##### 🤖 ИИ ПРЕДЛОЖИЛ")
