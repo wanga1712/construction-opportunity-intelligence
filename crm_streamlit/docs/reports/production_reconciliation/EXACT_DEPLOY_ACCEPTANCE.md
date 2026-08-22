@@ -1,6 +1,6 @@
 # Exact deploy acceptance
 
-Status: **EXACT DEPLOY ACTIVE; FINAL ACCEPTANCE ITERATION IN PROGRESS**.
+Status: **PASS — EXACT GIT / S13 / DB RECONCILIATION COMPLETE**.
 
 ## Authority and pre-change proof
 
@@ -33,9 +33,14 @@ Status: **EXACT DEPLOY ACTIVE; FINAL ACCEPTANCE ITERATION IN PROGRESS**.
 - Independent `git archive` closure comparison: 335 tracked runtime files matched, zero application-source mismatches; only documented host-local `.streamlit/config.toml` was additional.
 - Real-production read-only AppTest: five tabs, procurement source link, source/model/business/expert boundaries, factual history, legacy warning and all fast-annotation actions passed with zero exceptions.
 
-## Final iteration still pending
+## Operator-relevant runtime acceptance
 
-- Publish/redeploy the exact procurement-link caption alignment and read-only fresh-filter/reset acceptance script.
-- Re-run final SHA parity and production acceptance.
+- Fresh РАЗМЕТКА: `TOTAL_OPEN_ASSESSED=64`, `CURRENT_FILTER_RESULT=64`, publication visibility defaults to ALL.
+- Reset: PASS; logical filter object and all five Streamlit widget keys return to `open_assessed / unannotated / all / all / all`.
+- Procurement link: exact caption `Открыть закупку` visible for real procurement 1013.
+- Fast annotation: CORRECT, INCORRECT, add-missing-category, OUT-OF-PROFILE and SAVE & NEXT controls visible.
+- Card: five expected tabs, factual documents empty-state, real history, legacy warning and model/business/expert authority boundaries pass with zero exceptions.
+- Normal CRM publication behavior: unchanged; focused publication tests pass.
+- Data freshness: latest source timestamp `2026-08-22 20:42:13.907172+03`, latest CRM row update `2026-08-22 20:44:23.435193+03`, latest assessment `2026-08-20 14:22:02.8924+03`. The visible `2026-08-12` is a historical assessment version on the accepted procurement, not a current sync cutoff.
 
-Current proof: `GIT_DEPLOYED_RUNTIME_PARITY=YES`, `SERVICE_RESTARTED=YES`, `RUNNING_TREE_PARITY=YES`; final reconciliation result remains pending until the caption/reset acceptance iteration is deployed and rechecked.
+Final proof: `GIT_DEPLOYED_RUNTIME_PARITY=YES`, `FILES_MISMATCHED=0`, `SERVICE_RESTARTED=YES`, `RUNNING_TREE_PARITY=YES`, `RECONCILIATION_RESULT=PASS`. Exact final commit hashes are reported externally because a commit cannot contain its own hash.
