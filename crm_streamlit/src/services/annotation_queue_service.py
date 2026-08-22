@@ -42,10 +42,11 @@ class LifecycleLabel(StrEnum):
 
 
 def _canonical_open_sql(alias: str = "cp") -> str:
+    from src.services.commercial_routing_v3.submission_window import actionable_submission_sql
     return f"""
         {alias}.crm_stage = 'torgi'
         AND {alias}.award_status = 'submission_open'
-        AND {alias}.end_date >= CURRENT_DATE
+        AND {actionable_submission_sql(alias)}
     """
 
 

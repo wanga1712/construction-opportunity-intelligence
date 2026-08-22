@@ -117,6 +117,13 @@ def mark_failed(crm_db: Any, job_id: int, claimed_by: str, error: str) -> bool:
         (str(error)[:4000], job_id, claimed_by)))
 
 
+def mark_cancelled(crm_db: Any, job_id: int, claimed_by: str, reason: str) -> bool:
+    return bool(crm_db.execute_update(
+        """UPDATE crm_v3_inference_jobs SET status='CANCELLED',last_error=%s,finished_at=NOW(),
+           heartbeat_at=NOW() WHERE id=%s AND status='RUNNING' AND claimed_by=%s""",
+        (str(reason)[:4000], job_id, claimed_by)))
+
+
 def recover_stale_jobs(crm_db: Any, *, stale_after: timedelta = STALE_AFTER) -> dict:
     seconds = max(60, int(stale_after.total_seconds()))
     with _transaction(crm_db) as conn, conn.cursor() as cur:

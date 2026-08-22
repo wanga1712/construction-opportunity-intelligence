@@ -47,7 +47,8 @@ def _stage_workset_ids(stage: str) -> list[int]:
     """Return factual filtered workset IDs for true counts (one bounded-column query)."""
     import psycopg2
     if stage == "torgi":
-        where = "cp.crm_stage='torgi' AND cp.award_status='submission_open' AND cp.end_date>=CURRENT_DATE"
+        from src.services.commercial_routing_v3.submission_window import actionable_submission_sql
+        where = "cp.crm_stage='torgi' AND cp.award_status='submission_open' AND " + actionable_submission_sql("cp")
         cat_stage = "torgi"
     elif stage == "commission":
         where = "cp.crm_stage='torgi' AND cp.award_status IN ('submission_closed_waiting_award','award_not_found')"
@@ -84,6 +85,7 @@ def _load_torgi(limit: int = 25, offset: int = 0) -> list[dict]:
         from psycopg2.extras import RealDictCursor
 
         from src.services.db_bootstrap import connect_databases
+        from src.services.commercial_routing_v3.submission_window import actionable_submission_sql
         cat_sql, cat_params = _get_category_filter("torgi")
         params = dict(cat_params); params.update({"limit": limit, "offset": offset})
 
@@ -118,7 +120,7 @@ def _load_torgi(limit: int = 25, offset: int = 0) -> list[dict]:
                 LEFT JOIN procurement_ai_assessments ai ON ai.procurement_id = cp.id AND ai.is_current = TRUE
                 WHERE cp.crm_stage = 'torgi'
                   AND cp.award_status = 'submission_open'
-                  AND cp.end_date >= CURRENT_DATE
+                  AND {actionable_submission_sql("cp")}
                   AND ({cat_sql})
                 ORDER BY cp.end_date ASC, cp.match_score DESC
                 LIMIT %(limit)s OFFSET %(offset)s
