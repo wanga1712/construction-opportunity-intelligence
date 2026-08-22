@@ -11,3 +11,7 @@ Date-only semantics make today 0 and tomorrow 1; earliest admissible date on 202
 Focused local and exact-tree S13 suites: 15 PASS. Production AppTest: 25 inline cards, total/count/page 6,233, resolver 0→1, exceptions 0. Queue depth remained 0; Candidate inference remained disabled; no canary inference or bulk enqueue executed. CRM service active, HTTP 200, tracked runtime clean.
 
 No model, prompt, model-input semantics, DDL, manager publication, expert storage, document resolver/pipeline, parser or 615-PP change. STOP after prerequisite correction.
+
+## End-of-day acceptance
+
+Canonical closure `3580423` was pushed and its exact subtree deployed as standalone runtime `475fb2e7e5dac115304c04234ad40cea0e71f0e1`. Immediately before the suspend phase: durable queue QUEUED 0 / RUNNING 0; Candidate inference flag 0; active migration queries 0; systemd jobs 0; PostgreSQL `SELECT 1` OK; CRM active / HTTP 200; tracked runtime clean. No bulk enqueue, canary inference, mass inference, legacy scanning activation, S7 change, or next WIP occurred.
