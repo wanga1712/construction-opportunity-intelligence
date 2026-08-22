@@ -11,7 +11,11 @@
 - Размер рабочего Python-модуля: до 300 строк — желательно; 300–450 допустимо при цельности; свыше 450 требуется записанное объяснение или декомпозиция.
 - Изменение поведения сначала фиксируется тестом или явно записанным ожидаемым результатом.
 
-## CURRENT WIP — 2026-08-22
+## CURRENT WIP — 2026-08-23
+
+**CRM-V3-AI-EXPERT-REVIEW-QUEUE-AND-MANUAL-REASSESSMENT-1** — `[!]` **FAIL / STOP AT PHASE 1**. Read-only production audit proved there is no durable inference-job queue or active-job identity for `(procurement, model, prompt, run_kind, input version)`: the 45-second timer directly scans `crm_procurements` state fields. Safe bulk/retry idempotency therefore requires a separately approved queue schema/DDL decision. The production drop-in also freezes Candidate inference (`SHADOW_MODE=1`, `CANDIDATE_INFERENCE_ENABLED=0`). Per explicit STOP conditions, no UI action, enqueue, inference, DDL, FIRST/SECOND replacement, model/prompt/input, expert payload, resolver or service change was made. Report: `docs/reports/ai_expert_review_queue_manual_reassessment/IMPLEMENTATION_AND_PRODUCTION_ACCEPTANCE.md`.
+
+## PRIOR — 2026-08-22
 
 **CRM-V3-ANALYTICS-WORKSET-AND-CARD-PRESENTATION-CORRECTION-1** — `[x]` **PASS / STOP**. Analytics expert workset is separated from unchanged manager publication authority. Timestamped 2026-08-23 00:21 MSK waterfall: lifecycle-valid torgi 6827, manager-visible 20; hidden 6759 UNASSESSED, 7 SCOPE_UNKNOWN, 41 NO_VISIBLE_OPPORTUNITY. True commission/awarded totals are 31405/5890; all stages load bounded 25-card pages. Cards use compact responsive title/facts/chips, factual source action above lazy pills navigation, full dates and no raw technical status line. Isolated S13 suite 73 PASS; post-final-deploy real `app.py` route PASS with resolver `0→1`, 25 cards retained and zero exceptions; browser visual acceptance PASS. Implementation `69de9238`; exact standalone runtime `94ce4f469`; service active / HTTP 200. Report: `docs/reports/analytics_workset_card_presentation/IMPLEMENTATION_AND_PRODUCTION_ACCEPTANCE.md`. STOP after WIP.
 
