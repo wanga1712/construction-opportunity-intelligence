@@ -13,6 +13,8 @@
 
 ## CURRENT WIP — 2026-08-23
 
+**CRM-V3-DURABLE-AI-INFERENCE-JOB-QUEUE-1** — `[~]` **IMPLEMENTATION / PRE-MIGRATION**. Building the explicitly approved inference-job-only DDL and durable queue service from forensic base `b2fe151e`: database-enforced active identity, bounded `SKIP LOCKED` claims, heartbeat/stale recovery, retry lineage, canonical input fingerprint and existing-runner delegation. Candidate inference remains frozen; no production enqueue or inference is authorized.
+
 **CRM-V3-AI-EXPERT-REVIEW-QUEUE-AND-MANUAL-REASSESSMENT-1** — `[!]` **FAIL / STOP AT PHASE 1**. Read-only production audit proved there is no durable inference-job queue or active-job identity for `(procurement, model, prompt, run_kind, input version)`: the 45-second timer directly scans `crm_procurements` state fields. Safe bulk/retry idempotency therefore requires a separately approved queue schema/DDL decision. The production drop-in also freezes Candidate inference (`SHADOW_MODE=1`, `CANDIDATE_INFERENCE_ENABLED=0`). Per explicit STOP conditions, no UI action, enqueue, inference, DDL, FIRST/SECOND replacement, model/prompt/input, expert payload, resolver or service change was made. Report: `docs/reports/ai_expert_review_queue_manual_reassessment/IMPLEMENTATION_AND_PRODUCTION_ACCEPTANCE.md`.
 
 ## PRIOR — 2026-08-22
