@@ -270,6 +270,27 @@ def load_expert_annotation(
     }
 
 
+def load_document_findings_for_annotation(
+    procurement_id: int,
+    crm_db: Any,
+) -> list[dict]:
+    """Return already stored document findings; never starts document research."""
+    rows = crm_db.execute_query(
+        """
+        SELECT document_title, source_document_type, source_document_url,
+               download_status, parse_status, commercial_evidence_found,
+               matched_categories, product_mentions, usefulness_label,
+               observed_at
+        FROM crm_v3_document_observations
+        WHERE procurement_id = %s
+        ORDER BY observed_at DESC, id DESC
+        LIMIT 20
+        """,
+        (procurement_id,),
+    )
+    return [dict(row) for row in (rows or [])]
+
+
 # ─────────────────────────────────────────────────────────────────────────────
 # Expert annotation writer — atomic versioned upsert
 # ─────────────────────────────────────────────────────────────────────────────

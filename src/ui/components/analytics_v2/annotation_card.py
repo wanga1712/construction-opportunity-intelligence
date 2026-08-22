@@ -15,8 +15,15 @@ from src.services.expert_annotation_service import (
     collect_expert_object_types,
     collect_expert_work_stages,
     collect_expert_object_subtypes,
+    load_document_findings_for_annotation,
     save_expert_annotation,
     write_audit_row,
+)
+from src.services.annotation_readiness import (
+    COMPLETENESS_STATES,
+    EVIDENCE_STATES,
+    REVIEW_SCOPES,
+    training_eligibility_reasons,
 )
 from src.ui.components.analytics_v2.card_tabs_ai_expert_form import (
     _assemble_payload,
@@ -124,6 +131,9 @@ def _init_fast_draft(
         st.session_state[_sk(procurement_id, "absence_confirmed")] = bool(
             p.get("expert_category_absence_confirmed")
         )
+        st.session_state[_sk(procurement_id, "review_scope")] = p.get("annotation_review_scope") or "CATEGORY_ONLY"
+        st.session_state[_sk(procurement_id, "completeness")] = p.get("annotation_completeness") or "PARTIAL"
+        st.session_state[_sk(procurement_id, "evidence_state")] = p.get("evidence_state") or "SUFFICIENT"
     else:
         draft = []
         for row in model_category_rows(assessment):
@@ -138,6 +148,7 @@ def _init_fast_draft(
                 "model_opportunity_snapshot": row.get("model_opportunity_snapshot"),
                 "model_opportunity_index": row.get("model_opportunity_index"),
                 "comment": "",
+                "expert_reviewed": False,
             })
         st.session_state[_sk(procurement_id, "opps")] = draft
         st.session_state[_sk(procurement_id, "rejected")] = []
@@ -145,6 +156,9 @@ def _init_fast_draft(
         st.session_state[_sk(procurement_id, "obj_subtype")] = ""
         st.session_state[_sk(procurement_id, "work_stage")] = ""
         st.session_state[_sk(procurement_id, "absence_confirmed")] = False
+        st.session_state[_sk(procurement_id, "review_scope")] = "CATEGORY_ONLY"
+        st.session_state[_sk(procurement_id, "completeness")] = "PARTIAL"
+        st.session_state[_sk(procurement_id, "evidence_state")] = "SUFFICIENT"
     st.session_state[sk_init] = True
 
 
@@ -155,6 +169,7 @@ def _mark_category_correct(procurement_id: int, category_code: str) -> None:
         if rej.get("category_code") == category_code:
             rejected.remove(rej)
             rej["expert_action"] = "KEEP"
+            rej["expert_reviewed"] = True
             rej["expert_rank"] = len(opps) + 1
             opps.append(rej)
             _renumber(opps)
@@ -162,6 +177,7 @@ def _mark_category_correct(procurement_id: int, category_code: str) -> None:
     for opp in opps:
         if opp.get("category_code") == category_code:
             opp["expert_action"] = "KEEP"
+            opp["expert_reviewed"] = True
             return
 
 
@@ -174,6 +190,7 @@ def _mark_category_wrong(procurement_id: int, category_code: str) -> None:
             victim["expert_action"] = "REJECT"
             victim["expert_rank"] = None
             victim["rejection_reason"] = victim.get("rejection_reason") or "WRONG_CATEGORY"
+            victim["expert_reviewed"] = True
             rejected.append(victim)
             _renumber(opps)
             return
@@ -206,6 +223,9 @@ def _build_out_of_profile_payload(assessment: dict | None, created_by: str) -> d
         "error_reasons": ["OUT_OF_PROFILE"],
         "expert_comment": "",
         "expert_scope_verdict": "OUT_OF_PROFILE",
+        "annotation_review_scope": "OUT_OF_PROFILE",
+        "annotation_completeness": "COMPLETE",
+        "evidence_state": "SUFFICIENT",
         "opportunities": [],
         "rejected_model_opportunities": rejected,
         "taxonomy_proposals": [],
@@ -244,16 +264,21 @@ def render_annotation_card(
 
     st.markdown(
         f"### {header.get('auction_name') or '—'}  \n"
+        f"**ID:** `{procurement_id}` · **Источник:** `{header.get('source_table') or '—'}`  \n"
+        f"**Заказчик:** {header.get('customer') or '—'}  \n"
         f"**{fmt_price(header.get('initial_price'))}** · 📍 {header.get('delivery_region') or '—'}  \n"
         f"{status_icon} {status_label} · lifecycle `{lifecycle_label}` · **{pub_label}**  \n"
         f"ОКПД: `{header.get('okpd_code') or '—'}` — {header.get('okpd_name') or '—'}"
     )
+    if header.get("tender_link"):
+        st.link_button("🔗 Открыть закупку", header["tender_link"])
 
     _render_ai_block(assessment)
     _render_business_block(assessment)
     _render_category_verdicts(procurement_id, assessment, categories, cat_codes, cat_labels)
     _render_expert_object_stage(procurement_id, assessment, expert_obj_types, expert_subtypes, expert_stages)
     _render_ranked_expert_categories(procurement_id, cat_codes, cat_labels)
+    _render_review_contract(procurement_id, crm_db)
     _render_technical_details(assessment, existing_annotation)
 
     b1, b2, b3 = st.columns(3)
@@ -377,6 +402,7 @@ def _render_category_verdicts(
                     "model_opportunity_snapshot": None,
                     "model_opportunity_index": None,
                     "comment": "",
+                    "expert_reviewed": True,
                 })
             st.session_state[_sk(procurement_id, "show_add_missed")] = False
             st.rerun()
@@ -429,9 +455,33 @@ def _render_ranked_expert_categories(
             _renumber(opps)
             st.rerun()
         if c4.button("×", key=_sk(procurement_id, f"rank_del_{i}")):
-            opps.pop(i)
+            victim = opps.pop(i)
+            if victim.get("model_opportunity_index") is not None:
+                victim["expert_action"] = "REJECT"
+                victim["expert_reviewed"] = True
+                victim["expert_rank"] = None
+                victim["rejection_reason"] = victim.get("rejection_reason") or "WRONG_CATEGORY"
+                st.session_state[_sk(procurement_id, "rejected")].append(victim)
             _renumber(opps)
             st.rerun()
+
+
+def _render_review_contract(procurement_id: int, crm_db: Any) -> None:
+    st.markdown("---")
+    st.markdown("##### Объём и полнота экспертной проверки")
+    st.selectbox("annotation_review_scope", REVIEW_SCOPES, key=_sk(procurement_id, "review_scope"))
+    st.selectbox("annotation_completeness", COMPLETENESS_STATES, key=_sk(procurement_id, "completeness"))
+    st.selectbox("evidence_state", EVIDENCE_STATES, key=_sk(procurement_id, "evidence_state"))
+    findings = load_document_findings_for_annotation(procurement_id, crm_db)
+    with st.expander(f"Сохранённые document findings ({len(findings)})"):
+        if not findings:
+            st.caption("Сохранённых document findings нет. Исследование автоматически не запускается.")
+        for item in findings:
+            st.markdown(
+                f"- **{item.get('document_title') or item.get('source_document_type') or '—'}** · "
+                f"parse=`{item.get('parse_status')}` · evidence=`{item.get('commercial_evidence_found')}` · "
+                f"categories=`{item.get('matched_categories') or []}`"
+            )
 
 
 def _render_technical_details(assessment: dict | None, existing_annotation: dict | None) -> None:
@@ -460,7 +510,14 @@ def _build_workbench_payload(procurement_id: int, assessment: dict | None, creat
     has_rejects = bool(rejected)
     has_adds = any(o.get("expert_action") == "ADD" for o in opps)
     absence = bool(st.session_state.get(_sk(procurement_id, "absence_confirmed")))
-    if has_rejects or has_adds:
+    has_unreviewed = any(
+        row.get("model_opportunity_index") is not None and not row.get("expert_reviewed")
+        for row in [*opps, *rejected]
+    )
+    completeness = st.session_state.get(_sk(procurement_id, "completeness"), "PARTIAL")
+    if completeness == "PARTIAL" or has_unreviewed:
+        verdict = "PARTIAL_REVIEW"
+    elif has_rejects or has_adds:
         verdict = "WRONG" if has_rejects else "PARTIALLY_CORRECT"
     elif absence and not opps:
         verdict = "CORRECT"
@@ -486,6 +543,22 @@ def _build_workbench_payload(procurement_id: int, assessment: dict | None, creat
     )
     payload["training_evidence_quality"] = _training_evidence_quality(assessment)
     payload["expert_category_absence_confirmed"] = absence and not opps
+    payload["annotation_review_scope"] = st.session_state.get(_sk(procurement_id, "review_scope"), "CATEGORY_ONLY")
+    payload["annotation_completeness"] = completeness
+    payload["evidence_state"] = st.session_state.get(_sk(procurement_id, "evidence_state"), "SUFFICIENT")
+    states = []
+    for row in [*opps, *rejected]:
+        if row.get("model_opportunity_index") is None:
+            continue
+        states.append({
+            "model_opportunity_index": row.get("model_opportunity_index"),
+            "category_code": row.get("category_code"),
+            "reviewed": bool(row.get("expert_reviewed")),
+            "decision": row.get("expert_action") if row.get("expert_reviewed") else None,
+        })
+    payload["model_category_review_state"] = sorted(states, key=lambda row: row["model_opportunity_index"])
+    payload["reviewed_model_categories"] = [row for row in states if row["reviewed"]]
+    payload["training_eligible"] = not training_eligibility_reasons(payload, assessment)
     return payload
 
 
