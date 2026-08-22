@@ -23,6 +23,10 @@ from src.services.annotation_queue_service import (
     queue_order_sql,
 )
 from src.services.torgi_publication import torgi_publication_sql_filters
+from src.services.annotation_readiness import (
+    is_training_eligible,
+    training_eligibility_reasons,
+)
 from src.ui.components.analytics_v2.annotation_card import (
     _build_out_of_profile_payload,
     _training_evidence_quality,
@@ -197,6 +201,52 @@ def test_out_of_profile_payload() -> None:
     assert payload["expert_scope_verdict"] == "OUT_OF_PROFILE"
     assert payload["rejected_model_opportunities"][0]["rejection_reason"] == "OUT_OF_PROFILE"
     assert payload["training_evidence_quality"] == "LEGACY_NO_RAW"
+    assert payload["annotation_review_scope"] == "OUT_OF_PROFILE"
+    assert payload["annotation_completeness"] == "COMPLETE"
+
+
+def test_training_eligibility_excludes_partial_and_unreviewed() -> None:
+    assessment = {"normalized_result": {"category_opportunities": []}}
+    payload = {
+        "model_assessment_id": 3,
+        "annotation_review_scope": "CATEGORY_ONLY",
+        "annotation_completeness": "PARTIAL",
+        "evidence_state": "SUFFICIENT",
+        "model_category_review_state": [
+            {"category_code": "paint", "reviewed": False, "decision": None},
+        ],
+    }
+    reasons = training_eligibility_reasons(payload, assessment)
+    assert "ANNOTATION_INCOMPLETE" in reasons
+    assert "MODEL_CATEGORIES_NOT_FULLY_REVIEWED" in reasons
+    assert is_training_eligible(payload, assessment) is False
+
+
+def test_training_eligibility_accepts_explicit_complete_category_review() -> None:
+    assessment = {"normalized_result": {"category_opportunities": []}}
+    reviewed = {"category_code": "paint", "reviewed": True, "decision": "KEEP"}
+    payload = {
+        "model_assessment_id": 3,
+        "annotation_review_scope": "CATEGORY_ONLY",
+        "annotation_completeness": "COMPLETE",
+        "evidence_state": "SUFFICIENT",
+        "model_category_review_state": [reviewed],
+        "reviewed_model_categories": [reviewed],
+    }
+    assert is_training_eligible(payload, assessment) is True
+
+
+def test_training_eligibility_rejects_needs_document_research() -> None:
+    payload = {
+        "model_assessment_id": 3,
+        "annotation_review_scope": "CATEGORY_ONLY",
+        "annotation_completeness": "COMPLETE",
+        "evidence_state": "NEEDS_DOCUMENT_RESEARCH",
+        "expert_category_absence_confirmed": True,
+    }
+    assert "INSUFFICIENT_EVIDENCE" in training_eligibility_reasons(
+        payload, {"normalized_result": {"category_opportunities": []}}
+    )
 
 
 def test_save_next_advances_full_queue() -> None:

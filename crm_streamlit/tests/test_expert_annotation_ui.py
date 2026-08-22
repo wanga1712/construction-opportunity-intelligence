@@ -193,6 +193,17 @@ def test_save_without_next_does_not_set_navigation_flag(monkeypatch) -> None:
 def test_model_raw_table_is_never_updated_by_expert_service() -> None:
     source = Path("src/services/expert_annotation_service.py").read_text(encoding="utf-8")
     assert "UPDATE procurement_ai_assessments" not in source
+
+
+def test_document_findings_reader_is_read_only() -> None:
+    source = Path("src/services/expert_annotation_service.py").read_text(encoding="utf-8")
+    section = source.split("def load_document_findings_for_annotation", 1)[1].split(
+        "def save_expert_annotation", 1
+    )[0]
+    assert "crm_v3_document_observations" in section
+    assert "SELECT" in section
+    assert "INSERT" not in section
+    assert "UPDATE" not in section
     assert "INSERT INTO procurement_ai_assessments" not in source
     assert "DELETE FROM procurement_ai_assessments" not in source
 

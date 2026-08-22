@@ -418,7 +418,8 @@ def fetch_procurement_header(crm_db: Any, procurement_id: int) -> dict | None:
         """
         SELECT cp.id, cp.auction_name, cp.initial_price, cp.delivery_region,
                cp.okpd_code, cp.okpd_name, cp.crm_stage, cp.award_status,
-               cp.end_date, cp.contract_number
+               cp.end_date, cp.contract_number, cp.customer, cp.source_table,
+               cp.tender_link
         FROM crm_procurements cp
         WHERE cp.id = %s
         LIMIT 1
