@@ -50,6 +50,8 @@ RESOURCE_GUARANTEE_COMMIT=`0d1ba41951d3a5fa21ed2f85c809b7cb85071139`
 
 **Reconciliation size note:** `annotation_card.py` is 631 lines in the harvested, already-running card commit. This WIP does not redesign it: provenance queries and three display sections are already extracted into dedicated modules, while the remaining form/session-state/save boundary stays together to preserve verified Streamlit rerun behavior. Further decomposition belongs to a later explicitly requested refactor.
 
+**Exact-deploy progress:** reconciliation head `ac24800` and its tree-identical standalone S13 deployment ref were pushed; the clean checkout was atomically activated with the previous dirty tree retained as a recoverable backup. Post-deploy proof: service active/HTTP 200, expected PID command/workdir, 335 tracked closure files match Git and zero application-source mismatches; `.env` and `.streamlit/config.toml` are the only documented host-local additions. Real-production read-only AppTest passed five annotation tabs, source link, authority boundaries, history and all fast actions. Final acceptance iteration aligns the link caption exactly to `Открыть закупку` and adds explicit fresh-filter/reset-state proof; focused suite remains 95 PASS. No model/prompt/publication/document-pipeline change.
+
 **CRM-V3-PRODUCTION-RECOVERY-EXPERT-CALIBRATION-AND-DOCUMENT-LEARNING-BASELINE-1** — `[~]` **PHASE 2–3 CODE COMPLETE / PHASE 1 UI FROZEN**. Operator accepted Phase 1 nested procurement view as the last working look. Do not merge to `main` any commit that changes that appearance.
 
 **Phase 1** — `[x]` accepted. Nested pills `Предварительно ИИ` / `✓ Подтверждено`; stage tabs Лиды / Подготовка к торгам / Идут торги / Комиссия / На рассмотрении / Разыгранные.

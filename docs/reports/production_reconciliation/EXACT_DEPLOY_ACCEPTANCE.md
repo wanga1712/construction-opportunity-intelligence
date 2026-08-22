@@ -1,6 +1,6 @@
 # Exact deploy acceptance
 
-Status: **PRE-DEPLOY GATES COMPLETE; DEPLOY NOT YET PERFORMED**.
+Status: **EXACT DEPLOY ACTIVE; FINAL ACCEPTANCE ITERATION IN PROGRESS**.
 
 ## Authority and pre-change proof
 
@@ -24,12 +24,18 @@ Status: **PRE-DEPLOY GATES COMPLETE; DEPLOY NOT YET PERFORMED**.
 - Repository checks: `git diff --check` passed; no unknown drift classification remains.
 - Schema: required production objects match; no DDL required.
 
-## Deployment gates still pending
+## First exact-deploy proof
 
-- Commit audit/report updates and push reconciliation branch to canonical GitHub.
-- Deploy one exact Git-derived tree (not individual source copies), preserving only excluded host configuration/secrets.
-- Full post-deploy application-source SHA256 parity with zero mismatches.
-- Approved service restart and running-process/tree proof.
-- Fresh served-app acceptance for РАЗМЕТКА counts/reset, procurement link, fast annotation actions, normal publication gate, model authority, documents/history version, and data freshness.
+- Reconciliation GitHub head: `ac24800867f01c92b3128b27201a487230439ab9`.
+- Tree-identical standalone deployment commit: `e69ce418ea23558b532ebfea50b22ebc91b90034`; its tree ID equals `ac24800:crm_streamlit`.
+- Clean S13 checkout activated atomically; prior dirty tree retained as a recoverable backup.
+- Service restarted active, expected workdir/entrypoint/PID, localhost HTTP 200.
+- Independent `git archive` closure comparison: 335 tracked runtime files matched, zero application-source mismatches; only documented host-local `.streamlit/config.toml` was additional.
+- Real-production read-only AppTest: five tabs, procurement source link, source/model/business/expert boundaries, factual history, legacy warning and all fast-annotation actions passed with zero exceptions.
 
-Until those gates pass: `GIT_DEPLOYED_RUNTIME_PARITY=NO`, `SERVICE_RESTARTED=NO`, `RUNNING_TREE_PARITY=NO`, and final reconciliation result is not PASS.
+## Final iteration still pending
+
+- Publish/redeploy the exact procurement-link caption alignment and read-only fresh-filter/reset acceptance script.
+- Re-run final SHA parity and production acceptance.
+
+Current proof: `GIT_DEPLOYED_RUNTIME_PARITY=YES`, `SERVICE_RESTARTED=YES`, `RUNNING_TREE_PARITY=YES`; final reconciliation result remains pending until the caption/reset acceptance iteration is deployed and rechecked.
