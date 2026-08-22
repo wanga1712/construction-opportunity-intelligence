@@ -12,8 +12,7 @@ import streamlit as st
 
 from src.ui.components.analytics_v2.annotation_queue import bind_and_advance
 from src.ui.components.analytics_v2.card_feed import render_card_feed
-from src.ui.components.analytics_v2.card_compact import render_compact_card
-# Removed render_card_detail import
+from src.ui.components.analytics_v2.stage_workspace import render_stage_workspace
 
 _SESSION_TORGI    = "selected_torgi_id"
 _SESSION_KOMISSIA = "selected_komissia_id"
@@ -211,6 +210,20 @@ def _torgi_priority_score(card: dict) -> int:
     return time_score + price_bonus + min(int(signal), 100)
 
 
+def _load_effective_map(cards: list[dict]) -> dict:
+    """One batch query for list signals; never performs document resolution."""
+    if not cards:
+        return {}
+    from src.services.db_bootstrap import connect_databases
+    from src.services.effective_assessment import get_effective_business_assessments
+    try:
+        _, _, crm_db, _ = connect_databases()
+        return get_effective_business_assessments([card["id"] for card in cards], crm_db)
+    except Exception as exc:
+        st.warning(f"Effective assessment load error: {exc}")
+        return {}
+
+
 
 def _load_komissia() -> list[dict]:
     """Подача закрыта — ждём решения комиссии."""
@@ -276,6 +289,7 @@ def _load_razygranye() -> list[dict]:
                        cp.winner_name, cp.winner_inn,
                        cp.start_date, cp.end_date,
                        cp.contract_signed_at, cp.execution_end_at,
+                       cp.delivery_end_date,
                        cp.commercial_window_state,
                        cp.tender_link, cp.award_status,
                        cp.crm_stage, cp.crm_profile_id,
@@ -358,15 +372,7 @@ def _render_torgi_tab() -> None:
         card_processing.enrich_card(card, proc_results.get(card["id"], {}))
 
     # ── Bulk-load effective assessments (single contract, no N+1) ──────────
-    from src.services.db_bootstrap import connect_databases
-    from src.services.effective_assessment import get_effective_business_assessments
-    eff_map: dict = {}
-    try:
-        _, _, crm_db, _ = connect_databases()
-        pids = [c["id"] for c in cards]
-        eff_map = get_effective_business_assessments(pids, crm_db)
-    except Exception as e:
-        st.warning(f"Effective assessment load error: {e}")
+    eff_map = _load_effective_map(cards)
 
     # ── Qualification layer sub-tabs ─────────────────────────────────────────
     n_candidate = sum(1 for c in cards if not c.get("is_confirmed"))
@@ -425,11 +431,13 @@ def _render_torgi_tab() -> None:
         caption += f" · выбрана #{selected_id}"
     st.caption(caption)
 
-    for idx, card in enumerate(filtered):
-        pid = card["id"]
-        render_compact_card(card, idx, session_key=_SESSION_TORGI, effective=eff_map.get(pid))
-
-    # Details rendered inline inside render_compact_card
+    render_stage_workspace(
+        filtered,
+        session_key=_SESSION_TORGI,
+        stage="OPEN",
+        stage_label="Идут торги",
+        effective_map=eff_map,
+    )
 
 
 
@@ -450,10 +458,8 @@ def _render_komissia_tab() -> None:
 
     waiting   = [c for c in cards if c["award_status"] == "submission_closed_waiting_award"]
     not_found = [c for c in cards if c["award_status"] == "award_not_found"]
-    waiting = bind_and_advance(
-        waiting, _SESSION_KOMISSIA, st.session_state, consume_if_missing=False
-    )
-    not_found = bind_and_advance(not_found, _SESSION_KOMISSIA, st.session_state)
+    filtered = waiting + not_found
+    filtered = bind_and_advance(filtered, _SESSION_KOMISSIA, st.session_state)
     selected_id = st.session_state.get(_SESSION_KOMISSIA)
 
     st.caption(
@@ -461,15 +467,13 @@ def _render_komissia_tab() -> None:
         + (f" · выбрана #{selected_id}" if selected_id else "")
     )
 
-    for idx, card in enumerate(waiting):
-        render_compact_card(card, idx, session_key=_SESSION_KOMISSIA)
-
-    if not_found:
-        with st.expander(f"Результат не найден ({len(not_found)})"):
-            for idx, card in enumerate(not_found, start=len(waiting)):
-                render_compact_card(card, idx, session_key=_SESSION_KOMISSIA)
-
-    # Details rendered inline inside render_compact_card
+    render_stage_workspace(
+        filtered,
+        session_key=_SESSION_KOMISSIA,
+        stage="COMMISSION",
+        stage_label="Комиссия",
+        effective_map=_load_effective_map(filtered),
+    )
 
 
 # ─── Разыгранные-таб ──────────────────────────────────────────────────────────
@@ -485,9 +489,6 @@ def _render_razygranye_tab() -> None:
     if not cards:
         st.info("Нет разыгранных закупок.")
         return
-
-    selected_id   = st.session_state.get(_SESSION_RAZYGR)
-    selected_card = next((c for c in cards if c["id"] == selected_id), None)
 
     # ── Qualification layer sub-tabs ─────────────────────────────────────────
     n_candidate = sum(1 for c in cards if not c.get("is_confirmed"))
@@ -512,10 +513,13 @@ def _render_razygranye_tab() -> None:
         f" · {('✓ Подтверждено' if is_confirmed_layer else 'Предварительно ИИ')}: {len(cards_layer)}"
     )
 
-    for idx, card in enumerate(cards_layer):
-        render_compact_card(card, idx, session_key=_SESSION_RAZYGR)
-
-    # Details rendered inline inside render_compact_card
+    render_stage_workspace(
+        cards_layer,
+        session_key=_SESSION_RAZYGR,
+        stage="AWARDED",
+        stage_label="Разыгранные",
+        effective_map=_load_effective_map(cards_layer),
+    )
 
 
 # ─── На рассмотрении-таб (CRM-SYNC-1) ───────────────────────────────────────

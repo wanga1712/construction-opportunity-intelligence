@@ -33,7 +33,13 @@ def _run() -> AppTest:
 
 def main() -> int:
     fresh = _run()
-    metrics = {item.label: int(item.value) for item in fresh.metric}
+    metrics = {}
+    for item in fresh.metric:
+        try:
+            metrics[item.label] = int(item.value)
+        except (TypeError, ValueError):
+            # Phase 2 card metrics include formatted money/date/law values.
+            continue
     fresh_info = "\n".join(str(item.value) for item in fresh.info)
 
     reset = AppTest.from_file("app.py", default_timeout=120)
