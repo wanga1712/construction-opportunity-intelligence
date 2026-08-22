@@ -33,7 +33,7 @@ def main() -> int:
         "procurement_id": procurement_id,
         "exceptions": [str(item.value) for item in at.exception],
         "tabs": tabs,
-        "source_link_button": "🔗 Открыть оригинал закупки" in link_buttons,
+        "source_link_button": "🔗 Открыть закупку" in link_buttons,
         "header_source_law": "223-ФЗ" in markdown,
         "authority_sections": all(label in markdown for label in ("SOURCE FACTS", "MODEL", "BUSINESS RULE", "EXPERT")),
         "documents_empty_truthful": "Документные наблюдения" in infos,

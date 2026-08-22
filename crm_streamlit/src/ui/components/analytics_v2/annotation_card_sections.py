@@ -13,7 +13,7 @@ def render_workbench_header(header: dict, procurement_id: int, lifecycle: str, p
     st.markdown(f"## {header.get('auction_name') or 'Закупка без названия'}")
     link = header.get("tender_link")
     if link:
-        st.link_button("🔗 Открыть оригинал закупки", link, type="primary")
+        st.link_button("🔗 Открыть закупку", link, type="primary")
     c1, c2, c3, c4 = st.columns(4)
     c1.markdown(f"**Номер**  \n`{header.get('contract_number') or procurement_id}`")
     c2.markdown(f"**Источник / закон**  \n`{header.get('source_table') or '—'}` · {source_law(header.get('source_table'))}")
