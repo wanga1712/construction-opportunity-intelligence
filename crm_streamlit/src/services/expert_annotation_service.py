@@ -144,13 +144,18 @@ def load_model_assessment_for_annotation(
             nr = {}
     inference_run_id = row.get("inference_run_id")
     validated_model_result = None
+    raw_model_json = None
+    validation_status = None
+    validation_errors: list[str] = []
+    inference_prompt_version = None
     model_provenance = "UNKNOWN_LEGACY"
     if inference_run_id is not None:
         model_provenance = "MODEL_VALIDATED"
         try:
             ir = crm_db.execute_query(
                 """
-                SELECT validated_model_result, validation_status, raw_model_sha256
+                SELECT validated_model_result, validation_status, raw_model_sha256,
+                       raw_model_json, validation_errors, prompt_version, run_kind
                 FROM crm_v3_model_inference_runs
                 WHERE id = %s
                 LIMIT 1
@@ -158,14 +163,35 @@ def load_model_assessment_for_annotation(
                 (inference_run_id,),
             )
             if ir:
-                validated_model_result = ir[0].get("validated_model_result")
-                if isinstance(validated_model_result, str):
-                    try:
-                        validated_model_result = json.loads(validated_model_result)
-                    except Exception:
-                        validated_model_result = None
+                ir_row = ir[0]
+                if (ir_row.get("run_kind") or "").upper() == "SHADOW":
+                    model_provenance = "SHADOW_EXCLUDED"
+                else:
+                    validated_model_result = ir_row.get("validated_model_result")
+                    if isinstance(validated_model_result, str):
+                        try:
+                            validated_model_result = json.loads(validated_model_result)
+                        except Exception:
+                            validated_model_result = None
+                    raw_model_json = ir_row.get("raw_model_json")
+                    if isinstance(raw_model_json, str):
+                        try:
+                            raw_model_json = json.loads(raw_model_json)
+                        except Exception:
+                            raw_model_json = None
+                    validation_status = ir_row.get("validation_status")
+                    ve = ir_row.get("validation_errors")
+                    if isinstance(ve, str):
+                        try:
+                            ve = json.loads(ve)
+                        except Exception:
+                            ve = []
+                    validation_errors = list(ve or [])
+                    inference_prompt_version = ir_row.get("prompt_version")
         except Exception:
             validated_model_result = None
+            raw_model_json = None
+            validation_errors = []
 
     brr = row.get("business_rule_result")
     if isinstance(brr, str):
@@ -198,6 +224,10 @@ def load_model_assessment_for_annotation(
         "prompt_version": row.get("prompt_version"),
         "inference_run_id": inference_run_id,
         "validated_model_result": validated_model_result,
+        "raw_model_json": raw_model_json,
+        "validation_status": validation_status,
+        "validation_errors": validation_errors,
+        "inference_prompt_version": inference_prompt_version,
         "model_provenance": model_provenance,
         "business_rule_result": brr,
         "field_provenance": fp,
