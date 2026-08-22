@@ -62,11 +62,11 @@ def _summary(card: dict, stage: str, effective: Any, state: dict, published: boo
                                f"🔎 {card.get('match_count')} совпадений" if card.get("match_count") else None,
                                f"✅ {card.get('evidence_count')} подтверждений" if card.get("evidence_count") else None]))
     st.markdown(" ".join(f"`{escape(str(chip))}`" for chip in chips if chip))
-    st.markdown(f"<div style='font-size:24px;font-weight:680;line-height:1.3;margin:.35rem 0 .6rem'>{escape(card.get('auction_name') or 'Закупка без названия')}</div>", unsafe_allow_html=True)
+    st.markdown(f"<div style='font-size:24px;font-weight:680;line-height:1.3;margin:.35rem 0 .6rem;overflow-wrap:anywhere'>{escape(card.get('auction_name') or 'Закупка без названия')}</div>", unsafe_allow_html=True)
     facts = (("💰", fmt_price(amount), amount_label), ("📅", fmt_date(deadline), deadline_label),
              ("📜", source_law(card.get("source_table")), "Источник"))
-    st.markdown("<div style='display:flex;gap:12px;flex-wrap:wrap'>" + "".join(
-        f"<div style='min-width:170px;flex:1'><b style='font-size:20px'>{icon} {escape(str(value))}</b><br><small>{escape(label)}</small></div>"
+    st.markdown("<div style='display:grid;grid-template-columns:repeat(auto-fit,minmax(min(145px,100%),1fr));gap:10px;width:100%'>" + "".join(
+        f"<div style='min-width:0'><b style='font-size:20px;white-space:nowrap'>{icon} {escape(str(value))}</b><br><small>{escape(label)}</small></div>"
         for icon, value, label in facts) + "</div>", unsafe_allow_html=True)
     st.markdown(f"🏢 {escape(str(card.get('customer') or '—'))} &nbsp;&nbsp; 📍 {escape(str(card.get('delivery_region') or '—'))}", unsafe_allow_html=True)
     if stage == "AWARDED" and card.get("contractor_name"):
