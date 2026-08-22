@@ -20,6 +20,9 @@ from src.services.commercial_routing_v3.source_contour import resolve_source_con
 from src.services.commercial_routing_v3.source_lifecycle import (
     normalize_source_lifecycle_event,
 )
+from src.services.commercial_routing_v3.submission_window import (
+    TOO_SHORT_REASON, is_actionable_submission_window,
+)
 
 PLACEHOLDER_TITLES = frozenset(
     {"", "(без названия)", "без названия", "не указано", "н/д", "null"}
@@ -135,6 +138,10 @@ def evaluate_routing_eligibility(
 
     # Lane from normalized lifecycle (never physical table alone)
     if lifecycle == "OPEN":
+        if not is_actionable_submission_window(proc.get("end_date"), now=now, today=as_of):
+            return RoutingEligibilityDecision(
+                False, None, TOO_SHORT_REASON, lifecycle, True, "NONE", attempts, status
+            )
         lane, commercial = LANE_ACTIVE_OPEN, "ACTIVE"
     elif lifecycle == "WAITING_SOURCE_OUTCOME":
         if not WAITING_ROUTABLE:

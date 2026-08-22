@@ -8,7 +8,7 @@ def test_torgi_expert_workset_does_not_use_manager_publication_as_admission_gate
     loader = source.split("def _load_torgi", 1)[1].split("def _load_queue_statuses_batch", 1)[0]
     assert "cp.crm_stage = 'torgi'" in loader
     assert "cp.award_status = 'submission_open'" in loader
-    assert "cp.end_date >= CURRENT_DATE" in loader
+    assert "actionable_submission_sql(\"cp\")" in loader
     assert "torgi_publication_sql_filters" not in loader
     assert "publication_schema_ready" not in loader
 
