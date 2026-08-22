@@ -300,7 +300,7 @@ def render_annotation_card(
 
 def _render_ai_block(assessment: dict | None) -> None:
     with st.container(border=True):
-        st.markdown("##### ИИ ПРЕДЛОЖИЛ")
+        st.markdown("##### 🤖 ИИ ПРЕДЛОЖИЛ")
         view = model_view_from_assessment(assessment)
         if view.get("provenance") == "UNKNOWN_LEGACY":
             st.warning("⚠ **ИСТОРИЧЕСКАЯ ОЦЕНКА** — RAW модели не сохранён")
@@ -361,7 +361,8 @@ def _render_category_verdicts(
     cat_labels: list[str],
 ) -> None:
     st.markdown("---")
-    st.markdown("##### Категории — быстрая разметка")
+    st.markdown("##### 👤 ЭКСПЕРТНАЯ РАЗМЕТКА")
+    st.markdown("###### Категории — быстрая разметка")
     rows = model_category_rows(assessment)
     if not rows:
         st.info("ИИ не выбрал коммерческую категорию")

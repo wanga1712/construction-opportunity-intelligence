@@ -37,6 +37,7 @@ from src.ui.page_deps import (
     requires_companies_service,
 )
 from src.ui.system_health_page import render_system_health_page
+from src.ui.v3_analytics_page import render_v3_analytics_page
 from src.ui.annotation_workbench_page import render_annotation_workbench_page
 from src.ui.waterproofing_page import render_waterproofing_page
 

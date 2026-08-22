@@ -36,6 +36,7 @@ _SESSION_PAGE = "annotation_wb_page"
 _SESSION_PAGE_SIZE = "annotation_wb_page_size"
 _SESSION_SELECTED = "annotation_wb_selected_id"
 _QUEUE_SESSION_KEY = "annotation_wb_queue"
+_BUILD_ID = "CRM-V3-EXPERT-ANNOTATION-MVP-1/B.1"
 
 
 def _filters_from_session() -> AnnotationQueueFilters:
@@ -62,8 +63,8 @@ def _store_filters(f: AnnotationQueueFilters) -> None:
 def render_annotation_workbench_page(service: Optional[Any]) -> None:
     st.title("🏷️ РАЗМЕТКА")
     st.caption(
-        "Экспертный контур разметки. Обходит publication gate CRM. "
-        "Normal «Идут торги» не изменяется."
+        f"Экспертный контур разметки · build `{_BUILD_ID}` · "
+        "обходит publication gate CRM · normal «Идут торги» не изменяется."
     )
     if not service or not getattr(service, "crm_db", None):
         st.error("CRM DB недоступна")
@@ -84,6 +85,11 @@ def render_annotation_workbench_page(service: Optional[Any]) -> None:
     _store_filters(filters)
 
     queue_ids = fetch_queue_ids(crm_db, filters)
+    st.info(
+        f"**Очередь: {len(queue_ids)} карточек** · publication gate **не** применяется · "
+        f"open+assessed всего: {counters.get('open_assessed', 0)} · "
+        f"publication-visible: {counters.get('publication_visible_open_assessed', 0)}"
+    )
     if not queue_ids:
         st.info("Очередь пуста для текущих фильтров.")
         return
