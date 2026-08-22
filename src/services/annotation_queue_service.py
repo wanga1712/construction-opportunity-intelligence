@@ -431,10 +431,13 @@ def fetch_procurement_header(crm_db: Any, procurement_id: int) -> dict | None:
     rows = crm_db.execute_query(
         """
         SELECT cp.id, cp.auction_name, cp.initial_price, cp.final_price,
+               cp.final_contract_price,
                cp.delivery_region,
                cp.okpd_code, cp.okpd_name, cp.crm_stage, cp.award_status,
                cp.end_date, cp.contract_number, cp.customer, cp.source_table,
-               cp.source_id, cp.tender_link, cp.crm_created_at,
+               cp.source_id, cp.tender_link, cp.delivery_start_date,
+               cp.delivery_end_date, cp.award_date, cp.contract_signed_at,
+               cp.execution_start_at, cp.execution_end_at, cp.crm_created_at,
                cp.crm_updated_at, cp.source_updated_at
         FROM crm_procurements cp
         WHERE cp.id = %s

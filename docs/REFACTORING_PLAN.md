@@ -13,6 +13,10 @@
 
 ## CURRENT WIP — 2026-08-22
 
+**CRM-V3-ANNOTATION-CARD-DOCUMENTS-HISTORY-REDESIGN-1** — `[!]` **PHASE 1 FAIL / STOP BEFORE PHASE 2**. Read-only audit on canonical baseline `149e5d9bf25d9164967e5ccd8abba3cade2e18b3` covered real open 44/223 and awarded 44 procurements, complete S7 document enumeration, duplicates, price/date/contract-link provenance and multi-authority history. Production has zero rows in `crm_v3_document_observations`, so the mandatory real stored-observation case and production join cannot be proved without manufacturing data; awarded 223 is also unavailable. Proposed deterministic join is `source_document_id`, exact URL as legacy fallback, with explicit unobserved and orphan states. No UI/model/prompt/pipeline/DDL/source/runtime change. Reports: `docs/reports/annotation_card_documents_history_redesign/PHASE_1_DATA_CONTRACT_AUDIT.md` and `.json`. Do not start Phase 2 until the real-observation gate is satisfied and the read-only audit is rerun.
+
+## PRIOR — 2026-08-22
+
 **CRM-V3-EXPERT-ANNOTATION-MVP-1** — `[~]` **PHASE C — READY FOR OPERATOR BATCH**. Phase B/Phase C runtime is active on S13 (HTTP 200). Phase C adds explicit PARTIAL/COMPLETE review scope, `NEEDS_DOCUMENT_RESEARCH`, read-only stored document findings and deterministic eligibility rules; no model/prompt/publication/document-pipeline changes. First real batch is fixed at 20 unannotated open assessed procurements, balanced 10 publication-visible / 10 hidden. Focused local and S13 tests: 41 PASS each. Isolated temp-table lifecycle fixture: save/reload/edit/second reload PASS, model hash and production annotation count unchanged. Existing annotations 5→5; operator batch remains intentionally pending. STOP before training.
 
 **Phase C size note:** `annotation_card.py` is 591 lines after adding the acceptance controls. It remains the single stateful card because verdict buttons, ranked draft, review scope and SAVE/SAVE+NEXT share Streamlit session keys and one rerun boundary. Phase C forbids a broader card redesign; decomposition is deferred to the already listed Stage 2 card-component task.
