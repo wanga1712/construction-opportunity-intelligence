@@ -1,0 +1,38 @@
+{
+  "wip": "CRM-V3-ANNOTATION-CARD-DOCUMENTS-HISTORY-REDESIGN-1",
+  "phase": 1,
+  "result": "FAIL",
+  "audit_mode": "READ_ONLY",
+  "development_baseline": "149e5d9bf25d9164967e5ccd8abba3cade2e18b3",
+  "production_runtime_ref": "fc0d53ae0be8621fb63eae0e43b67a680b709d13",
+  "ui_changed": false,
+  "source_data_mutated": false,
+  "blockers": [
+    {
+      "code": "NO_REAL_DOCUMENT_OBSERVATION_FIXTURE",
+      "fact": "crm_v3_document_observations contains 0 rows for 0 procurements",
+      "impact": "The required real procurement with a stored observation and the production join cannot be demonstrated."
+    },
+    {
+      "code": "AWARDED_223_NOT_AVAILABLE",
+      "fact": "No awarded 223-FZ procurement exists in the current CRM projection",
+      "impact": "Awarded 223-FZ UI/data semantics cannot be audited on a real CRM card."
+    }
+  ],
+  "cases": [
+    {"id": 1013, "source_table": "reestr_contract_223_fz", "law": "223-FZ", "lifecycle": "OPEN_LEGACY_NO_CANONICAL_CARD", "raw_links": 2, "unique_urls": 2, "unique_physical_documents": 2, "duplicate_rows": 0, "observed_documents": 0, "unobserved_documents": 2, "orphan_observations": 0, "procurement_url_present": true, "contract_url_present": false, "join_deterministic_on_real_data": false, "history_events": 6, "initial_price": 1400000, "final_contract_price": null, "display_amount": "NMCK 1400000"},
+    {"id": 8021, "source_table": "reestr_contract_44_fz", "law": "44-FZ", "lifecycle": "OPEN", "raw_links": 256, "unique_urls": 170, "unique_physical_documents": 170, "duplicate_rows": 86, "observed_documents": 0, "unobserved_documents": 170, "orphan_observations": 0, "procurement_url_present": true, "contract_url_present": false, "join_deterministic_on_real_data": false, "history_events": 2, "initial_price": 4020029027.22, "final_contract_price": null, "display_amount": "NMCK 4020029027.22"},
+    {"id": 17390, "source_table": "reestr_contract_223_fz", "law": "223-FZ", "lifecycle": "OPEN", "raw_links": 6, "unique_urls": 6, "unique_physical_documents": 6, "duplicate_rows": 0, "observed_documents": 0, "unobserved_documents": 6, "orphan_observations": 0, "procurement_url_present": true, "contract_url_present": false, "join_deterministic_on_real_data": false, "history_events": 3, "initial_price": 175000, "final_contract_price": null, "display_amount": "NMCK 175000"},
+    {"id": 20254, "source_table": "reestr_contract_44_fz_awarded", "law": "44-FZ", "lifecycle": "AWARDED", "raw_links": 30, "unique_urls": 2, "unique_physical_documents": 2, "duplicate_rows": 28, "observed_documents": 0, "unobserved_documents": 2, "orphan_observations": 0, "procurement_url_present": true, "contract_url_present": true, "join_deterministic_on_real_data": false, "history_events": 2, "initial_price": 6561721.46, "final_contract_price": 5675888.99, "display_amount": "CONTRACT 5675888.99", "factual_contract_url_source": "links_documentation_44_fz: Информация о контракте"},
+    {"id": 20256, "source_table": "reestr_contract_44_fz_awarded", "law": "44-FZ", "lifecycle": "AWARDED", "raw_links": 275, "unique_urls": 25, "unique_physical_documents": 25, "duplicate_rows": 250, "observed_documents": 0, "unobserved_documents": 25, "orphan_observations": 0, "procurement_url_present": true, "contract_url_present": true, "join_deterministic_on_real_data": false, "history_events": 7, "initial_price": 0, "final_contract_price": 331398905.55, "display_amount": "CONTRACT 331398905.55", "factual_contract_url_source": "links_documentation_44_fz: Информация о контракте"}
+  ],
+  "proposed_contracts": {
+    "documents": "Resolve the complete current S7 source list by contract_number (source_id fallback), deduplicate physical targets, retain version/source identifiers, and never use capped canonical document_links_summary as completeness authority.",
+    "observations": "Left-join stored observations to source documents by source_document_id; use exact source_document_url only as a legacy fallback; display unobserved documents and orphan observations explicitly.",
+    "price": "OPEN shows initial_price as NMCK. AWARDED shows final_contract_price as contract amount and initial_price separately; zero is not treated as missing.",
+    "dates": "OPEN start_date/end_date are procedure/application-window facts unless an explicit publication field exists. AWARDED uses explicit contract/delivery/execution fields; generic dates require provenance labels and must not be relabelled as publication.",
+    "contract_url": "Expose only a factual source contract URL, currently the strict S7 document row named 'Информация о контракте' with an /epz/contract/ URL; do not synthesize it from tender_link.",
+    "history": "Merge factual source, model, business, override, expert and audit events; sort by factual timestamp; preserve authority labels; suppress only exact duplicate event signatures."
+  },
+  "raw_evidence_file": "PHASE_1_DATA_CONTRACT_AUDIT.raw.json"
+}
