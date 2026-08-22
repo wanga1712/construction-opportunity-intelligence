@@ -16,4 +16,3 @@ Read-only metadata inspection used the approved production-DB route. No DDL was 
 `INFERENCE_RUN_ID_SCHEMA_TRUTH=PRESENT_AND_POPULATED`.
 
 The earlier contradiction was a stale runtime/report assertion, not current production schema truth. The migration source file `crm_v3_business_rule_result_1.sql` is absent from the dirty S13 application tree, but its required columns, FK and index are already present in the database. Therefore `MISSING_REQUIRED_MIGRATIONS=0` for the reconciled code and no migration is planned.
-
