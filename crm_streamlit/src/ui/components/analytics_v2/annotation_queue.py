@@ -11,6 +11,7 @@ from typing import Any
 GO_NEXT_KEY = "annotation_go_next"
 GO_NEXT_FROM_KEY = "annotation_go_next_from"
 QUEUE_PREFIX = "_annotation_queue_"
+ACTIVE_QUEUE_KEY = "annotation_active_queue_session_key"
 
 
 def remember_queue(card_ids: list[int], session_key: str, session: dict) -> None:
@@ -50,6 +51,9 @@ def bind_and_advance(
     remember_queue(ids, session_key, session)
 
     if session.get(GO_NEXT_KEY):
+        active_queue = session.get(ACTIVE_QUEUE_KEY)
+        if active_queue and active_queue != session_key:
+            return cards
         from_id = session.get(GO_NEXT_FROM_KEY)
         if from_id not in ids:
             if consume_if_missing:

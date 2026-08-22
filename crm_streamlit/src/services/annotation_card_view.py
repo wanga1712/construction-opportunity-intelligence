@@ -7,12 +7,18 @@ from src.services.annotation_card_provenance import load_annotation_history, sou
 from src.services.commercial_routing_v3.document_links import resolve_document_links
 
 
-def _is_awarded(header: dict) -> bool:
-    return (
+def _lifecycle(header: dict) -> str:
+    if (
         "awarded" in str(header.get("source_table") or "").lower()
         or str(header.get("award_status") or "").lower() == "awarded"
         or str(header.get("crm_stage") or "").lower() == "razygranye"
-    )
+    ):
+        return "AWARDED"
+    if str(header.get("award_status") or "").lower() in {
+        "submission_closed_waiting_award", "award_not_found"
+    }:
+        return "COMMISSION"
+    return "OPEN"
 
 
 def _exact_url(value: Any) -> str | None:
@@ -63,7 +69,8 @@ def compose_annotation_card_view(
     history: list[dict],
 ) -> dict:
     """Pure composition step used by tests and the runtime loader."""
-    awarded = _is_awarded(header)
+    lifecycle = _lifecycle(header)
+    awarded = lifecycle == "AWARDED"
     initial = header.get("initial_price")
     final = header.get("final_contract_price")
     if final is None:
@@ -74,6 +81,9 @@ def compose_annotation_card_view(
     if awarded:
         deadline = header.get("execution_end_at") or header.get("delivery_end_date")
         deadline_label = "Исполнение до" if deadline else "Срок исполнения"
+    elif lifecycle == "COMMISSION":
+        deadline = header.get("end_date")
+        deadline_label = "Приём заявок завершён"
     else:
         deadline = header.get("end_date")
         deadline_label = "Приём заявок до"
@@ -129,7 +139,7 @@ def compose_annotation_card_view(
             "contract_number": header.get("contract_number"),
             "source_table": header.get("source_table"),
             "law": source_law(header.get("source_table")),
-            "lifecycle": "AWARDED" if awarded else "OPEN",
+            "lifecycle": lifecycle,
             "award_status": header.get("award_status"),
             "customer": header.get("customer"),
             "region": header.get("delivery_region"),

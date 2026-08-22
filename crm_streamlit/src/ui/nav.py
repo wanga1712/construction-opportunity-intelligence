@@ -18,7 +18,6 @@ PAGES = {
     "export_pdf": ("📄", "Выгрузка PDF"),
     "crm_profiles": ("⚙️", "Профили поиска"),
     "category_registry": ("📦", "Товарные категории"),
-    "expert_annotation": ("🏷️", "РАЗМЕТКА"),
 }
 
 FUTURE_PAGES: list = []

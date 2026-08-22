@@ -127,14 +127,7 @@ def _render_filters() -> None:
 
     st.button("Расширенные фильтры", use_container_width=True)
     if st.button("Сбросить фильтры", use_container_width=True):
-        _reset_all_category_filters()
-        for key in [
-            "analytics_v2_profile_filter",
-            "analytics_v2_level_filter",
-            "analytics_v2_region_filter",
-            "analytics_v2_show_mode",
-        ]:
-            st.session_state.pop(key, None)
+        _reset_analytics_filters_state(st.session_state)
         st.rerun()
 
 
@@ -175,12 +168,31 @@ def _init_cat_state(stage: str, hierarchy: dict) -> None:
         }
 
 
-def _reset_all_category_filters() -> None:
+def _reset_all_category_filters(session: dict | None = None) -> None:
     """Удаляет все category filter ключи из session_state."""
+    session = session if session is not None else st.session_state
     for stage in _STAGES:
         for k in [_cat_sess_key(stage), _subcat_sess_key(stage)]:
-            st.session_state.pop(k, None)
-    st.session_state.pop(_stage_sess_key(), None)
+            session.pop(k, None)
+    session.pop(_stage_sess_key(), None)
+
+
+def _reset_analytics_filters_state(session: dict) -> None:
+    """Restore list mode and filter defaults without touching unrelated state."""
+    _reset_all_category_filters(session)
+    for key in (
+        "analytics_v2_profile_filter",
+        "analytics_v2_level_filter",
+        "analytics_v2_region_filter",
+        "analytics_v2_show_mode",
+        "selected_torgi_id",
+        "selected_komissia_id",
+        "selected_razygr_id",
+        "annotation_active_queue_session_key",
+        "annotation_go_next",
+        "annotation_go_next_from",
+    ):
+        session.pop(key, None)
 
 
 def _render_category_filter_panel(filters_for_counts: dict) -> None:
