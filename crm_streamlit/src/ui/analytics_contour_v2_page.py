@@ -166,13 +166,14 @@ def _init_cat_state(stage: str, hierarchy: dict) -> None:
             cat: set(info["subcategories"].keys())
             for cat, info in hierarchy.items()
         }
+    st.session_state.setdefault(f"_catf_{stage}_explicit", False)
 
 
 def _reset_all_category_filters(session: dict | None = None) -> None:
     """Удаляет все category filter ключи из session_state."""
     session = session if session is not None else st.session_state
     for stage in _STAGES:
-        for k in [_cat_sess_key(stage), _subcat_sess_key(stage)]:
+        for k in [_cat_sess_key(stage), _subcat_sess_key(stage), f"_catf_{stage}_explicit"]:
             session.pop(k, None)
     session.pop(_stage_sess_key(), None)
 
@@ -238,6 +239,7 @@ def _render_category_filter_panel(filters_for_counts: dict) -> None:
                     cat: set(info["subcategories"].keys())
                     for cat, info in hierarchy.items()
                 }
+                st.session_state[f"_catf_{active_stage}_explicit"] = False
                 st.rerun()
         with b2:
             if st.button("Снять всё", key=f"_catf_{active_stage}_btn_none",
@@ -246,6 +248,7 @@ def _render_category_filter_panel(filters_for_counts: dict) -> None:
                 st.session_state[_subcat_sess_key(active_stage)] = {
                     cat: set() for cat in hierarchy
                 }
+                st.session_state[f"_catf_{active_stage}_explicit"] = True
                 st.rerun()
 
         if st.button("Только подтверждённые", key=f"_catf_{active_stage}_btn_conf",
@@ -263,6 +266,7 @@ def _render_category_filter_panel(filters_for_counts: dict) -> None:
                 for cat, info in hierarchy.items()
                 if cat in confirmed
             }
+            st.session_state[f"_catf_{active_stage}_explicit"] = True
             st.rerun()
 
         st.markdown("---")
@@ -278,6 +282,7 @@ def _render_category_filter_panel(filters_for_counts: dict) -> None:
             )
             st.session_state[_cat_sess_key(active_stage)] = new_cats
             st.session_state[_subcat_sess_key(active_stage)] = new_subs
+            st.session_state[f"_catf_{active_stage}_explicit"] = not val
 
         # Pre-set master key if needed
         master_cb_key = f"_catcb_{active_stage}_all"
@@ -323,6 +328,7 @@ def _render_category_filter_panel(filters_for_counts: dict) -> None:
                     cur_subs[_cat] = set()
                 st.session_state[_cat_sess_key(_stage)] = cur_cats
                 st.session_state[_subcat_sess_key(_stage)] = cur_subs
+                st.session_state[f"_catf_{_stage}_explicit"] = True
 
             st.checkbox(
                 f"**{cat_info['display']}** ({cat_info['count']})",

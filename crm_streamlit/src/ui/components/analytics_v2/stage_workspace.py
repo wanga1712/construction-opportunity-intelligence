@@ -1,45 +1,103 @@
 """Shared lazy inline-card workspace for analytical lifecycle feeds."""
 from __future__ import annotations
+
+from html import escape
 from typing import Any
+from urllib.parse import urlparse
+
 import streamlit as st
+
 from src.services.annotation_card_provenance import source_law
-from src.services.annotation_state_service import ANNOTATED, NOT_INTERESTING, UNANNOTATED, annotation_state_counts, load_current_annotation_states
+from src.services.annotation_state_service import (
+    ANNOTATED, NOT_INTERESTING, UNANNOTATED, annotation_state_counts,
+    load_current_annotation_states,
+)
 from src.ui.components.analytics_v2.card_trust import fmt_date, fmt_price
 
 SECTIONS = ("Обзор", "Модель / Категории", "Документы", "История", "Экспертная разметка")
-FILTERS = (("ALL", "Все"), (UNANNOTATED, "Не размеченные"), (ANNOTATED, "Размеченные"), (NOT_INTERESTING, "Неинтересные"))
+FILTERS = (("ALL", "Все"), (UNANNOTATED, "Не размеченные"),
+           (ANNOTATED, "Размеченные"), (NOT_INTERESTING, "Неинтересные"))
+AI_LABELS = {"ASSESSED": "🤖 AI оценено", "UNASSESSED": "🤖 AI не оценено",
+             "INCOMPLETE": "⚠ AI оценка неполная", "FAILED": "❌ Ошибка AI"}
+BUSINESS_LABELS = {"IN_PROFILE": "🟢 В профиле", "OUT_OF_PROFILE": "⚪ AI: вне профиля"}
+MEDAL_LABELS = {"GOLD": "🥇 GOLD", "SILVER": "🥈 SILVER", "BRONZE": "🥉 BRONZE", "WOOD": "🪵 WOOD"}
+
 
 def _activate_inline(active_key: str, procurement_id: int) -> None:
     st.session_state[active_key] = procurement_id
 
+
 def _amount(card: dict, stage: str):
-    return ((card.get("final_contract_price"), "Цена контракта") if stage == "AWARDED" and card.get("final_contract_price") is not None else (card.get("initial_price"), "НМЦК"))
+    if stage == "AWARDED" and card.get("final_contract_price") is not None:
+        return card.get("final_contract_price"), "Цена контракта"
+    return card.get("initial_price"), "НМЦК"
+
 
 def _deadline(card: dict, stage: str):
-    if stage == "AWARDED": return card.get("execution_end_at") or card.get("delivery_end_date"), "Исполнение до"
+    if stage == "AWARDED":
+        return card.get("execution_end_at") or card.get("delivery_end_date"), "Исполнение до"
     return card.get("end_date"), "Приём заявок завершён" if stage == "COMMISSION" else "Приём заявок до"
 
-def _summary(card: dict, stage: str, effective: Any, state: dict) -> None:
-    amount, amount_label = _amount(card, stage); deadline, deadline_label = _deadline(card, stage)
-    badge = {UNANNOTATED: "Не размечено", ANNOTATED: "Размечено", NOT_INTERESTING: "Неинтересная"}[state["annotation_state"]]
-    medal = getattr(effective, "best_candidate_level", None) if effective else None
-    business = getattr(effective, "business_relevance", None) if effective else None
-    ai = getattr(effective, "ai_status", None) if effective else None
-    st.caption(f"{medal or '—'} · 👤 {badge} · {stage}")
-    st.markdown(f"#### {card.get('auction_name') or 'Закупка без названия'}")
-    a, d, law = st.columns(3); a.metric(amount_label, fmt_price(amount)); d.metric(deadline_label, fmt_date(deadline)); law.metric("Источник", source_law(card.get("source_table")))
-    st.markdown(f"**Заказчик:** {card.get('customer') or '—'}  \n**Регион:** {card.get('delivery_region') or '—'}")
-    if stage == "AWARDED" and card.get("contractor_name"): st.markdown(f"**Подрядчик / победитель:** {card['contractor_name']}")
-    st.caption(f"AI: {ai or '—'} · Business: {business or '—'} · route: {card.get('proposed_route_profile') or '—'} · object: {card.get('proposed_object_type') or '—'} · category: {card.get('crm_category') or '—'} · confidence: {card.get('confidence') or '—'} · files/matches/evidence: {card.get('file_count') or 0}/{card.get('match_count') or 0}/{card.get('evidence_count') or 0}")
 
-def render_stage_workspace(cards: list[dict], *, session_key: str, stage: str, stage_label: str, effective_map: dict | None = None) -> str:
+def _clean(value: Any) -> str | None:
+    text = str(value or "").strip()
+    return None if not text or text.lower() in {"unknown", "unassessed", "none", "—"} else text
+
+
+def _summary(card: dict, stage: str, effective: Any, state: dict, published: bool) -> None:
+    amount, amount_label = _amount(card, stage)
+    deadline, deadline_label = _deadline(card, stage)
+    human = {UNANNOTATED: "👤 Не размечено", ANNOTATED: "✓ Размечено",
+             NOT_INTERESTING: "⛔ Неинтересная"}[state["annotation_state"]]
+    medal = _clean(getattr(effective, "best_candidate_level", None) if effective else None)
+    business = _clean(getattr(effective, "business_relevance", None) if effective else None)
+    ai = _clean(getattr(effective, "ai_status", None) if effective else None) or "UNASSESSED"
+    chips = [MEDAL_LABELS.get(medal, medal) if medal else None, human,
+             AI_LABELS.get(ai, f"🤖 {ai}"), BUSINESS_LABELS.get(business) if business else None,
+             "✓ Опубликовано в CRM" if published else "Не опубликовано менеджерам"]
+    for icon, value in (("📦", card.get("crm_category")), ("🏗", card.get("proposed_object_type")),
+                        ("🛠", card.get("proposed_procurement_type"))):
+        if _clean(value): chips.append(f"{icon} {_clean(value)}")
+    chips.extend(filter(None, [f"📎 {card.get('file_count')} документов" if card.get("file_count") else None,
+                               f"🔎 {card.get('match_count')} совпадений" if card.get("match_count") else None,
+                               f"✅ {card.get('evidence_count')} подтверждений" if card.get("evidence_count") else None]))
+    st.markdown(" ".join(f"`{escape(str(chip))}`" for chip in chips if chip))
+    st.markdown(f"<div style='font-size:24px;font-weight:680;line-height:1.3;margin:.35rem 0 .6rem'>{escape(card.get('auction_name') or 'Закупка без названия')}</div>", unsafe_allow_html=True)
+    facts = (("💰", fmt_price(amount), amount_label), ("📅", fmt_date(deadline), deadline_label),
+             ("📜", source_law(card.get("source_table")), "Источник"))
+    st.markdown("<div style='display:flex;gap:12px;flex-wrap:wrap'>" + "".join(
+        f"<div style='min-width:170px;flex:1'><b style='font-size:20px'>{icon} {escape(str(value))}</b><br><small>{escape(label)}</small></div>"
+        for icon, value, label in facts) + "</div>", unsafe_allow_html=True)
+    st.markdown(f"🏢 {escape(str(card.get('customer') or '—'))} &nbsp;&nbsp; 📍 {escape(str(card.get('delivery_region') or '—'))}", unsafe_allow_html=True)
+    if stage == "AWARDED" and card.get("contractor_name"):
+        st.markdown(f"**Подрядчик / победитель:** {card['contractor_name']}")
+
+
+def _source_actions(card: dict) -> None:
+    url = _clean(card.get("tender_link"))
+    if url:
+        host = (urlparse(url).hostname or "").lower()
+        st.link_button("🔗 Закупка на ЕИС" if "zakupki.gov.ru" in host else "🔗 Открыть закупку", url)
+    else:
+        st.caption("🔗 Ссылка на закупку отсутствует")
+
+
+def render_stage_workspace(cards: list[dict], *, session_key: str, stage: str,
+                           stage_label: str, effective_map: dict | None = None,
+                           workset_ids: list[int] | None = None) -> str:
+    from src.services.annotation_queue_service import batch_publication_visibility
     from src.services.db_bootstrap import connect_databases
     _, _, crm_db, _ = connect_databases()
-    states = load_current_annotation_states([c["id"] for c in cards], crm_db); counts = annotation_state_counts(states)
-    filter_key = f"annotation_state_filter_{session_key}"; labels = [f"{label} · {counts[key]}" for key, label in FILTERS]
-    selected_label = st.radio("Экспертная разметка", labels, horizontal=True, key=filter_key)
+    all_ids = workset_ids or [card["id"] for card in cards]
+    all_states = load_current_annotation_states(all_ids, crm_db)
+    counts = annotation_state_counts(all_states)
+    page_states = {card["id"]: all_states[card["id"]] for card in cards}
+    publication = batch_publication_visibility(crm_db, [card["id"] for card in cards])
+    filter_key = f"annotation_state_filter_{session_key}"
+    labels = [f"{label} · {counts[key]}" for key, label in FILTERS]
+    selected_label = st.pills("Экспертная разметка", labels, default=labels[0], key=filter_key)
     selected_state = FILTERS[labels.index(selected_label)][0]
-    visible = cards if selected_state == "ALL" else [c for c in cards if states[c["id"]]["annotation_state"] == selected_state]
+    visible = cards if selected_state == "ALL" else [card for card in cards if page_states[card["id"]]["annotation_state"] == selected_state]
     active_key = f"active_inline_{session_key}"
     focused = st.session_state.get(session_key)
     if focused in [card["id"] for card in visible]:
@@ -48,19 +106,25 @@ def render_stage_workspace(cards: list[dict], *, session_key: str, stage: str, s
     for card in visible:
         pid = card["id"]
         with st.container(border=True):
-            _summary(card, stage, (effective_map or {}).get(pid), states[pid])
-            section = st.radio("Раздел карточки", SECTIONS, horizontal=True, key=f"inline_card_tab_{pid}", on_change=_activate_inline, args=(active_key, pid))
-            if section == "Обзор":
-                if card.get("tender_link"): st.link_button("🔗 Открыть закупку", card["tender_link"])
-            elif st.session_state.get(active_key) == pid:
-                _render_expensive_section(pid, section)
-            else: st.caption("Другой карточке принадлежит активный рабочий фокус.")
+            _summary(card, stage, (effective_map or {}).get(pid), page_states[pid], publication.get(pid, False))
+            _source_actions(card)
+            section_labels = list(SECTIONS); section_labels[2] = f"Документы · {card.get('file_count') or 0}"
+            section = st.pills("Раздел карточки", section_labels, default=section_labels[0],
+                               key=f"inline_card_tab_{pid}", label_visibility="collapsed",
+                               on_change=_activate_inline, args=(active_key, pid))
+            canonical_section = "Документы" if section.startswith("Документы") else section
+            if canonical_section != "Обзор" and st.session_state.get(active_key) == pid:
+                _render_expensive_section(pid, canonical_section)
     return "INLINE"
+
 
 def _render_expensive_section(procurement_id: int, section: str) -> None:
     from src.services.annotation_queue_service import fetch_procurement_header
     from src.services.db_bootstrap import connect_databases
     from src.services.expert_annotation_service import load_expert_annotation, load_model_assessment_for_annotation
     from src.ui.components.analytics_v2.annotation_card import render_annotation_section
-    _, _, crm_db, _ = connect_databases(); header = fetch_procurement_header(crm_db, procurement_id)
-    render_annotation_section(crm_db=crm_db, procurement_id=procurement_id, header=header, assessment=load_model_assessment_for_annotation(procurement_id, crm_db), existing_annotation=load_expert_annotation(procurement_id, crm_db), section=section)
+    _, _, crm_db, _ = connect_databases()
+    header = fetch_procurement_header(crm_db, procurement_id)
+    render_annotation_section(crm_db=crm_db, procurement_id=procurement_id, header=header,
+                              assessment=load_model_assessment_for_annotation(procurement_id, crm_db),
+                              existing_annotation=load_expert_annotation(procurement_id, crm_db), section=section)
