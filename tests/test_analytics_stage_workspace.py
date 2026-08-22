@@ -149,3 +149,9 @@ def test_separate_annotation_page_is_not_a_sidebar_product_route():
     pages_block = source.split("PAGES = {", 1)[1].split("}", 1)[0]
     assert '"objects_v2"' in pages_block
     assert '"expert_annotation"' not in pages_block
+
+
+def test_real_analytics_page_uses_lazy_single_stage_dispatcher():
+    source = Path("src/ui/analytics_contour_v2_page.py").read_text(encoding="utf-8")
+    assert "analytics_v2.tabs_lazy_dispatch import render_tabs" in source
+    assert "analytics_v2.tabs import render_tabs" not in source

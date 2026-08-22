@@ -9,7 +9,7 @@ from src.ui.components.analytics_v2.kpi_row import render_kpi_row
 from src.ui.components.analytics_v2.limits import render_limits
 from src.ui.components.analytics_v2.mock_data import CARDS
 from src.ui.components.analytics_v2.quick_filters import render_quick_filters
-from src.ui.components.analytics_v2.tabs import render_tabs
+from src.ui.components.analytics_v2.tabs_lazy_dispatch import render_tabs
 
 _STICKY_CSS = """
 <style>
