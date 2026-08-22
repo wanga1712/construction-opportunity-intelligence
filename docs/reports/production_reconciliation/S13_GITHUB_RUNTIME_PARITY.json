@@ -1,0 +1,3432 @@
+{
+  "runtime_dependency_file_count": 341,
+  "status_counts": {
+    "S13_ONLY_CHANGE": 211,
+    "MATCH_ALL": 121,
+    "MISSING_S13": 1,
+    "UNTRACKED_RUNTIME_FILE": 8
+  },
+  "classification_counts": {
+    "STALE_OLD_CODE": 9,
+    "GENERATED_OR_CACHE_ARTIFACT": 191,
+    "SECRET_OR_ENVIRONMENT_SPECIFIC": 2,
+    "DESIRED_RUNTIME_FIX_NOT_COMMITTED": 5,
+    "HOST_LOCAL_CONFIGURATION": 12
+  },
+  "recent_fix_presence": {
+    "github": {
+      "filter_reset": false,
+      "count_metrics": false,
+      "refresh_update": true,
+      "procurement_link": true,
+      "annotation_card_latest": true,
+      "document_observation_read": true,
+      "history_provenance": true
+    },
+    "local": {
+      "filter_reset": false,
+      "count_metrics": false,
+      "refresh_update": true,
+      "procurement_link": true,
+      "annotation_card_latest": true,
+      "document_observation_read": true,
+      "history_provenance": true
+    },
+    "s13": {
+      "filter_reset": true,
+      "count_metrics": true,
+      "refresh_update": true,
+      "procurement_link": true,
+      "annotation_card_latest": true,
+      "document_observation_read": true,
+      "history_provenance": true
+    }
+  },
+  "files": [
+    {
+      "file": "AGENTS.md",
+      "github_sha256": "20d958e46ad6cadafe44248f2879a39947adbc6a01cfcb85828639e7d6d2cc05",
+      "local_sha256": "20d958e46ad6cadafe44248f2879a39947adbc6a01cfcb85828639e7d6d2cc05",
+      "s13_sha256": "3502e1b2df8a0cb7721d28e05cc7809c0814002513ae39fff26b18e16afdbc4e",
+      "status": "S13_ONLY_CHANGE",
+      "normalized_match_github_s13": false,
+      "classification": "STALE_OLD_CODE",
+      "function_or_section": "repository instructions",
+      "semantic_diff": "Older production-local instructions differ from canonical project policy"
+    },
+    {
+      "file": "app.py",
+      "github_sha256": "1dea5de97c343d92468ed12816c7d13dcde3f3c6b8ac9e756a78e64b09962c7e",
+      "local_sha256": "1dea5de97c343d92468ed12816c7d13dcde3f3c6b8ac9e756a78e64b09962c7e",
+      "s13_sha256": "1dea5de97c343d92468ed12816c7d13dcde3f3c6b8ac9e756a78e64b09962c7e",
+      "status": "MATCH_ALL",
+      "normalized_match_github_s13": false
+    },
+    {
+      "file": "pyproject.toml",
+      "github_sha256": "ff818b54d75da4d4a454a2e15bf1e09e1073376610c3651938ce3c6f0097e4e6",
+      "local_sha256": "ff818b54d75da4d4a454a2e15bf1e09e1073376610c3651938ce3c6f0097e4e6",
+      "s13_sha256": "fc63f4fe5b310dea0223a0be49414a85cbb69cb358e450a51c95c2f18ab24c92",
+      "status": "S13_ONLY_CHANGE",
+      "normalized_match_github_s13": true,
+      "classification": "GENERATED_OR_CACHE_ARTIFACT",
+      "function_or_section": "whole file",
+      "semantic_diff": "EOL encoding only; normalized UTF-8 content is identical"
+    },
+    {
+      "file": "requirements.txt",
+      "github_sha256": "5e13ea77a9853ef085f25bb13ba19e2a9527c4aa458c757722d3eb50c4251261",
+      "local_sha256": "5e13ea77a9853ef085f25bb13ba19e2a9527c4aa458c757722d3eb50c4251261",
+      "s13_sha256": "4f0590e516cc410faa3e264296c857fdf420040230c9cea8beff9c848cf3b440",
+      "status": "S13_ONLY_CHANGE",
+      "normalized_match_github_s13": true,
+      "classification": "GENERATED_OR_CACHE_ARTIFACT",
+      "function_or_section": "whole file",
+      "semantic_diff": "EOL encoding only; normalized UTF-8 content is identical"
+    },
+    {
+      "file": "src/bootstrap.py",
+      "github_sha256": "ee498ee5f1591aadd5f5fb1cfcd11e4fc17ff73db8f547585c88649482972cc5",
+      "local_sha256": "ee498ee5f1591aadd5f5fb1cfcd11e4fc17ff73db8f547585c88649482972cc5",
+      "s13_sha256": "ee498ee5f1591aadd5f5fb1cfcd11e4fc17ff73db8f547585c88649482972cc5",
+      "status": "MATCH_ALL",
+      "normalized_match_github_s13": false
+    },
+    {
+      "file": "src/constants/balance_holder_registries.py",
+      "github_sha256": "af56b181681a84d80c053da844f76ac7ad533b41fcbf79bdb03013c9359a8e17",
+      "local_sha256": "af56b181681a84d80c053da844f76ac7ad533b41fcbf79bdb03013c9359a8e17",
+      "s13_sha256": "af56b181681a84d80c053da844f76ac7ad533b41fcbf79bdb03013c9359a8e17",
+      "status": "MATCH_ALL",
+      "normalized_match_github_s13": false
+    },
+    {
+      "file": "src/constants/computer_okpd.py",
+      "github_sha256": "c0ee95cae2e63f730c74c4188b04f7cf3f81163bb3b786562e14d6bc248c84ea",
+      "local_sha256": "c0ee95cae2e63f730c74c4188b04f7cf3f81163bb3b786562e14d6bc248c84ea",
+      "s13_sha256": "c0ee95cae2e63f730c74c4188b04f7cf3f81163bb3b786562e14d6bc248c84ea",
+      "status": "MATCH_ALL",
+      "normalized_match_github_s13": false
+    },
+    {
+      "file": "src/constants/object_quality.py",
+      "github_sha256": "e7c85d11acc5955937932b639ca83510f72f66afd68de16ed916dedbef833ad7",
+      "local_sha256": "e7c85d11acc5955937932b639ca83510f72f66afd68de16ed916dedbef833ad7",
+      "s13_sha256": "e7c85d11acc5955937932b639ca83510f72f66afd68de16ed916dedbef833ad7",
+      "status": "MATCH_ALL",
+      "normalized_match_github_s13": false
+    },
+    {
+      "file": "src/constants/object_segments.py",
+      "github_sha256": "7ca6d0f643f50f187820e1732e61e97bba9082eaa583e18973e38b9f6a3d2aa3",
+      "local_sha256": "7ca6d0f643f50f187820e1732e61e97bba9082eaa583e18973e38b9f6a3d2aa3",
+      "s13_sha256": "06191f69de7d3bdb3ccc9af67793f620811f8c152916af8c98481533bd21ba1b",
+      "status": "S13_ONLY_CHANGE",
+      "normalized_match_github_s13": true,
+      "classification": "GENERATED_OR_CACHE_ARTIFACT",
+      "function_or_section": "whole file",
+      "semantic_diff": "EOL encoding only; normalized UTF-8 content is identical"
+    },
+    {
+      "file": "src/constants/product_groups.py",
+      "github_sha256": "f5362d20b212d77f5a95ef0fbfea00b882bcf1c8bbe6b89938f2c68ec3851edb",
+      "local_sha256": "f5362d20b212d77f5a95ef0fbfea00b882bcf1c8bbe6b89938f2c68ec3851edb",
+      "s13_sha256": "3a3a05ddb9f29b43536b31a18d0afd8770e0339f57cd8077ee9462d744307fe6",
+      "status": "S13_ONLY_CHANGE",
+      "normalized_match_github_s13": true,
+      "classification": "GENERATED_OR_CACHE_ARTIFACT",
+      "function_or_section": "whole file",
+      "semantic_diff": "EOL encoding only; normalized UTF-8 content is identical"
+    },
+    {
+      "file": "src/domain/commercial_opportunity_lifecycle.py",
+      "github_sha256": "075eb924c5601b43bf147d41a6b6f16413d3b312f248bbe21a9af597bf8a0f6f",
+      "local_sha256": "075eb924c5601b43bf147d41a6b6f16413d3b312f248bbe21a9af597bf8a0f6f",
+      "s13_sha256": "0a115c502dd12c0bddb5dc1cc664db47326f94e738505d8e586386e665b2f928",
+      "status": "S13_ONLY_CHANGE",
+      "normalized_match_github_s13": true,
+      "classification": "GENERATED_OR_CACHE_ARTIFACT",
+      "function_or_section": "whole file",
+      "semantic_diff": "EOL encoding only; normalized UTF-8 content is identical"
+    },
+    {
+      "file": "src/domain/commercial_routing_v3.py",
+      "github_sha256": "cc0831ef33bcbc90fb8b1cdeb42a7c747714f1f406c0ac1628b099cea9326ffd",
+      "local_sha256": "cc0831ef33bcbc90fb8b1cdeb42a7c747714f1f406c0ac1628b099cea9326ffd",
+      "s13_sha256": "29891e1ce43f291eaac19cd71b43449791c2d9761ef9f85b4092e733e924f404",
+      "status": "S13_ONLY_CHANGE",
+      "normalized_match_github_s13": true,
+      "classification": "GENERATED_OR_CACHE_ARTIFACT",
+      "function_or_section": "whole file",
+      "semantic_diff": "EOL encoding only; normalized UTF-8 content is identical"
+    },
+    {
+      "file": "src/domain/commercial_taxonomy.py",
+      "github_sha256": "06c31aac92e68fa82e15b4ec972900b1a7e4f6635f85fc7aee743feda1b6f5cd",
+      "local_sha256": "06c31aac92e68fa82e15b4ec972900b1a7e4f6635f85fc7aee743feda1b6f5cd",
+      "s13_sha256": "a45c4d1cc997279ecf8c6ba03bd56c0b90344a57ff632d9c6cd553e7547d76e6",
+      "status": "S13_ONLY_CHANGE",
+      "normalized_match_github_s13": true,
+      "classification": "GENERATED_OR_CACHE_ARTIFACT",
+      "function_or_section": "whole file",
+      "semantic_diff": "EOL encoding only; normalized UTF-8 content is identical"
+    },
+    {
+      "file": "src/migrations/category_registry_normalization.sql",
+      "github_sha256": "6f7fc32cee7e438f5cd3bf604600850e703ad468b72cdae34b4a7f8d2c54d009",
+      "local_sha256": "6f7fc32cee7e438f5cd3bf604600850e703ad468b72cdae34b4a7f8d2c54d009",
+      "s13_sha256": "62bfee551c1741abae5706816d2f17be02aed45c04e8128de816a27ffd5cfb44",
+      "status": "S13_ONLY_CHANGE",
+      "normalized_match_github_s13": true,
+      "classification": "GENERATED_OR_CACHE_ARTIFACT",
+      "function_or_section": "whole file",
+      "semantic_diff": "EOL encoding only; normalized UTF-8 content is identical"
+    },
+    {
+      "file": "src/migrations/commercial_routing_v3_legacy_okpd_data.sql",
+      "github_sha256": "441340b53900daab1180a5ebe22e1a437d04a43d61ef03a5a8f856f5e8ac6981",
+      "local_sha256": "441340b53900daab1180a5ebe22e1a437d04a43d61ef03a5a8f856f5e8ac6981",
+      "s13_sha256": "441340b53900daab1180a5ebe22e1a437d04a43d61ef03a5a8f856f5e8ac6981",
+      "status": "MATCH_ALL",
+      "normalized_match_github_s13": false
+    },
+    {
+      "file": "src/migrations/commercial_routing_v3_legacy_okpd_schema.sql",
+      "github_sha256": "6ee2fec10a9ca0af5eddea66fce6acdd1d09517341df6d95489102c678e8fa6c",
+      "local_sha256": "6ee2fec10a9ca0af5eddea66fce6acdd1d09517341df6d95489102c678e8fa6c",
+      "s13_sha256": "419a11e62b00355741ab1028ffd03f2c589f0faf95e06fed3d69cc595752e08b",
+      "status": "S13_ONLY_CHANGE",
+      "normalized_match_github_s13": true,
+      "classification": "GENERATED_OR_CACHE_ARTIFACT",
+      "function_or_section": "whole file",
+      "semantic_diff": "EOL encoding only; normalized UTF-8 content is identical"
+    },
+    {
+      "file": "src/migrations/commercial_routing_v3_medal_lineage.sql",
+      "github_sha256": "f4be96f864caf2db78c659ce69c612881b7f86d240a9c1d91d36dca17cbcc7bd",
+      "local_sha256": "f4be96f864caf2db78c659ce69c612881b7f86d240a9c1d91d36dca17cbcc7bd",
+      "s13_sha256": "aa71dce3d44ff8d2b95a9ae86c966f6c16485ad834d3f81306fdc2ddca82c78e",
+      "status": "S13_ONLY_CHANGE",
+      "normalized_match_github_s13": true,
+      "classification": "GENERATED_OR_CACHE_ARTIFACT",
+      "function_or_section": "whole file",
+      "semantic_diff": "EOL encoding only; normalized UTF-8 content is identical"
+    },
+    {
+      "file": "src/migrations/commercial_routing_v3_schema.sql",
+      "github_sha256": "923e27afe0196bb5c9ba08bf4b656a3b9a196afe5c2f686bd9bbec3487536366",
+      "local_sha256": "923e27afe0196bb5c9ba08bf4b656a3b9a196afe5c2f686bd9bbec3487536366",
+      "s13_sha256": "bae1739bba8005f5c3e64bb57dbb02db28140475770baa0d3b447b9d95bbb9e0",
+      "status": "S13_ONLY_CHANGE",
+      "normalized_match_github_s13": true,
+      "classification": "GENERATED_OR_CACHE_ARTIFACT",
+      "function_or_section": "whole file",
+      "semantic_diff": "EOL encoding only; normalized UTF-8 content is identical"
+    },
+    {
+      "file": "src/migrations/commercial_routing_v3_seed.sql",
+      "github_sha256": "a7849e8dd45a00ad0c6d507661cdfbf18703428f5c0168d6581c9d1ecfca5e8d",
+      "local_sha256": "a7849e8dd45a00ad0c6d507661cdfbf18703428f5c0168d6581c9d1ecfca5e8d",
+      "s13_sha256": "94d6375b680e3a087cb056f208998d4d740285a1a55ef629e2cbde20281113f1",
+      "status": "S13_ONLY_CHANGE",
+      "normalized_match_github_s13": true,
+      "classification": "GENERATED_OR_CACHE_ARTIFACT",
+      "function_or_section": "whole file",
+      "semantic_diff": "EOL encoding only; normalized UTF-8 content is identical"
+    },
+    {
+      "file": "src/migrations/commercial_taxonomy_schema_and_registry_1.sql",
+      "github_sha256": "b8f8fca2e46c9ea70856b93848c6817496dcefdcfb56e3fde641d24acfab39dc",
+      "local_sha256": "b8f8fca2e46c9ea70856b93848c6817496dcefdcfb56e3fde641d24acfab39dc",
+      "s13_sha256": "def96e902b59b3aadc82f6556dba81a3e7759f458e02f15fdc20d54c408d1b25",
+      "status": "S13_ONLY_CHANGE",
+      "normalized_match_github_s13": true,
+      "classification": "GENERATED_OR_CACHE_ARTIFACT",
+      "function_or_section": "whole file",
+      "semantic_diff": "EOL encoding only; normalized UTF-8 content is identical"
+    },
+    {
+      "file": "src/migrations/commercial_taxonomy_seed_1.sql",
+      "github_sha256": "60651c917705206207adc9df07559fefb3d2978fb11b8fd4889edceb6f9b32f9",
+      "local_sha256": "60651c917705206207adc9df07559fefb3d2978fb11b8fd4889edceb6f9b32f9",
+      "s13_sha256": "4c2634fef62c15c4bf250c1de8c3062c9e5929473f4b75e9993181b13cad98e6",
+      "status": "S13_ONLY_CHANGE",
+      "normalized_match_github_s13": true,
+      "classification": "GENERATED_OR_CACHE_ARTIFACT",
+      "function_or_section": "whole file",
+      "semantic_diff": "EOL encoding only; normalized UTF-8 content is identical"
+    },
+    {
+      "file": "src/migrations/crm_docs_priority_hints.sql",
+      "github_sha256": "402db7ac2c85c4303064a3c310fb73ab300b07d93a8568fa1903395c8dd6cd90",
+      "local_sha256": "402db7ac2c85c4303064a3c310fb73ab300b07d93a8568fa1903395c8dd6cd90",
+      "s13_sha256": "bf25ec1ae9e9fddf45a6874319d11373e3f3dc6ec8c6f8c0c2ba2da38bba9c2e",
+      "status": "S13_ONLY_CHANGE",
+      "normalized_match_github_s13": true,
+      "classification": "GENERATED_OR_CACHE_ARTIFACT",
+      "function_or_section": "whole file",
+      "semantic_diff": "EOL encoding only; normalized UTF-8 content is identical"
+    },
+    {
+      "file": "src/migrations/crm_tender_match_cache_rehome_to_crm.sql",
+      "github_sha256": "128f06224b34ffae46e2585a8e5ea14121bd9eeab717b87808feb45228219a40",
+      "local_sha256": "128f06224b34ffae46e2585a8e5ea14121bd9eeab717b87808feb45228219a40",
+      "s13_sha256": "84dfa5b6a26f2dfbfc06555f0ba4f3a32f952b247c309a26d17c85d90f9397d0",
+      "status": "S13_ONLY_CHANGE",
+      "normalized_match_github_s13": false,
+      "classification": "SECRET_OR_ENVIRONMENT_SPECIFIC",
+      "function_or_section": "migration comments",
+      "semantic_diff": "Concrete access identity/endpoint appears only in an operational comment"
+    },
+    {
+      "file": "src/migrations/crm_v3_analytics_cache.sql",
+      "github_sha256": "a06d006dc6428c9d38aa8359798816bf42b52493540deb667ae36017b6d368db",
+      "local_sha256": "a06d006dc6428c9d38aa8359798816bf42b52493540deb667ae36017b6d368db",
+      "s13_sha256": "65649e12f5b31f10b2a8a5d4a76419b2db5fd93c20ad557213eecc7ca631a450",
+      "status": "S13_ONLY_CHANGE",
+      "normalized_match_github_s13": true,
+      "classification": "GENERATED_OR_CACHE_ARTIFACT",
+      "function_or_section": "whole file",
+      "semantic_diff": "EOL encoding only; normalized UTF-8 content is identical"
+    },
+    {
+      "file": "src/migrations/crm_v3_business_rule_result_1.sql",
+      "github_sha256": "54dbbfbacbd3ddd43fcefb1316dec508f9adbf9e9bb86ed292918784d5824f27",
+      "local_sha256": "54dbbfbacbd3ddd43fcefb1316dec508f9adbf9e9bb86ed292918784d5824f27",
+      "s13_sha256": null,
+      "status": "MISSING_S13",
+      "normalized_match_github_s13": false
+    },
+    {
+      "file": "src/migrations/crm_v3_canonical_procurement_card_1.sql",
+      "github_sha256": "b6691b5f21ab6a07a582ce90b1d5dc565efa139cd1627aa31f3f65ffd03e347b",
+      "local_sha256": "b6691b5f21ab6a07a582ce90b1d5dc565efa139cd1627aa31f3f65ffd03e347b",
+      "s13_sha256": "28ba3485d18df397b6b34415e470dd9028814dc9a179b64027c6c964ef5bb1b0",
+      "status": "S13_ONLY_CHANGE",
+      "normalized_match_github_s13": true,
+      "classification": "GENERATED_OR_CACHE_ARTIFACT",
+      "function_or_section": "whole file",
+      "semantic_diff": "EOL encoding only; normalized UTF-8 content is identical"
+    },
+    {
+      "file": "src/migrations/crm_v3_document_observation_1.sql",
+      "github_sha256": "6dd4d70925bf845b6191b8f16df05a7a1c9d264f9cf622f6925422351b8f2a7e",
+      "local_sha256": "6dd4d70925bf845b6191b8f16df05a7a1c9d264f9cf622f6925422351b8f2a7e",
+      "s13_sha256": "8bf3857fb8017a2ab1c1e4a35066795cdeeb9fa4417c2e897e51602856e3c7f9",
+      "status": "S13_ONLY_CHANGE",
+      "normalized_match_github_s13": false,
+      "classification": "SECRET_OR_ENVIRONMENT_SPECIFIC",
+      "function_or_section": "migration comments",
+      "semantic_diff": "Concrete access identity/endpoint appears only in an operational comment"
+    },
+    {
+      "file": "src/migrations/crm_v3_model_inference_runs_1.sql",
+      "github_sha256": "ed3ec29f422f0efbc9f63b9e78051ac9f0abdf9a1274de71506d94941343447f",
+      "local_sha256": "ed3ec29f422f0efbc9f63b9e78051ac9f0abdf9a1274de71506d94941343447f",
+      "s13_sha256": "ed3ec29f422f0efbc9f63b9e78051ac9f0abdf9a1274de71506d94941343447f",
+      "status": "MATCH_ALL",
+      "normalized_match_github_s13": false
+    },
+    {
+      "file": "src/migrations/crm_v3_routing_lease_retry_1.sql",
+      "github_sha256": "f621c17c7aae05e5a7779dd1d73e622038b07243422e42cf930318dd0b817394",
+      "local_sha256": "f621c17c7aae05e5a7779dd1d73e622038b07243422e42cf930318dd0b817394",
+      "s13_sha256": "a4d6d132aa7ec4e4c44545e13402d347c4b8cd417a8bfb83f6837ec2a35f1f22",
+      "status": "S13_ONLY_CHANGE",
+      "normalized_match_github_s13": true,
+      "classification": "GENERATED_OR_CACHE_ARTIFACT",
+      "function_or_section": "whole file",
+      "semantic_diff": "EOL encoding only; normalized UTF-8 content is identical"
+    },
+    {
+      "file": "src/migrations/crm_v3_top5_broad_prior_contextual_1.sql",
+      "github_sha256": "09ce271a459313f7dd8c9d4107eecd034c8d7f7668905ba362c10b780d1d1df0",
+      "local_sha256": "09ce271a459313f7dd8c9d4107eecd034c8d7f7668905ba362c10b780d1d1df0",
+      "s13_sha256": "ae90be5656e8185cc20a34e3f682831fbc8cdfd5ad28e1e6bfc0ca6c881a130c",
+      "status": "S13_ONLY_CHANGE",
+      "normalized_match_github_s13": true,
+      "classification": "GENERATED_OR_CACHE_ARTIFACT",
+      "function_or_section": "whole file",
+      "semantic_diff": "EOL encoding only; normalized UTF-8 content is identical"
+    },
+    {
+      "file": "src/migrations/crm_v3_wave1_source_corpus_1.sql",
+      "github_sha256": "f5e78fc182913d77c34238a002a9034b1d79b9b1d59412fd2d92850b17e1ed88",
+      "local_sha256": "f5e78fc182913d77c34238a002a9034b1d79b9b1d59412fd2d92850b17e1ed88",
+      "s13_sha256": "81bfc316f0e04fa038a93a592dd013d2b6bba5bc9ecc9deef524242bbdf31150",
+      "status": "S13_ONLY_CHANGE",
+      "normalized_match_github_s13": true,
+      "classification": "GENERATED_OR_CACHE_ARTIFACT",
+      "function_or_section": "whole file",
+      "semantic_diff": "EOL encoding only; normalized UTF-8 content is identical"
+    },
+    {
+      "file": "src/repositories/analytics_contour_repository.py",
+      "github_sha256": "c9449535234df821cf55ee51f5fc648db0ca7ef7886a396b94776a3e95b823df",
+      "local_sha256": "c9449535234df821cf55ee51f5fc648db0ca7ef7886a396b94776a3e95b823df",
+      "s13_sha256": "a0f664ac0f9e974cf6249724322e4ce02f0aad29fb170d53a551dec9b1b9a578",
+      "status": "S13_ONLY_CHANGE",
+      "normalized_match_github_s13": true,
+      "classification": "GENERATED_OR_CACHE_ARTIFACT",
+      "function_or_section": "whole file",
+      "semantic_diff": "EOL encoding only; normalized UTF-8 content is identical"
+    },
+    {
+      "file": "src/services/__init__.py",
+      "github_sha256": "7eb70257593da06f682a3ddda54a9d260d4fc514f645237f5ca74b08f8da61a6",
+      "local_sha256": "7eb70257593da06f682a3ddda54a9d260d4fc514f645237f5ca74b08f8da61a6",
+      "s13_sha256": "7eb70257593da06f682a3ddda54a9d260d4fc514f645237f5ca74b08f8da61a6",
+      "status": "MATCH_ALL",
+      "normalized_match_github_s13": false
+    },
+    {
+      "file": "src/services/ai_assessment_runner.py",
+      "github_sha256": "e841c595bb84928306b700bcea8f12ef6f9528353285f61926305532422d650f",
+      "local_sha256": "e841c595bb84928306b700bcea8f12ef6f9528353285f61926305532422d650f",
+      "s13_sha256": "8b696410be1e493bdbe813b8146aacf569ec3519cb144ceeb1acef4dfb504c31",
+      "status": "S13_ONLY_CHANGE",
+      "normalized_match_github_s13": true,
+      "classification": "GENERATED_OR_CACHE_ARTIFACT",
+      "function_or_section": "whole file",
+      "semantic_diff": "EOL encoding only; normalized UTF-8 content is identical"
+    },
+    {
+      "file": "src/services/ai_client.py",
+      "github_sha256": "b10241a7532cafe6faa94cdef6f1b5c3de1f28aeba265f4460b652dda378bc1a",
+      "local_sha256": "b10241a7532cafe6faa94cdef6f1b5c3de1f28aeba265f4460b652dda378bc1a",
+      "s13_sha256": "36f083c65e11e22592483da7cdf80eee00162b7f9754ff9cbfdd42d5bd8e4ade",
+      "status": "S13_ONLY_CHANGE",
+      "normalized_match_github_s13": true,
+      "classification": "GENERATED_OR_CACHE_ARTIFACT",
+      "function_or_section": "whole file",
+      "semantic_diff": "EOL encoding only; normalized UTF-8 content is identical"
+    },
+    {
+      "file": "src/services/ai_grounding.py",
+      "github_sha256": "f5944e2db443db8c2cf433654d5e40a357229e3f698d21c14e2dcc13af96dd1e",
+      "local_sha256": "f5944e2db443db8c2cf433654d5e40a357229e3f698d21c14e2dcc13af96dd1e",
+      "s13_sha256": "f5944e2db443db8c2cf433654d5e40a357229e3f698d21c14e2dcc13af96dd1e",
+      "status": "MATCH_ALL",
+      "normalized_match_github_s13": false
+    },
+    {
+      "file": "src/services/analytics_categories.py",
+      "github_sha256": "fb6c7bbd96ad2af02d6a7b81f198510e45fca31d56457d287a3c195a270ab361",
+      "local_sha256": "fb6c7bbd96ad2af02d6a7b81f198510e45fca31d56457d287a3c195a270ab361",
+      "s13_sha256": "394567f7d36399700241361d813456416f0f808c593f40a992aa12c0252079b2",
+      "status": "S13_ONLY_CHANGE",
+      "normalized_match_github_s13": true,
+      "classification": "GENERATED_OR_CACHE_ARTIFACT",
+      "function_or_section": "whole file",
+      "semantic_diff": "EOL encoding only; normalized UTF-8 content is identical"
+    },
+    {
+      "file": "src/services/analytics_contour_service.py",
+      "github_sha256": "773b933e99e23ecf6af3655a266c09fe1ecad32ed4e7e9b1fb34193f806454d3",
+      "local_sha256": "773b933e99e23ecf6af3655a266c09fe1ecad32ed4e7e9b1fb34193f806454d3",
+      "s13_sha256": "166663cd501d675e5cc61fd94389cad45a5ecda945f61fd4b47cf228371d9643",
+      "status": "S13_ONLY_CHANGE",
+      "normalized_match_github_s13": true,
+      "classification": "GENERATED_OR_CACHE_ARTIFACT",
+      "function_or_section": "whole file",
+      "semantic_diff": "EOL encoding only; normalized UTF-8 content is identical"
+    },
+    {
+      "file": "src/services/analytics_contour_v2_page.py",
+      "github_sha256": "38a49c069db9c883371cff5c96ec556685bb1e92bb438611de9273e9495e4ca9",
+      "local_sha256": "38a49c069db9c883371cff5c96ec556685bb1e92bb438611de9273e9495e4ca9",
+      "s13_sha256": "38a49c069db9c883371cff5c96ec556685bb1e92bb438611de9273e9495e4ca9",
+      "status": "MATCH_ALL",
+      "normalized_match_github_s13": false
+    },
+    {
+      "file": "src/services/annotation_card_provenance.py",
+      "github_sha256": null,
+      "local_sha256": null,
+      "s13_sha256": "168c76c91e79d4a5929e7a5c2fdd4e920718565be10fca2ec448cfe6bcbc6d37",
+      "status": "UNTRACKED_RUNTIME_FILE",
+      "normalized_match_github_s13": false,
+      "classification": "DESIRED_RUNTIME_FIX_NOT_COMMITTED",
+      "function_or_section": "annotation queue/workbench/card",
+      "semantic_diff": "Matches verified local runtime-fix commit 20cb2e8 after EOL normalization"
+    },
+    {
+      "file": "src/services/annotation_queue_service.py",
+      "github_sha256": "862a69c801804779fddc1f727b1bd247e7cd3a06124cee21c3d9f5c1d474e7b3",
+      "local_sha256": "862a69c801804779fddc1f727b1bd247e7cd3a06124cee21c3d9f5c1d474e7b3",
+      "s13_sha256": "a9e81b2a267c2f144137259fea5df71625a01ce3e786125a8e5aed7a15f91126",
+      "status": "S13_ONLY_CHANGE",
+      "normalized_match_github_s13": false,
+      "classification": "DESIRED_RUNTIME_FIX_NOT_COMMITTED",
+      "function_or_section": "annotation queue/workbench/card",
+      "semantic_diff": "Matches verified local runtime-fix commit 20cb2e8 after EOL normalization"
+    },
+    {
+      "file": "src/services/annotation_readiness.py",
+      "github_sha256": "2b0a4ca4d3492ee7f14c2807f3f338331ce99f6e47d2c0886295194e8a68d9ad",
+      "local_sha256": "2b0a4ca4d3492ee7f14c2807f3f338331ce99f6e47d2c0886295194e8a68d9ad",
+      "s13_sha256": "38a9362e805a85d18d544cda3e614a2f43d2f4b1539928bf506e039578e62bbe",
+      "status": "S13_ONLY_CHANGE",
+      "normalized_match_github_s13": true,
+      "classification": "GENERATED_OR_CACHE_ARTIFACT",
+      "function_or_section": "whole file",
+      "semantic_diff": "EOL encoding only; normalized UTF-8 content is identical"
+    },
+    {
+      "file": "src/services/app.py",
+      "github_sha256": "e234ca335737b0dfcb19c1ba4c40cc96bbb47a8302b5b735b9c78c1d1678d7d7",
+      "local_sha256": "e234ca335737b0dfcb19c1ba4c40cc96bbb47a8302b5b735b9c78c1d1678d7d7",
+      "s13_sha256": "64161677123ee252e2c97223b6a39527d00c0ce76e264379f4f5dbadf7600be2",
+      "status": "S13_ONLY_CHANGE",
+      "normalized_match_github_s13": false,
+      "classification": "HOST_LOCAL_CONFIGURATION",
+      "function_or_section": "host defaults/operator diagnostics",
+      "semantic_diff": "Concrete host/operator values replace canonical logical aliases"
+    },
+    {
+      "file": "src/services/awarded_scoring.py",
+      "github_sha256": "73644c23e2eac011488d12024f1d0095d4eaa36a35d21d481ae1e6be1cb4c787",
+      "local_sha256": "73644c23e2eac011488d12024f1d0095d4eaa36a35d21d481ae1e6be1cb4c787",
+      "s13_sha256": "5a3dd95abccb6354e44d4ed8ea10268183e9ce20b3fb105cfec5a0071aa3f71a",
+      "status": "S13_ONLY_CHANGE",
+      "normalized_match_github_s13": true,
+      "classification": "GENERATED_OR_CACHE_ARTIFACT",
+      "function_or_section": "whole file",
+      "semantic_diff": "EOL encoding only; normalized UTF-8 content is identical"
+    },
+    {
+      "file": "src/services/awarded_sync_migration.py",
+      "github_sha256": "f8be441e1142cf66e858fb16c8237e58fca6c7c6865d184e9288e95744d5ae32",
+      "local_sha256": "f8be441e1142cf66e858fb16c8237e58fca6c7c6865d184e9288e95744d5ae32",
+      "s13_sha256": "95f368814a0d9d41d52b48ee7338123a70531999ea49442e5d1fff868f408415",
+      "status": "S13_ONLY_CHANGE",
+      "normalized_match_github_s13": true,
+      "classification": "GENERATED_OR_CACHE_ARTIFACT",
+      "function_or_section": "whole file",
+      "semantic_diff": "EOL encoding only; normalized UTF-8 content is identical"
+    },
+    {
+      "file": "src/services/backup_tables.py",
+      "github_sha256": "a27be946eb8df6950b594eea2552ab09e24c8771072023ad429f90dde0a5484d",
+      "local_sha256": "a27be946eb8df6950b594eea2552ab09e24c8771072023ad429f90dde0a5484d",
+      "s13_sha256": "e94e308de88a6cbff0f4441d21480f36fe5f2327337687a12cd49ddf04fcd7bf",
+      "status": "S13_ONLY_CHANGE",
+      "normalized_match_github_s13": true,
+      "classification": "GENERATED_OR_CACHE_ARTIFACT",
+      "function_or_section": "whole file",
+      "semantic_diff": "EOL encoding only; normalized UTF-8 content is identical"
+    },
+    {
+      "file": "src/services/balance_holder_store.py",
+      "github_sha256": "96bbe339bff9de2119a9700a9b09bd0ccce0e7678373fbc7d4a9ff62a1546596",
+      "local_sha256": "96bbe339bff9de2119a9700a9b09bd0ccce0e7678373fbc7d4a9ff62a1546596",
+      "s13_sha256": "96bbe339bff9de2119a9700a9b09bd0ccce0e7678373fbc7d4a9ff62a1546596",
+      "status": "MATCH_ALL",
+      "normalized_match_github_s13": false
+    },
+    {
+      "file": "src/services/business_scope.py",
+      "github_sha256": "8b789da9a85444d7ce56bbfb2745a24950c19085068fefa8436d8b3373a8dfe5",
+      "local_sha256": "8b789da9a85444d7ce56bbfb2745a24950c19085068fefa8436d8b3373a8dfe5",
+      "s13_sha256": "8b789da9a85444d7ce56bbfb2745a24950c19085068fefa8436d8b3373a8dfe5",
+      "status": "MATCH_ALL",
+      "normalized_match_github_s13": false
+    },
+    {
+      "file": "src/services/candidate_policy.py",
+      "github_sha256": "61ace62a901d7ef6ac11d8d445080662a7aa73d86e199227ebe184e910a5f130",
+      "local_sha256": "61ace62a901d7ef6ac11d8d445080662a7aa73d86e199227ebe184e910a5f130",
+      "s13_sha256": "61ace62a901d7ef6ac11d8d445080662a7aa73d86e199227ebe184e910a5f130",
+      "status": "MATCH_ALL",
+      "normalized_match_github_s13": false
+    },
+    {
+      "file": "src/services/card_compact.py",
+      "github_sha256": "457cc0161b82352c4bde4a140ec0bae86622e9027a5b2eb91732949943d1f43f",
+      "local_sha256": "457cc0161b82352c4bde4a140ec0bae86622e9027a5b2eb91732949943d1f43f",
+      "s13_sha256": "0e5b50b386d01a62b0885ce488d244c3e98c9b1b675c47eb9cb635288f246f29",
+      "status": "S13_ONLY_CHANGE",
+      "normalized_match_github_s13": true,
+      "classification": "GENERATED_OR_CACHE_ARTIFACT",
+      "function_or_section": "whole file",
+      "semantic_diff": "EOL encoding only; normalized UTF-8 content is identical"
+    },
+    {
+      "file": "src/services/card_tabs_ai.py",
+      "github_sha256": "fd906bbdf57f8508116a374920b689d7442c920a4f4892985f5704824bb1efa3",
+      "local_sha256": "fd906bbdf57f8508116a374920b689d7442c920a4f4892985f5704824bb1efa3",
+      "s13_sha256": "862736316943179524452eafed69d319c40530ae584dcafe3ca7b29483277b48",
+      "status": "S13_ONLY_CHANGE",
+      "normalized_match_github_s13": true,
+      "classification": "GENERATED_OR_CACHE_ARTIFACT",
+      "function_or_section": "whole file",
+      "semantic_diff": "EOL encoding only; normalized UTF-8 content is identical"
+    },
+    {
+      "file": "src/services/card_tabs_medals.py",
+      "github_sha256": "91d6184d98b0fa89621700adb2221e4e351b683929d3c4e6f6b285f1622de011",
+      "local_sha256": "91d6184d98b0fa89621700adb2221e4e351b683929d3c4e6f6b285f1622de011",
+      "s13_sha256": "f81776c063f3c1306a929f562744aee4275012c8be044b95480cd8779a7ed126",
+      "status": "S13_ONLY_CHANGE",
+      "normalized_match_github_s13": true,
+      "classification": "GENERATED_OR_CACHE_ARTIFACT",
+      "function_or_section": "whole file",
+      "semantic_diff": "EOL encoding only; normalized UTF-8 content is identical"
+    },
+    {
+      "file": "src/services/category_registry_service.py",
+      "github_sha256": "b95470e68bfdd0fd211c7f9175aee3069b380b6bb13ffd1501036db5ccc89c8a",
+      "local_sha256": "b95470e68bfdd0fd211c7f9175aee3069b380b6bb13ffd1501036db5ccc89c8a",
+      "s13_sha256": "e5d764cb7b1ecfa964fec2203104d7cb55f69004e33ee01eb4e63e1e28eb6448",
+      "status": "S13_ONLY_CHANGE",
+      "normalized_match_github_s13": true,
+      "classification": "GENERATED_OR_CACHE_ARTIFACT",
+      "function_or_section": "whole file",
+      "semantic_diff": "EOL encoding only; normalized UTF-8 content is identical"
+    },
+    {
+      "file": "src/services/commercial_routing_v3/__init__.py",
+      "github_sha256": "5d3e21b676bd2c523e7dcb156b007ee2c05c68d841df975a3075685b8ee9fc04",
+      "local_sha256": "5d3e21b676bd2c523e7dcb156b007ee2c05c68d841df975a3075685b8ee9fc04",
+      "s13_sha256": "467dff97b46aba73a988ce25d4897c2da84a939fb8b3ec90a2699ba1d7ea3270",
+      "status": "S13_ONLY_CHANGE",
+      "normalized_match_github_s13": true,
+      "classification": "GENERATED_OR_CACHE_ARTIFACT",
+      "function_or_section": "whole file",
+      "semantic_diff": "EOL encoding only; normalized UTF-8 content is identical"
+    },
+    {
+      "file": "src/services/commercial_routing_v3/analysis_mode.py",
+      "github_sha256": "81e3be7a2dad08715177022f49f93f5ed231920531864a34ffa1763bac1f7853",
+      "local_sha256": "81e3be7a2dad08715177022f49f93f5ed231920531864a34ffa1763bac1f7853",
+      "s13_sha256": "1176304fe2db682f4fc6aecf76f55b9bdabda3e83a68b8d075bc2724e4d7b520",
+      "status": "S13_ONLY_CHANGE",
+      "normalized_match_github_s13": true,
+      "classification": "GENERATED_OR_CACHE_ARTIFACT",
+      "function_or_section": "whole file",
+      "semantic_diff": "EOL encoding only; normalized UTF-8 content is identical"
+    },
+    {
+      "file": "src/services/commercial_routing_v3/arch_prompts.py",
+      "github_sha256": null,
+      "local_sha256": null,
+      "s13_sha256": "e7fc18937c4e7992b0ae009826ced69c28781db79d77589708d4488b6354c15f",
+      "status": "UNTRACKED_RUNTIME_FILE",
+      "normalized_match_github_s13": false,
+      "classification": "STALE_OLD_CODE",
+      "function_or_section": "Phase 10 SHADOW transport",
+      "semantic_diff": "Experimental ref-transport/model validation source is outside this WIP and absent from canonical annotation Git"
+    },
+    {
+      "file": "src/services/commercial_routing_v3/arch_shadow_runner.py",
+      "github_sha256": null,
+      "local_sha256": null,
+      "s13_sha256": "4c289b9eaae524a9bb0b4dd106492edac5510205b7492a3f188704546ac49c50",
+      "status": "UNTRACKED_RUNTIME_FILE",
+      "normalized_match_github_s13": false,
+      "classification": "STALE_OLD_CODE",
+      "function_or_section": "Phase 10 SHADOW transport",
+      "semantic_diff": "Experimental ref-transport/model validation source is outside this WIP and absent from canonical annotation Git"
+    },
+    {
+      "file": "src/services/commercial_routing_v3/candidate_scoring.py",
+      "github_sha256": "d6932023f98ce2a8ab5804cbf29c149070e2d015a71a10d0c4fee4ac830c0a67",
+      "local_sha256": "d6932023f98ce2a8ab5804cbf29c149070e2d015a71a10d0c4fee4ac830c0a67",
+      "s13_sha256": "9717e7a02bdb3a0454bd30c62d04b945b387ccd4648276bace3fe711975a9e2c",
+      "status": "S13_ONLY_CHANGE",
+      "normalized_match_github_s13": true,
+      "classification": "GENERATED_OR_CACHE_ARTIFACT",
+      "function_or_section": "whole file",
+      "semantic_diff": "EOL encoding only; normalized UTF-8 content is identical"
+    },
+    {
+      "file": "src/services/commercial_routing_v3/canonical_card.py",
+      "github_sha256": "1ff4552db5cca2535892be9754671a9d511f65089e11f18e7e7740f8507e7533",
+      "local_sha256": "1ff4552db5cca2535892be9754671a9d511f65089e11f18e7e7740f8507e7533",
+      "s13_sha256": "60a71a66e5a30ba671598cec87e81c72bc74c722baf8a14ad5095b34fd1fda3b",
+      "status": "S13_ONLY_CHANGE",
+      "normalized_match_github_s13": false,
+      "classification": "HOST_LOCAL_CONFIGURATION",
+      "function_or_section": "host defaults/operator diagnostics",
+      "semantic_diff": "Concrete host/operator values replace canonical logical aliases"
+    },
+    {
+      "file": "src/services/commercial_routing_v3/category_aliases.py",
+      "github_sha256": "cfe56728fa4ab4c939b92c7329c5d3aca4bc2a8479d2bd78faa1b40169d588a9",
+      "local_sha256": "cfe56728fa4ab4c939b92c7329c5d3aca4bc2a8479d2bd78faa1b40169d588a9",
+      "s13_sha256": "35b9e3fd20987f61c5591a4cec59962e7dae0a0fa4140b0e089d5e0892e555df",
+      "status": "S13_ONLY_CHANGE",
+      "normalized_match_github_s13": true,
+      "classification": "GENERATED_OR_CACHE_ARTIFACT",
+      "function_or_section": "whole file",
+      "semantic_diff": "EOL encoding only; normalized UTF-8 content is identical"
+    },
+    {
+      "file": "src/services/commercial_routing_v3/category_ref_transport.py",
+      "github_sha256": null,
+      "local_sha256": null,
+      "s13_sha256": "be130cef1d5ef0f073f66122d7a1d8b756b83c2f440e65f3c9de452be9316a27",
+      "status": "UNTRACKED_RUNTIME_FILE",
+      "normalized_match_github_s13": false,
+      "classification": "STALE_OLD_CODE",
+      "function_or_section": "Phase 10 SHADOW transport",
+      "semantic_diff": "Experimental ref-transport/model validation source is outside this WIP and absent from canonical annotation Git"
+    },
+    {
+      "file": "src/services/commercial_routing_v3/commercial_routing_v3.py",
+      "github_sha256": "cc0831ef33bcbc90fb8b1cdeb42a7c747714f1f406c0ac1628b099cea9326ffd",
+      "local_sha256": "cc0831ef33bcbc90fb8b1cdeb42a7c747714f1f406c0ac1628b099cea9326ffd",
+      "s13_sha256": "29891e1ce43f291eaac19cd71b43449791c2d9761ef9f85b4092e733e924f404",
+      "status": "S13_ONLY_CHANGE",
+      "normalized_match_github_s13": true,
+      "classification": "GENERATED_OR_CACHE_ARTIFACT",
+      "function_or_section": "whole file",
+      "semantic_diff": "EOL encoding only; normalized UTF-8 content is identical"
+    },
+    {
+      "file": "src/services/commercial_routing_v3/commercial_timing.py",
+      "github_sha256": "fcd75e6ef7ca438452d71ed9656b1c7fcf196d90bc6a18add1761ca7b1830f5f",
+      "local_sha256": "fcd75e6ef7ca438452d71ed9656b1c7fcf196d90bc6a18add1761ca7b1830f5f",
+      "s13_sha256": "b5729752efbad50852f6a592e9dca71b826bbc82f3c104b8d85cc9ba0907f963",
+      "status": "S13_ONLY_CHANGE",
+      "normalized_match_github_s13": true,
+      "classification": "GENERATED_OR_CACHE_ARTIFACT",
+      "function_or_section": "whole file",
+      "semantic_diff": "EOL encoding only; normalized UTF-8 content is identical"
+    },
+    {
+      "file": "src/services/commercial_routing_v3/construction_semantics.py",
+      "github_sha256": "b72f45c33f0bdfda0927ee029d39cc5a9b373ffedc9c99a89ca91b37577ec176",
+      "local_sha256": "b72f45c33f0bdfda0927ee029d39cc5a9b373ffedc9c99a89ca91b37577ec176",
+      "s13_sha256": "2333a72d1e84e3613d65ed200194782188dc3076efa1b8e73a6923f064f62b9a",
+      "status": "S13_ONLY_CHANGE",
+      "normalized_match_github_s13": true,
+      "classification": "GENERATED_OR_CACHE_ARTIFACT",
+      "function_or_section": "whole file",
+      "semantic_diff": "EOL encoding only; normalized UTF-8 content is identical"
+    },
+    {
+      "file": "src/services/commercial_routing_v3/daily_medal_reevaluation.py",
+      "github_sha256": "727d58fcb71413c69abc66ad84d7323b93249bb8b30cd4b6ac382d03197b44f7",
+      "local_sha256": "727d58fcb71413c69abc66ad84d7323b93249bb8b30cd4b6ac382d03197b44f7",
+      "s13_sha256": "7727f096b82044567db45c4d138a517ab2135861b0f22780e781453f4a5e35bd",
+      "status": "S13_ONLY_CHANGE",
+      "normalized_match_github_s13": true,
+      "classification": "GENERATED_OR_CACHE_ARTIFACT",
+      "function_or_section": "whole file",
+      "semantic_diff": "EOL encoding only; normalized UTF-8 content is identical"
+    },
+    {
+      "file": "src/services/commercial_routing_v3/deadline_pressure.py",
+      "github_sha256": "514bc80b138fd552f16a65acc9bd0549bf980af623b176feb089cba51562f5d0",
+      "local_sha256": "514bc80b138fd552f16a65acc9bd0549bf980af623b176feb089cba51562f5d0",
+      "s13_sha256": "7a42ed61ad66c4b66d1f99e7cf5a59c7599c9d640d5b26e9e777b23e8eb28108",
+      "status": "S13_ONLY_CHANGE",
+      "normalized_match_github_s13": true,
+      "classification": "GENERATED_OR_CACHE_ARTIFACT",
+      "function_or_section": "whole file",
+      "semantic_diff": "EOL encoding only; normalized UTF-8 content is identical"
+    },
+    {
+      "file": "src/services/commercial_routing_v3/decision_authorities.py",
+      "github_sha256": "18f3365d9aaf3c3cf590a4735e3cb8c5353111984864c68f77ab0239d37f0198",
+      "local_sha256": "18f3365d9aaf3c3cf590a4735e3cb8c5353111984864c68f77ab0239d37f0198",
+      "s13_sha256": "22ec5b6f84a2dd89fa7568330c7bdfe7be877619cf6bd07dcf8de8d0f0fa6889",
+      "status": "S13_ONLY_CHANGE",
+      "normalized_match_github_s13": true,
+      "classification": "GENERATED_OR_CACHE_ARTIFACT",
+      "function_or_section": "whole file",
+      "semantic_diff": "EOL encoding only; normalized UTF-8 content is identical"
+    },
+    {
+      "file": "src/services/commercial_routing_v3/direct_product_evidence.py",
+      "github_sha256": "f1ab7b08c6859d48a81231ab11f7e9fa1e305984fdbb4bcc92091171707d8aea",
+      "local_sha256": "f1ab7b08c6859d48a81231ab11f7e9fa1e305984fdbb4bcc92091171707d8aea",
+      "s13_sha256": "01aabce71a052ca01e9dd93349e4d7a1c2e18c171603846085aadd60748a2a66",
+      "status": "S13_ONLY_CHANGE",
+      "normalized_match_github_s13": true,
+      "classification": "GENERATED_OR_CACHE_ARTIFACT",
+      "function_or_section": "whole file",
+      "semantic_diff": "EOL encoding only; normalized UTF-8 content is identical"
+    },
+    {
+      "file": "src/services/commercial_routing_v3/document_lane_authority.py",
+      "github_sha256": "fdadc1e707e1ff9da64fe398e846390402af5cb8a66d97be96de6b1d0293abde",
+      "local_sha256": "fdadc1e707e1ff9da64fe398e846390402af5cb8a66d97be96de6b1d0293abde",
+      "s13_sha256": "6ea0096da5932a53c9b35d2e6e658eefd57b0b73fc0cc3f8a83ddeccc72db8fd",
+      "status": "S13_ONLY_CHANGE",
+      "normalized_match_github_s13": true,
+      "classification": "GENERATED_OR_CACHE_ARTIFACT",
+      "function_or_section": "whole file",
+      "semantic_diff": "EOL encoding only; normalized UTF-8 content is identical"
+    },
+    {
+      "file": "src/services/commercial_routing_v3/document_links.py",
+      "github_sha256": "537570c9060f418d6000d6d1fb6ae9c56578493121a27fa305617e9d15c74a23",
+      "local_sha256": "537570c9060f418d6000d6d1fb6ae9c56578493121a27fa305617e9d15c74a23",
+      "s13_sha256": "be8eabf6393988b242ef4f81b3c8494b5b66a26cecf127aa96c568457b200e13",
+      "status": "S13_ONLY_CHANGE",
+      "normalized_match_github_s13": false,
+      "classification": "HOST_LOCAL_CONFIGURATION",
+      "function_or_section": "host defaults/operator diagnostics",
+      "semantic_diff": "Concrete host/operator values replace canonical logical aliases"
+    },
+    {
+      "file": "src/services/commercial_routing_v3/document_priority.py",
+      "github_sha256": "fc55f0a4817bcc1f8226fa05013231d376032c0f350b32d537ab74bd1b8f8639",
+      "local_sha256": "fc55f0a4817bcc1f8226fa05013231d376032c0f350b32d537ab74bd1b8f8639",
+      "s13_sha256": "e809385c7bf0f6489761e9fadeeed6cd063d62effb5b6cca4184534e27193b1f",
+      "status": "S13_ONLY_CHANGE",
+      "normalized_match_github_s13": true,
+      "classification": "GENERATED_OR_CACHE_ARTIFACT",
+      "function_or_section": "whole file",
+      "semantic_diff": "EOL encoding only; normalized UTF-8 content is identical"
+    },
+    {
+      "file": "src/services/commercial_routing_v3/engine.py",
+      "github_sha256": "160da8a2243f86a63fadd7b469f56a5788af1606d1c90be140742f79694a32f8",
+      "local_sha256": "160da8a2243f86a63fadd7b469f56a5788af1606d1c90be140742f79694a32f8",
+      "s13_sha256": "160da8a2243f86a63fadd7b469f56a5788af1606d1c90be140742f79694a32f8",
+      "status": "MATCH_ALL",
+      "normalized_match_github_s13": false
+    },
+    {
+      "file": "src/services/commercial_routing_v3/field_provenance.py",
+      "github_sha256": "9ec8680af08c8c89d737dd1338b76a511e5147686b6a54b3d2fb02e681aad634",
+      "local_sha256": "9ec8680af08c8c89d737dd1338b76a511e5147686b6a54b3d2fb02e681aad634",
+      "s13_sha256": "9ec8680af08c8c89d737dd1338b76a511e5147686b6a54b3d2fb02e681aad634",
+      "status": "MATCH_ALL",
+      "normalized_match_github_s13": false
+    },
+    {
+      "file": "src/services/commercial_routing_v3/golden_canary_config.py",
+      "github_sha256": "8bfd5f012583ca3c059559eddc2ef16ccc5fe013cf38d60a1ebec6c21e20b272",
+      "local_sha256": "8bfd5f012583ca3c059559eddc2ef16ccc5fe013cf38d60a1ebec6c21e20b272",
+      "s13_sha256": "a91286562c5c581a61301dbe57df6c289c051b08a76eb19d460bc6c498a40f8e",
+      "status": "S13_ONLY_CHANGE",
+      "normalized_match_github_s13": true,
+      "classification": "GENERATED_OR_CACHE_ARTIFACT",
+      "function_or_section": "whole file",
+      "semantic_diff": "EOL encoding only; normalized UTF-8 content is identical"
+    },
+    {
+      "file": "src/services/commercial_routing_v3/golden_canary_readiness.py",
+      "github_sha256": "727cb14d39b028a3e7ce29aa404cdb1140386cd8865806936298cf69976f2b15",
+      "local_sha256": "727cb14d39b028a3e7ce29aa404cdb1140386cd8865806936298cf69976f2b15",
+      "s13_sha256": "bf6aa7b3ca8d3191ba82eb6777d5dec572f9ac92a27791206ca2650fd16de92c",
+      "status": "S13_ONLY_CHANGE",
+      "normalized_match_github_s13": true,
+      "classification": "GENERATED_OR_CACHE_ARTIFACT",
+      "function_or_section": "whole file",
+      "semantic_diff": "EOL encoding only; normalized UTF-8 content is identical"
+    },
+    {
+      "file": "src/services/commercial_routing_v3/golden_canary_runner.py",
+      "github_sha256": "93839857af5f42dcb4287d5763c8ea82f7779bfea18c385c8fd51d6753c9465f",
+      "local_sha256": "93839857af5f42dcb4287d5763c8ea82f7779bfea18c385c8fd51d6753c9465f",
+      "s13_sha256": "0ba5cf78c8d1a44ef22be31fc216e7932365d1d9246815df2515689a7d1a4f8a",
+      "status": "S13_ONLY_CHANGE",
+      "normalized_match_github_s13": true,
+      "classification": "GENERATED_OR_CACHE_ARTIFACT",
+      "function_or_section": "whole file",
+      "semantic_diff": "EOL encoding only; normalized UTF-8 content is identical"
+    },
+    {
+      "file": "src/services/commercial_routing_v3/golden_canary_select.py",
+      "github_sha256": "b4eef38e302bf7629b2ba8e23bcd5a91360b3ee404b2414d3dfbbe64abc226d8",
+      "local_sha256": "b4eef38e302bf7629b2ba8e23bcd5a91360b3ee404b2414d3dfbbe64abc226d8",
+      "s13_sha256": "5ff7e1a77501cefe2366cda10503afc359712857a2f504ab228158b89fe3b129",
+      "status": "S13_ONLY_CHANGE",
+      "normalized_match_github_s13": true,
+      "classification": "GENERATED_OR_CACHE_ARTIFACT",
+      "function_or_section": "whole file",
+      "semantic_diff": "EOL encoding only; normalized UTF-8 content is identical"
+    },
+    {
+      "file": "src/services/commercial_routing_v3/golden_canary_validate.py",
+      "github_sha256": "52eb746ecad177deacbcb764e58d63c4080ac212d3687f2055062507fab4335b",
+      "local_sha256": "52eb746ecad177deacbcb764e58d63c4080ac212d3687f2055062507fab4335b",
+      "s13_sha256": "a95fbaa7eb1581bc50f57ebe000fc661cc520026f53b1365478349c9f7e103c4",
+      "status": "S13_ONLY_CHANGE",
+      "normalized_match_github_s13": true,
+      "classification": "GENERATED_OR_CACHE_ARTIFACT",
+      "function_or_section": "whole file",
+      "semantic_diff": "EOL encoding only; normalized UTF-8 content is identical"
+    },
+    {
+      "file": "src/services/commercial_routing_v3/gpu_arbiter.py",
+      "github_sha256": "6ad44bb9d32a0f2f103abc8ae2547112169e0ebb3def374ec1bb6fe5f76d936c",
+      "local_sha256": "6ad44bb9d32a0f2f103abc8ae2547112169e0ebb3def374ec1bb6fe5f76d936c",
+      "s13_sha256": "08485aae3d73fcdf50e3822720f12b432158169e00d4d7febf82efec3b85cfe2",
+      "status": "S13_ONLY_CHANGE",
+      "normalized_match_github_s13": true,
+      "classification": "GENERATED_OR_CACHE_ARTIFACT",
+      "function_or_section": "whole file",
+      "semantic_diff": "EOL encoding only; normalized UTF-8 content is identical"
+    },
+    {
+      "file": "src/services/commercial_routing_v3/legacy_okpd_knowledge.py",
+      "github_sha256": "8cbd108fd9e3f0dab85c3296f5cbc473b1c0bc3940e6d4f43d86f5259f040a06",
+      "local_sha256": "8cbd108fd9e3f0dab85c3296f5cbc473b1c0bc3940e6d4f43d86f5259f040a06",
+      "s13_sha256": "3172f62926d9b6d58042919f2d6f872d568614ac497f87d84f864bd0c91247bb",
+      "status": "S13_ONLY_CHANGE",
+      "normalized_match_github_s13": true,
+      "classification": "GENERATED_OR_CACHE_ARTIFACT",
+      "function_or_section": "whole file",
+      "semantic_diff": "EOL encoding only; normalized UTF-8 content is identical"
+    },
+    {
+      "file": "src/services/commercial_routing_v3/manager_lane_gates.py",
+      "github_sha256": "9ff4532841021e83393f4e73082955774fba9071871be360f2331ce30e02657b",
+      "local_sha256": "9ff4532841021e83393f4e73082955774fba9071871be360f2331ce30e02657b",
+      "s13_sha256": "141d3aabdb3dd29adf3e2716a562f586e52ca014d5cf3605cd0c238d90825bbb",
+      "status": "S13_ONLY_CHANGE",
+      "normalized_match_github_s13": true,
+      "classification": "GENERATED_OR_CACHE_ARTIFACT",
+      "function_or_section": "whole file",
+      "semantic_diff": "EOL encoding only; normalized UTF-8 content is identical"
+    },
+    {
+      "file": "src/services/commercial_routing_v3/manager_object_ranking.py",
+      "github_sha256": "44556f74e64de056af9e4dbdfa3ad33bc483560b8ed261d91141b5966000e124",
+      "local_sha256": "44556f74e64de056af9e4dbdfa3ad33bc483560b8ed261d91141b5966000e124",
+      "s13_sha256": "32f1ab323cc1585863eeaecb9f0dd4c57df3363744a171e82637089b134fa5a9",
+      "status": "S13_ONLY_CHANGE",
+      "normalized_match_github_s13": true,
+      "classification": "GENERATED_OR_CACHE_ARTIFACT",
+      "function_or_section": "whole file",
+      "semantic_diff": "EOL encoding only; normalized UTF-8 content is identical"
+    },
+    {
+      "file": "src/services/commercial_routing_v3/medal.py",
+      "github_sha256": "808da4a76ed8c99e4c4ce6b843de7de4100fff16b54a69fc0e4145e0df1345f6",
+      "local_sha256": "808da4a76ed8c99e4c4ce6b843de7de4100fff16b54a69fc0e4145e0df1345f6",
+      "s13_sha256": "a1770365c0bd5ee392f9d298a54d511fedcc1539f29d0a1ccb0a56ea5260f948",
+      "status": "S13_ONLY_CHANGE",
+      "normalized_match_github_s13": true,
+      "classification": "GENERATED_OR_CACHE_ARTIFACT",
+      "function_or_section": "whole file",
+      "semantic_diff": "EOL encoding only; normalized UTF-8 content is identical"
+    },
+    {
+      "file": "src/services/commercial_routing_v3/medal_lineage.py",
+      "github_sha256": "887b439ace14ca226ec6931d2db168d1f1554b0f8cdd94dadbb8f92ad2f4a4a4",
+      "local_sha256": "887b439ace14ca226ec6931d2db168d1f1554b0f8cdd94dadbb8f92ad2f4a4a4",
+      "s13_sha256": "900ca78c33b00d8d48f7bd948ad01760f0ff1b26d3bca60c1b9cafa2cc31b43d",
+      "status": "S13_ONLY_CHANGE",
+      "normalized_match_github_s13": true,
+      "classification": "GENERATED_OR_CACHE_ARTIFACT",
+      "function_or_section": "whole file",
+      "semantic_diff": "EOL encoding only; normalized UTF-8 content is identical"
+    },
+    {
+      "file": "src/services/commercial_routing_v3/model_inference_runs.py",
+      "github_sha256": "bd7cf13905c2dd76580ec3d37eccfec5a492846b69759866a32f3b450eda3e3a",
+      "local_sha256": "bd7cf13905c2dd76580ec3d37eccfec5a492846b69759866a32f3b450eda3e3a",
+      "s13_sha256": "7bf93ef1d91a4aec84afb80e0fd3c686305e48b32efa42aef3109143574d4c9a",
+      "status": "S13_ONLY_CHANGE",
+      "normalized_match_github_s13": false,
+      "classification": "STALE_OLD_CODE",
+      "function_or_section": "Phase 10 SHADOW transport",
+      "semantic_diff": "Experimental ref-transport/model validation source is outside this WIP and absent from canonical annotation Git"
+    },
+    {
+      "file": "src/services/commercial_routing_v3/model_input.py",
+      "github_sha256": "9e8e921020c2ccdba28329db746683fe4810e1aaa4e1b18963a6759449f8f1e0",
+      "local_sha256": "9e8e921020c2ccdba28329db746683fe4810e1aaa4e1b18963a6759449f8f1e0",
+      "s13_sha256": "82b435843aa1f39f49e5f810f17ea1e654c7045ebb74060ef5b40200c4e83b18",
+      "status": "S13_ONLY_CHANGE",
+      "normalized_match_github_s13": true,
+      "classification": "GENERATED_OR_CACHE_ARTIFACT",
+      "function_or_section": "whole file",
+      "semantic_diff": "EOL encoding only; normalized UTF-8 content is identical"
+    },
+    {
+      "file": "src/services/commercial_routing_v3/model_json.py",
+      "github_sha256": "10b924b76ed7df7e9d88e9921ce2f589b9fe755a14289d93a24bf29b11d64a60",
+      "local_sha256": "10b924b76ed7df7e9d88e9921ce2f589b9fe755a14289d93a24bf29b11d64a60",
+      "s13_sha256": "8ed556ea00c6c8d167ce151dd5dd6a667314a69300c4c6fcfc0e4e0d0c89aa27",
+      "status": "S13_ONLY_CHANGE",
+      "normalized_match_github_s13": true,
+      "classification": "GENERATED_OR_CACHE_ARTIFACT",
+      "function_or_section": "whole file",
+      "semantic_diff": "EOL encoding only; normalized UTF-8 content is identical"
+    },
+    {
+      "file": "src/services/commercial_routing_v3/model_result_validator.py",
+      "github_sha256": "60a86ba831f752449c7a44ef784856def53ead3a8b9587b83a7c7bbef2719ea1",
+      "local_sha256": "60a86ba831f752449c7a44ef784856def53ead3a8b9587b83a7c7bbef2719ea1",
+      "s13_sha256": "8f5977e141d6c237f8f18e092fd60768f5886ed8cde6198d90dd2c71cb82acdc",
+      "status": "S13_ONLY_CHANGE",
+      "normalized_match_github_s13": false,
+      "classification": "STALE_OLD_CODE",
+      "function_or_section": "Phase 10 SHADOW transport",
+      "semantic_diff": "Experimental ref-transport/model validation source is outside this WIP and absent from canonical annotation Git"
+    },
+    {
+      "file": "src/services/commercial_routing_v3/model_ui_projection.py",
+      "github_sha256": "f1bb9e1a5397cad80bdfba161b6ba4d654e1bd3dd226d006cb53e0be76b7e210",
+      "local_sha256": "f1bb9e1a5397cad80bdfba161b6ba4d654e1bd3dd226d006cb53e0be76b7e210",
+      "s13_sha256": "f1bb9e1a5397cad80bdfba161b6ba4d654e1bd3dd226d006cb53e0be76b7e210",
+      "status": "MATCH_ALL",
+      "normalized_match_github_s13": false
+    },
+    {
+      "file": "src/services/commercial_routing_v3/normalizer.py",
+      "github_sha256": "b2a2641d166e40c5e93a205a1236a6bc575e17e51364acc00fa3a1e1fc184d0b",
+      "local_sha256": "b2a2641d166e40c5e93a205a1236a6bc575e17e51364acc00fa3a1e1fc184d0b",
+      "s13_sha256": "d0a7bef8fa745a6360e519d028a0c7dba4416953ac4afffbee1b757124e91084",
+      "status": "S13_ONLY_CHANGE",
+      "normalized_match_github_s13": true,
+      "classification": "GENERATED_OR_CACHE_ARTIFACT",
+      "function_or_section": "whole file",
+      "semantic_diff": "EOL encoding only; normalized UTF-8 content is identical"
+    },
+    {
+      "file": "src/services/commercial_routing_v3/object_mode_routing.py",
+      "github_sha256": "25dfda24daa965abdb93e3391b7a69f6c74eeccd4e743a1ddadf7910f17cb4c8",
+      "local_sha256": "25dfda24daa965abdb93e3391b7a69f6c74eeccd4e743a1ddadf7910f17cb4c8",
+      "s13_sha256": "25dfda24daa965abdb93e3391b7a69f6c74eeccd4e743a1ddadf7910f17cb4c8",
+      "status": "MATCH_ALL",
+      "normalized_match_github_s13": false
+    },
+    {
+      "file": "src/services/commercial_routing_v3/okpd_priors.py",
+      "github_sha256": "9a7eb016fee4fedb7d009d27f0b3817a90feba9893a6046448b213700b63e442",
+      "local_sha256": "9a7eb016fee4fedb7d009d27f0b3817a90feba9893a6046448b213700b63e442",
+      "s13_sha256": "c810435a3db5280963abec1ac82e222670552c587f8edab0892550a3c30f4e92",
+      "status": "S13_ONLY_CHANGE",
+      "normalized_match_github_s13": true,
+      "classification": "GENERATED_OR_CACHE_ARTIFACT",
+      "function_or_section": "whole file",
+      "semantic_diff": "EOL encoding only; normalized UTF-8 content is identical"
+    },
+    {
+      "file": "src/services/commercial_routing_v3/okpd_product_branch.py",
+      "github_sha256": "32b2759360596453ee61ce1661551024d0d8900ea11618600dca29365e323d70",
+      "local_sha256": "32b2759360596453ee61ce1661551024d0d8900ea11618600dca29365e323d70",
+      "s13_sha256": "017f76b0a4eeeb885d35a3609d1698238cafe6a536469e2260dab37afba1cd32",
+      "status": "S13_ONLY_CHANGE",
+      "normalized_match_github_s13": true,
+      "classification": "GENERATED_OR_CACHE_ARTIFACT",
+      "function_or_section": "whole file",
+      "semantic_diff": "EOL encoding only; normalized UTF-8 content is identical"
+    },
+    {
+      "file": "src/services/commercial_routing_v3/opportunity_lifecycle_sync.py",
+      "github_sha256": "34b16a23172258cfb73b4044f23cf6f6d739575c24f278fd84e01c787671d3a7",
+      "local_sha256": "34b16a23172258cfb73b4044f23cf6f6d739575c24f278fd84e01c787671d3a7",
+      "s13_sha256": "57d09e30f97488c864a3a8c40506ce7fcaa59a038571678290b6b25d47e27114",
+      "status": "S13_ONLY_CHANGE",
+      "normalized_match_github_s13": true,
+      "classification": "GENERATED_OR_CACHE_ARTIFACT",
+      "function_or_section": "whole file",
+      "semantic_diff": "EOL encoding only; normalized UTF-8 content is identical"
+    },
+    {
+      "file": "src/services/commercial_routing_v3/opportunity_persistence.py",
+      "github_sha256": "39fa38e007b8d8e0f929407bbc78ccbf113c3351d2b459b5ae312738e6921b38",
+      "local_sha256": "39fa38e007b8d8e0f929407bbc78ccbf113c3351d2b459b5ae312738e6921b38",
+      "s13_sha256": "df371e129fefd123d7deee76796d84cccc932f02a03a869bb71aed25b8096f1d",
+      "status": "S13_ONLY_CHANGE",
+      "normalized_match_github_s13": true,
+      "classification": "GENERATED_OR_CACHE_ARTIFACT",
+      "function_or_section": "whole file",
+      "semantic_diff": "EOL encoding only; normalized UTF-8 content is identical"
+    },
+    {
+      "file": "src/services/commercial_routing_v3/post_award_execution_timing.py",
+      "github_sha256": "8534d3af53b7c02a79a6b35c7a8f23b291e6687af3f5cef5e4a0c9483c31d179",
+      "local_sha256": "8534d3af53b7c02a79a6b35c7a8f23b291e6687af3f5cef5e4a0c9483c31d179",
+      "s13_sha256": "66a5f21e957a5fcccd9e453223f4d68ee3884eb3ad29fae158c4e97685a1ac8c",
+      "status": "S13_ONLY_CHANGE",
+      "normalized_match_github_s13": true,
+      "classification": "GENERATED_OR_CACHE_ARTIFACT",
+      "function_or_section": "whole file",
+      "semantic_diff": "EOL encoding only; normalized UTF-8 content is identical"
+    },
+    {
+      "file": "src/services/commercial_routing_v3/prior_promotion_contract.py",
+      "github_sha256": "1053a3f6536cfeb310111ae31b28d19d2921522fba3efa2a3b6d6688f9a58bca",
+      "local_sha256": "1053a3f6536cfeb310111ae31b28d19d2921522fba3efa2a3b6d6688f9a58bca",
+      "s13_sha256": "2b2ce071eadaac6a179258b154600d5786c8ba1b6a44a1195c75e81e196ef1d7",
+      "status": "S13_ONLY_CHANGE",
+      "normalized_match_github_s13": true,
+      "classification": "GENERATED_OR_CACHE_ARTIFACT",
+      "function_or_section": "whole file",
+      "semantic_diff": "EOL encoding only; normalized UTF-8 content is identical"
+    },
+    {
+      "file": "src/services/commercial_routing_v3/prior_semantics.py",
+      "github_sha256": "075e0527b500cba6ec8a9c62763f90c51936c60472003a24d942e60bbbaf3abf",
+      "local_sha256": "075e0527b500cba6ec8a9c62763f90c51936c60472003a24d942e60bbbaf3abf",
+      "s13_sha256": "f2ce603dc9dce0b00aa17275c378fe002398279d262b0fc7cd00814236c3d459",
+      "status": "S13_ONLY_CHANGE",
+      "normalized_match_github_s13": true,
+      "classification": "GENERATED_OR_CACHE_ARTIFACT",
+      "function_or_section": "whole file",
+      "semantic_diff": "EOL encoding only; normalized UTF-8 content is identical"
+    },
+    {
+      "file": "src/services/commercial_routing_v3/processing_lease.py",
+      "github_sha256": "2f952a2fa54a54c5a26c509d4bd85a2bd3aaa6172d5104b716b2331be5bb6f5a",
+      "local_sha256": "2f952a2fa54a54c5a26c509d4bd85a2bd3aaa6172d5104b716b2331be5bb6f5a",
+      "s13_sha256": "65fbf24a751e1a39eca12e18c02fdf6414aea4547ee8fd64b32f714efc5ca53e",
+      "status": "S13_ONLY_CHANGE",
+      "normalized_match_github_s13": true,
+      "classification": "GENERATED_OR_CACHE_ARTIFACT",
+      "function_or_section": "whole file",
+      "semantic_diff": "EOL encoding only; normalized UTF-8 content is identical"
+    },
+    {
+      "file": "src/services/commercial_routing_v3/procurement_form.py",
+      "github_sha256": "1d3c62f3df9839395c615d0bc35f11e46cf365cd4d26f61b723871def8163ae3",
+      "local_sha256": "1d3c62f3df9839395c615d0bc35f11e46cf365cd4d26f61b723871def8163ae3",
+      "s13_sha256": "0ecac68342f0bb27abd79c68c372043e413b4b85e5a23c264d959728af5ae9ce",
+      "status": "S13_ONLY_CHANGE",
+      "normalized_match_github_s13": true,
+      "classification": "GENERATED_OR_CACHE_ARTIFACT",
+      "function_or_section": "whole file",
+      "semantic_diff": "EOL encoding only; normalized UTF-8 content is identical"
+    },
+    {
+      "file": "src/services/commercial_routing_v3/projection.py",
+      "github_sha256": "46aa8c4283d4f2d49028cfd57360f294ffda1ba70225aeb3a0709150da161dbe",
+      "local_sha256": "46aa8c4283d4f2d49028cfd57360f294ffda1ba70225aeb3a0709150da161dbe",
+      "s13_sha256": "5fd9908ee850a18902e609af07e31c7af2f789e4b810331fdee5a9cdf952f3c8",
+      "status": "S13_ONLY_CHANGE",
+      "normalized_match_github_s13": true,
+      "classification": "GENERATED_OR_CACHE_ARTIFACT",
+      "function_or_section": "whole file",
+      "semantic_diff": "EOL encoding only; normalized UTF-8 content is identical"
+    },
+    {
+      "file": "src/services/commercial_routing_v3/projection_writer.py",
+      "github_sha256": "268df3fa81e1d06d81afd483a2f039eea7111e6f53ee46ceadf57015895e7472",
+      "local_sha256": "268df3fa81e1d06d81afd483a2f039eea7111e6f53ee46ceadf57015895e7472",
+      "s13_sha256": "5f4ba918b784c4f2e780927f594c9898e5b6fd91fd624ee4c3458125ea23b068",
+      "status": "S13_ONLY_CHANGE",
+      "normalized_match_github_s13": true,
+      "classification": "GENERATED_OR_CACHE_ARTIFACT",
+      "function_or_section": "whole file",
+      "semantic_diff": "EOL encoding only; normalized UTF-8 content is identical"
+    },
+    {
+      "file": "src/services/commercial_routing_v3/prompt.py",
+      "github_sha256": "6789c8916094300c8a6cd6fe5e5e1e254623d22c09d3ab2723e4cbc5e1df0509",
+      "local_sha256": "6789c8916094300c8a6cd6fe5e5e1e254623d22c09d3ab2723e4cbc5e1df0509",
+      "s13_sha256": "c3e5cdd119a6cd45707ac2ac114b112fe646f83a1442f344893abec772bd7260",
+      "status": "S13_ONLY_CHANGE",
+      "normalized_match_github_s13": true,
+      "classification": "GENERATED_OR_CACHE_ARTIFACT",
+      "function_or_section": "whole file",
+      "semantic_diff": "EOL encoding only; normalized UTF-8 content is identical"
+    },
+    {
+      "file": "src/services/commercial_routing_v3/prompt_v10_shadow.py",
+      "github_sha256": null,
+      "local_sha256": null,
+      "s13_sha256": "f5fe39c3747b49262373b7f65bcd1ce82f7efdc840482e536f20be463ede9531",
+      "status": "UNTRACKED_RUNTIME_FILE",
+      "normalized_match_github_s13": false,
+      "classification": "STALE_OLD_CODE",
+      "function_or_section": "Phase 10 SHADOW transport",
+      "semantic_diff": "Experimental ref-transport/model validation source is outside this WIP and absent from canonical annotation Git"
+    },
+    {
+      "file": "src/services/commercial_routing_v3/prompt_v6.py",
+      "github_sha256": "c969944566c773947a7f0fcdcd78acf1ba76767f918260e0719937bf8e85a7e7",
+      "local_sha256": "c969944566c773947a7f0fcdcd78acf1ba76767f918260e0719937bf8e85a7e7",
+      "s13_sha256": "c969944566c773947a7f0fcdcd78acf1ba76767f918260e0719937bf8e85a7e7",
+      "status": "MATCH_ALL",
+      "normalized_match_github_s13": false
+    },
+    {
+      "file": "src/services/commercial_routing_v3/prompt_v6_1.py",
+      "github_sha256": "e204fb3f6c6e69c841c515557dd328911c4ca858dd103607905ccf9032170026",
+      "local_sha256": "e204fb3f6c6e69c841c515557dd328911c4ca858dd103607905ccf9032170026",
+      "s13_sha256": "e204fb3f6c6e69c841c515557dd328911c4ca858dd103607905ccf9032170026",
+      "status": "MATCH_ALL",
+      "normalized_match_github_s13": false
+    },
+    {
+      "file": "src/services/commercial_routing_v3/prompt_v6_2.py",
+      "github_sha256": "f89f8144076c07424ffadbb13c73c86f14b02ba5b46447434239a156bd83b2c1",
+      "local_sha256": "f89f8144076c07424ffadbb13c73c86f14b02ba5b46447434239a156bd83b2c1",
+      "s13_sha256": "f89f8144076c07424ffadbb13c73c86f14b02ba5b46447434239a156bd83b2c1",
+      "status": "MATCH_ALL",
+      "normalized_match_github_s13": false
+    },
+    {
+      "file": "src/services/commercial_routing_v3/prompt_v6_3.py",
+      "github_sha256": "f56c93e7e874158aa68ca43c999404bcdd298fcb036c9bb7f119fa2386e69fe1",
+      "local_sha256": "f56c93e7e874158aa68ca43c999404bcdd298fcb036c9bb7f119fa2386e69fe1",
+      "s13_sha256": "f56c93e7e874158aa68ca43c999404bcdd298fcb036c9bb7f119fa2386e69fe1",
+      "status": "MATCH_ALL",
+      "normalized_match_github_s13": false
+    },
+    {
+      "file": "src/services/commercial_routing_v3/prompt_v9_full_registry.py",
+      "github_sha256": "ffe5048508aeea668876088560f95e4483b6c022b14de3a0ac3e4b7bf6e53c89",
+      "local_sha256": "ffe5048508aeea668876088560f95e4483b6c022b14de3a0ac3e4b7bf6e53c89",
+      "s13_sha256": "827b82547036178cae93597a6432c565655140eac66921bcc6f88862c5e4ccab",
+      "status": "S13_ONLY_CHANGE",
+      "normalized_match_github_s13": true,
+      "classification": "GENERATED_OR_CACHE_ARTIFACT",
+      "function_or_section": "whole file",
+      "semantic_diff": "EOL encoding only; normalized UTF-8 content is identical"
+    },
+    {
+      "file": "src/services/commercial_routing_v3/queue_producer.py",
+      "github_sha256": "c4dfee97db7338f7114d8259eefac111564afe123b7a5557d68fae96d0661d85",
+      "local_sha256": "c4dfee97db7338f7114d8259eefac111564afe123b7a5557d68fae96d0661d85",
+      "s13_sha256": "45dbbdef22621169111e8a103ce6c8e037d604dd0f4a8dabc912983509da4e26",
+      "status": "S13_ONLY_CHANGE",
+      "normalized_match_github_s13": false,
+      "classification": "HOST_LOCAL_CONFIGURATION",
+      "function_or_section": "host defaults/operator diagnostics",
+      "semantic_diff": "Concrete host/operator values replace canonical logical aliases"
+    },
+    {
+      "file": "src/services/commercial_routing_v3/registry_extract_mapper.py",
+      "github_sha256": null,
+      "local_sha256": null,
+      "s13_sha256": "dc32c4ac4647888e140c50e24138d30ce3b46ba849950ca86dd88f6af30496c6",
+      "status": "UNTRACKED_RUNTIME_FILE",
+      "normalized_match_github_s13": false,
+      "classification": "STALE_OLD_CODE",
+      "function_or_section": "Phase 10 SHADOW transport",
+      "semantic_diff": "Experimental ref-transport/model validation source is outside this WIP and absent from canonical annotation Git"
+    },
+    {
+      "file": "src/services/commercial_routing_v3/registry_prompt_payload.py",
+      "github_sha256": "714f9ecbb46a5ce3b71774b4b549149895c1dbb7acd948e26e96e5e65c21f882",
+      "local_sha256": "714f9ecbb46a5ce3b71774b4b549149895c1dbb7acd948e26e96e5e65c21f882",
+      "s13_sha256": "2a214486d5bf3a69904d51170ad0a707638b57af6d1fb5e91759c4fd633605c9",
+      "status": "S13_ONLY_CHANGE",
+      "normalized_match_github_s13": true,
+      "classification": "GENERATED_OR_CACHE_ARTIFACT",
+      "function_or_section": "whole file",
+      "semantic_diff": "EOL encoding only; normalized UTF-8 content is identical"
+    },
+    {
+      "file": "src/services/commercial_routing_v3/research_queue_lifecycle.py",
+      "github_sha256": "6c632b5d296403d3067209e300d6949e096dbd16fb1d906dce40cb876c44bc93",
+      "local_sha256": "6c632b5d296403d3067209e300d6949e096dbd16fb1d906dce40cb876c44bc93",
+      "s13_sha256": "025d13736b7d98d734c1a7a0e17866d2f094cbf1dcc5a69f4396904969f7e9dd",
+      "status": "S13_ONLY_CHANGE",
+      "normalized_match_github_s13": true,
+      "classification": "GENERATED_OR_CACHE_ARTIFACT",
+      "function_or_section": "whole file",
+      "semantic_diff": "EOL encoding only; normalized UTF-8 content is identical"
+    },
+    {
+      "file": "src/services/commercial_routing_v3/routing_backlog.py",
+      "github_sha256": "f96efa1fc4f443e64923fb6e2227a617d446cfa8ffacddee8fb368453f55b352",
+      "local_sha256": "f96efa1fc4f443e64923fb6e2227a617d446cfa8ffacddee8fb368453f55b352",
+      "s13_sha256": "cb53207425f440aa8c0b97f43eeb246daeac7f0e11d6653ea7e9b41d633efc48",
+      "status": "S13_ONLY_CHANGE",
+      "normalized_match_github_s13": true,
+      "classification": "GENERATED_OR_CACHE_ARTIFACT",
+      "function_or_section": "whole file",
+      "semantic_diff": "EOL encoding only; normalized UTF-8 content is identical"
+    },
+    {
+      "file": "src/services/commercial_routing_v3/routing_drain.py",
+      "github_sha256": "a06848f9e650705a762940e5c3f11c7e2c948aa95162b5f54583282223f29f68",
+      "local_sha256": "a06848f9e650705a762940e5c3f11c7e2c948aa95162b5f54583282223f29f68",
+      "s13_sha256": "1f527d53e2033a2f6dd2ecdf4cc4af91874956467c28f1d46be990b9a64d98b3",
+      "status": "S13_ONLY_CHANGE",
+      "normalized_match_github_s13": true,
+      "classification": "GENERATED_OR_CACHE_ARTIFACT",
+      "function_or_section": "whole file",
+      "semantic_diff": "EOL encoding only; normalized UTF-8 content is identical"
+    },
+    {
+      "file": "src/services/commercial_routing_v3/routing_eligibility.py",
+      "github_sha256": "e92a19c738ef4d0054a41e3f93f2366269cf3ecc1b88bc0523eb0778acd47e3e",
+      "local_sha256": "e92a19c738ef4d0054a41e3f93f2366269cf3ecc1b88bc0523eb0778acd47e3e",
+      "s13_sha256": "6e554ad1047d33663a4983efae0a9b9f2d5ee7ba9a571973ade25f61d172e5c8",
+      "status": "S13_ONLY_CHANGE",
+      "normalized_match_github_s13": true,
+      "classification": "GENERATED_OR_CACHE_ARTIFACT",
+      "function_or_section": "whole file",
+      "semantic_diff": "EOL encoding only; normalized UTF-8 content is identical"
+    },
+    {
+      "file": "src/services/commercial_routing_v3/routing_outcome.py",
+      "github_sha256": "53d6ac6deb1add6032f4dcb85b457597280dc9705b63a2c79bae0e2c3637b9fa",
+      "local_sha256": "53d6ac6deb1add6032f4dcb85b457597280dc9705b63a2c79bae0e2c3637b9fa",
+      "s13_sha256": "53d6ac6deb1add6032f4dcb85b457597280dc9705b63a2c79bae0e2c3637b9fa",
+      "status": "MATCH_ALL",
+      "normalized_match_github_s13": false
+    },
+    {
+      "file": "src/services/commercial_routing_v3/routing_priority.py",
+      "github_sha256": "aea06a7d2b7fa8e9a3a5ee6f2dea29c3d2621eca11da637cd5f94832ef685ddb",
+      "local_sha256": "aea06a7d2b7fa8e9a3a5ee6f2dea29c3d2621eca11da637cd5f94832ef685ddb",
+      "s13_sha256": "9e3c97247337240a5defd7d03b72944425105597378fb5854c6ad3298cf38c35",
+      "status": "S13_ONLY_CHANGE",
+      "normalized_match_github_s13": true,
+      "classification": "GENERATED_OR_CACHE_ARTIFACT",
+      "function_or_section": "whole file",
+      "semantic_diff": "EOL encoding only; normalized UTF-8 content is identical"
+    },
+    {
+      "file": "src/services/commercial_routing_v3/routing_ready.py",
+      "github_sha256": "34efe074b4bc58be4b27294d4574a19abc04858f3f7dc996ee9280ecc7a720f7",
+      "local_sha256": "34efe074b4bc58be4b27294d4574a19abc04858f3f7dc996ee9280ecc7a720f7",
+      "s13_sha256": "8f332b6afa59822702796bd157a177cd2e121436598c76b95f9708f57dda5322",
+      "status": "S13_ONLY_CHANGE",
+      "normalized_match_github_s13": true,
+      "classification": "GENERATED_OR_CACHE_ARTIFACT",
+      "function_or_section": "whole file",
+      "semantic_diff": "EOL encoding only; normalized UTF-8 content is identical"
+    },
+    {
+      "file": "src/services/commercial_routing_v3/routing_runtime_config.py",
+      "github_sha256": "7b495b15ec4b3b88cc6ed20ef0608478a519dea06c9af8f50df6baeded266291",
+      "local_sha256": "7b495b15ec4b3b88cc6ed20ef0608478a519dea06c9af8f50df6baeded266291",
+      "s13_sha256": "5de8ab7ba874f018860a552b6d61d80a46c26268c493c0693b2f92c230f3024f",
+      "status": "S13_ONLY_CHANGE",
+      "normalized_match_github_s13": true,
+      "classification": "GENERATED_OR_CACHE_ARTIFACT",
+      "function_or_section": "whole file",
+      "semantic_diff": "EOL encoding only; normalized UTF-8 content is identical"
+    },
+    {
+      "file": "src/services/commercial_routing_v3/routing_signals.py",
+      "github_sha256": "26947090c4a5b42c8734a6d0a2a6128fcacefeb69f062845c312d7740102a990",
+      "local_sha256": "26947090c4a5b42c8734a6d0a2a6128fcacefeb69f062845c312d7740102a990",
+      "s13_sha256": "3af269d91e5bc3089e00b7d8dfbf7b8ce06d7709ed7be86568e85af945056216",
+      "status": "S13_ONLY_CHANGE",
+      "normalized_match_github_s13": true,
+      "classification": "GENERATED_OR_CACHE_ARTIFACT",
+      "function_or_section": "whole file",
+      "semantic_diff": "EOL encoding only; normalized UTF-8 content is identical"
+    },
+    {
+      "file": "src/services/commercial_routing_v3/runtime_adapter.py",
+      "github_sha256": "f08f61d06255dbb0331a6dca3db7d3a0c7da02f3b480d4c96d1a36b91c802317",
+      "local_sha256": "f08f61d06255dbb0331a6dca3db7d3a0c7da02f3b480d4c96d1a36b91c802317",
+      "s13_sha256": "f08f61d06255dbb0331a6dca3db7d3a0c7da02f3b480d4c96d1a36b91c802317",
+      "status": "MATCH_ALL",
+      "normalized_match_github_s13": false
+    },
+    {
+      "file": "src/services/commercial_routing_v3/schema_readiness.py",
+      "github_sha256": "18212b7520aaab70a20414121760a57ae8abe08248c50c65dba7a5e800d65208",
+      "local_sha256": "18212b7520aaab70a20414121760a57ae8abe08248c50c65dba7a5e800d65208",
+      "s13_sha256": "0c0b07e07f979ef78be239d09b11215aa45163a40b28417b55a627b42581b400",
+      "status": "S13_ONLY_CHANGE",
+      "normalized_match_github_s13": true,
+      "classification": "GENERATED_OR_CACHE_ARTIFACT",
+      "function_or_section": "whole file",
+      "semantic_diff": "EOL encoding only; normalized UTF-8 content is identical"
+    },
+    {
+      "file": "src/services/commercial_routing_v3/shadow_inference.py",
+      "github_sha256": "6d63310bfbf43b760a28c8bbd31019d76c9d8d7fa8824ce2c898f31c8772e714",
+      "local_sha256": "6d63310bfbf43b760a28c8bbd31019d76c9d8d7fa8824ce2c898f31c8772e714",
+      "s13_sha256": "300149082434e92713b1944267c0a00f43eac374c35d2a32e537589b1f08e104",
+      "status": "S13_ONLY_CHANGE",
+      "normalized_match_github_s13": false,
+      "classification": "STALE_OLD_CODE",
+      "function_or_section": "Phase 10 SHADOW transport",
+      "semantic_diff": "Experimental ref-transport/model validation source is outside this WIP and absent from canonical annotation Git"
+    },
+    {
+      "file": "src/services/commercial_routing_v3/source_contour.py",
+      "github_sha256": "1f8115cf6a2d8e505cde06a0ae7310f8b3ea346b24c86db2d62000469cd3361e",
+      "local_sha256": "1f8115cf6a2d8e505cde06a0ae7310f8b3ea346b24c86db2d62000469cd3361e",
+      "s13_sha256": "e607dfd23c4edb3f0c7960a75644c337de98a118ed60731a6f89b12b2a182af6",
+      "status": "S13_ONLY_CHANGE",
+      "normalized_match_github_s13": true,
+      "classification": "GENERATED_OR_CACHE_ARTIFACT",
+      "function_or_section": "whole file",
+      "semantic_diff": "EOL encoding only; normalized UTF-8 content is identical"
+    },
+    {
+      "file": "src/services/commercial_routing_v3/source_enrich.py",
+      "github_sha256": "36cb31b868dfad266a2a3e83f2f98c34e4a7c4b66f6fc9ee587d771c964d0537",
+      "local_sha256": "36cb31b868dfad266a2a3e83f2f98c34e4a7c4b66f6fc9ee587d771c964d0537",
+      "s13_sha256": "1b441050fb6a1d88fc7279e1e0df5c6d70797c596d5c29969ddfb5c0a0b81dc6",
+      "status": "S13_ONLY_CHANGE",
+      "normalized_match_github_s13": false,
+      "classification": "HOST_LOCAL_CONFIGURATION",
+      "function_or_section": "host defaults/operator diagnostics",
+      "semantic_diff": "Concrete host/operator values replace canonical logical aliases"
+    },
+    {
+      "file": "src/services/commercial_routing_v3/source_lifecycle.py",
+      "github_sha256": "4576f4f7b333972022e0fb840f998e80c7a75462d57d5de4601dc0a3eee0683c",
+      "local_sha256": "4576f4f7b333972022e0fb840f998e80c7a75462d57d5de4601dc0a3eee0683c",
+      "s13_sha256": "70f3796b41e228fcb3a7a93d992af2bf8cd333429ee8fd70449b87bf58699d84",
+      "status": "S13_ONLY_CHANGE",
+      "normalized_match_github_s13": true,
+      "classification": "GENERATED_OR_CACHE_ARTIFACT",
+      "function_or_section": "whole file",
+      "semantic_diff": "EOL encoding only; normalized UTF-8 content is identical"
+    },
+    {
+      "file": "src/services/commercial_routing_v3/wave1_corpus.py",
+      "github_sha256": "4bc7bfce0ce315fb7a8cdd29245a51fd88189d2878e37a8d41214e500f28b203",
+      "local_sha256": "4bc7bfce0ce315fb7a8cdd29245a51fd88189d2878e37a8d41214e500f28b203",
+      "s13_sha256": "1b9454198918f052d8c438031c1e742d279eb25bfd5bd2bfe25adb8484587848",
+      "status": "S13_ONLY_CHANGE",
+      "normalized_match_github_s13": true,
+      "classification": "GENERATED_OR_CACHE_ARTIFACT",
+      "function_or_section": "whole file",
+      "semantic_diff": "EOL encoding only; normalized UTF-8 content is identical"
+    },
+    {
+      "file": "src/services/commercial_taxonomy_registry.py",
+      "github_sha256": "818dde53e02a70d20a7b3aa83401d214bf97aec64a07420597172e84c72f99da",
+      "local_sha256": "818dde53e02a70d20a7b3aa83401d214bf97aec64a07420597172e84c72f99da",
+      "s13_sha256": "5cfd932e75c6b6d5c2c4729e925a1473b09ccc408ed083f11e5a70f133db0099",
+      "status": "S13_ONLY_CHANGE",
+      "normalized_match_github_s13": true,
+      "classification": "GENERATED_OR_CACHE_ARTIFACT",
+      "function_or_section": "whole file",
+      "semantic_diff": "EOL encoding only; normalized UTF-8 content is identical"
+    },
+    {
+      "file": "src/services/companies_balance.py",
+      "github_sha256": "7aca67b686d18b587f68212289f0d61b7affea3073a9b6ae8f5a924d1eaf2db3",
+      "local_sha256": "7aca67b686d18b587f68212289f0d61b7affea3073a9b6ae8f5a924d1eaf2db3",
+      "s13_sha256": "7aca67b686d18b587f68212289f0d61b7affea3073a9b6ae8f5a924d1eaf2db3",
+      "status": "MATCH_ALL",
+      "normalized_match_github_s13": false
+    },
+    {
+      "file": "src/services/companies_service.py",
+      "github_sha256": "948b06cf508ec16e311330c56185d5e829f39dfb2c98a4861916806c5705c129",
+      "local_sha256": "948b06cf508ec16e311330c56185d5e829f39dfb2c98a4861916806c5705c129",
+      "s13_sha256": "948b06cf508ec16e311330c56185d5e829f39dfb2c98a4861916806c5705c129",
+      "status": "MATCH_ALL",
+      "normalized_match_github_s13": false
+    },
+    {
+      "file": "src/services/computer_doc_extract.py",
+      "github_sha256": "9eb6893f0faa72501337cb64798f79d8c20f2520fa34081dfb584bc43a9adfce",
+      "local_sha256": "9eb6893f0faa72501337cb64798f79d8c20f2520fa34081dfb584bc43a9adfce",
+      "s13_sha256": "9eb6893f0faa72501337cb64798f79d8c20f2520fa34081dfb584bc43a9adfce",
+      "status": "MATCH_ALL",
+      "normalized_match_github_s13": false
+    },
+    {
+      "file": "src/services/computer_tz_ai.py",
+      "github_sha256": "fa7860bdf5881ec2e1e94c356e3c65656962ad1cacbb6626cad816fa7137908a",
+      "local_sha256": "fa7860bdf5881ec2e1e94c356e3c65656962ad1cacbb6626cad816fa7137908a",
+      "s13_sha256": "fa7860bdf5881ec2e1e94c356e3c65656962ad1cacbb6626cad816fa7137908a",
+      "status": "MATCH_ALL",
+      "normalized_match_github_s13": false
+    },
+    {
+      "file": "src/services/computers_service.py",
+      "github_sha256": "39a9663499e823a431851d0ed3df46aa093e09b57ee9acdc283769816907a892",
+      "local_sha256": "39a9663499e823a431851d0ed3df46aa093e09b57ee9acdc283769816907a892",
+      "s13_sha256": "39a9663499e823a431851d0ed3df46aa093e09b57ee9acdc283769816907a892",
+      "status": "MATCH_ALL",
+      "normalized_match_github_s13": false
+    },
+    {
+      "file": "src/services/computers_service.py.tmp_path_issue/computer_tz_daemon.py",
+      "github_sha256": "a27cbdb9f8c9481bcd6e958d23c26e5e15c7190b70b30ae6405684eb70c9274e",
+      "local_sha256": "a27cbdb9f8c9481bcd6e958d23c26e5e15c7190b70b30ae6405684eb70c9274e",
+      "s13_sha256": "e174f3ba6bc99dce4fa987c33328dd50d6321982912a847e6c9eb3810c499bc5",
+      "status": "S13_ONLY_CHANGE",
+      "normalized_match_github_s13": false,
+      "classification": "GENERATED_OR_CACHE_ARTIFACT",
+      "function_or_section": "non-runtime test/temp path",
+      "semantic_diff": "Misplaced test or temporary-path artifact is not part of the canonical application tree"
+    },
+    {
+      "file": "src/services/computers_service.py.tmp_path_issue/computers_service.py",
+      "github_sha256": "e5469962e810a7f3edc3dd69f342a2420fec7f289dcd8763872d7f896c81d5a8",
+      "local_sha256": "e5469962e810a7f3edc3dd69f342a2420fec7f289dcd8763872d7f896c81d5a8",
+      "s13_sha256": "e5469962e810a7f3edc3dd69f342a2420fec7f289dcd8763872d7f896c81d5a8",
+      "status": "MATCH_ALL",
+      "normalized_match_github_s13": false
+    },
+    {
+      "file": "src/services/crm_ai_assessment_runner.py",
+      "github_sha256": "a43dfac0eee28d52a0783d304f2f7aee372672abcd3ee17c068eaf008542ed3b",
+      "local_sha256": "a43dfac0eee28d52a0783d304f2f7aee372672abcd3ee17c068eaf008542ed3b",
+      "s13_sha256": "a43dfac0eee28d52a0783d304f2f7aee372672abcd3ee17c068eaf008542ed3b",
+      "status": "MATCH_ALL",
+      "normalized_match_github_s13": false
+    },
+    {
+      "file": "src/services/crm_business_control_migration.py",
+      "github_sha256": "49a3f56c05c6cc0734289aa698fcd7f4b7ae401c8e126f2ed65376890c9be780",
+      "local_sha256": "49a3f56c05c6cc0734289aa698fcd7f4b7ae401c8e126f2ed65376890c9be780",
+      "s13_sha256": "7be808294ef314e0cca2394130b227e9a466f60ec0701dc085f0c119d523227e",
+      "status": "S13_ONLY_CHANGE",
+      "normalized_match_github_s13": true,
+      "classification": "GENERATED_OR_CACHE_ARTIFACT",
+      "function_or_section": "whole file",
+      "semantic_diff": "EOL encoding only; normalized UTF-8 content is identical"
+    },
+    {
+      "file": "src/services/crm_db_runtime.py",
+      "github_sha256": "e6b79407497af14c5e6480732233fad2f865c953120708e1dfe40959bd39b978",
+      "local_sha256": "e6b79407497af14c5e6480732233fad2f865c953120708e1dfe40959bd39b978",
+      "s13_sha256": "7aceb8ab90f5f5f80065e9d875dcd366a8ded5565b131c7eaff323ccb2e5652a",
+      "status": "S13_ONLY_CHANGE",
+      "normalized_match_github_s13": true,
+      "classification": "GENERATED_OR_CACHE_ARTIFACT",
+      "function_or_section": "whole file",
+      "semantic_diff": "EOL encoding only; normalized UTF-8 content is identical"
+    },
+    {
+      "file": "src/services/crm_procurements_migration_1.py",
+      "github_sha256": "3e3f9f21d16f085a0d4905a5896cf61094e57dec379b24ae65a3938d2ab099d2",
+      "local_sha256": "3e3f9f21d16f085a0d4905a5896cf61094e57dec379b24ae65a3938d2ab099d2",
+      "s13_sha256": "c6473319be8c137e1cdcfb0d8d494cde71276e60ad95bca6c8f776aeb7fe9d8f",
+      "status": "S13_ONLY_CHANGE",
+      "normalized_match_github_s13": true,
+      "classification": "GENERATED_OR_CACHE_ARTIFACT",
+      "function_or_section": "whole file",
+      "semantic_diff": "EOL encoding only; normalized UTF-8 content is identical"
+    },
+    {
+      "file": "src/services/crm_procurements_repository.py",
+      "github_sha256": "ce9ec37d09cc22a3aec8a944ecd3a4340f2aea6bd5036815136e4bbad7bafaad",
+      "local_sha256": "ce9ec37d09cc22a3aec8a944ecd3a4340f2aea6bd5036815136e4bbad7bafaad",
+      "s13_sha256": "45e92e8eaef0f70ab28be210c0d1b73da1cf1463475ba8881c0810f13d1a86cd",
+      "status": "S13_ONLY_CHANGE",
+      "normalized_match_github_s13": true,
+      "classification": "GENERATED_OR_CACHE_ARTIFACT",
+      "function_or_section": "whole file",
+      "semantic_diff": "EOL encoding only; normalized UTF-8 content is identical"
+    },
+    {
+      "file": "src/services/crm_procurements_schema.py",
+      "github_sha256": "685cc7cb7a886cfd137daa19c762bcb5d03259b249452331c5c12a2b93f05b89",
+      "local_sha256": "685cc7cb7a886cfd137daa19c762bcb5d03259b249452331c5c12a2b93f05b89",
+      "s13_sha256": "d1a644261188065df6953183f7054c498ebf550db97e1012cfa93c61916e892d",
+      "status": "S13_ONLY_CHANGE",
+      "normalized_match_github_s13": true,
+      "classification": "GENERATED_OR_CACHE_ARTIFACT",
+      "function_or_section": "whole file",
+      "semantic_diff": "EOL encoding only; normalized UTF-8 content is identical"
+    },
+    {
+      "file": "src/services/crm_procurements_sync.py",
+      "github_sha256": "f0711125d7dec2ab05348ca9ecb86f3d9d16066a06739343a7ba35666743ca6a",
+      "local_sha256": "f0711125d7dec2ab05348ca9ecb86f3d9d16066a06739343a7ba35666743ca6a",
+      "s13_sha256": "87aee1f2e693121886a2e4efddaadb8a664c605208d7b11900d459b82c89dda3",
+      "status": "S13_ONLY_CHANGE",
+      "normalized_match_github_s13": true,
+      "classification": "GENERATED_OR_CACHE_ARTIFACT",
+      "function_or_section": "whole file",
+      "semantic_diff": "EOL encoding only; normalized UTF-8 content is identical"
+    },
+    {
+      "file": "src/services/crm_profile_service.py",
+      "github_sha256": "ee5adbbdf7b09d524f48c1667c15e0e63346bf95eea20c367e8a9bc27ce70fbc",
+      "local_sha256": "ee5adbbdf7b09d524f48c1667c15e0e63346bf95eea20c367e8a9bc27ce70fbc",
+      "s13_sha256": "ee5adbbdf7b09d524f48c1667c15e0e63346bf95eea20c367e8a9bc27ce70fbc",
+      "status": "MATCH_ALL",
+      "normalized_match_github_s13": false
+    },
+    {
+      "file": "src/services/crm_profiles_page.py",
+      "github_sha256": "3d7f661c100df4cc08d01abd6e630547304ab1b2cf9cdbcf44a573986788a184",
+      "local_sha256": "3d7f661c100df4cc08d01abd6e630547304ab1b2cf9cdbcf44a573986788a184",
+      "s13_sha256": "3d7f661c100df4cc08d01abd6e630547304ab1b2cf9cdbcf44a573986788a184",
+      "status": "MATCH_ALL",
+      "normalized_match_github_s13": false
+    },
+    {
+      "file": "src/services/db_bootstrap.py",
+      "github_sha256": "6515bb299b28d993c184e43899e80e30109afe9f664826a6a066b9bd195ebf35",
+      "local_sha256": "6515bb299b28d993c184e43899e80e30109afe9f664826a6a066b9bd195ebf35",
+      "s13_sha256": "3d4043278b40093c96efc369720bc0b0d13348cdb4eda77614308ee9a775660c",
+      "status": "S13_ONLY_CHANGE",
+      "normalized_match_github_s13": false,
+      "classification": "HOST_LOCAL_CONFIGURATION",
+      "function_or_section": "host defaults/operator diagnostics",
+      "semantic_diff": "Concrete host/operator values replace canonical logical aliases"
+    },
+    {
+      "file": "src/services/db_health.py",
+      "github_sha256": "a5d5def04330f9398e710c76637b8bfb3c875b06d5e792b7586833b831289f36",
+      "local_sha256": "a5d5def04330f9398e710c76637b8bfb3c875b06d5e792b7586833b831289f36",
+      "s13_sha256": "a5d5def04330f9398e710c76637b8bfb3c875b06d5e792b7586833b831289f36",
+      "status": "MATCH_ALL",
+      "normalized_match_github_s13": false
+    },
+    {
+      "file": "src/services/db_role_contract.py",
+      "github_sha256": "ab6983812959c623f61f9448ac0c0a4415b9544b7201626bdd63d6f9f08564b9",
+      "local_sha256": "ab6983812959c623f61f9448ac0c0a4415b9544b7201626bdd63d6f9f08564b9",
+      "s13_sha256": "64965f743348217235fb9f0e6509665203ac7ba1d320d3793118cddfdc2e38dd",
+      "status": "S13_ONLY_CHANGE",
+      "normalized_match_github_s13": false,
+      "classification": "HOST_LOCAL_CONFIGURATION",
+      "function_or_section": "host defaults/operator diagnostics",
+      "semantic_diff": "Concrete host/operator values replace canonical logical aliases"
+    },
+    {
+      "file": "src/services/docs_match_preview.py",
+      "github_sha256": "f3d00e2e051fbb7712333869bd26d20f2f318b72f67282f35d4c8f399db29686",
+      "local_sha256": "f3d00e2e051fbb7712333869bd26d20f2f318b72f67282f35d4c8f399db29686",
+      "s13_sha256": "f3d00e2e051fbb7712333869bd26d20f2f318b72f67282f35d4c8f399db29686",
+      "status": "MATCH_ALL",
+      "normalized_match_github_s13": false
+    },
+    {
+      "file": "src/services/docs_priority_sync.py",
+      "github_sha256": "6c6763b10b23843bb939e78290367130534b7dc68c50c98853c4fe84690670e3",
+      "local_sha256": "6c6763b10b23843bb939e78290367130534b7dc68c50c98853c4fe84690670e3",
+      "s13_sha256": "6c6763b10b23843bb939e78290367130534b7dc68c50c98853c4fe84690670e3",
+      "status": "MATCH_ALL",
+      "normalized_match_github_s13": false
+    },
+    {
+      "file": "src/services/docs_soft_reclassify.py",
+      "github_sha256": "558a0ca6d1a3cbb193105701e13c0073eaaeda08883144255d211e1a1aedead8",
+      "local_sha256": "558a0ca6d1a3cbb193105701e13c0073eaaeda08883144255d211e1a1aedead8",
+      "s13_sha256": "558a0ca6d1a3cbb193105701e13c0073eaaeda08883144255d211e1a1aedead8",
+      "status": "MATCH_ALL",
+      "normalized_match_github_s13": false
+    },
+    {
+      "file": "src/services/document_learning/__init__.py",
+      "github_sha256": "9ed8583d69ab4a8d1bdc01da4ec857780de0e77c49cd3efa1d05ecdb5a46e144",
+      "local_sha256": "9ed8583d69ab4a8d1bdc01da4ec857780de0e77c49cd3efa1d05ecdb5a46e144",
+      "s13_sha256": "f504f46ea986f6c9960e41653d515d0007ce709f95f47bc329915e97c92ca2d3",
+      "status": "S13_ONLY_CHANGE",
+      "normalized_match_github_s13": true,
+      "classification": "GENERATED_OR_CACHE_ARTIFACT",
+      "function_or_section": "whole file",
+      "semantic_diff": "EOL encoding only; normalized UTF-8 content is identical"
+    },
+    {
+      "file": "src/services/document_learning/config.py",
+      "github_sha256": "f4c14dedc48be3960f4df25bdc234482584231585b6bfadc445efd29c1203371",
+      "local_sha256": "f4c14dedc48be3960f4df25bdc234482584231585b6bfadc445efd29c1203371",
+      "s13_sha256": "e25e71d91bc604d6ba0787922a5f3d0285d2b542f8a7f2614c47616c9f59c72b",
+      "status": "S13_ONLY_CHANGE",
+      "normalized_match_github_s13": true,
+      "classification": "GENERATED_OR_CACHE_ARTIFACT",
+      "function_or_section": "whole file",
+      "semantic_diff": "EOL encoding only; normalized UTF-8 content is identical"
+    },
+    {
+      "file": "src/services/document_learning/contract.py",
+      "github_sha256": "947347a4e2dc06174395803604acb093ab6160277ab3f8f9c95945051dac92ce",
+      "local_sha256": "947347a4e2dc06174395803604acb093ab6160277ab3f8f9c95945051dac92ce",
+      "s13_sha256": "48051a496df9f5a1a95d085d4a74132d28fcf7a07ec34779b311450e6f3718b5",
+      "status": "S13_ONLY_CHANGE",
+      "normalized_match_github_s13": true,
+      "classification": "GENERATED_OR_CACHE_ARTIFACT",
+      "function_or_section": "whole file",
+      "semantic_diff": "EOL encoding only; normalized UTF-8 content is identical"
+    },
+    {
+      "file": "src/services/document_learning/export.py",
+      "github_sha256": "e063d0e6a4b3f74366a55b3b9ec6b36e320988ca1bae86be172f7f2e136d7aca",
+      "local_sha256": "e063d0e6a4b3f74366a55b3b9ec6b36e320988ca1bae86be172f7f2e136d7aca",
+      "s13_sha256": "24e97b0ff72ff6f50de0bfaf60d917d6b6a1cb76ef52b481427fe9da12a8325e",
+      "status": "S13_ONLY_CHANGE",
+      "normalized_match_github_s13": true,
+      "classification": "GENERATED_OR_CACHE_ARTIFACT",
+      "function_or_section": "whole file",
+      "semantic_diff": "EOL encoding only; normalized UTF-8 content is identical"
+    },
+    {
+      "file": "src/services/document_learning/policy.py",
+      "github_sha256": "7753acf374f262cc5bd68cf24cc692aabe671a4d801b546af32699ca9a182ab0",
+      "local_sha256": "7753acf374f262cc5bd68cf24cc692aabe671a4d801b546af32699ca9a182ab0",
+      "s13_sha256": "f58ebc134b5877ffd55f6b91e1084324607ebd81ea2c7228e8473e44fefd0e80",
+      "status": "S13_ONLY_CHANGE",
+      "normalized_match_github_s13": true,
+      "classification": "GENERATED_OR_CACHE_ARTIFACT",
+      "function_or_section": "whole file",
+      "semantic_diff": "EOL encoding only; normalized UTF-8 content is identical"
+    },
+    {
+      "file": "src/services/document_learning/stats.py",
+      "github_sha256": "a69238d4262ffa36cba753314e44b3e2929d3870a9cea8224a6b5692acdd7f9f",
+      "local_sha256": "a69238d4262ffa36cba753314e44b3e2929d3870a9cea8224a6b5692acdd7f9f",
+      "s13_sha256": "f466f77d4f78e725fb1ee3a55092605aafe851d55656a968d9e5b418ec024c29",
+      "status": "S13_ONLY_CHANGE",
+      "normalized_match_github_s13": true,
+      "classification": "GENERATED_OR_CACHE_ARTIFACT",
+      "function_or_section": "whole file",
+      "semantic_diff": "EOL encoding only; normalized UTF-8 content is identical"
+    },
+    {
+      "file": "src/services/document_learning/store.py",
+      "github_sha256": "911cf7d3fe5b21e8a1a8759d84dc05d232cf637cad735d8570784f9766a4c0c7",
+      "local_sha256": "911cf7d3fe5b21e8a1a8759d84dc05d232cf637cad735d8570784f9766a4c0c7",
+      "s13_sha256": "8dd4c753552de2a6f9d21f2e4a2c3f699a19883992556c2cd3861a8835ec4e88",
+      "status": "S13_ONLY_CHANGE",
+      "normalized_match_github_s13": true,
+      "classification": "GENERATED_OR_CACHE_ARTIFACT",
+      "function_or_section": "whole file",
+      "semantic_diff": "EOL encoding only; normalized UTF-8 content is identical"
+    },
+    {
+      "file": "src/services/effective_assessment.py",
+      "github_sha256": "7696a63cb95ce3614532a87b3d165bf9a462312d453ea17433045009088a32aa",
+      "local_sha256": "7696a63cb95ce3614532a87b3d165bf9a462312d453ea17433045009088a32aa",
+      "s13_sha256": "7696a63cb95ce3614532a87b3d165bf9a462312d453ea17433045009088a32aa",
+      "status": "MATCH_ALL",
+      "normalized_match_github_s13": false
+    },
+    {
+      "file": "src/services/expert_annotation_service.py",
+      "github_sha256": "6c0b91e7b4eeba33e00ff1ec546880147a71cf6819d0e047905906f60e36b92b",
+      "local_sha256": "6c0b91e7b4eeba33e00ff1ec546880147a71cf6819d0e047905906f60e36b92b",
+      "s13_sha256": "8171101f110ade813b126d767a3f1e566405add0a78402cabe0759f21c9afedb",
+      "status": "S13_ONLY_CHANGE",
+      "normalized_match_github_s13": true,
+      "classification": "GENERATED_OR_CACHE_ARTIFACT",
+      "function_or_section": "whole file",
+      "semantic_diff": "EOL encoding only; normalized UTF-8 content is identical"
+    },
+    {
+      "file": "src/services/expertise_enrich.py",
+      "github_sha256": "a971363451715ad2ba2a938c3c7c7728930037b2403ce7e01f9d142a43ceb3dc",
+      "local_sha256": "a971363451715ad2ba2a938c3c7c7728930037b2403ce7e01f9d142a43ceb3dc",
+      "s13_sha256": "3f560449b5076f6b4aba56260925198bd9f5424720787cb1c21ee298c3246c6e",
+      "status": "S13_ONLY_CHANGE",
+      "normalized_match_github_s13": true,
+      "classification": "GENERATED_OR_CACHE_ARTIFACT",
+      "function_or_section": "whole file",
+      "semantic_diff": "EOL encoding only; normalized UTF-8 content is identical"
+    },
+    {
+      "file": "src/services/export_queue.py",
+      "github_sha256": "488e1981f3890721ba7e749e838338747cbb8a7a160579b4943c3478c6068201",
+      "local_sha256": "488e1981f3890721ba7e749e838338747cbb8a7a160579b4943c3478c6068201",
+      "s13_sha256": "488e1981f3890721ba7e749e838338747cbb8a7a160579b4943c3478c6068201",
+      "status": "MATCH_ALL",
+      "normalized_match_github_s13": false
+    },
+    {
+      "file": "src/services/export_sort.py",
+      "github_sha256": "0eeb717611869417a950a3d44764b93a74bb2ed0e541c089135f79389efd1d73",
+      "local_sha256": "0eeb717611869417a950a3d44764b93a74bb2ed0e541c089135f79389efd1d73",
+      "s13_sha256": "0eeb717611869417a950a3d44764b93a74bb2ed0e541c089135f79389efd1d73",
+      "status": "MATCH_ALL",
+      "normalized_match_github_s13": false
+    },
+    {
+      "file": "src/services/filters.py",
+      "github_sha256": "dbbdb264c4807c142ac7a0b047f6973e0a78982a5f38800c7ada34936a99e741",
+      "local_sha256": "dbbdb264c4807c142ac7a0b047f6973e0a78982a5f38800c7ada34936a99e741",
+      "s13_sha256": "dbbdb264c4807c142ac7a0b047f6973e0a78982a5f38800c7ada34936a99e741",
+      "status": "MATCH_ALL",
+      "normalized_match_github_s13": false
+    },
+    {
+      "file": "src/services/geo_coords.py",
+      "github_sha256": "8078384e3ba41b10311ffc780d800973bee171ffe546726b29870b72e4ed1f61",
+      "local_sha256": "8078384e3ba41b10311ffc780d800973bee171ffe546726b29870b72e4ed1f61",
+      "s13_sha256": "8078384e3ba41b10311ffc780d800973bee171ffe546726b29870b72e4ed1f61",
+      "status": "MATCH_ALL",
+      "normalized_match_github_s13": false
+    },
+    {
+      "file": "src/services/hydro_zone_profiles.py",
+      "github_sha256": "888962d4413d3634aaa5e76e4f027862173ac926c4cb717318352782475ba583",
+      "local_sha256": "888962d4413d3634aaa5e76e4f027862173ac926c4cb717318352782475ba583",
+      "s13_sha256": "888962d4413d3634aaa5e76e4f027862173ac926c4cb717318352782475ba583",
+      "status": "MATCH_ALL",
+      "normalized_match_github_s13": false
+    },
+    {
+      "file": "src/services/infrastructure_status.py",
+      "github_sha256": "ddfb2b67a32b069dc3d972c9d67fea7e3cc6d72299459e8c5d90c3c65bf6965b",
+      "local_sha256": "ddfb2b67a32b069dc3d972c9d67fea7e3cc6d72299459e8c5d90c3c65bf6965b",
+      "s13_sha256": "119d95586a93b009afc34d8d8f73228952e37602b05c5380c69927c0207818ad",
+      "status": "S13_ONLY_CHANGE",
+      "normalized_match_github_s13": false,
+      "classification": "HOST_LOCAL_CONFIGURATION",
+      "function_or_section": "host defaults/operator diagnostics",
+      "semantic_diff": "Concrete host/operator values replace canonical logical aliases"
+    },
+    {
+      "file": "src/services/map_export.py",
+      "github_sha256": "e4be2f399811af9dace31c5dddbb5a60e6dab4c0552aa8e2360f811c6ef64244",
+      "local_sha256": "e4be2f399811af9dace31c5dddbb5a60e6dab4c0552aa8e2360f811c6ef64244",
+      "s13_sha256": "e4be2f399811af9dace31c5dddbb5a60e6dab4c0552aa8e2360f811c6ef64244",
+      "status": "MATCH_ALL",
+      "normalized_match_github_s13": false
+    },
+    {
+      "file": "src/services/map_hydro_classify.py",
+      "github_sha256": "ca9007d5d874238314f31401fec9e06aac24e73790d4d243bb7fc4adfc5d8594",
+      "local_sha256": "ca9007d5d874238314f31401fec9e06aac24e73790d4d243bb7fc4adfc5d8594",
+      "s13_sha256": "ca9007d5d874238314f31401fec9e06aac24e73790d4d243bb7fc4adfc5d8594",
+      "status": "MATCH_ALL",
+      "normalized_match_github_s13": false
+    },
+    {
+      "file": "src/services/map_layers_service.py",
+      "github_sha256": "87a128b0e4e92ad4cf1bd18e3a76e1b457f3069d9cf9b38de9c3d455633ad90d",
+      "local_sha256": "87a128b0e4e92ad4cf1bd18e3a76e1b457f3069d9cf9b38de9c3d455633ad90d",
+      "s13_sha256": "87a128b0e4e92ad4cf1bd18e3a76e1b457f3069d9cf9b38de9c3d455633ad90d",
+      "status": "MATCH_ALL",
+      "normalized_match_github_s13": false
+    },
+    {
+      "file": "src/services/match_file_display.py",
+      "github_sha256": "b1a2bbd299cacc46c0b17340065c165a018974b38ed38dd5b1bab9193b5c5c95",
+      "local_sha256": "b1a2bbd299cacc46c0b17340065c165a018974b38ed38dd5b1bab9193b5c5c95",
+      "s13_sha256": "b1a2bbd299cacc46c0b17340065c165a018974b38ed38dd5b1bab9193b5c5c95",
+      "status": "MATCH_ALL",
+      "normalized_match_github_s13": false
+    },
+    {
+      "file": "src/services/nav.py",
+      "github_sha256": "93fec9b933c8173773312c7c193785f9d1e1cb5b18c17e443b458edd886e0a0b",
+      "local_sha256": "93fec9b933c8173773312c7c193785f9d1e1cb5b18c17e443b458edd886e0a0b",
+      "s13_sha256": "f7d4658ef3c2392cf3c43c8356d3735b423d2cd889e91fa33af61223271426ee",
+      "status": "S13_ONLY_CHANGE",
+      "normalized_match_github_s13": true,
+      "classification": "GENERATED_OR_CACHE_ARTIFACT",
+      "function_or_section": "whole file",
+      "semantic_diff": "EOL encoding only; normalized UTF-8 content is identical"
+    },
+    {
+      "file": "src/services/object_ai_classification_store.py",
+      "github_sha256": "217065d2b553a9c7e5ad7da8619f8277dff29a0fa114160d84a43437ad7444d4",
+      "local_sha256": "217065d2b553a9c7e5ad7da8619f8277dff29a0fa114160d84a43437ad7444d4",
+      "s13_sha256": "d53d9758199f774f3ca5308eedc7fab859d564cf5b27e294b4345e3d93b22a4e",
+      "status": "S13_ONLY_CHANGE",
+      "normalized_match_github_s13": true,
+      "classification": "GENERATED_OR_CACHE_ARTIFACT",
+      "function_or_section": "whole file",
+      "semantic_diff": "EOL encoding only; normalized UTF-8 content is identical"
+    },
+    {
+      "file": "src/services/object_ai_classifier.py",
+      "github_sha256": "322b04312a12a56238a5fcb2cb01e683b7d254f2097a1a02ed335fa7e7595550",
+      "local_sha256": "322b04312a12a56238a5fcb2cb01e683b7d254f2097a1a02ed335fa7e7595550",
+      "s13_sha256": "322b04312a12a56238a5fcb2cb01e683b7d254f2097a1a02ed335fa7e7595550",
+      "status": "MATCH_ALL",
+      "normalized_match_github_s13": false
+    },
+    {
+      "file": "src/services/object_ai_fallbacks.py",
+      "github_sha256": "339eae3c3ad443c3a9e14ffa2bd21232061b94de73da2075b2bb121d63946a10",
+      "local_sha256": "339eae3c3ad443c3a9e14ffa2bd21232061b94de73da2075b2bb121d63946a10",
+      "s13_sha256": "339eae3c3ad443c3a9e14ffa2bd21232061b94de73da2075b2bb121d63946a10",
+      "status": "MATCH_ALL",
+      "normalized_match_github_s13": false
+    },
+    {
+      "file": "src/services/object_ai_prompts.py",
+      "github_sha256": "dec9bd7cb41d2d4681cfc5305a3a5fc95f4c98b958e6a5042fe4669ac8c5c0d0",
+      "local_sha256": "dec9bd7cb41d2d4681cfc5305a3a5fc95f4c98b958e6a5042fe4669ac8c5c0d0",
+      "s13_sha256": "dec9bd7cb41d2d4681cfc5305a3a5fc95f4c98b958e6a5042fe4669ac8c5c0d0",
+      "status": "MATCH_ALL",
+      "normalized_match_github_s13": false
+    },
+    {
+      "file": "src/services/object_ai_scores.py",
+      "github_sha256": "13d0cc668cb3619a3d2639a51044a60f58772d5f576eb79e63a8929329727ed8",
+      "local_sha256": "13d0cc668cb3619a3d2639a51044a60f58772d5f576eb79e63a8929329727ed8",
+      "s13_sha256": "a092f7ae01700b5676507d7c4529a3984549c8e77023654874e1db68ea755f46",
+      "status": "S13_ONLY_CHANGE",
+      "normalized_match_github_s13": true,
+      "classification": "GENERATED_OR_CACHE_ARTIFACT",
+      "function_or_section": "whole file",
+      "semantic_diff": "EOL encoding only; normalized UTF-8 content is identical"
+    },
+    {
+      "file": "src/services/object_category_labels.py",
+      "github_sha256": "02bcb21fdc2d68402773d442d75d83ad28814d983405d5c2b2473c7aeb056b44",
+      "local_sha256": "02bcb21fdc2d68402773d442d75d83ad28814d983405d5c2b2473c7aeb056b44",
+      "s13_sha256": "c4e45ef6c1143ceaaf1d5956a06ffada79ef9b822e2c500a39cc38b4aa0ef136",
+      "status": "S13_ONLY_CHANGE",
+      "normalized_match_github_s13": true,
+      "classification": "GENERATED_OR_CACHE_ARTIFACT",
+      "function_or_section": "whole file",
+      "semantic_diff": "EOL encoding only; normalized UTF-8 content is identical"
+    },
+    {
+      "file": "src/services/object_detail_loader.py",
+      "github_sha256": "ed6352bf381f6069d7d4ffa8d21257e9e4aeff469e9dfb0ae776bc7aba6ec050",
+      "local_sha256": "ed6352bf381f6069d7d4ffa8d21257e9e4aeff469e9dfb0ae776bc7aba6ec050",
+      "s13_sha256": "ed6352bf381f6069d7d4ffa8d21257e9e4aeff469e9dfb0ae776bc7aba6ec050",
+      "status": "MATCH_ALL",
+      "normalized_match_github_s13": false
+    },
+    {
+      "file": "src/services/object_enrich.py",
+      "github_sha256": "63559feba0e297dd1db2a40bbe91e4099c9413fa5917dd6bccfae46fc75d66d7",
+      "local_sha256": "63559feba0e297dd1db2a40bbe91e4099c9413fa5917dd6bccfae46fc75d66d7",
+      "s13_sha256": "63559feba0e297dd1db2a40bbe91e4099c9413fa5917dd6bccfae46fc75d66d7",
+      "status": "MATCH_ALL",
+      "normalized_match_github_s13": false
+    },
+    {
+      "file": "src/services/object_interest_service.py",
+      "github_sha256": "53771cc6983a940005f6cd0ad8c0f110ea73c49dca806cc79ae0b71eb5593396",
+      "local_sha256": "53771cc6983a940005f6cd0ad8c0f110ea73c49dca806cc79ae0b71eb5593396",
+      "s13_sha256": "53771cc6983a940005f6cd0ad8c0f110ea73c49dca806cc79ae0b71eb5593396",
+      "status": "MATCH_ALL",
+      "normalized_match_github_s13": false
+    },
+    {
+      "file": "src/services/object_leads_bridge.py",
+      "github_sha256": "095cbd2246d0a670bacc4a8cca8bd960de9a80e101d325edbaf495f06654fca6",
+      "local_sha256": "095cbd2246d0a670bacc4a8cca8bd960de9a80e101d325edbaf495f06654fca6",
+      "s13_sha256": "df6578e621966475184387bca00f959f0bec2d23844b7abe5ebec8ac52e56e40",
+      "status": "S13_ONLY_CHANGE",
+      "normalized_match_github_s13": true,
+      "classification": "GENERATED_OR_CACHE_ARTIFACT",
+      "function_or_section": "whole file",
+      "semantic_diff": "EOL encoding only; normalized UTF-8 content is identical"
+    },
+    {
+      "file": "src/services/object_leads_sync.py",
+      "github_sha256": "f15aca341401df0c8fa56632c02298bcff681ca0f261c5d862c15bc0b3ea8f50",
+      "local_sha256": "f15aca341401df0c8fa56632c02298bcff681ca0f261c5d862c15bc0b3ea8f50",
+      "s13_sha256": "f15aca341401df0c8fa56632c02298bcff681ca0f261c5d862c15bc0b3ea8f50",
+      "status": "MATCH_ALL",
+      "normalized_match_github_s13": false
+    },
+    {
+      "file": "src/services/object_lifecycle.py",
+      "github_sha256": "503fb9cb1216381b928a0b8a80404164a474b94fad4e24d86d94a888d31f4718",
+      "local_sha256": "503fb9cb1216381b928a0b8a80404164a474b94fad4e24d86d94a888d31f4718",
+      "s13_sha256": "5085d44aa05695d6c4133b231b52911e63435c35766b3eef05575eba6a271e95",
+      "status": "S13_ONLY_CHANGE",
+      "normalized_match_github_s13": true,
+      "classification": "GENERATED_OR_CACHE_ARTIFACT",
+      "function_or_section": "whole file",
+      "semantic_diff": "EOL encoding only; normalized UTF-8 content is identical"
+    },
+    {
+      "file": "src/services/object_models.py",
+      "github_sha256": "d02e71aef3b4de8f907eaf50db7bacd3ed464e6cb96ba1096dc5a243b945418a",
+      "local_sha256": "d02e71aef3b4de8f907eaf50db7bacd3ed464e6cb96ba1096dc5a243b945418a",
+      "s13_sha256": "d02e71aef3b4de8f907eaf50db7bacd3ed464e6cb96ba1096dc5a243b945418a",
+      "status": "MATCH_ALL",
+      "normalized_match_github_s13": false
+    },
+    {
+      "file": "src/services/object_pipeline_stage.py",
+      "github_sha256": "99373a8952860945575122c06d9f3599aba6356330edbb773878775aa9b1a289",
+      "local_sha256": "99373a8952860945575122c06d9f3599aba6356330edbb773878775aa9b1a289",
+      "s13_sha256": "15c46e416eb4cf1b6f0c3274e5f1a482853bd6beeb9ea11fba59b4faacd8c73b",
+      "status": "S13_ONLY_CHANGE",
+      "normalized_match_github_s13": true,
+      "classification": "GENERATED_OR_CACHE_ARTIFACT",
+      "function_or_section": "whole file",
+      "semantic_diff": "EOL encoding only; normalized UTF-8 content is identical"
+    },
+    {
+      "file": "src/services/object_subcategory_links.py",
+      "github_sha256": "bba9afb453765152fb42c869fd199da46da5a708a33c4e5c6475b97abb58cb2f",
+      "local_sha256": "bba9afb453765152fb42c869fd199da46da5a708a33c4e5c6475b97abb58cb2f",
+      "s13_sha256": "b715ebbe1a83c3b3a255735bffdd0ca4987538ebd8917d5b32462127fdfa5b88",
+      "status": "S13_ONLY_CHANGE",
+      "normalized_match_github_s13": true,
+      "classification": "GENERATED_OR_CACHE_ARTIFACT",
+      "function_or_section": "whole file",
+      "semantic_diff": "EOL encoding only; normalized UTF-8 content is identical"
+    },
+    {
+      "file": "src/services/objects_index_manager.py",
+      "github_sha256": "2cbcb381a6b9190ce8eb68f13cee83771d62ae9d55949ca28a54df03be829c39",
+      "local_sha256": "2cbcb381a6b9190ce8eb68f13cee83771d62ae9d55949ca28a54df03be829c39",
+      "s13_sha256": "2cbcb381a6b9190ce8eb68f13cee83771d62ae9d55949ca28a54df03be829c39",
+      "status": "MATCH_ALL",
+      "normalized_match_github_s13": false
+    },
+    {
+      "file": "src/services/objects_loader.py",
+      "github_sha256": "342071a962c8fadf7e7b9bbeeecff886c761b7b39350c3848457ed09b46632d6",
+      "local_sha256": "342071a962c8fadf7e7b9bbeeecff886c761b7b39350c3848457ed09b46632d6",
+      "s13_sha256": "342071a962c8fadf7e7b9bbeeecff886c761b7b39350c3848457ed09b46632d6",
+      "status": "MATCH_ALL",
+      "normalized_match_github_s13": false
+    },
+    {
+      "file": "src/services/objects_loader_nashdom.py",
+      "github_sha256": "203e7c3b3f0da3adf3521396337e094be405b01231794eba2334240fb56713d2",
+      "local_sha256": "203e7c3b3f0da3adf3521396337e094be405b01231794eba2334240fb56713d2",
+      "s13_sha256": "203e7c3b3f0da3adf3521396337e094be405b01231794eba2334240fb56713d2",
+      "status": "MATCH_ALL",
+      "normalized_match_github_s13": false
+    },
+    {
+      "file": "src/services/objects_mapper.py",
+      "github_sha256": "1b6238900519055fc356cfdcbf259c3bdf0e79b92c66f8ef4fd509ab5b8019d8",
+      "local_sha256": "1b6238900519055fc356cfdcbf259c3bdf0e79b92c66f8ef4fd509ab5b8019d8",
+      "s13_sha256": "1b6238900519055fc356cfdcbf259c3bdf0e79b92c66f8ef4fd509ab5b8019d8",
+      "status": "MATCH_ALL",
+      "normalized_match_github_s13": false
+    },
+    {
+      "file": "src/services/objects_service.py",
+      "github_sha256": "416cc6b3987b65a989a92c28842fb5076439320f86574cfd54a5f307d7a6a4c3",
+      "local_sha256": "416cc6b3987b65a989a92c28842fb5076439320f86574cfd54a5f307d7a6a4c3",
+      "s13_sha256": "8a1ddebbd891774b34e98735eb09d87c6432a5988ab7024185bee8cf67a3fdf1",
+      "status": "S13_ONLY_CHANGE",
+      "normalized_match_github_s13": true,
+      "classification": "GENERATED_OR_CACHE_ARTIFACT",
+      "function_or_section": "whole file",
+      "semantic_diff": "EOL encoding only; normalized UTF-8 content is identical"
+    },
+    {
+      "file": "src/services/opportunity_radar.py",
+      "github_sha256": "e27e0c6f35897eb2125448773de86b71be4004fb52fcbd724121709a852175ee",
+      "local_sha256": "e27e0c6f35897eb2125448773de86b71be4004fb52fcbd724121709a852175ee",
+      "s13_sha256": "6feb157393371e4f6dd00b2ed41feb1c4abdd6f66198d93678ffcaedf568767e",
+      "status": "S13_ONLY_CHANGE",
+      "normalized_match_github_s13": true,
+      "classification": "GENERATED_OR_CACHE_ARTIFACT",
+      "function_or_section": "whole file",
+      "semantic_diff": "EOL encoding only; normalized UTF-8 content is identical"
+    },
+    {
+      "file": "src/services/parking_db.py",
+      "github_sha256": "0f5b0b02f91c05353301491c74e63bf7faec9d5bbc2bab2b8d1b19dbea4f93b7",
+      "local_sha256": "0f5b0b02f91c05353301491c74e63bf7faec9d5bbc2bab2b8d1b19dbea4f93b7",
+      "s13_sha256": "0f5b0b02f91c05353301491c74e63bf7faec9d5bbc2bab2b8d1b19dbea4f93b7",
+      "status": "MATCH_ALL",
+      "normalized_match_github_s13": false
+    },
+    {
+      "file": "src/services/pdf_export.py",
+      "github_sha256": "7e341173348e1e82ff1f2f09520a747ef167c77c5bfdf5943a02678cb507e0ed",
+      "local_sha256": "7e341173348e1e82ff1f2f09520a747ef167c77c5bfdf5943a02678cb507e0ed",
+      "s13_sha256": "7e341173348e1e82ff1f2f09520a747ef167c77c5bfdf5943a02678cb507e0ed",
+      "status": "MATCH_ALL",
+      "normalized_match_github_s13": false
+    },
+    {
+      "file": "src/services/processing_quality.py",
+      "github_sha256": "c786a9b172d4abd85fe759630109abf49ed553dceb61f614d423d4f0efc40b57",
+      "local_sha256": "c786a9b172d4abd85fe759630109abf49ed553dceb61f614d423d4f0efc40b57",
+      "s13_sha256": "af82efe9ff79c89a5cf26e438e2ded20f1a854c4f147efae7eba734eda253954",
+      "status": "S13_ONLY_CHANGE",
+      "normalized_match_github_s13": true,
+      "classification": "GENERATED_OR_CACHE_ARTIFACT",
+      "function_or_section": "whole file",
+      "semantic_diff": "EOL encoding only; normalized UTF-8 content is identical"
+    },
+    {
+      "file": "src/services/product_subcategories_service.py",
+      "github_sha256": "15f0573838a308013932829c9e2f72d5f836ff6b3f86ce91b94effaa764e640c",
+      "local_sha256": "15f0573838a308013932829c9e2f72d5f836ff6b3f86ce91b94effaa764e640c",
+      "s13_sha256": "ea594d21c403309d1f932397c52637de47e993b8f6e7ed8e7f75153ef2b12ca1",
+      "status": "S13_ONLY_CHANGE",
+      "normalized_match_github_s13": true,
+      "classification": "GENERATED_OR_CACHE_ARTIFACT",
+      "function_or_section": "whole file",
+      "semantic_diff": "EOL encoding only; normalized UTF-8 content is identical"
+    },
+    {
+      "file": "src/services/product_subcategory_seed_data.py",
+      "github_sha256": "de734b32f9df12291c52f68e7e32e5b7040eed7536f6474cb46346638b5819f1",
+      "local_sha256": "de734b32f9df12291c52f68e7e32e5b7040eed7536f6474cb46346638b5819f1",
+      "s13_sha256": "cca9f4b4244699d64193952a6adad98b9033a72339ccc4378c889692dcb9873d",
+      "status": "S13_ONLY_CHANGE",
+      "normalized_match_github_s13": true,
+      "classification": "GENERATED_OR_CACHE_ARTIFACT",
+      "function_or_section": "whole file",
+      "semantic_diff": "EOL encoding only; normalized UTF-8 content is identical"
+    },
+    {
+      "file": "src/services/profile_decisions_sync.py",
+      "github_sha256": "94b752ba9a5ffe331e8fe71e04ccdd09ecfb704b51456c5a0fb3ffa9944db49b",
+      "local_sha256": "94b752ba9a5ffe331e8fe71e04ccdd09ecfb704b51456c5a0fb3ffa9944db49b",
+      "s13_sha256": "94b752ba9a5ffe331e8fe71e04ccdd09ecfb704b51456c5a0fb3ffa9944db49b",
+      "status": "MATCH_ALL",
+      "normalized_match_github_s13": false
+    },
+    {
+      "file": "src/services/profiled_search.py",
+      "github_sha256": "6abc5d354f37444f9c20eb5b38655d7ea657a8844b012eb51f8363bc9fdc4cb1",
+      "local_sha256": "6abc5d354f37444f9c20eb5b38655d7ea657a8844b012eb51f8363bc9fdc4cb1",
+      "s13_sha256": "56d3d6c66a3e4e58c0980d2f59af180bcc34056c0842dfec9d27655f57754652",
+      "status": "S13_ONLY_CHANGE",
+      "normalized_match_github_s13": true,
+      "classification": "GENERATED_OR_CACHE_ARTIFACT",
+      "function_or_section": "whole file",
+      "semantic_diff": "EOL encoding only; normalized UTF-8 content is identical"
+    },
+    {
+      "file": "src/services/queue_policy_v2a_migration.py",
+      "github_sha256": "c09e1319c5a1ab4c8c2c5dc6f9cec87077a9528901c3694f1a2dfdec63c167cf",
+      "local_sha256": "c09e1319c5a1ab4c8c2c5dc6f9cec87077a9528901c3694f1a2dfdec63c167cf",
+      "s13_sha256": "2172a25ec6533a8b50232439caaec2ccc490652a755acea796356b1b849a0f17",
+      "status": "S13_ONLY_CHANGE",
+      "normalized_match_github_s13": true,
+      "classification": "GENERATED_OR_CACHE_ARTIFACT",
+      "function_or_section": "whole file",
+      "semantic_diff": "EOL encoding only; normalized UTF-8 content is identical"
+    },
+    {
+      "file": "src/services/queue_repository.py",
+      "github_sha256": "3f49199bf2bf26aaa0269efad0e518c9a83bad7c82a2522a3bbda96c9e2d6bb9",
+      "local_sha256": "3f49199bf2bf26aaa0269efad0e518c9a83bad7c82a2522a3bbda96c9e2d6bb9",
+      "s13_sha256": "7228ab29030c356f53c9342f61e3a7179d2cdb2b7679b52340d03d5184a92ff2",
+      "status": "S13_ONLY_CHANGE",
+      "normalized_match_github_s13": true,
+      "classification": "GENERATED_OR_CACHE_ARTIFACT",
+      "function_or_section": "whole file",
+      "semantic_diff": "EOL encoding only; normalized UTF-8 content is identical"
+    },
+    {
+      "file": "src/services/result_repository.py",
+      "github_sha256": "7b4d637872f556b42f18d85f8c2089b8ce245d00d250d61364b8713fc6764e62",
+      "local_sha256": "7b4d637872f556b42f18d85f8c2089b8ce245d00d250d61364b8713fc6764e62",
+      "s13_sha256": "81b6cecc734f1bd27a4c3336c58eb3ab8ddb5ad63c33ca89997e9cfe0fb8c403",
+      "status": "S13_ONLY_CHANGE",
+      "normalized_match_github_s13": true,
+      "classification": "GENERATED_OR_CACHE_ARTIFACT",
+      "function_or_section": "whole file",
+      "semantic_diff": "EOL encoding only; normalized UTF-8 content is identical"
+    },
+    {
+      "file": "src/services/s13_v2_counters.py",
+      "github_sha256": "10a127422d629170ecb5fff7bf3680b36220aeca0f5eaee2e5fd26b93e689f0a",
+      "local_sha256": "10a127422d629170ecb5fff7bf3680b36220aeca0f5eaee2e5fd26b93e689f0a",
+      "s13_sha256": "39495ccd193ce5537b073dab1204bd668b42de6163df639825530915fa9b8b5e",
+      "status": "S13_ONLY_CHANGE",
+      "normalized_match_github_s13": true,
+      "classification": "GENERATED_OR_CACHE_ARTIFACT",
+      "function_or_section": "whole file",
+      "semantic_diff": "EOL encoding only; normalized UTF-8 content is identical"
+    },
+    {
+      "file": "src/services/s13_v2_queue_producer.py",
+      "github_sha256": "ee18a1cc557abd8fd58ad158d0bed3bfe783c73f7c9a4fec0225428568d3dbe3",
+      "local_sha256": "ee18a1cc557abd8fd58ad158d0bed3bfe783c73f7c9a4fec0225428568d3dbe3",
+      "s13_sha256": "6d76182492f06b46e98f36bb6769cd5430dc111ee22a51596f8e4e8c20a60272",
+      "status": "S13_ONLY_CHANGE",
+      "normalized_match_github_s13": true,
+      "classification": "GENERATED_OR_CACHE_ARTIFACT",
+      "function_or_section": "whole file",
+      "semantic_diff": "EOL encoding only; normalized UTF-8 content is identical"
+    },
+    {
+      "file": "src/services/sales_spin_playbook.py",
+      "github_sha256": "e598bec3f18e4d2500257ada04d6f61d20bb1912a4da882c483ff135d0c18593",
+      "local_sha256": "e598bec3f18e4d2500257ada04d6f61d20bb1912a4da882c483ff135d0c18593",
+      "s13_sha256": "e598bec3f18e4d2500257ada04d6f61d20bb1912a4da882c483ff135d0c18593",
+      "status": "MATCH_ALL",
+      "normalized_match_github_s13": false
+    },
+    {
+      "file": "src/services/schema_guard.py",
+      "github_sha256": "ba98df7b15e38c1c14d2737350abb177a6cd7af2d30df279445f720dddda40f2",
+      "local_sha256": "ba98df7b15e38c1c14d2737350abb177a6cd7af2d30df279445f720dddda40f2",
+      "s13_sha256": "6fcdab2aec59694f1ce4419ba654efc160b41367fb1c32382f52ba4c161aff33",
+      "status": "S13_ONLY_CHANGE",
+      "normalized_match_github_s13": true,
+      "classification": "GENERATED_OR_CACHE_ARTIFACT",
+      "function_or_section": "whole file",
+      "semantic_diff": "EOL encoding only; normalized UTF-8 content is identical"
+    },
+    {
+      "file": "src/services/source_db_readonly.py",
+      "github_sha256": "0bebe42e5bf06614263370a13277262bd6c111955ae3d184bfdd775f49a2426d",
+      "local_sha256": "0bebe42e5bf06614263370a13277262bd6c111955ae3d184bfdd775f49a2426d",
+      "s13_sha256": "d55334b242fe930d2efee756eac538fd9f3d0c4ccefba68201fd1d9eac76fda3",
+      "status": "S13_ONLY_CHANGE",
+      "normalized_match_github_s13": true,
+      "classification": "GENERATED_OR_CACHE_ARTIFACT",
+      "function_or_section": "whole file",
+      "semantic_diff": "EOL encoding only; normalized UTF-8 content is identical"
+    },
+    {
+      "file": "src/services/system_health_alerts.py",
+      "github_sha256": "1590b19899888f19d2e443dd97950d5b2121bbfa5973fc638b73e21a95f5bc24",
+      "local_sha256": "1590b19899888f19d2e443dd97950d5b2121bbfa5973fc638b73e21a95f5bc24",
+      "s13_sha256": "4c4b437646142a91a83140cf9d1e7e2c4d38cdf3451f03fed56b029f1ad8f5b8",
+      "status": "S13_ONLY_CHANGE",
+      "normalized_match_github_s13": true,
+      "classification": "GENERATED_OR_CACHE_ARTIFACT",
+      "function_or_section": "whole file",
+      "semantic_diff": "EOL encoding only; normalized UTF-8 content is identical"
+    },
+    {
+      "file": "src/services/system_health_collector.py",
+      "github_sha256": "5a64255a67a560c6ce9768d85a24ea5cdbd97d23ad2a1f0e9b312d3b3eb447b7",
+      "local_sha256": "5a64255a67a560c6ce9768d85a24ea5cdbd97d23ad2a1f0e9b312d3b3eb447b7",
+      "s13_sha256": "3012dbc87744bbacaaf5c5abcd2584ab77469453589d1205316cef722a1dc621",
+      "status": "S13_ONLY_CHANGE",
+      "normalized_match_github_s13": true,
+      "classification": "GENERATED_OR_CACHE_ARTIFACT",
+      "function_or_section": "whole file",
+      "semantic_diff": "EOL encoding only; normalized UTF-8 content is identical"
+    },
+    {
+      "file": "src/services/system_health_config.py",
+      "github_sha256": "5c9c528bdc18a98d005f3d8553c012a5e86d9b0bac3593af07424d6cb6e53736",
+      "local_sha256": "5c9c528bdc18a98d005f3d8553c012a5e86d9b0bac3593af07424d6cb6e53736",
+      "s13_sha256": "ec112500b8a9e6d59458fa93bd5002c1bca67e38588613c9455fdc79b262dd95",
+      "status": "S13_ONLY_CHANGE",
+      "normalized_match_github_s13": false,
+      "classification": "HOST_LOCAL_CONFIGURATION",
+      "function_or_section": "host defaults/operator diagnostics",
+      "semantic_diff": "Concrete host/operator values replace canonical logical aliases"
+    },
+    {
+      "file": "src/services/system_health_gpu.py",
+      "github_sha256": "02bec6606e8ff3de7bb19c63fcfae57c4811156d6eaf04f653382e050c6178f7",
+      "local_sha256": "02bec6606e8ff3de7bb19c63fcfae57c4811156d6eaf04f653382e050c6178f7",
+      "s13_sha256": "8cef6223cc3cbcc5db9fdea7ac00b290129c64247b0d94f2b305b0cbd342b458",
+      "status": "S13_ONLY_CHANGE",
+      "normalized_match_github_s13": true,
+      "classification": "GENERATED_OR_CACHE_ARTIFACT",
+      "function_or_section": "whole file",
+      "semantic_diff": "EOL encoding only; normalized UTF-8 content is identical"
+    },
+    {
+      "file": "src/services/system_health_probes.py",
+      "github_sha256": "f1ceda32d443dbdda12255172ca491a5c71790dddf3ef3f554b908956bbeffd4",
+      "local_sha256": "f1ceda32d443dbdda12255172ca491a5c71790dddf3ef3f554b908956bbeffd4",
+      "s13_sha256": "d740abeee47c433bd3ce726e7c6062987325193e28c535b01f373531c043bcca",
+      "status": "S13_ONLY_CHANGE",
+      "normalized_match_github_s13": true,
+      "classification": "GENERATED_OR_CACHE_ARTIFACT",
+      "function_or_section": "whole file",
+      "semantic_diff": "EOL encoding only; normalized UTF-8 content is identical"
+    },
+    {
+      "file": "src/services/system_health_read.py",
+      "github_sha256": "953bcce678ca8692778149bc756ebb0b290db91f685be6a35cd7f2be77bb6ebc",
+      "local_sha256": "953bcce678ca8692778149bc756ebb0b290db91f685be6a35cd7f2be77bb6ebc",
+      "s13_sha256": "86489163e2026f85e2da7b16a14fb333188280d87cd28e99a9d78e87ea849e51",
+      "status": "S13_ONLY_CHANGE",
+      "normalized_match_github_s13": true,
+      "classification": "GENERATED_OR_CACHE_ARTIFACT",
+      "function_or_section": "whole file",
+      "semantic_diff": "EOL encoding only; normalized UTF-8 content is identical"
+    },
+    {
+      "file": "src/services/system_health_s7.py",
+      "github_sha256": "e9509d3aa327ea230dd943ca05159b61fe5bc1232ed0b1d6414f042de512f6b0",
+      "local_sha256": "e9509d3aa327ea230dd943ca05159b61fe5bc1232ed0b1d6414f042de512f6b0",
+      "s13_sha256": "304e41e7e65f7d8f144c56fa92b8a7b84e24c21e4a914f4f440e65e1baddafc1",
+      "status": "S13_ONLY_CHANGE",
+      "normalized_match_github_s13": true,
+      "classification": "GENERATED_OR_CACHE_ARTIFACT",
+      "function_or_section": "whole file",
+      "semantic_diff": "EOL encoding only; normalized UTF-8 content is identical"
+    },
+    {
+      "file": "src/services/system_health_services.py",
+      "github_sha256": "8a774c7afe92e7caa030f54a8f6ce202d3fef0c63e26fa38709e0822c301054c",
+      "local_sha256": "8a774c7afe92e7caa030f54a8f6ce202d3fef0c63e26fa38709e0822c301054c",
+      "s13_sha256": "b23848cb58d878fbf4104e3d38b5c733ec54a1612556ab84e37df25a0a6393ae",
+      "status": "S13_ONLY_CHANGE",
+      "normalized_match_github_s13": true,
+      "classification": "GENERATED_OR_CACHE_ARTIFACT",
+      "function_or_section": "whole file",
+      "semantic_diff": "EOL encoding only; normalized UTF-8 content is identical"
+    },
+    {
+      "file": "src/services/system_health_smart.py",
+      "github_sha256": "273c15a134915bbca1d44e46f309ff77d169cb441f2166231dd3c12cb4a3a7f2",
+      "local_sha256": "273c15a134915bbca1d44e46f309ff77d169cb441f2166231dd3c12cb4a3a7f2",
+      "s13_sha256": "7ff8e721f03c258fba0e69e29065ea62b4bdee9f7d4c56053051278e65008152",
+      "status": "S13_ONLY_CHANGE",
+      "normalized_match_github_s13": true,
+      "classification": "GENERATED_OR_CACHE_ARTIFACT",
+      "function_or_section": "whole file",
+      "semantic_diff": "EOL encoding only; normalized UTF-8 content is identical"
+    },
+    {
+      "file": "src/services/system_health_store.py",
+      "github_sha256": "48af5f1b7ffcc819f60dc42181787704081f761f9509bfedb53e249eed328f4e",
+      "local_sha256": "48af5f1b7ffcc819f60dc42181787704081f761f9509bfedb53e249eed328f4e",
+      "s13_sha256": "0584c4b89ea762d0d840950d845940bd8cc72ace2d2f29c4211c271acff55066",
+      "status": "S13_ONLY_CHANGE",
+      "normalized_match_github_s13": true,
+      "classification": "GENERATED_OR_CACHE_ARTIFACT",
+      "function_or_section": "whole file",
+      "semantic_diff": "EOL encoding only; normalized UTF-8 content is identical"
+    },
+    {
+      "file": "src/services/system_health_temps.py",
+      "github_sha256": "cd1997309c67d29c7c8db846b4bf6ad16f0f8f0a8158473dd674ba53f4516318",
+      "local_sha256": "cd1997309c67d29c7c8db846b4bf6ad16f0f8f0a8158473dd674ba53f4516318",
+      "s13_sha256": "a575ca4903b5d77a0116661cafb655a14dd783cef0bd9fe4c2d6a1a2b3d7fca7",
+      "status": "S13_ONLY_CHANGE",
+      "normalized_match_github_s13": true,
+      "classification": "GENERATED_OR_CACHE_ARTIFACT",
+      "function_or_section": "whole file",
+      "semantic_diff": "EOL encoding only; normalized UTF-8 content is identical"
+    },
+    {
+      "file": "src/services/tabs.py",
+      "github_sha256": "d39b4662569deeaccc50b9d90e9e2b9dd1619ab17f09b36c7c12edc14e243736",
+      "local_sha256": "d39b4662569deeaccc50b9d90e9e2b9dd1619ab17f09b36c7c12edc14e243736",
+      "s13_sha256": "d39b4662569deeaccc50b9d90e9e2b9dd1619ab17f09b36c7c12edc14e243736",
+      "status": "MATCH_ALL",
+      "normalized_match_github_s13": false
+    },
+    {
+      "file": "src/services/tender_docs_bundle.py",
+      "github_sha256": "289359710bca727678a4ce4f56645faa4d6acdd34483ba981331dff8b0f34346",
+      "local_sha256": "289359710bca727678a4ce4f56645faa4d6acdd34483ba981331dff8b0f34346",
+      "s13_sha256": "289359710bca727678a4ce4f56645faa4d6acdd34483ba981331dff8b0f34346",
+      "status": "MATCH_ALL",
+      "normalized_match_github_s13": false
+    },
+    {
+      "file": "src/services/tender_docs_shadow_runner.py",
+      "github_sha256": "3ba64c0b2cbb069a2dc0df66d0723f8bb9fab6d62cb316baa883eecd164d3727",
+      "local_sha256": "3ba64c0b2cbb069a2dc0df66d0723f8bb9fab6d62cb316baa883eecd164d3727",
+      "s13_sha256": "3ba64c0b2cbb069a2dc0df66d0723f8bb9fab6d62cb316baa883eecd164d3727",
+      "status": "MATCH_ALL",
+      "normalized_match_github_s13": false
+    },
+    {
+      "file": "src/services/tender_registry_query.py",
+      "github_sha256": "b3f12c4a37e4336c3a0492aa131642ee7dabf0d7c70d0b86ae2b00fbe81b88d8",
+      "local_sha256": "b3f12c4a37e4336c3a0492aa131642ee7dabf0d7c70d0b86ae2b00fbe81b88d8",
+      "s13_sha256": "b3f12c4a37e4336c3a0492aa131642ee7dabf0d7c70d0b86ae2b00fbe81b88d8",
+      "status": "MATCH_ALL",
+      "normalized_match_github_s13": false
+    },
+    {
+      "file": "src/services/test_crm_sync1.py",
+      "github_sha256": null,
+      "local_sha256": null,
+      "s13_sha256": "961f937e3393f1fe5823d9ce472a48d31e978a41187d9a81b3686ee25c8fa06c",
+      "status": "UNTRACKED_RUNTIME_FILE",
+      "normalized_match_github_s13": false,
+      "classification": "GENERATED_OR_CACHE_ARTIFACT",
+      "function_or_section": "non-runtime test/temp path",
+      "semantic_diff": "Misplaced test or temporary-path artifact is not part of the canonical application tree"
+    },
+    {
+      "file": "src/services/torgi_publication.py",
+      "github_sha256": "2f95ecae857b21090742ed3b84f677382b74d838a701e37d384edeca26836817",
+      "local_sha256": "2f95ecae857b21090742ed3b84f677382b74d838a701e37d384edeca26836817",
+      "s13_sha256": "2f95ecae857b21090742ed3b84f677382b74d838a701e37d384edeca26836817",
+      "status": "MATCH_ALL",
+      "normalized_match_github_s13": false
+    },
+    {
+      "file": "src/services/unified_radar_models.py",
+      "github_sha256": "876bf9174edf45b1f963494c617adf0687e60e93508e52be9a5364654a61e7c3",
+      "local_sha256": "876bf9174edf45b1f963494c617adf0687e60e93508e52be9a5364654a61e7c3",
+      "s13_sha256": "876bf9174edf45b1f963494c617adf0687e60e93508e52be9a5364654a61e7c3",
+      "status": "MATCH_ALL",
+      "normalized_match_github_s13": false
+    },
+    {
+      "file": "src/services/unified_radar_service.py",
+      "github_sha256": "ed0477004642ca7ba2327172aaca08b3c2ce80f874c44b780f3ecf6b57dd0a4a",
+      "local_sha256": "ed0477004642ca7ba2327172aaca08b3c2ce80f874c44b780f3ecf6b57dd0a4a",
+      "s13_sha256": "ed0477004642ca7ba2327172aaca08b3c2ce80f874c44b780f3ecf6b57dd0a4a",
+      "status": "MATCH_ALL",
+      "normalized_match_github_s13": false
+    },
+    {
+      "file": "src/services/v3_analytics_cache.py",
+      "github_sha256": "987b783049465bece93a7b5c28819514a51e3bb27bf505dd93f0baf17560354e",
+      "local_sha256": "987b783049465bece93a7b5c28819514a51e3bb27bf505dd93f0baf17560354e",
+      "s13_sha256": "d08e96c87339707922f0e62c7f04d062ab7ffec31c98f265f53a55de121fba52",
+      "status": "S13_ONLY_CHANGE",
+      "normalized_match_github_s13": true,
+      "classification": "GENERATED_OR_CACHE_ARTIFACT",
+      "function_or_section": "whole file",
+      "semantic_diff": "EOL encoding only; normalized UTF-8 content is identical"
+    },
+    {
+      "file": "src/services/v3_analytics_fixtures.py",
+      "github_sha256": "24594fd831a2770d43daf7be19b6426226a83b37304b6cf3c4a29820b8ebb109",
+      "local_sha256": "24594fd831a2770d43daf7be19b6426226a83b37304b6cf3c4a29820b8ebb109",
+      "s13_sha256": "309d8803002a30f26a3a303e04ebe0ee8b6d0d6840f5339e6e94dcc195306204",
+      "status": "S13_ONLY_CHANGE",
+      "normalized_match_github_s13": true,
+      "classification": "GENERATED_OR_CACHE_ARTIFACT",
+      "function_or_section": "whole file",
+      "semantic_diff": "EOL encoding only; normalized UTF-8 content is identical"
+    },
+    {
+      "file": "src/services/v3_analytics_level_b.py",
+      "github_sha256": "0a5aa99333be9a434ca059e1d331caf0a5abb16f4dc74b2a2dbba204d90464ef",
+      "local_sha256": "0a5aa99333be9a434ca059e1d331caf0a5abb16f4dc74b2a2dbba204d90464ef",
+      "s13_sha256": "bc6eea622fe593d730381a8743efcd16e785e4520f286726a7cf7a37611e018f",
+      "status": "S13_ONLY_CHANGE",
+      "normalized_match_github_s13": true,
+      "classification": "GENERATED_OR_CACHE_ARTIFACT",
+      "function_or_section": "whole file",
+      "semantic_diff": "EOL encoding only; normalized UTF-8 content is identical"
+    },
+    {
+      "file": "src/services/v3_analytics_metric_state.py",
+      "github_sha256": "deb2fd400e8aaae7eaa9c4aa3f407693caf928df48904ec7deace864852f73cc",
+      "local_sha256": "deb2fd400e8aaae7eaa9c4aa3f407693caf928df48904ec7deace864852f73cc",
+      "s13_sha256": "f0ceb2c6bd0ddb2e971e493e3c77bc1fd734345bfce14a6e9c46358971ba580a",
+      "status": "S13_ONLY_CHANGE",
+      "normalized_match_github_s13": true,
+      "classification": "GENERATED_OR_CACHE_ARTIFACT",
+      "function_or_section": "whole file",
+      "semantic_diff": "EOL encoding only; normalized UTF-8 content is identical"
+    },
+    {
+      "file": "src/services/v3_analytics_okpd.py",
+      "github_sha256": "cd6cfc93a588d34ada873720ddc548a525d2413cfe4a282ff6ca547e35e6a887",
+      "local_sha256": "cd6cfc93a588d34ada873720ddc548a525d2413cfe4a282ff6ca547e35e6a887",
+      "s13_sha256": "bf75b1f6956c50b80c7dc0eb57bee10ee7a565566dc0deaf94b71265d9f5371a",
+      "status": "S13_ONLY_CHANGE",
+      "normalized_match_github_s13": true,
+      "classification": "GENERATED_OR_CACHE_ARTIFACT",
+      "function_or_section": "whole file",
+      "semantic_diff": "EOL encoding only; normalized UTF-8 content is identical"
+    },
+    {
+      "file": "src/services/v3_analytics_pipeline_funnel.py",
+      "github_sha256": "93034c5221952918ff6c5764f6f9f7e613617f0e237ec0102de18626f2125657",
+      "local_sha256": "93034c5221952918ff6c5764f6f9f7e613617f0e237ec0102de18626f2125657",
+      "s13_sha256": "459ead791e5196a1b422ba1deb7ba2433aa80b8dba26316f77b23ebfe1c835e4",
+      "status": "S13_ONLY_CHANGE",
+      "normalized_match_github_s13": true,
+      "classification": "GENERATED_OR_CACHE_ARTIFACT",
+      "function_or_section": "whole file",
+      "semantic_diff": "EOL encoding only; normalized UTF-8 content is identical"
+    },
+    {
+      "file": "src/services/v3_analytics_precutover.py",
+      "github_sha256": "529bafc366e98add0f755b373a95ae42a414e45277361cca58401cb00ce7b044",
+      "local_sha256": "529bafc366e98add0f755b373a95ae42a414e45277361cca58401cb00ce7b044",
+      "s13_sha256": "3609a789cd32003f989ab9e7963e556cdac5a4c7adaf96a28dd3b32debe8c672",
+      "status": "S13_ONLY_CHANGE",
+      "normalized_match_github_s13": true,
+      "classification": "GENERATED_OR_CACHE_ARTIFACT",
+      "function_or_section": "whole file",
+      "semantic_diff": "EOL encoding only; normalized UTF-8 content is identical"
+    },
+    {
+      "file": "src/services/v3_analytics_read.py",
+      "github_sha256": "a711f99423407f061326bc60c5878d79f647c52af0ea9498f760c0ad101d4945",
+      "local_sha256": "a711f99423407f061326bc60c5878d79f647c52af0ea9498f760c0ad101d4945",
+      "s13_sha256": "94d9be3a69fbe9b49ea49cfa82df33739b1550c6c7f6c7da7a458d689827b06b",
+      "status": "S13_ONLY_CHANGE",
+      "normalized_match_github_s13": true,
+      "classification": "GENERATED_OR_CACHE_ARTIFACT",
+      "function_or_section": "whole file",
+      "semantic_diff": "EOL encoding only; normalized UTF-8 content is identical"
+    },
+    {
+      "file": "src/services/v3_analytics_refresh.py",
+      "github_sha256": "d8170b81bb63f89aae52998f1c2602d4c0b2ab97fda3f0cff9d0da4151d97be1",
+      "local_sha256": "d8170b81bb63f89aae52998f1c2602d4c0b2ab97fda3f0cff9d0da4151d97be1",
+      "s13_sha256": "d8170b81bb63f89aae52998f1c2602d4c0b2ab97fda3f0cff9d0da4151d97be1",
+      "status": "MATCH_ALL",
+      "normalized_match_github_s13": false
+    },
+    {
+      "file": "src/services/v3_analytics_service.py",
+      "github_sha256": "72e071cfb739c0d5265e1e8a04bd7f0e0be8476d9c7d1017f9205fb2a114f3c6",
+      "local_sha256": "72e071cfb739c0d5265e1e8a04bd7f0e0be8476d9c7d1017f9205fb2a114f3c6",
+      "s13_sha256": "516665f07c5a207d2ef75cbfdc7ec2eee3dc0d6fcff5bf7afca1c2a525054e9a",
+      "status": "S13_ONLY_CHANGE",
+      "normalized_match_github_s13": true,
+      "classification": "GENERATED_OR_CACHE_ARTIFACT",
+      "function_or_section": "whole file",
+      "semantic_diff": "EOL encoding only; normalized UTF-8 content is identical"
+    },
+    {
+      "file": "src/services/waterproofing_ai_context.py",
+      "github_sha256": "4a1392311abed4311b8ad68cbd06044507b88fe4094e113095571c966bde274f",
+      "local_sha256": "4a1392311abed4311b8ad68cbd06044507b88fe4094e113095571c966bde274f",
+      "s13_sha256": "4a1392311abed4311b8ad68cbd06044507b88fe4094e113095571c966bde274f",
+      "status": "MATCH_ALL",
+      "normalized_match_github_s13": false
+    },
+    {
+      "file": "src/services/waterproofing_contour.py",
+      "github_sha256": "586ebb6605077d5f92841489a2fe543ea75737abe8f123ffc3515270d448ad6f",
+      "local_sha256": "586ebb6605077d5f92841489a2fe543ea75737abe8f123ffc3515270d448ad6f",
+      "s13_sha256": "586ebb6605077d5f92841489a2fe543ea75737abe8f123ffc3515270d448ad6f",
+      "status": "MATCH_ALL",
+      "normalized_match_github_s13": false
+    },
+    {
+      "file": "src/services/waterproofing_process.py",
+      "github_sha256": "d78af5a819f56001c3476b8ffa2ada84ac9c6c0fc1fcab20b1eb18f7c83371af",
+      "local_sha256": "d78af5a819f56001c3476b8ffa2ada84ac9c6c0fc1fcab20b1eb18f7c83371af",
+      "s13_sha256": "7f1eaa15c364887335df97686cb2b2c420e2bdebaf7f9a56323f307b8ee934e2",
+      "status": "S13_ONLY_CHANGE",
+      "normalized_match_github_s13": true,
+      "classification": "GENERATED_OR_CACHE_ARTIFACT",
+      "function_or_section": "whole file",
+      "semantic_diff": "EOL encoding only; normalized UTF-8 content is identical"
+    },
+    {
+      "file": "src/services/waterproofing_scoring.py",
+      "github_sha256": "031a5d86e002007c2855c23e136536e382bcbf32ba758257fdd33cd3674728bb",
+      "local_sha256": "031a5d86e002007c2855c23e136536e382bcbf32ba758257fdd33cd3674728bb",
+      "s13_sha256": "031a5d86e002007c2855c23e136536e382bcbf32ba758257fdd33cd3674728bb",
+      "status": "MATCH_ALL",
+      "normalized_match_github_s13": false
+    },
+    {
+      "file": "src/ui/__init__.py",
+      "github_sha256": "7eb70257593da06f682a3ddda54a9d260d4fc514f645237f5ca74b08f8da61a6",
+      "local_sha256": "7eb70257593da06f682a3ddda54a9d260d4fc514f645237f5ca74b08f8da61a6",
+      "s13_sha256": "7eb70257593da06f682a3ddda54a9d260d4fc514f645237f5ca74b08f8da61a6",
+      "status": "MATCH_ALL",
+      "normalized_match_github_s13": false
+    },
+    {
+      "file": "src/ui/ai_review_page.py",
+      "github_sha256": "372dc957e84a9b6a78d260de53b009be9a56b087f5b436d6f72fd3d02d5cf71f",
+      "local_sha256": "372dc957e84a9b6a78d260de53b009be9a56b087f5b436d6f72fd3d02d5cf71f",
+      "s13_sha256": "bf95abfd5ff10cfaade049dc2f434c52c6c1c837d65a069b24df69da4bde27f6",
+      "status": "S13_ONLY_CHANGE",
+      "normalized_match_github_s13": true,
+      "classification": "GENERATED_OR_CACHE_ARTIFACT",
+      "function_or_section": "whole file",
+      "semantic_diff": "EOL encoding only; normalized UTF-8 content is identical"
+    },
+    {
+      "file": "src/ui/ai_shadow_page.py",
+      "github_sha256": "85330b2fd376ee07235771103326bdaa9239564495aca6cc3f47563452819cfe",
+      "local_sha256": "85330b2fd376ee07235771103326bdaa9239564495aca6cc3f47563452819cfe",
+      "s13_sha256": "803ae09ce7c05b216f3df36e7b0cae46037a79a7f164559a193eb9247ea8bbdf",
+      "status": "S13_ONLY_CHANGE",
+      "normalized_match_github_s13": true,
+      "classification": "GENERATED_OR_CACHE_ARTIFACT",
+      "function_or_section": "whole file",
+      "semantic_diff": "EOL encoding only; normalized UTF-8 content is identical"
+    },
+    {
+      "file": "src/ui/analytics_contour_copy_page.py",
+      "github_sha256": "e2ae006aa4db4cba5a18462eb13378d82f3a5e06739dbb5774030ec5b07823c6",
+      "local_sha256": "e2ae006aa4db4cba5a18462eb13378d82f3a5e06739dbb5774030ec5b07823c6",
+      "s13_sha256": "9aaf241c96eda4e032e55daa28468a1730d0efcbaf6d4a8cd520605271e72f90",
+      "status": "S13_ONLY_CHANGE",
+      "normalized_match_github_s13": true,
+      "classification": "GENERATED_OR_CACHE_ARTIFACT",
+      "function_or_section": "whole file",
+      "semantic_diff": "EOL encoding only; normalized UTF-8 content is identical"
+    },
+    {
+      "file": "src/ui/analytics_contour_exact_layout.py",
+      "github_sha256": "935e0ab5412debfaca0e768ac1148858049dffd116ccf75ff9a66ddb1782e85e",
+      "local_sha256": "935e0ab5412debfaca0e768ac1148858049dffd116ccf75ff9a66ddb1782e85e",
+      "s13_sha256": "2c798f899fe49e91d079dbd9a8d68799d6f2526e887a67419f5d7fa5fc9e903a",
+      "status": "S13_ONLY_CHANGE",
+      "normalized_match_github_s13": true,
+      "classification": "GENERATED_OR_CACHE_ARTIFACT",
+      "function_or_section": "whole file",
+      "semantic_diff": "EOL encoding only; normalized UTF-8 content is identical"
+    },
+    {
+      "file": "src/ui/analytics_contour_page.py",
+      "github_sha256": "cdb4db14ba1008b0721bb4df10228082b9e791ae46da4716fc88e1989cebbf97",
+      "local_sha256": "cdb4db14ba1008b0721bb4df10228082b9e791ae46da4716fc88e1989cebbf97",
+      "s13_sha256": "64b4183f7cf7ea71cac08ea53490b0c2d3f1487c20403894ef3894370b220140",
+      "status": "S13_ONLY_CHANGE",
+      "normalized_match_github_s13": true,
+      "classification": "GENERATED_OR_CACHE_ARTIFACT",
+      "function_or_section": "whole file",
+      "semantic_diff": "EOL encoding only; normalized UTF-8 content is identical"
+    },
+    {
+      "file": "src/ui/analytics_contour_v2_page.py",
+      "github_sha256": "b213045d966af89e59c91fa27652605d02c96aca58fd866d7bb966978feff479",
+      "local_sha256": "b213045d966af89e59c91fa27652605d02c96aca58fd866d7bb966978feff479",
+      "s13_sha256": "b213045d966af89e59c91fa27652605d02c96aca58fd866d7bb966978feff479",
+      "status": "MATCH_ALL",
+      "normalized_match_github_s13": false
+    },
+    {
+      "file": "src/ui/annotation_workbench_page.py",
+      "github_sha256": "30548d119d278ba08a2d4f133247a4ab4a543b27da0403884e30adbcf919b68b",
+      "local_sha256": "30548d119d278ba08a2d4f133247a4ab4a543b27da0403884e30adbcf919b68b",
+      "s13_sha256": "0f0f73d0225bd1716b696c9e55a0957b135f65a1be1f5ba4f05ea5c01e6f8836",
+      "status": "S13_ONLY_CHANGE",
+      "normalized_match_github_s13": false,
+      "classification": "DESIRED_RUNTIME_FIX_NOT_COMMITTED",
+      "function_or_section": "annotation queue/workbench/card",
+      "semantic_diff": "Matches verified local runtime-fix commit 20cb2e8 after EOL normalization"
+    },
+    {
+      "file": "src/ui/app_bootstrap.py",
+      "github_sha256": "160e62f99803e18564e9eab340e0644051ff1666e4b8aa8d6a862f2d0c917751",
+      "local_sha256": "160e62f99803e18564e9eab340e0644051ff1666e4b8aa8d6a862f2d0c917751",
+      "s13_sha256": "160e62f99803e18564e9eab340e0644051ff1666e4b8aa8d6a862f2d0c917751",
+      "status": "MATCH_ALL",
+      "normalized_match_github_s13": false
+    },
+    {
+      "file": "src/ui/balance_holder_card.py",
+      "github_sha256": "ace92ec9d5af1cd5bc498139cc6d008af67bbcdf3a40ca861b4324ed6df896b0",
+      "local_sha256": "ace92ec9d5af1cd5bc498139cc6d008af67bbcdf3a40ca861b4324ed6df896b0",
+      "s13_sha256": "ace92ec9d5af1cd5bc498139cc6d008af67bbcdf3a40ca861b4324ed6df896b0",
+      "status": "MATCH_ALL",
+      "normalized_match_github_s13": false
+    },
+    {
+      "file": "src/ui/balance_holders_tab.py",
+      "github_sha256": "6635c8c4ebdb88a3a0efe8e89dddff8d1c189ed2e96f5049460cf397af48aeda",
+      "local_sha256": "6635c8c4ebdb88a3a0efe8e89dddff8d1c189ed2e96f5049460cf397af48aeda",
+      "s13_sha256": "6635c8c4ebdb88a3a0efe8e89dddff8d1c189ed2e96f5049460cf397af48aeda",
+      "status": "MATCH_ALL",
+      "normalized_match_github_s13": false
+    },
+    {
+      "file": "src/ui/card_pagination.py",
+      "github_sha256": "f6e9376acb6899d5d5a6590a0a6f77fb49c0d2a71f18a6ddfcaf62acbba42468",
+      "local_sha256": "f6e9376acb6899d5d5a6590a0a6f77fb49c0d2a71f18a6ddfcaf62acbba42468",
+      "s13_sha256": "f6e9376acb6899d5d5a6590a0a6f77fb49c0d2a71f18a6ddfcaf62acbba42468",
+      "status": "MATCH_ALL",
+      "normalized_match_github_s13": false
+    },
+    {
+      "file": "src/ui/category_registry_page.py",
+      "github_sha256": "d44034fd94f75f70badd7fbf54cbe8071b9037929fba6a0d6a2ff57b0cecec03",
+      "local_sha256": "d44034fd94f75f70badd7fbf54cbe8071b9037929fba6a0d6a2ff57b0cecec03",
+      "s13_sha256": "2f9a0835c19522380b1b7213888e7e2bb6ed5f15c31651d46d1a8441b62e013e",
+      "status": "S13_ONLY_CHANGE",
+      "normalized_match_github_s13": true,
+      "classification": "GENERATED_OR_CACHE_ARTIFACT",
+      "function_or_section": "whole file",
+      "semantic_diff": "EOL encoding only; normalized UTF-8 content is identical"
+    },
+    {
+      "file": "src/ui/companies_page.py",
+      "github_sha256": "21b8897224e6756a21d4d9c12bad48eb59f561ce2dd1fd9cad620ef14cedfaf8",
+      "local_sha256": "21b8897224e6756a21d4d9c12bad48eb59f561ce2dd1fd9cad620ef14cedfaf8",
+      "s13_sha256": "21b8897224e6756a21d4d9c12bad48eb59f561ce2dd1fd9cad620ef14cedfaf8",
+      "status": "MATCH_ALL",
+      "normalized_match_github_s13": false
+    },
+    {
+      "file": "src/ui/companies_page_filters.py",
+      "github_sha256": "664de21d3cc3371ec5eb29265e768b110f5fb0bd7a9a9889717c4181dedc2907",
+      "local_sha256": "664de21d3cc3371ec5eb29265e768b110f5fb0bd7a9a9889717c4181dedc2907",
+      "s13_sha256": "664de21d3cc3371ec5eb29265e768b110f5fb0bd7a9a9889717c4181dedc2907",
+      "status": "MATCH_ALL",
+      "normalized_match_github_s13": false
+    },
+    {
+      "file": "src/ui/companies_page_tabs.py",
+      "github_sha256": "77caa2009d951aeee59bba638d57f1b956f7368d846830dd62fa2f5d61ffc3aa",
+      "local_sha256": "77caa2009d951aeee59bba638d57f1b956f7368d846830dd62fa2f5d61ffc3aa",
+      "s13_sha256": "77caa2009d951aeee59bba638d57f1b956f7368d846830dd62fa2f5d61ffc3aa",
+      "status": "MATCH_ALL",
+      "normalized_match_github_s13": false
+    },
+    {
+      "file": "src/ui/company_card.py",
+      "github_sha256": "5efaba9dbdb81e569f086f4affd8b54ffc34ad2bd7e7307f8c4324da3e663c4d",
+      "local_sha256": "5efaba9dbdb81e569f086f4affd8b54ffc34ad2bd7e7307f8c4324da3e663c4d",
+      "s13_sha256": "5efaba9dbdb81e569f086f4affd8b54ffc34ad2bd7e7307f8c4324da3e663c4d",
+      "status": "MATCH_ALL",
+      "normalized_match_github_s13": false
+    },
+    {
+      "file": "src/ui/company_detail.py",
+      "github_sha256": "7fa662fe5193c0e54eec6bb9e43df185a902dbbb2be28cafa728776ae192fe7e",
+      "local_sha256": "7fa662fe5193c0e54eec6bb9e43df185a902dbbb2be28cafa728776ae192fe7e",
+      "s13_sha256": "7fa662fe5193c0e54eec6bb9e43df185a902dbbb2be28cafa728776ae192fe7e",
+      "status": "MATCH_ALL",
+      "normalized_match_github_s13": false
+    },
+    {
+      "file": "src/ui/company_title.py",
+      "github_sha256": "d89db77d318ec90d3e32fca53978520d589545da5998d99c01c64b19f3cc6398",
+      "local_sha256": "d89db77d318ec90d3e32fca53978520d589545da5998d99c01c64b19f3cc6398",
+      "s13_sha256": "d89db77d318ec90d3e32fca53978520d589545da5998d99c01c64b19f3cc6398",
+      "status": "MATCH_ALL",
+      "normalized_match_github_s13": false
+    },
+    {
+      "file": "src/ui/components/__init__.py",
+      "github_sha256": "7eb70257593da06f682a3ddda54a9d260d4fc514f645237f5ca74b08f8da61a6",
+      "local_sha256": "7eb70257593da06f682a3ddda54a9d260d4fc514f645237f5ca74b08f8da61a6",
+      "s13_sha256": "7eb70257593da06f682a3ddda54a9d260d4fc514f645237f5ca74b08f8da61a6",
+      "status": "MATCH_ALL",
+      "normalized_match_github_s13": false
+    },
+    {
+      "file": "src/ui/components/ai_review.py",
+      "github_sha256": "24118c35a5699513fc730d933ebe052872007ed383b6dc1eda9526696e4b0f3f",
+      "local_sha256": "24118c35a5699513fc730d933ebe052872007ed383b6dc1eda9526696e4b0f3f",
+      "s13_sha256": "df0b0b8c66b231e5cba8901078343cc0431b2d12e36289078d4900af63c206bb",
+      "status": "S13_ONLY_CHANGE",
+      "normalized_match_github_s13": true,
+      "classification": "GENERATED_OR_CACHE_ARTIFACT",
+      "function_or_section": "whole file",
+      "semantic_diff": "EOL encoding only; normalized UTF-8 content is identical"
+    },
+    {
+      "file": "src/ui/components/analytics_charts.py",
+      "github_sha256": "088f0fac723c89b3e05412e839ce9804069dd763dab7a9c828f2dfb2ded5a69a",
+      "local_sha256": "088f0fac723c89b3e05412e839ce9804069dd763dab7a9c828f2dfb2ded5a69a",
+      "s13_sha256": "79f6913120fca1924f2319ad2e67cafd2a17d7050808436f01b6baa92a42bc75",
+      "status": "S13_ONLY_CHANGE",
+      "normalized_match_github_s13": true,
+      "classification": "GENERATED_OR_CACHE_ARTIFACT",
+      "function_or_section": "whole file",
+      "semantic_diff": "EOL encoding only; normalized UTF-8 content is identical"
+    },
+    {
+      "file": "src/ui/components/analytics_header.py",
+      "github_sha256": "17144be447c2564cdb2db3ec532e0ff1ca8a986b69ce4b2da2f6deeadf39c48f",
+      "local_sha256": "17144be447c2564cdb2db3ec532e0ff1ca8a986b69ce4b2da2f6deeadf39c48f",
+      "s13_sha256": "b2d417293ef526d73b61033a5318d05aefa6a395e2b39de1c7dfe9e37490ea57",
+      "status": "S13_ONLY_CHANGE",
+      "normalized_match_github_s13": true,
+      "classification": "GENERATED_OR_CACHE_ARTIFACT",
+      "function_or_section": "whole file",
+      "semantic_diff": "EOL encoding only; normalized UTF-8 content is identical"
+    },
+    {
+      "file": "src/ui/components/analytics_kpi.py",
+      "github_sha256": "4f9bfe4a91d66616a9fcaba73c4dbb286d5db61fc6273011e505d72cd874c95c",
+      "local_sha256": "4f9bfe4a91d66616a9fcaba73c4dbb286d5db61fc6273011e505d72cd874c95c",
+      "s13_sha256": "fca2008fd645b6c763e614eb8a1f9cb08104e15cc26848d10dcdbf46cc529190",
+      "status": "S13_ONLY_CHANGE",
+      "normalized_match_github_s13": true,
+      "classification": "GENERATED_OR_CACHE_ARTIFACT",
+      "function_or_section": "whole file",
+      "semantic_diff": "EOL encoding only; normalized UTF-8 content is identical"
+    },
+    {
+      "file": "src/ui/components/analytics_v2/analytics_expander.py",
+      "github_sha256": "a9621481ec9c2d4a0801c0510d06225d10032d3364a3b0d78c04a876628b7ed6",
+      "local_sha256": "a9621481ec9c2d4a0801c0510d06225d10032d3364a3b0d78c04a876628b7ed6",
+      "s13_sha256": "e877b47b5f9110ec1927de80ecadcc09715388b035238b36b5d8fa3887d28b1a",
+      "status": "S13_ONLY_CHANGE",
+      "normalized_match_github_s13": true,
+      "classification": "GENERATED_OR_CACHE_ARTIFACT",
+      "function_or_section": "whole file",
+      "semantic_diff": "EOL encoding only; normalized UTF-8 content is identical"
+    },
+    {
+      "file": "src/ui/components/analytics_v2/annotation_card.py",
+      "github_sha256": "768da880193735761ed4bd27c35450731cfa3fc64d94ed663b139429168d2e4f",
+      "local_sha256": "768da880193735761ed4bd27c35450731cfa3fc64d94ed663b139429168d2e4f",
+      "s13_sha256": "45819bb8cf3bf68302bfbda4038344020b49f18b6e7b03f0ca2d3a1d079a89ed",
+      "status": "S13_ONLY_CHANGE",
+      "normalized_match_github_s13": false,
+      "classification": "DESIRED_RUNTIME_FIX_NOT_COMMITTED",
+      "function_or_section": "annotation queue/workbench/card",
+      "semantic_diff": "Matches verified local runtime-fix commit 20cb2e8 after EOL normalization"
+    },
+    {
+      "file": "src/ui/components/analytics_v2/annotation_card_sections.py",
+      "github_sha256": null,
+      "local_sha256": null,
+      "s13_sha256": "1f7747f8e595ff5d283b32f58e1e7fc6daf95173ea07d242f1e8bcef536226f8",
+      "status": "UNTRACKED_RUNTIME_FILE",
+      "normalized_match_github_s13": false,
+      "classification": "DESIRED_RUNTIME_FIX_NOT_COMMITTED",
+      "function_or_section": "annotation queue/workbench/card",
+      "semantic_diff": "Matches verified local runtime-fix commit 20cb2e8 after EOL normalization"
+    },
+    {
+      "file": "src/ui/components/analytics_v2/annotation_queue.py",
+      "github_sha256": "da3b2ed5155dba6df3d643fb0d7ebbfbef83bc91af2d27d627ac56c8fa49a219",
+      "local_sha256": "da3b2ed5155dba6df3d643fb0d7ebbfbef83bc91af2d27d627ac56c8fa49a219",
+      "s13_sha256": "064d329ea1e7adca70fbc3099b1024ec5ffa44707b86d44ea56b862c3dda3f00",
+      "status": "S13_ONLY_CHANGE",
+      "normalized_match_github_s13": true,
+      "classification": "GENERATED_OR_CACHE_ARTIFACT",
+      "function_or_section": "whole file",
+      "semantic_diff": "EOL encoding only; normalized UTF-8 content is identical"
+    },
+    {
+      "file": "src/ui/components/analytics_v2/card_compact.py",
+      "github_sha256": "457cc0161b82352c4bde4a140ec0bae86622e9027a5b2eb91732949943d1f43f",
+      "local_sha256": "457cc0161b82352c4bde4a140ec0bae86622e9027a5b2eb91732949943d1f43f",
+      "s13_sha256": "3daf1d08b87fc8f1c06f8a9d2bdb926f04a37d59b3cdde806b6cf9013b88d8d5",
+      "status": "S13_ONLY_CHANGE",
+      "normalized_match_github_s13": true,
+      "classification": "GENERATED_OR_CACHE_ARTIFACT",
+      "function_or_section": "whole file",
+      "semantic_diff": "EOL encoding only; normalized UTF-8 content is identical"
+    },
+    {
+      "file": "src/ui/components/analytics_v2/card_detail.py",
+      "github_sha256": "6b51bf5e18d7477465be1fef96263283f0f98949dc779f2ec83ec26e7e6ac6fc",
+      "local_sha256": "6b51bf5e18d7477465be1fef96263283f0f98949dc779f2ec83ec26e7e6ac6fc",
+      "s13_sha256": "6b51bf5e18d7477465be1fef96263283f0f98949dc779f2ec83ec26e7e6ac6fc",
+      "status": "MATCH_ALL",
+      "normalized_match_github_s13": false
+    },
+    {
+      "file": "src/ui/components/analytics_v2/card_feed.py",
+      "github_sha256": "aaeb0ccc146a46a92c358a03f07961ce3c2f2f0e776afaa88fa92088ac21fbd1",
+      "local_sha256": "aaeb0ccc146a46a92c358a03f07961ce3c2f2f0e776afaa88fa92088ac21fbd1",
+      "s13_sha256": "37593b1b7bda119ab64bad7b3975dc713b55a69bfa13dac5e1b0987c9ec46712",
+      "status": "S13_ONLY_CHANGE",
+      "normalized_match_github_s13": true,
+      "classification": "GENERATED_OR_CACHE_ARTIFACT",
+      "function_or_section": "whole file",
+      "semantic_diff": "EOL encoding only; normalized UTF-8 content is identical"
+    },
+    {
+      "file": "src/ui/components/analytics_v2/card_processing.py",
+      "github_sha256": "5a0496862cfa51a9e737192d13d930acd8915906176fbd2522325b6dfc6bcaca",
+      "local_sha256": "5a0496862cfa51a9e737192d13d930acd8915906176fbd2522325b6dfc6bcaca",
+      "s13_sha256": "75f1f5915f79016099dce0c0de320c0cd664e88408abfe6571e70caf99501210",
+      "status": "S13_ONLY_CHANGE",
+      "normalized_match_github_s13": true,
+      "classification": "GENERATED_OR_CACHE_ARTIFACT",
+      "function_or_section": "whole file",
+      "semantic_diff": "EOL encoding only; normalized UTF-8 content is identical"
+    },
+    {
+      "file": "src/ui/components/analytics_v2/card_tabs_ai.py",
+      "github_sha256": "6fe5bddf56dbe3bd02bba5cad49c3e9aaad0269ca5360e305af80c86068b58a0",
+      "local_sha256": "6fe5bddf56dbe3bd02bba5cad49c3e9aaad0269ca5360e305af80c86068b58a0",
+      "s13_sha256": "6fe5bddf56dbe3bd02bba5cad49c3e9aaad0269ca5360e305af80c86068b58a0",
+      "status": "MATCH_ALL",
+      "normalized_match_github_s13": false
+    },
+    {
+      "file": "src/ui/components/analytics_v2/card_tabs_ai_expert_form.py",
+      "github_sha256": "c267e843d31cebb78b82a9e79187184ec1f4f1e43890dcca810a32c02253d705",
+      "local_sha256": "c267e843d31cebb78b82a9e79187184ec1f4f1e43890dcca810a32c02253d705",
+      "s13_sha256": "6c73ef2fc3d7e6ea0cef2993ded545e197ff02aec94185835fa06dff29830572",
+      "status": "S13_ONLY_CHANGE",
+      "normalized_match_github_s13": true,
+      "classification": "GENERATED_OR_CACHE_ARTIFACT",
+      "function_or_section": "whole file",
+      "semantic_diff": "EOL encoding only; normalized UTF-8 content is identical"
+    },
+    {
+      "file": "src/ui/components/analytics_v2/card_tabs_ai_readonly.py",
+      "github_sha256": "49289ec289361c935f18cc16541b8ce8e21075af4251b531ddd56dedd810ec59",
+      "local_sha256": "49289ec289361c935f18cc16541b8ce8e21075af4251b531ddd56dedd810ec59",
+      "s13_sha256": "49289ec289361c935f18cc16541b8ce8e21075af4251b531ddd56dedd810ec59",
+      "status": "MATCH_ALL",
+      "normalized_match_github_s13": false
+    },
+    {
+      "file": "src/ui/components/analytics_v2/card_tabs_history.py",
+      "github_sha256": "768190e13e1d4fe2853e795d0de4ca49cffe5f6fb1d3cfddcc9d5fd39c75ed60",
+      "local_sha256": "768190e13e1d4fe2853e795d0de4ca49cffe5f6fb1d3cfddcc9d5fd39c75ed60",
+      "s13_sha256": "fdec1e0b629556454546c93fc812b2299dc1319a180033d5de6b07ffc01f57ac",
+      "status": "S13_ONLY_CHANGE",
+      "normalized_match_github_s13": true,
+      "classification": "GENERATED_OR_CACHE_ARTIFACT",
+      "function_or_section": "whole file",
+      "semantic_diff": "EOL encoding only; normalized UTF-8 content is identical"
+    },
+    {
+      "file": "src/ui/components/analytics_v2/card_tabs_medals.py",
+      "github_sha256": "cf36df7ffdfad6440a1a0455f07938d5d1ac40e9364efdc73458aecccbd69f9a",
+      "local_sha256": "cf36df7ffdfad6440a1a0455f07938d5d1ac40e9364efdc73458aecccbd69f9a",
+      "s13_sha256": "cf36df7ffdfad6440a1a0455f07938d5d1ac40e9364efdc73458aecccbd69f9a",
+      "status": "MATCH_ALL",
+      "normalized_match_github_s13": false
+    },
+    {
+      "file": "src/ui/components/analytics_v2/card_trust.py",
+      "github_sha256": "9cb9648a0679b1f68a07a291ed15f4dc3c08bd2258436690c0a97af0b104c247",
+      "local_sha256": "9cb9648a0679b1f68a07a291ed15f4dc3c08bd2258436690c0a97af0b104c247",
+      "s13_sha256": "8b0de2ab4a8483ee5abe8d8b6903f00e9955a7e23670613ffb8161ed4d372932",
+      "status": "S13_ONLY_CHANGE",
+      "normalized_match_github_s13": true,
+      "classification": "GENERATED_OR_CACHE_ARTIFACT",
+      "function_or_section": "whole file",
+      "semantic_diff": "EOL encoding only; normalized UTF-8 content is identical"
+    },
+    {
+      "file": "src/ui/components/analytics_v2/header.py",
+      "github_sha256": "39c7017b240960ea0d75cf24a548814675752390b3c5c7bd084a24264e8a68cb",
+      "local_sha256": "39c7017b240960ea0d75cf24a548814675752390b3c5c7bd084a24264e8a68cb",
+      "s13_sha256": "966610e0cec2fbcbf788b0366a70e7799636f68fd635aae3852b5cb9edd7f5b0",
+      "status": "S13_ONLY_CHANGE",
+      "normalized_match_github_s13": true,
+      "classification": "GENERATED_OR_CACHE_ARTIFACT",
+      "function_or_section": "whole file",
+      "semantic_diff": "EOL encoding only; normalized UTF-8 content is identical"
+    },
+    {
+      "file": "src/ui/components/analytics_v2/kpi_row.py",
+      "github_sha256": "9c19d69e9294ebcafb65af5a2f10ff6a145ca1b8bddd4a657ec8e42aca021c37",
+      "local_sha256": "9c19d69e9294ebcafb65af5a2f10ff6a145ca1b8bddd4a657ec8e42aca021c37",
+      "s13_sha256": "f06f51dd25564134bd16276e1cb4266c5dfb6cc96bf2dcbf811367e572d93d87",
+      "status": "S13_ONLY_CHANGE",
+      "normalized_match_github_s13": true,
+      "classification": "GENERATED_OR_CACHE_ARTIFACT",
+      "function_or_section": "whole file",
+      "semantic_diff": "EOL encoding only; normalized UTF-8 content is identical"
+    },
+    {
+      "file": "src/ui/components/analytics_v2/limits.py",
+      "github_sha256": "bb821f58ba1c26aab0fe68f7c550a9b0daf7d776727a9e49bc0bd23a9390e7f0",
+      "local_sha256": "bb821f58ba1c26aab0fe68f7c550a9b0daf7d776727a9e49bc0bd23a9390e7f0",
+      "s13_sha256": "fdf0238a2df4db9f860eee5b2eedf1b917302a2d6f810055d639207f6bc064b8",
+      "status": "S13_ONLY_CHANGE",
+      "normalized_match_github_s13": true,
+      "classification": "GENERATED_OR_CACHE_ARTIFACT",
+      "function_or_section": "whole file",
+      "semantic_diff": "EOL encoding only; normalized UTF-8 content is identical"
+    },
+    {
+      "file": "src/ui/components/analytics_v2/mock_data.py",
+      "github_sha256": "f85c064b8fc6069e8dfc17fc445bc652666cc36194a0659e5cc2d55c10e7bbf2",
+      "local_sha256": "f85c064b8fc6069e8dfc17fc445bc652666cc36194a0659e5cc2d55c10e7bbf2",
+      "s13_sha256": "2cd4e8194588f23133dc94681cca7ba7efdea5fbe643dc99659daf8cb69950b1",
+      "status": "S13_ONLY_CHANGE",
+      "normalized_match_github_s13": true,
+      "classification": "GENERATED_OR_CACHE_ARTIFACT",
+      "function_or_section": "whole file",
+      "semantic_diff": "EOL encoding only; normalized UTF-8 content is identical"
+    },
+    {
+      "file": "src/ui/components/analytics_v2/object_card.py",
+      "github_sha256": "60e4e0b9f047bb17dc0f7732520de143b59700b4e7fb8bdcbda590ccb58b9151",
+      "local_sha256": "60e4e0b9f047bb17dc0f7732520de143b59700b4e7fb8bdcbda590ccb58b9151",
+      "s13_sha256": "eba3f9a8a8184f91609cc326a313e37491c22949e3456ed84b3e05c919b1ab51",
+      "status": "S13_ONLY_CHANGE",
+      "normalized_match_github_s13": true,
+      "classification": "GENERATED_OR_CACHE_ARTIFACT",
+      "function_or_section": "whole file",
+      "semantic_diff": "EOL encoding only; normalized UTF-8 content is identical"
+    },
+    {
+      "file": "src/ui/components/analytics_v2/procurement_card.py",
+      "github_sha256": "4e6d6386b2d2928e157f0ab41b24c51ee20b6a7f131382d32d9f68524e2420c2",
+      "local_sha256": "4e6d6386b2d2928e157f0ab41b24c51ee20b6a7f131382d32d9f68524e2420c2",
+      "s13_sha256": "7f51cdd511237354819e74581f7d99e044c429e54b1ce977e68c235189f7016d",
+      "status": "S13_ONLY_CHANGE",
+      "normalized_match_github_s13": true,
+      "classification": "GENERATED_OR_CACHE_ARTIFACT",
+      "function_or_section": "whole file",
+      "semantic_diff": "EOL encoding only; normalized UTF-8 content is identical"
+    },
+    {
+      "file": "src/ui/components/analytics_v2/quick_filters.py",
+      "github_sha256": "968d574240fec896d3e5ea235be672072eba377df6a6ed8e64992be6a2be5d8f",
+      "local_sha256": "968d574240fec896d3e5ea235be672072eba377df6a6ed8e64992be6a2be5d8f",
+      "s13_sha256": "edc785d45e2b0a8ef126b0f6d41b797837fed12caab623bb82fe53b539d0ea54",
+      "status": "S13_ONLY_CHANGE",
+      "normalized_match_github_s13": true,
+      "classification": "GENERATED_OR_CACHE_ARTIFACT",
+      "function_or_section": "whole file",
+      "semantic_diff": "EOL encoding only; normalized UTF-8 content is identical"
+    },
+    {
+      "file": "src/ui/components/analytics_v2/sidebar.py",
+      "github_sha256": "6c5365cb3dbef7b40e6d9eb3f2934372cb74770e0ca267e5d53ea5b3457fb1a6",
+      "local_sha256": "6c5365cb3dbef7b40e6d9eb3f2934372cb74770e0ca267e5d53ea5b3457fb1a6",
+      "s13_sha256": "36b9e2c1be507dc4db723dfb0f7ee5d445ef8e35dea1af95b438046747b97f4b",
+      "status": "S13_ONLY_CHANGE",
+      "normalized_match_github_s13": true,
+      "classification": "GENERATED_OR_CACHE_ARTIFACT",
+      "function_or_section": "whole file",
+      "semantic_diff": "EOL encoding only; normalized UTF-8 content is identical"
+    },
+    {
+      "file": "src/ui/components/analytics_v2/tabs.py",
+      "github_sha256": "8bf0ec65e5fc7d6d47e525e6cb15ec836f1ca0056ae40805bc5ee3e181e62e35",
+      "local_sha256": "8bf0ec65e5fc7d6d47e525e6cb15ec836f1ca0056ae40805bc5ee3e181e62e35",
+      "s13_sha256": "8bf0ec65e5fc7d6d47e525e6cb15ec836f1ca0056ae40805bc5ee3e181e62e35",
+      "status": "MATCH_ALL",
+      "normalized_match_github_s13": false
+    },
+    {
+      "file": "src/ui/components/analytics_v2/tabs_lazy_dispatch.py",
+      "github_sha256": "5d576bf859d192ca37042a9313d8974eed47fc2f4ae1699765dab003afad2884",
+      "local_sha256": "5d576bf859d192ca37042a9313d8974eed47fc2f4ae1699765dab003afad2884",
+      "s13_sha256": "30eabca0abe3bc4fdec612046cdb098ca3b7d0e1386c5f68d789a39147b12504",
+      "status": "S13_ONLY_CHANGE",
+      "normalized_match_github_s13": true,
+      "classification": "GENERATED_OR_CACHE_ARTIFACT",
+      "function_or_section": "whole file",
+      "semantic_diff": "EOL encoding only; normalized UTF-8 content is identical"
+    },
+    {
+      "file": "src/ui/components/analytics_v2/test_torgi_tab.py",
+      "github_sha256": "bc14f7f78c245674e7748b70847175c9ed4c7062a3849fcf9a4c1316d905ca45",
+      "local_sha256": "bc14f7f78c245674e7748b70847175c9ed4c7062a3849fcf9a4c1316d905ca45",
+      "s13_sha256": "fe2770e2e80590bf3051b78327725ed3d66716e8018addbc94de1e96aaed2607",
+      "status": "S13_ONLY_CHANGE",
+      "normalized_match_github_s13": true,
+      "classification": "GENERATED_OR_CACHE_ARTIFACT",
+      "function_or_section": "whole file",
+      "semantic_diff": "EOL encoding only; normalized UTF-8 content is identical"
+    },
+    {
+      "file": "src/ui/components/dblclick_card/__init__.py",
+      "github_sha256": "93ba6eca0c3311659f95bbeadf7da29da565292e1aba744da5416b2b3bf9a2c0",
+      "local_sha256": "93ba6eca0c3311659f95bbeadf7da29da565292e1aba744da5416b2b3bf9a2c0",
+      "s13_sha256": "93ba6eca0c3311659f95bbeadf7da29da565292e1aba744da5416b2b3bf9a2c0",
+      "status": "MATCH_ALL",
+      "normalized_match_github_s13": false
+    },
+    {
+      "file": "src/ui/components/object_card.py",
+      "github_sha256": "d71f75a4cd0321167876b32cbce07f2401f092356dd007c9846db4d1c2bce415",
+      "local_sha256": "d71f75a4cd0321167876b32cbce07f2401f092356dd007c9846db4d1c2bce415",
+      "s13_sha256": "d5df73c9072ad31c9b22fb2578dfbe2665eb5e62218df0506eaf7ba58b6f72f3",
+      "status": "S13_ONLY_CHANGE",
+      "normalized_match_github_s13": true,
+      "classification": "GENERATED_OR_CACHE_ARTIFACT",
+      "function_or_section": "whole file",
+      "semantic_diff": "EOL encoding only; normalized UTF-8 content is identical"
+    },
+    {
+      "file": "src/ui/components/object_detail.py",
+      "github_sha256": "3d6b8e7a032048bd3df32cd58ab2687109077586d2bf8e8c8be020ffefcf52df",
+      "local_sha256": "3d6b8e7a032048bd3df32cd58ab2687109077586d2bf8e8c8be020ffefcf52df",
+      "s13_sha256": "5a11d4983f2de80b3b9a7db83238d1bbedb7cce7a7ac8d16247eb36b392f1e90",
+      "status": "S13_ONLY_CHANGE",
+      "normalized_match_github_s13": true,
+      "classification": "GENERATED_OR_CACHE_ARTIFACT",
+      "function_or_section": "whole file",
+      "semantic_diff": "EOL encoding only; normalized UTF-8 content is identical"
+    },
+    {
+      "file": "src/ui/computers_page.py",
+      "github_sha256": "0957b8ae368ebcc3209573a0b01cbc058acc8ee6a1d362b31e96260029f1335a",
+      "local_sha256": "0957b8ae368ebcc3209573a0b01cbc058acc8ee6a1d362b31e96260029f1335a",
+      "s13_sha256": "0957b8ae368ebcc3209573a0b01cbc058acc8ee6a1d362b31e96260029f1335a",
+      "status": "MATCH_ALL",
+      "normalized_match_github_s13": false
+    },
+    {
+      "file": "src/ui/crm_profiles_page.py",
+      "github_sha256": "3d7f661c100df4cc08d01abd6e630547304ab1b2cf9cdbcf44a573986788a184",
+      "local_sha256": "3d7f661c100df4cc08d01abd6e630547304ab1b2cf9cdbcf44a573986788a184",
+      "s13_sha256": "3d7f661c100df4cc08d01abd6e630547304ab1b2cf9cdbcf44a573986788a184",
+      "status": "MATCH_ALL",
+      "normalized_match_github_s13": false
+    },
+    {
+      "file": "src/ui/customers_page.py",
+      "github_sha256": "7fef5cdb433cb4f5554b714cafee8bf56f7677dce9364121868ad745d9f5c889",
+      "local_sha256": "7fef5cdb433cb4f5554b714cafee8bf56f7677dce9364121868ad745d9f5c889",
+      "s13_sha256": "458c0bf24296434a1140280791adfeed3adbe6020b59cb5d6d04f3c8f78bbbb4",
+      "status": "S13_ONLY_CHANGE",
+      "normalized_match_github_s13": false,
+      "classification": "HOST_LOCAL_CONFIGURATION",
+      "function_or_section": "host defaults/operator diagnostics",
+      "semantic_diff": "Concrete host/operator values replace canonical logical aliases"
+    },
+    {
+      "file": "src/ui/db_health_ui.py",
+      "github_sha256": "16b98977e42176ca2c04ff8ba352bbf807a46834249d5c7dd467cfece1228d1e",
+      "local_sha256": "16b98977e42176ca2c04ff8ba352bbf807a46834249d5c7dd467cfece1228d1e",
+      "s13_sha256": "16b98977e42176ca2c04ff8ba352bbf807a46834249d5c7dd467cfece1228d1e",
+      "status": "MATCH_ALL",
+      "normalized_match_github_s13": false
+    },
+    {
+      "file": "src/ui/edit_panel.py",
+      "github_sha256": "725212eeb33ccb4833d3a274b45228a253011352d63ea42f75490095d24b846e",
+      "local_sha256": "725212eeb33ccb4833d3a274b45228a253011352d63ea42f75490095d24b846e",
+      "s13_sha256": "725212eeb33ccb4833d3a274b45228a253011352d63ea42f75490095d24b846e",
+      "status": "MATCH_ALL",
+      "normalized_match_github_s13": false
+    },
+    {
+      "file": "src/ui/export_queue_page.py",
+      "github_sha256": "6fefd55c49070d800f8d1e0531a4c3cd7c3445b41009fe80e74747144c24b0ed",
+      "local_sha256": "6fefd55c49070d800f8d1e0531a4c3cd7c3445b41009fe80e74747144c24b0ed",
+      "s13_sha256": "6fefd55c49070d800f8d1e0531a4c3cd7c3445b41009fe80e74747144c24b0ed",
+      "status": "MATCH_ALL",
+      "normalized_match_github_s13": false
+    },
+    {
+      "file": "src/ui/export_queue_ui.py",
+      "github_sha256": "70b0fe8e14db11386980e531f0fc081d182d2bd7d0a91ea70cb41686091d333f",
+      "local_sha256": "70b0fe8e14db11386980e531f0fc081d182d2bd7d0a91ea70cb41686091d333f",
+      "s13_sha256": "70b0fe8e14db11386980e531f0fc081d182d2bd7d0a91ea70cb41686091d333f",
+      "status": "MATCH_ALL",
+      "normalized_match_github_s13": false
+    },
+    {
+      "file": "src/ui/header.py",
+      "github_sha256": "39c7017b240960ea0d75cf24a548814675752390b3c5c7bd084a24264e8a68cb",
+      "local_sha256": "39c7017b240960ea0d75cf24a548814675752390b3c5c7bd084a24264e8a68cb",
+      "s13_sha256": "966610e0cec2fbcbf788b0366a70e7799636f68fd635aae3852b5cb9edd7f5b0",
+      "status": "S13_ONLY_CHANGE",
+      "normalized_match_github_s13": true,
+      "classification": "GENERATED_OR_CACHE_ARTIFACT",
+      "function_or_section": "whole file",
+      "semantic_diff": "EOL encoding only; normalized UTF-8 content is identical"
+    },
+    {
+      "file": "src/ui/infrastructure_page.py",
+      "github_sha256": "6b55371ceb2a3219d9f6811bbfcee67332788ad6bfaaa45733e7d7cb04b1d54b",
+      "local_sha256": "6b55371ceb2a3219d9f6811bbfcee67332788ad6bfaaa45733e7d7cb04b1d54b",
+      "s13_sha256": "05b055abdb476a2fd1e3e296dca0d48e5f778818dfe41084b93ff353cc704778",
+      "status": "S13_ONLY_CHANGE",
+      "normalized_match_github_s13": false,
+      "classification": "HOST_LOCAL_CONFIGURATION",
+      "function_or_section": "host defaults/operator diagnostics",
+      "semantic_diff": "Concrete host/operator values replace canonical logical aliases"
+    },
+    {
+      "file": "src/ui/map_page.py",
+      "github_sha256": "72d2b8bf5bdc3674a3131f16a9e72cbb4655fcf0673953a3cdb19fd4f868dc1b",
+      "local_sha256": "72d2b8bf5bdc3674a3131f16a9e72cbb4655fcf0673953a3cdb19fd4f868dc1b",
+      "s13_sha256": "72d2b8bf5bdc3674a3131f16a9e72cbb4655fcf0673953a3cdb19fd4f868dc1b",
+      "status": "MATCH_ALL",
+      "normalized_match_github_s13": false
+    },
+    {
+      "file": "src/ui/map_view.py",
+      "github_sha256": "cf95d1291d8420f583b0a6aca83b9ed1128841210c6483ac636facef44e98a5a",
+      "local_sha256": "cf95d1291d8420f583b0a6aca83b9ed1128841210c6483ac636facef44e98a5a",
+      "s13_sha256": "cf95d1291d8420f583b0a6aca83b9ed1128841210c6483ac636facef44e98a5a",
+      "status": "MATCH_ALL",
+      "normalized_match_github_s13": false
+    },
+    {
+      "file": "src/ui/monitoring_page.py",
+      "github_sha256": "3dad85e231137a081cf4670d1bdecbeb3ac05754dac6fcc1115d6d769176307d",
+      "local_sha256": "3dad85e231137a081cf4670d1bdecbeb3ac05754dac6fcc1115d6d769176307d",
+      "s13_sha256": "755dc96409630c68d36b81a0ef7dd6974d378f550e078764f7b445f5d177dfc0",
+      "status": "S13_ONLY_CHANGE",
+      "normalized_match_github_s13": true,
+      "classification": "GENERATED_OR_CACHE_ARTIFACT",
+      "function_or_section": "whole file",
+      "semantic_diff": "EOL encoding only; normalized UTF-8 content is identical"
+    },
+    {
+      "file": "src/ui/nav.py",
+      "github_sha256": "76f70009b3a0d4bcc525827a2a5d97482600387bbe9dcfdaaf8e2069726a4d3b",
+      "local_sha256": "76f70009b3a0d4bcc525827a2a5d97482600387bbe9dcfdaaf8e2069726a4d3b",
+      "s13_sha256": "76f70009b3a0d4bcc525827a2a5d97482600387bbe9dcfdaaf8e2069726a4d3b",
+      "status": "MATCH_ALL",
+      "normalized_match_github_s13": false
+    },
+    {
+      "file": "src/ui/object_card.py",
+      "github_sha256": "8e7462a62d4e5e0f4f5cb6e69b33251aec840283e3acc9a8da6d1e73df36d809",
+      "local_sha256": "8e7462a62d4e5e0f4f5cb6e69b33251aec840283e3acc9a8da6d1e73df36d809",
+      "s13_sha256": "8e7462a62d4e5e0f4f5cb6e69b33251aec840283e3acc9a8da6d1e73df36d809",
+      "status": "MATCH_ALL",
+      "normalized_match_github_s13": false
+    },
+    {
+      "file": "src/ui/object_card_format.py",
+      "github_sha256": "348af9d81d110590103762bcce20cd77577537cb3ec9a3ef011146ba7ca649ab",
+      "local_sha256": "348af9d81d110590103762bcce20cd77577537cb3ec9a3ef011146ba7ca649ab",
+      "s13_sha256": "348af9d81d110590103762bcce20cd77577537cb3ec9a3ef011146ba7ca649ab",
+      "status": "MATCH_ALL",
+      "normalized_match_github_s13": false
+    },
+    {
+      "file": "src/ui/object_detail.py",
+      "github_sha256": "b43dd3ac666a4d42efa9ab400bec74a4fe70849f8813b54d51b0a20659639f66",
+      "local_sha256": "b43dd3ac666a4d42efa9ab400bec74a4fe70849f8813b54d51b0a20659639f66",
+      "s13_sha256": "c98c9e58bcf9a5c6a57960c047cf5c95e2440647c9f4d3bec819759131a06f80",
+      "status": "S13_ONLY_CHANGE",
+      "normalized_match_github_s13": true,
+      "classification": "GENERATED_OR_CACHE_ARTIFACT",
+      "function_or_section": "whole file",
+      "semantic_diff": "EOL encoding only; normalized UTF-8 content is identical"
+    },
+    {
+      "file": "src/ui/object_detail/__init__.py",
+      "github_sha256": "20277d29c7c2d1a6dfbcac4456c82d00420d5bcd3e5b6d6081a3bc2fe9c6ed95",
+      "local_sha256": "20277d29c7c2d1a6dfbcac4456c82d00420d5bcd3e5b6d6081a3bc2fe9c6ed95",
+      "s13_sha256": "20277d29c7c2d1a6dfbcac4456c82d00420d5bcd3e5b6d6081a3bc2fe9c6ed95",
+      "status": "MATCH_ALL",
+      "normalized_match_github_s13": false
+    },
+    {
+      "file": "src/ui/object_detail/ai_chat.py",
+      "github_sha256": "0088c0b4c7db310714a24f42849d9706dbfd7c67e1708b512bb5bf9e437ea7ff",
+      "local_sha256": "0088c0b4c7db310714a24f42849d9706dbfd7c67e1708b512bb5bf9e437ea7ff",
+      "s13_sha256": "0088c0b4c7db310714a24f42849d9706dbfd7c67e1708b512bb5bf9e437ea7ff",
+      "status": "MATCH_ALL",
+      "normalized_match_github_s13": false
+    },
+    {
+      "file": "src/ui/object_detail/ai_shadow.py",
+      "github_sha256": "2eba4defd6c572a1b18e9ce0587dcac61e2f41799400d3c760bdf49058e8ce36",
+      "local_sha256": "2eba4defd6c572a1b18e9ce0587dcac61e2f41799400d3c760bdf49058e8ce36",
+      "s13_sha256": "2eba4defd6c572a1b18e9ce0587dcac61e2f41799400d3c760bdf49058e8ce36",
+      "status": "MATCH_ALL",
+      "normalized_match_github_s13": false
+    },
+    {
+      "file": "src/ui/object_detail/ai_tab.py",
+      "github_sha256": "3ebf1f8721be4ccb4cb4334cc62d9e61d74ce8c6ca1112b710e96765286e4dd6",
+      "local_sha256": "3ebf1f8721be4ccb4cb4334cc62d9e61d74ce8c6ca1112b710e96765286e4dd6",
+      "s13_sha256": "3ebf1f8721be4ccb4cb4334cc62d9e61d74ce8c6ca1112b710e96765286e4dd6",
+      "status": "MATCH_ALL",
+      "normalized_match_github_s13": false
+    },
+    {
+      "file": "src/ui/object_detail/docs_tab.py",
+      "github_sha256": "1ee2fd74aa24b1131c4e65c9fa07d189d871a3d7acb64b00ae9625631758fe42",
+      "local_sha256": "1ee2fd74aa24b1131c4e65c9fa07d189d871a3d7acb64b00ae9625631758fe42",
+      "s13_sha256": "1ee2fd74aa24b1131c4e65c9fa07d189d871a3d7acb64b00ae9625631758fe42",
+      "status": "MATCH_ALL",
+      "normalized_match_github_s13": false
+    },
+    {
+      "file": "src/ui/object_detail/formatters.py",
+      "github_sha256": "811919dbb3efc8e85ae905dae0e39e9fe2f17eced2b8b6b0fece042c15fa17d2",
+      "local_sha256": "811919dbb3efc8e85ae905dae0e39e9fe2f17eced2b8b6b0fece042c15fa17d2",
+      "s13_sha256": "811919dbb3efc8e85ae905dae0e39e9fe2f17eced2b8b6b0fece042c15fa17d2",
+      "status": "MATCH_ALL",
+      "normalized_match_github_s13": false
+    },
+    {
+      "file": "src/ui/object_detail/layout.py",
+      "github_sha256": "41690d7fc1dc7d8ce9fd2bdd8531043dbb99b257e2dee4c46ac95c8a18db2b22",
+      "local_sha256": "41690d7fc1dc7d8ce9fd2bdd8531043dbb99b257e2dee4c46ac95c8a18db2b22",
+      "s13_sha256": "41690d7fc1dc7d8ce9fd2bdd8531043dbb99b257e2dee4c46ac95c8a18db2b22",
+      "status": "MATCH_ALL",
+      "normalized_match_github_s13": false
+    },
+    {
+      "file": "src/ui/object_detail/matches_tab.py",
+      "github_sha256": "2544d7eed7cef5b0b7faabda9d23d4b1076e7264e0d50502c465bd3c68a87ea5",
+      "local_sha256": "2544d7eed7cef5b0b7faabda9d23d4b1076e7264e0d50502c465bd3c68a87ea5",
+      "s13_sha256": "2544d7eed7cef5b0b7faabda9d23d4b1076e7264e0d50502c465bd3c68a87ea5",
+      "status": "MATCH_ALL",
+      "normalized_match_github_s13": false
+    },
+    {
+      "file": "src/ui/objects_page.py",
+      "github_sha256": "8362ecf71cdcde03fffe763ca04f8faa524337101e720eafc3d4203fe0204da8",
+      "local_sha256": "8362ecf71cdcde03fffe763ca04f8faa524337101e720eafc3d4203fe0204da8",
+      "s13_sha256": "1f2bfe5cf92bf16c457f34f02978e8592c964b78a54174a35206ae8c9f2f20f1",
+      "status": "S13_ONLY_CHANGE",
+      "normalized_match_github_s13": true,
+      "classification": "GENERATED_OR_CACHE_ARTIFACT",
+      "function_or_section": "whole file",
+      "semantic_diff": "EOL encoding only; normalized UTF-8 content is identical"
+    },
+    {
+      "file": "src/ui/objects_page_panels.py",
+      "github_sha256": "e3e7f48bf15eb7f2abacf84615300273b6e8123c92881d80fdc5083155cab2eb",
+      "local_sha256": "e3e7f48bf15eb7f2abacf84615300273b6e8123c92881d80fdc5083155cab2eb",
+      "s13_sha256": "e3e7f48bf15eb7f2abacf84615300273b6e8123c92881d80fdc5083155cab2eb",
+      "status": "MATCH_ALL",
+      "normalized_match_github_s13": false
+    },
+    {
+      "file": "src/ui/opportunity_radar_page.py",
+      "github_sha256": "c8acb7460e8976310eb1edda9efce9f7d0bbb72416cf0027b70e5885c5ebf352",
+      "local_sha256": "c8acb7460e8976310eb1edda9efce9f7d0bbb72416cf0027b70e5885c5ebf352",
+      "s13_sha256": "6615f4e572fd10c194bf58c33038f433b75576f6e78ce22f829c81b4d99e82ca",
+      "status": "S13_ONLY_CHANGE",
+      "normalized_match_github_s13": true,
+      "classification": "GENERATED_OR_CACHE_ARTIFACT",
+      "function_or_section": "whole file",
+      "semantic_diff": "EOL encoding only; normalized UTF-8 content is identical"
+    },
+    {
+      "file": "src/ui/page_deps.py",
+      "github_sha256": "5e45769dbb02e95dd1fe3fbc9c70af1957cb2286f2ef2247098375c0955579a9",
+      "local_sha256": "5e45769dbb02e95dd1fe3fbc9c70af1957cb2286f2ef2247098375c0955579a9",
+      "s13_sha256": "5e45769dbb02e95dd1fe3fbc9c70af1957cb2286f2ef2247098375c0955579a9",
+      "status": "MATCH_ALL",
+      "normalized_match_github_s13": false
+    },
+    {
+      "file": "src/ui/processing_quality_ui.py",
+      "github_sha256": "f23a2733fcee2ac763c53c417865cc2e93db528483f1cf19165f49fbe9f198ee",
+      "local_sha256": "f23a2733fcee2ac763c53c417865cc2e93db528483f1cf19165f49fbe9f198ee",
+      "s13_sha256": "971d9f318a8af5432dc2d7939820b195d7b93823cfabd502d0e513192cf1bfad",
+      "status": "S13_ONLY_CHANGE",
+      "normalized_match_github_s13": true,
+      "classification": "GENERATED_OR_CACHE_ARTIFACT",
+      "function_or_section": "whole file",
+      "semantic_diff": "EOL encoding only; normalized UTF-8 content is identical"
+    },
+    {
+      "file": "src/ui/product_subcategories_service.py",
+      "github_sha256": "19f0dfc7610fa97bb06352bd966a719a404c22438d80331a2569a217a877e51b",
+      "local_sha256": "19f0dfc7610fa97bb06352bd966a719a404c22438d80331a2569a217a877e51b",
+      "s13_sha256": "7b881d12d46bd8a3df27bab2c9e3db10c35054e607abab62bd7d57fe7febf520",
+      "status": "S13_ONLY_CHANGE",
+      "normalized_match_github_s13": true,
+      "classification": "GENERATED_OR_CACHE_ARTIFACT",
+      "function_or_section": "whole file",
+      "semantic_diff": "EOL encoding only; normalized UTF-8 content is identical"
+    },
+    {
+      "file": "src/ui/session_deps.py",
+      "github_sha256": "fd3ea6d8b2b05d1db01e4c7e964fb175e240d33ab248b6027336e4ca6f1820c5",
+      "local_sha256": "fd3ea6d8b2b05d1db01e4c7e964fb175e240d33ab248b6027336e4ca6f1820c5",
+      "s13_sha256": "fd3ea6d8b2b05d1db01e4c7e964fb175e240d33ab248b6027336e4ca6f1820c5",
+      "status": "MATCH_ALL",
+      "normalized_match_github_s13": false
+    },
+    {
+      "file": "src/ui/sidebar.py",
+      "github_sha256": "572429c620d119af508197106fab54f12cb2669c8fa7adbeb6471f962516a1b4",
+      "local_sha256": "572429c620d119af508197106fab54f12cb2669c8fa7adbeb6471f962516a1b4",
+      "s13_sha256": "fbe9c1d78804db00d26bf00e3d6da3b903b05315402f9f3b2927e9fbc8032475",
+      "status": "S13_ONLY_CHANGE",
+      "normalized_match_github_s13": true,
+      "classification": "GENERATED_OR_CACHE_ARTIFACT",
+      "function_or_section": "whole file",
+      "semantic_diff": "EOL encoding only; normalized UTF-8 content is identical"
+    },
+    {
+      "file": "src/ui/styles.py",
+      "github_sha256": "f843254838c004e8c6bb071f61642f26a0c677d59e20b41d60a54962cd66397e",
+      "local_sha256": "f843254838c004e8c6bb071f61642f26a0c677d59e20b41d60a54962cd66397e",
+      "s13_sha256": "f843254838c004e8c6bb071f61642f26a0c677d59e20b41d60a54962cd66397e",
+      "status": "MATCH_ALL",
+      "normalized_match_github_s13": false
+    },
+    {
+      "file": "src/ui/styles_salesforce.py",
+      "github_sha256": "1439f4cbb3331181206f9b4310390cbb075e048d673ef0c35d234b31ac9d9c81",
+      "local_sha256": "1439f4cbb3331181206f9b4310390cbb075e048d673ef0c35d234b31ac9d9c81",
+      "s13_sha256": "1439f4cbb3331181206f9b4310390cbb075e048d673ef0c35d234b31ac9d9c81",
+      "status": "MATCH_ALL",
+      "normalized_match_github_s13": false
+    },
+    {
+      "file": "src/ui/system_health_format.py",
+      "github_sha256": "bc7e5b695c553c6df3921bef60be8f85fbabaeaca79c58494d5dd4f7a62b5fa8",
+      "local_sha256": "bc7e5b695c553c6df3921bef60be8f85fbabaeaca79c58494d5dd4f7a62b5fa8",
+      "s13_sha256": "5d6e46dfc254afc6d18c4b4e0d98895f9994f5177c210d4a8d5545b0e402de30",
+      "status": "S13_ONLY_CHANGE",
+      "normalized_match_github_s13": true,
+      "classification": "GENERATED_OR_CACHE_ARTIFACT",
+      "function_or_section": "whole file",
+      "semantic_diff": "EOL encoding only; normalized UTF-8 content is identical"
+    },
+    {
+      "file": "src/ui/system_health_page.py",
+      "github_sha256": "2d87932def022373eccf3dab446d77fbeaf532eee8edc83381dff1051c40308a",
+      "local_sha256": "2d87932def022373eccf3dab446d77fbeaf532eee8edc83381dff1051c40308a",
+      "s13_sha256": "d67c1dc3f9dfe9e747125113b961fac48b42ea0f18059e7643f53210cf1f7e79",
+      "status": "S13_ONLY_CHANGE",
+      "normalized_match_github_s13": true,
+      "classification": "GENERATED_OR_CACHE_ARTIFACT",
+      "function_or_section": "whole file",
+      "semantic_diff": "EOL encoding only; normalized UTF-8 content is identical"
+    },
+    {
+      "file": "src/ui/table.py",
+      "github_sha256": "d81377d2d9f39f772a8e2c60fdc4ae2baf40251bee3a08e93cfd21a8303d8f7c",
+      "local_sha256": "d81377d2d9f39f772a8e2c60fdc4ae2baf40251bee3a08e93cfd21a8303d8f7c",
+      "s13_sha256": "d81377d2d9f39f772a8e2c60fdc4ae2baf40251bee3a08e93cfd21a8303d8f7c",
+      "status": "MATCH_ALL",
+      "normalized_match_github_s13": false
+    },
+    {
+      "file": "src/ui/v3_analytics_okpd_funnel.py",
+      "github_sha256": "1522d4d528f26fdff05b2a10bf67eb0a2d2121a1dde285fbd7be9669d0e24e8a",
+      "local_sha256": "1522d4d528f26fdff05b2a10bf67eb0a2d2121a1dde285fbd7be9669d0e24e8a",
+      "s13_sha256": "295b849332d74d04282ab26f4fb716896c1ea56a4c835aa72627455151342398",
+      "status": "S13_ONLY_CHANGE",
+      "normalized_match_github_s13": true,
+      "classification": "GENERATED_OR_CACHE_ARTIFACT",
+      "function_or_section": "whole file",
+      "semantic_diff": "EOL encoding only; normalized UTF-8 content is identical"
+    },
+    {
+      "file": "src/ui/v3_analytics_page.py",
+      "github_sha256": "cfa343ab5df9d6f0440a16344599394249ab9a347ecb723781a69d20c9576875",
+      "local_sha256": "cfa343ab5df9d6f0440a16344599394249ab9a347ecb723781a69d20c9576875",
+      "s13_sha256": "155eb86149bf217722f4561f08c6bca6630382646d06476f2fea22e437064ae2",
+      "status": "S13_ONLY_CHANGE",
+      "normalized_match_github_s13": true,
+      "classification": "GENERATED_OR_CACHE_ARTIFACT",
+      "function_or_section": "whole file",
+      "semantic_diff": "EOL encoding only; normalized UTF-8 content is identical"
+    },
+    {
+      "file": "src/ui/v3_analytics_page_sections.py",
+      "github_sha256": "fbf2e918cfe50405d87cbfc2f165946b3a7502c12e03177f5dceb471ca80f7ed",
+      "local_sha256": "fbf2e918cfe50405d87cbfc2f165946b3a7502c12e03177f5dceb471ca80f7ed",
+      "s13_sha256": "789ca63c8f11bcd19482f215bdc06ca793294f04235817844bfa43f93d8c29cb",
+      "status": "S13_ONLY_CHANGE",
+      "normalized_match_github_s13": true,
+      "classification": "GENERATED_OR_CACHE_ARTIFACT",
+      "function_or_section": "whole file",
+      "semantic_diff": "EOL encoding only; normalized UTF-8 content is identical"
+    },
+    {
+      "file": "src/ui/v3_analytics_pipeline_funnel.py",
+      "github_sha256": "eb01ad32b5233969a29bd23eb2deb67e5ac82139fdefa1bc77b31a77788396d0",
+      "local_sha256": "eb01ad32b5233969a29bd23eb2deb67e5ac82139fdefa1bc77b31a77788396d0",
+      "s13_sha256": "7de582019e09d8bb686ae8899c594d8a641c282e48bedfb90604b4ab574fa377",
+      "status": "S13_ONLY_CHANGE",
+      "normalized_match_github_s13": true,
+      "classification": "GENERATED_OR_CACHE_ARTIFACT",
+      "function_or_section": "whole file",
+      "semantic_diff": "EOL encoding only; normalized UTF-8 content is identical"
+    },
+    {
+      "file": "src/ui/v3_analytics_premodel_panel.py",
+      "github_sha256": "8a9ecd9f87a67d0bcd2cf8e4936f2356b6207ba612c1ab4f087c14629c5db36c",
+      "local_sha256": "8a9ecd9f87a67d0bcd2cf8e4936f2356b6207ba612c1ab4f087c14629c5db36c",
+      "s13_sha256": "2860ef4154195be724cd277b90569bfe94590f635751f18d2253d1e9ca6c2651",
+      "status": "S13_ONLY_CHANGE",
+      "normalized_match_github_s13": true,
+      "classification": "GENERATED_OR_CACHE_ARTIFACT",
+      "function_or_section": "whole file",
+      "semantic_diff": "EOL encoding only; normalized UTF-8 content is identical"
+    },
+    {
+      "file": "src/ui/v3_analytics_wave1_panel.py",
+      "github_sha256": "41383a45dacb84528a7367871c0462c76fb253eadda6126c3f4750cf570038b9",
+      "local_sha256": "41383a45dacb84528a7367871c0462c76fb253eadda6126c3f4750cf570038b9",
+      "s13_sha256": "f80cbc363bfc4fe468eb07cb47169846131392007b7075b734e718af0a5fbc6d",
+      "status": "S13_ONLY_CHANGE",
+      "normalized_match_github_s13": true,
+      "classification": "GENERATED_OR_CACHE_ARTIFACT",
+      "function_or_section": "whole file",
+      "semantic_diff": "EOL encoding only; normalized UTF-8 content is identical"
+    },
+    {
+      "file": "src/ui/waterproofing_map_tab.py",
+      "github_sha256": "b8e6bccb76628e80fe8789e66b67646bb220c9fefae7fa8ed0450a2a5b12d728",
+      "local_sha256": "b8e6bccb76628e80fe8789e66b67646bb220c9fefae7fa8ed0450a2a5b12d728",
+      "s13_sha256": "b8e6bccb76628e80fe8789e66b67646bb220c9fefae7fa8ed0450a2a5b12d728",
+      "status": "MATCH_ALL",
+      "normalized_match_github_s13": false
+    },
+    {
+      "file": "src/ui/waterproofing_meta_tabs.py",
+      "github_sha256": "1ebaa55f9e48ab4514be8f0ad817590a09080e7f1de34c9b82e70008cab28057",
+      "local_sha256": "1ebaa55f9e48ab4514be8f0ad817590a09080e7f1de34c9b82e70008cab28057",
+      "s13_sha256": "1ebaa55f9e48ab4514be8f0ad817590a09080e7f1de34c9b82e70008cab28057",
+      "status": "MATCH_ALL",
+      "normalized_match_github_s13": false
+    },
+    {
+      "file": "src/ui/waterproofing_objects_tab.py",
+      "github_sha256": "7981389c541cd3c0a38f6a55ec233fe5c9f891ef997c692f928dbd223ea3294f",
+      "local_sha256": "7981389c541cd3c0a38f6a55ec233fe5c9f891ef997c692f928dbd223ea3294f",
+      "s13_sha256": "7981389c541cd3c0a38f6a55ec233fe5c9f891ef997c692f928dbd223ea3294f",
+      "status": "MATCH_ALL",
+      "normalized_match_github_s13": false
+    },
+    {
+      "file": "src/ui/waterproofing_page.py",
+      "github_sha256": "1b8c9cfb8384d93e262adfb6a8ec203a5faac5fa0d2816cd807842e835f07bb3",
+      "local_sha256": "1b8c9cfb8384d93e262adfb6a8ec203a5faac5fa0d2816cd807842e835f07bb3",
+      "s13_sha256": "1b8c9cfb8384d93e262adfb6a8ec203a5faac5fa0d2816cd807842e835f07bb3",
+      "status": "MATCH_ALL",
+      "normalized_match_github_s13": false
+    },
+    {
+      "file": "src/ui/waterproofing_uk_tab.py",
+      "github_sha256": "c812de321b91e6fdd161da50e84f51f0661e2bef7ac4a7b25ee6776088db3a11",
+      "local_sha256": "c812de321b91e6fdd161da50e84f51f0661e2bef7ac4a7b25ee6776088db3a11",
+      "s13_sha256": "ffcbb2513b383f2ebf74ae57c7d3d6bc4a042168f9cb4a351d0706db3e3a6705",
+      "status": "S13_ONLY_CHANGE",
+      "normalized_match_github_s13": false,
+      "classification": "HOST_LOCAL_CONFIGURATION",
+      "function_or_section": "host defaults/operator diagnostics",
+      "semantic_diff": "Concrete host/operator values replace canonical logical aliases"
+    }
+  ]
+}
