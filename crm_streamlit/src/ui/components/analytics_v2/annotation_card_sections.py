@@ -3,22 +3,28 @@ from __future__ import annotations
 
 import streamlit as st
 
-from src.services.annotation_card_provenance import project_document_rows, source_law
 from src.services.commercial_routing_v3.model_ui_projection import business_view_from_assessment, model_view_from_assessment
-from src.ui.components.analytics_v2.card_trust import fmt_price, submission_status
+from src.ui.components.analytics_v2.card_trust import fmt_price
 
 
 def render_workbench_header(header: dict, procurement_id: int, lifecycle: str, publication_visible: bool) -> None:
-    status_icon, status_label, _ = submission_status(header.get("award_status", "submission_open"), header.get("end_date"))
-    st.markdown(f"## {header.get('auction_name') or 'Закупка без названия'}")
-    link = header.get("tender_link")
-    if link:
-        st.link_button("🔗 Открыть закупку", link, type="primary")
-    c1, c2, c3, c4 = st.columns(4)
-    c1.markdown(f"**Номер**  \n`{header.get('contract_number') or procurement_id}`")
-    c2.markdown(f"**Источник / закон**  \n`{header.get('source_table') or '—'}` · {source_law(header.get('source_table'))}")
-    c3.markdown(f"**Регион / цена**  \n{header.get('delivery_region') or '—'} · {fmt_price(header.get('final_price') or header.get('initial_price'))}")
-    c4.markdown(f"**Статус / дедлайн**  \n{status_icon} {status_label} · {header.get('end_date') or '—'}")
+    st.markdown(f"## {header.get('title') or 'Закупка без названия'}")
+    amount, deadline, law = st.columns(3)
+    amount.metric(header.get("display_amount_label") or "Сумма", fmt_price(header.get("display_amount")))
+    deadline.metric(header.get("deadline_label") or "Срок", str(header.get("deadline") or "—"))
+    law.metric("Закон / источник", header.get("law") or "—")
+    if header.get("lifecycle") == "AWARDED" and header.get("initial_price") is not None:
+        st.caption(f"Начальная цена / НМЦК: {fmt_price(header.get('initial_price'))}")
+    c1, c2, c3 = st.columns(3)
+    c1.markdown(f"**Заказчик**  \n{header.get('customer') or '—'}")
+    c2.markdown(f"**Регион**  \n{header.get('region') or '—'}")
+    c3.markdown(f"**Номер**  \n`{header.get('procurement_number') or procurement_id}`")
+    actions = st.columns(2)
+    if header.get("procurement_url"):
+        actions[0].link_button("🔗 Открыть закупку", header["procurement_url"], type="primary")
+    if header.get("contract_url"):
+        actions[1].link_button("📄 Открыть контракт", header["contract_url"])
+        actions[1].caption(f"Источник: {header.get('contract_url_provenance')}")
     st.caption(f"lifecycle={lifecycle} · publication={'visible' if publication_visible else 'hidden (annotation доступна)'} · CRM id={procurement_id}")
 
 
@@ -55,27 +61,62 @@ def render_overview(header: dict, assessment: dict | None, existing: dict | None
         st.markdown(f"**Стадия:** {payload.get('expert_work_stage') or '—'}")
 
 
-def render_documents(procurement_id: int, rows: list[dict], priority_state: dict[str, str]) -> None:
+def render_documents(
+    procurement_id: int,
+    rows: list[dict],
+    priority_state: dict[str, str],
+    orphan_observations: list[dict] | None = None,
+) -> None:
     st.markdown("### 📎 Документы для экспертной проверки")
-    docs = project_document_rows(rows)
-    if not docs:
-        st.info("Документные наблюдения для этой закупки не сохранены. Документы не выдумываются и исследование автоматически не запускается.")
+    if not rows:
+        st.info("Источник не вернул документов для этой закупки. Исследование автоматически не запускается.")
         return
-    for idx, row in enumerate(docs, 1):
-        key = row["document_key"]
+    labels = {
+        "UNOBSERVED": "Документ ещё не исследован",
+        "OBSERVED_WITH_EVIDENCE": "Исследован · найдены коммерческие свидетельства",
+        "OBSERVED_NO_EVIDENCE": "Исследован · коммерческих свидетельств не найдено",
+        "DOWNLOAD_FAILED": "Ошибка скачивания документа",
+        "PARSE_FAILED": "Ошибка разбора документа",
+        "UNSUPPORTED_FORMAT": "Неподдерживаемый формат",
+        "EMPTY_DOCUMENT": "Пустой документ",
+        "DUPLICATE_DOCUMENT": "Дубликат документа",
+    }
+    for idx, row in enumerate(rows, 1):
+        # Preserve the existing persisted priority identity (URL-first).
+        key = str(row.get("document_url") or row.get("source_document_id") or idx)
         with st.container(border=True):
             left, right = st.columns([4, 2])
-            left.markdown(f"**{idx}. {row.get('document_title') or row['file_name']}**")
-            left.caption(f"Файл: `{row['file_name']}` · тип: `{row.get('source_document_type') or '—'}` · parse: `{row.get('parse_status') or '—'}`")
-            if row.get("source_document_url"):
-                left.link_button("Открыть / скачать документ", row["source_document_url"])
-            match_label = "✅ найдены" if row["match_found"] else "— не найдены"
-            evidence_label = "✅ найдено" if row["evidence_found"] else "— не найдено"
-            left.markdown(f"**Matches:** {match_label} · **Evidence:** {evidence_label}")
-            if row["category_signals"]:
-                left.markdown("**Категорийные сигналы:** " + ", ".join(map(str, row["category_signals"])))
-            if row["product_mentions"]:
-                left.caption("Упоминания: " + ", ".join(map(str, row["product_mentions"][:8])))
+            left.markdown(f"**{idx}. {row.get('document_name') or 'Документ без имени'}**")
+            left.caption(
+                f"source_document_id=`{row.get('source_document_id') or '—'}` · "
+                f"тип=`{row.get('document_type') or '—'}` · источник=`{row.get('link_source') or '—'}`"
+            )
+            if int(row.get("source_row_count") or 1) > 1:
+                left.caption(f"Один физический файл представлен {row['source_row_count']} строками/версиями источника")
+            if row.get("document_url"):
+                left.link_button("Открыть / скачать документ", row["document_url"])
+            state = row.get("observation_state") or "UNOBSERVED"
+            if state == "UNOBSERVED":
+                left.info(labels[state])
+            elif state in {"DOWNLOAD_FAILED", "PARSE_FAILED", "UNSUPPORTED_FORMAT", "EMPTY_DOCUMENT"}:
+                left.error(labels.get(state, state))
+            elif state == "OBSERVED_WITH_EVIDENCE":
+                left.success(labels[state])
+            else:
+                left.warning(labels.get(state, state))
+            for observation in row.get("observations") or []:
+                categories = observation.get("matched_categories") or []
+                mentions = observation.get("product_mentions") or []
+                if categories:
+                    left.markdown("**Категории:** " + ", ".join(map(str, categories)))
+                if mentions:
+                    left.markdown("**Материалы / товары:** " + ", ".join(map(str, mentions[:8])))
+                left.caption(
+                    f"download=`{observation.get('download_status') or '—'}` · "
+                    f"parse=`{observation.get('parse_status') or '—'}` · "
+                    f"outcome=`{observation.get('usefulness_label') or '—'}` · "
+                    f"observed_at=`{observation.get('observed_at') or '—'}`"
+                )
             current = priority_state.get(key, "none")
             selected = right.radio(
                 "Приоритет открытия",
@@ -85,6 +126,8 @@ def render_documents(procurement_id: int, rows: list[dict], priority_state: dict
                 key=f"ann_doc_priority_{procurement_id}_{idx}",
             )
             priority_state[key] = selected
+    if orphan_observations:
+        st.warning(f"Непривязанные наблюдения: {len(orphan_observations)}. Они не прикреплены к случайным документам.")
 
 
 def render_history(events: list[dict]) -> None:

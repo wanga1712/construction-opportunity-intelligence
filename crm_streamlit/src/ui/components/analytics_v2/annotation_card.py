@@ -15,7 +15,6 @@ from src.services.expert_annotation_service import (
     collect_expert_object_types,
     collect_expert_work_stages,
     collect_expert_object_subtypes,
-    load_document_findings_for_annotation,
     save_expert_annotation,
     write_audit_row,
 )
@@ -25,7 +24,7 @@ from src.services.annotation_readiness import (
     REVIEW_SCOPES,
     training_eligibility_reasons,
 )
-from src.services.annotation_card_provenance import load_annotation_history
+from src.services.annotation_card_view import load_annotation_card_view
 from src.ui.components.analytics_v2.card_tabs_ai_expert_form import (
     _assemble_payload,
     _renumber,
@@ -268,13 +267,12 @@ def render_annotation_card(
     expert_stages = collect_expert_work_stages(crm_db)
     expert_subtypes = collect_expert_object_subtypes(crm_db)
 
-    render_workbench_header(header, procurement_id, lifecycle_label, publication_visible)
-    documents = load_document_findings_for_annotation(procurement_id, crm_db)
-    history = load_annotation_history(crm_db, procurement_id, header)
+    card_view = load_annotation_card_view(procurement_id, header, crm_db)
+    render_workbench_header(card_view["facts"], procurement_id, lifecycle_label, publication_visible)
     priority_state = st.session_state[_sk(procurement_id, "document_priorities")]
 
     overview_tab, model_tab, documents_tab, history_tab, expert_tab = st.tabs(
-        ["Обзор", "Модель / Категории", "Документы", "История", "Экспертная разметка"]
+        ["Обзор", "Модель / Категории", f"Документы ({card_view['document_count']})", "История", "Экспертная разметка"]
     )
     with overview_tab:
         render_overview(header, assessment, existing_annotation)
@@ -283,13 +281,13 @@ def render_annotation_card(
         _render_business_block(assessment)
         _render_category_verdicts(procurement_id, assessment, categories, cat_codes, cat_labels)
     with documents_tab:
-        render_documents(procurement_id, documents, priority_state)
+        render_documents(procurement_id, card_view["documents"], priority_state, card_view["orphan_observations"])
     with history_tab:
-        render_history(history)
+        render_history(card_view["history"])
     with expert_tab:
         _render_expert_object_stage(procurement_id, assessment, expert_obj_types, expert_subtypes, expert_stages)
         _render_ranked_expert_categories(procurement_id, cat_codes, cat_labels)
-        _render_review_contract(procurement_id, crm_db)
+        _render_review_contract(procurement_id, card_view["documents"])
         _render_technical_details(assessment, existing_annotation)
 
     b1, b2, b3 = st.columns(3)
@@ -495,13 +493,17 @@ def _render_ranked_expert_categories(
             st.rerun()
 
 
-def _render_review_contract(procurement_id: int, crm_db: Any) -> None:
+def _render_review_contract(procurement_id: int, documents: list[dict]) -> None:
     st.markdown("---")
     st.markdown("##### Объём и полнота экспертной проверки")
     st.selectbox("annotation_review_scope", REVIEW_SCOPES, key=_sk(procurement_id, "review_scope"))
     st.selectbox("annotation_completeness", COMPLETENESS_STATES, key=_sk(procurement_id, "completeness"))
     st.selectbox("evidence_state", EVIDENCE_STATES, key=_sk(procurement_id, "evidence_state"))
-    findings = load_document_findings_for_annotation(procurement_id, crm_db)
+    findings = [
+        observation
+        for document in documents
+        for observation in document.get("observations") or []
+    ]
     with st.expander(f"Сохранённые document findings ({len(findings)})"):
         if not findings:
             st.caption("Сохранённых document findings нет. Исследование автоматически не запускается.")
