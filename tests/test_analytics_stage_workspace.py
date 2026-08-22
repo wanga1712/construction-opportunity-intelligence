@@ -43,7 +43,7 @@ def test_initial_route_is_inline_and_has_no_open_or_back_controls():
 def test_inline_sections_are_lazy_and_shared():
     source = Path("src/ui/components/analytics_v2/stage_workspace.py").read_text(encoding="utf-8")
     assert "SECTIONS =" in source
-    assert "_render_expensive_section(pid, section)" in source
+    assert "_render_expensive_section(pid, canonical_section)" in source
     assert "load_current_annotation_states" in source
 
 

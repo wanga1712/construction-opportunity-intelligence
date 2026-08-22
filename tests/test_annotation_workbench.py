@@ -357,5 +357,9 @@ def test_torgi_publication_sql_unchanged_in_tabs() -> None:
     from pathlib import Path
 
     tabs = Path("src/ui/components/analytics_v2/tabs.py").read_text(encoding="utf-8")
-    assert "torgi_publication_sql_filters" in tabs
+    publication = Path("src/services/torgi_publication.py").read_text(encoding="utf-8")
+    workspace = Path("src/ui/components/analytics_v2/stage_workspace.py").read_text(encoding="utf-8")
+    assert "torgi_publication_sql_filters" in publication
+    assert "torgi_publication_sql_filters" not in tabs
+    assert "batch_publication_visibility" in workspace
     assert "expert_annotation" not in tabs

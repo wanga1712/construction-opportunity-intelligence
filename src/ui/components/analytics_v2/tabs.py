@@ -15,6 +15,7 @@ from src.ui.components.analytics_v2.stage_workspace import render_stage_workspac
 _SESSION_TORGI    = "selected_torgi_id"
 _SESSION_KOMISSIA = "selected_komissia_id"
 _SESSION_RAZYGR   = "selected_razygr_id"
+_PAGE_SIZE = 25
 
 
 # ─── DB helpers ───────────────────────────────────────────────────────────────
@@ -37,29 +38,54 @@ def _get_category_filter(stage: str) -> tuple[str, dict]:
     # Если ключ отсутствует (фильтр ещё не инициализирован) — не фильтруем
     if cats_key not in st.session_state:
         return "TRUE", {}
+    if not st.session_state.get(f"_catf_{stage}_explicit", False):
+        return "TRUE", {}
     return build_category_sql_filter(selected_cats, set())
 
 
-def _load_torgi() -> list[dict]:
-    """Open torgi procurements that pass V3 publication contract (fail-closed)."""
+def _stage_workset_ids(stage: str) -> list[int]:
+    """Return factual filtered workset IDs for true counts (one bounded-column query)."""
+    import psycopg2
+    if stage == "torgi":
+        where = "cp.crm_stage='torgi' AND cp.award_status='submission_open' AND cp.end_date>=CURRENT_DATE"
+        cat_stage = "torgi"
+    elif stage == "commission":
+        where = "cp.crm_stage='torgi' AND cp.award_status IN ('submission_closed_waiting_award','award_not_found')"
+        cat_stage = "commission"
+    else:
+        where = "cp.crm_stage='razygranye'"
+        cat_stage = "razygranye"
+    cat_sql, params = _get_category_filter(cat_stage)
+    conn = psycopg2.connect(**_pg())
+    try:
+        with conn.cursor() as cur:
+            cur.execute(
+                f"""SELECT DISTINCT cp.id
+                    FROM crm_procurements cp
+                    LEFT JOIN crm_category_candidates cc ON cc.procurement_id = cp.id
+                    WHERE {where} AND ({cat_sql}) ORDER BY cp.id""",
+                params,
+            )
+            return [row[0] for row in cur.fetchall()]
+    finally:
+        conn.close()
+
+
+def _page_offset(stage: str, total: int) -> tuple[int, int]:
+    pages = max(1, (total + _PAGE_SIZE - 1) // _PAGE_SIZE)
+    page = st.number_input("Страница", 1, pages, 1, key=f"{stage}_workset_page")
+    return int(page), (int(page) - 1) * _PAGE_SIZE
+
+
+def _load_torgi(limit: int = 25, offset: int = 0) -> list[dict]:
+    """Lifecycle-valid expert workset; manager publication is not an admission gate."""
     try:
         import psycopg2
         from psycopg2.extras import RealDictCursor
 
         from src.services.db_bootstrap import connect_databases
-        from src.services.torgi_publication import (
-            publication_schema_ready,
-            torgi_publication_sql_filters,
-        )
-
-        _, _, crm_db, _ = connect_databases()
-        if not publication_schema_ready(crm_db):
-            log = __import__("logging").getLogger(__name__)
-            log.warning("torgi publication schema not ready — fail-closed empty feed")
-            return []
-
         cat_sql, cat_params = _get_category_filter("torgi")
-        pub_sql = torgi_publication_sql_filters()
+        params = dict(cat_params); params.update({"limit": limit, "offset": offset})
 
         conn = psycopg2.connect(**_pg())
         with conn.cursor(cursor_factory=RealDictCursor) as cur:
@@ -93,11 +119,10 @@ def _load_torgi() -> list[dict]:
                 WHERE cp.crm_stage = 'torgi'
                   AND cp.award_status = 'submission_open'
                   AND cp.end_date >= CURRENT_DATE
-                  {pub_sql}
                   AND ({cat_sql})
                 ORDER BY cp.end_date ASC, cp.match_score DESC
-                LIMIT 500
-            """, cat_params)
+                LIMIT %(limit)s OFFSET %(offset)s
+            """, params)
             rows = [dict(r) for r in cur.fetchall()]
         conn.close()
         return rows
@@ -223,13 +248,14 @@ def _load_effective_map(cards: list[dict]) -> dict:
 
 
 
-def _load_komissia() -> list[dict]:
+def _load_komissia(limit: int = 25, offset: int = 0) -> list[dict]:
     """Подача закрыта — ждём решения комиссии."""
     try:
         import psycopg2
         from psycopg2.extras import RealDictCursor
 
         cat_sql, cat_params = _get_category_filter("commission")
+        params = dict(cat_params); params.update({"limit": limit, "offset": offset})
 
         conn = psycopg2.connect(**_pg())
         with conn.cursor(cursor_factory=RealDictCursor) as cur:
@@ -257,8 +283,8 @@ def _load_komissia() -> list[dict]:
                   AND cp.award_status IN ('submission_closed_waiting_award', 'award_not_found')
                   AND ({cat_sql})
                 ORDER BY cp.end_date DESC, cp.match_score DESC
-                LIMIT 500
-            """, cat_params)
+                LIMIT %(limit)s OFFSET %(offset)s
+            """, params)
             rows = [dict(r) for r in cur.fetchall()]
         conn.close()
         return rows
@@ -267,12 +293,13 @@ def _load_komissia() -> list[dict]:
         return []
 
 
-def _load_razygranye() -> list[dict]:
+def _load_razygranye(limit: int = 25, offset: int = 0) -> list[dict]:
     try:
         import psycopg2
         from psycopg2.extras import RealDictCursor
 
         cat_sql, cat_params = _get_category_filter("razygranye")
+        params = dict(cat_params); params.update({"limit": limit, "offset": offset})
 
         conn = psycopg2.connect(**_pg())
         with conn.cursor(cursor_factory=RealDictCursor) as cur:
@@ -310,8 +337,8 @@ def _load_razygranye() -> list[dict]:
                 WHERE cp.crm_stage = 'razygranye'
                   AND ({cat_sql})
                 ORDER BY cp.contract_signed_at DESC NULLS LAST
-                LIMIT 500
-            """, cat_params)
+                LIMIT %(limit)s OFFSET %(offset)s
+            """, params)
             rows = [dict(r) for r in cur.fetchall()]
         conn.close()
         return rows
@@ -357,7 +384,9 @@ def _render_torgi_tab() -> None:
             st.cache_data.clear()
             st.rerun()
 
-    cards = _load_torgi()
+    workset_ids = _stage_workset_ids("torgi")
+    page, offset = _page_offset("torgi", len(workset_ids))
+    cards = _load_torgi(_PAGE_SIZE, offset)
 
     if not cards:
         st.info("Нет тендеров в стадии торгов.")
@@ -374,27 +403,7 @@ def _render_torgi_tab() -> None:
 
     cards_layer = cards
 
-    # ── AI state filter ────────────────────────────────────────────────────
-    with st.expander("Дополнительные AI-фильтры"):
-        ai_filter = st.selectbox("Фильтр AI-состояния:", _TORGI_AI_FILTERS, key="torgi_ai_filter")
-
-    def _matches_filter(card: dict) -> bool:
-        eff = eff_map.get(card["id"])
-        ai_s = eff.ai_status if eff else "UNASSESSED"
-        scope = eff.business_relevance if eff else "UNKNOWN"
-        if ai_filter == "Неоцененные":
-            return ai_s == "UNASSESSED"
-        if ai_filter == "Неполные оценки":
-            return ai_s == "INCOMPLETE"
-        if ai_filter == "Ошибки AI":
-            return ai_s == "FAILED"
-        if ai_filter == "IN_PROFILE":
-            return ai_s == "ASSESSED" and scope == "IN_PROFILE"
-        if ai_filter == "OUT_OF_PROFILE":
-            return scope == "OUT_OF_PROFILE"
-        return True  # "Все"
-
-    filtered = [c for c in cards_layer if _matches_filter(c)]
+    filtered = cards_layer
 
     # ── Sort by effective assessment (explicit rank tuple) ──────────────────
     filtered = sorted(
@@ -405,12 +414,8 @@ def _render_torgi_tab() -> None:
     filtered = bind_and_advance(filtered, _SESSION_TORGI, st.session_state)
 
     selected_id = st.session_state.get(_SESSION_TORGI)
-    caption = f"Активных торгов: {len(cards)}"
-    if ai_filter != "Все":
-        caption += f" · фильтр: {ai_filter} ({len(filtered)})"
-    if selected_id:
-        caption += f" · выбрана #{selected_id}"
-    st.caption(caption)
+    st.markdown(f"### Идут торги · {len(workset_ids)}")
+    st.caption(f"Показано {offset + 1}–{offset + len(cards)} из {len(workset_ids)}")
 
     render_stage_workspace(
         filtered,
@@ -418,6 +423,7 @@ def _render_torgi_tab() -> None:
         stage="OPEN",
         stage_label="Идут торги",
         effective_map=eff_map,
+        workset_ids=workset_ids,
     )
 
 
@@ -431,7 +437,9 @@ def _render_komissia_tab() -> None:
             st.cache_data.clear()
             st.rerun()
 
-    cards = _load_komissia()
+    workset_ids = _stage_workset_ids("commission")
+    page, offset = _page_offset("commission", len(workset_ids))
+    cards = _load_komissia(_PAGE_SIZE, offset)
 
     if not cards:
         st.info("Нет тендеров на стадии работы комиссии.")
@@ -444,8 +452,7 @@ def _render_komissia_tab() -> None:
     selected_id = st.session_state.get(_SESSION_KOMISSIA)
 
     st.caption(
-        f"Ждём решения: {len(waiting)} · результат не найден: {len(not_found)}"
-        + (f" · выбрана #{selected_id}" if selected_id else "")
+        f"Комиссия · {len(workset_ids)} · показано {offset + 1}–{offset + len(cards)}"
     )
 
     render_stage_workspace(
@@ -454,6 +461,7 @@ def _render_komissia_tab() -> None:
         stage="COMMISSION",
         stage_label="Комиссия",
         effective_map=_load_effective_map(filtered),
+        workset_ids=workset_ids,
     )
 
 
@@ -466,7 +474,9 @@ def _render_razygranye_tab() -> None:
             st.cache_data.clear()
             st.rerun()
 
-    cards = _load_razygranye()
+    workset_ids = _stage_workset_ids("razygranye")
+    page, offset = _page_offset("razygranye", len(workset_ids))
+    cards = _load_razygranye(_PAGE_SIZE, offset)
     if not cards:
         st.info("Нет разыгранных закупок.")
         return
@@ -475,8 +485,7 @@ def _render_razygranye_tab() -> None:
     cards_layer = bind_and_advance(cards_layer, _SESSION_RAZYGR, st.session_state)
 
     st.caption(
-        f"Найдено: {len(cards)} записей"
-        f" · текущий рабочий набор: {len(cards_layer)}"
+        f"Разыгранные · {len(workset_ids)} · показано {offset + 1}–{offset + len(cards_layer)}"
     )
 
     render_stage_workspace(
@@ -485,6 +494,7 @@ def _render_razygranye_tab() -> None:
         stage="AWARDED",
         stage_label="Разыгранные",
         effective_map=_load_effective_map(cards_layer),
+        workset_ids=workset_ids,
     )
 
 
