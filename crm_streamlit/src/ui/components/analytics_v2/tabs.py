@@ -1,8 +1,6 @@
 """Вкладки рабочей области аналитического контура v2.
 
-Layout внутри правой панели:
-  - Список компактных карточек (card_compact)
-  - При выборе: полный детейл ниже (card_detail) с кнопкой «Назад»
+Lifecycle feeds render shared lazy inline procurement cards.
 """
 from __future__ import annotations
 
@@ -374,28 +372,11 @@ def _render_torgi_tab() -> None:
     # ── Bulk-load effective assessments (single contract, no N+1) ──────────
     eff_map = _load_effective_map(cards)
 
-    # ── Qualification layer sub-tabs ─────────────────────────────────────────
-    n_candidate = sum(1 for c in cards if not c.get("is_confirmed"))
-    n_confirmed = sum(1 for c in cards if c.get("is_confirmed"))
-    qual_layer = st.pills(
-        "Уровень квалификации:",
-        options=["Предварительно ИИ", "✓ Подтверждено"],
-        format_func=lambda x: (
-            f"{x} · {n_candidate}" if x == "Предварительно ИИ"
-            else f"{x} · {n_confirmed}"
-        ),
-        default="Предварительно ИИ",
-        key="torgi_qual_layer",
-        label_visibility="collapsed",
-    )
-    is_confirmed_layer = qual_layer == "✓ Подтверждено"
-    cards_layer = [c for c in cards if bool(c.get("is_confirmed")) == is_confirmed_layer]
+    cards_layer = cards
 
     # ── AI state filter ────────────────────────────────────────────────────
-    ai_filter = st.selectbox(
-        "Фильтр AI-состояния:", _TORGI_AI_FILTERS,
-        key="torgi_ai_filter", label_visibility="collapsed"
-    )
+    with st.expander("Дополнительные AI-фильтры"):
+        ai_filter = st.selectbox("Фильтр AI-состояния:", _TORGI_AI_FILTERS, key="torgi_ai_filter")
 
     def _matches_filter(card: dict) -> bool:
         eff = eff_map.get(card["id"])
@@ -490,27 +471,12 @@ def _render_razygranye_tab() -> None:
         st.info("Нет разыгранных закупок.")
         return
 
-    # ── Qualification layer sub-tabs ─────────────────────────────────────────
-    n_candidate = sum(1 for c in cards if not c.get("is_confirmed"))
-    n_confirmed = sum(1 for c in cards if c.get("is_confirmed"))
-    qual_layer = st.pills(
-        "Уровень квалификации:",
-        options=["Предварительно ИИ", "✓ Подтверждено"],
-        format_func=lambda x: (
-            f"{x} · {n_candidate}" if x == "Предварительно ИИ"
-            else f"{x} · {n_confirmed}"
-        ),
-        default="Предварительно ИИ",
-        key="razygr_qual_layer",
-        label_visibility="collapsed",
-    )
-    is_confirmed_layer = qual_layer == "✓ Подтверждено"
-    cards_layer = [c for c in cards if bool(c.get("is_confirmed")) == is_confirmed_layer]
+    cards_layer = cards
     cards_layer = bind_and_advance(cards_layer, _SESSION_RAZYGR, st.session_state)
 
     st.caption(
         f"Найдено: {len(cards)} записей"
-        f" · {('✓ Подтверждено' if is_confirmed_layer else 'Предварительно ИИ')}: {len(cards_layer)}"
+        f" · текущий рабочий набор: {len(cards_layer)}"
     )
 
     render_stage_workspace(

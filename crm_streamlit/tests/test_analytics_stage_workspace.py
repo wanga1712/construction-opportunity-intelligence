@@ -33,59 +33,24 @@ def _cards(*ids):
     return [{"id": value, "auction_name": f"Card {value}"} for value in ids]
 
 
-def test_list_route_does_not_load_full_detail_or_documents(monkeypatch):
-    fake = _St()
-    rendered = []
-    monkeypatch.setattr(stage_workspace, "st", fake)
-    monkeypatch.setattr(
-        stage_workspace,
-        "render_stage_list_card",
-        lambda card, idx, **kwargs: rendered.append((card["id"], idx, kwargs["stage"])),
-    )
-    monkeypatch.setattr(
-        stage_workspace,
-        "_render_selected_detail",
-        lambda _pid: pytest.fail("full detail must be lazy"),
-    )
-    assert stage_workspace.render_stage_workspace(
-        _cards(1, 2, 3), session_key="selected_torgi_id", stage="OPEN", stage_label="Идут торги"
-    ) == "LIST"
-    assert rendered == [(1, 0, "OPEN"), (2, 1, "OPEN"), (3, 2, "OPEN")]
+def test_initial_route_is_inline_and_has_no_open_or_back_controls():
+    source = Path("src/ui/components/analytics_v2/stage_workspace.py").read_text(encoding="utf-8")
+    assert 'return "INLINE"' in source
+    assert "Открыть карточку" not in source
+    assert "Назад к списку" not in source
 
 
-def test_selected_route_renders_one_full_detail(monkeypatch):
-    fake = _St({"selected_razygr_id": 20})
-    details = []
-    monkeypatch.setattr(stage_workspace, "st", fake)
-    monkeypatch.setattr(stage_workspace, "_render_selected_detail", details.append)
-    assert stage_workspace.render_stage_workspace(
-        _cards(10, 20),
-        session_key="selected_razygr_id",
-        stage="AWARDED",
-        stage_label="Разыгранные",
-    ) == "DETAIL"
-    assert details == [20]
-    assert fake.session_state[ACTIVE_QUEUE_KEY] == "selected_razygr_id"
+def test_inline_sections_are_lazy_and_shared():
+    source = Path("src/ui/components/analytics_v2/stage_workspace.py").read_text(encoding="utf-8")
+    assert "SECTIONS =" in source
+    assert "_render_expensive_section(pid, section)" in source
+    assert "load_current_annotation_states" in source
 
 
-def test_back_clears_only_current_selection_and_preserves_filters(monkeypatch):
-    session = {
-        "selected_torgi_id": 1,
-        "selected_razygr_id": 99,
-        "torgi_ai_filter": "IN_PROFILE",
-        "torgi_qual_layer": "✓ Подтверждено",
-        ACTIVE_QUEUE_KEY: "selected_torgi_id",
-    }
-    monkeypatch.setattr(stage_workspace, "st", _St(session, "← Назад к списку · Идут торги"))
-    with pytest.raises(_Rerun):
-        stage_workspace.render_stage_workspace(
-            _cards(1, 2), session_key="selected_torgi_id", stage="OPEN", stage_label="Идут торги"
-        )
-    assert "selected_torgi_id" not in session
-    assert ACTIVE_QUEUE_KEY not in session
-    assert session["selected_razygr_id"] == 99
-    assert session["torgi_ai_filter"] == "IN_PROFILE"
-    assert session["torgi_qual_layer"] == "✓ Подтверждено"
+def test_annotation_filter_has_all_four_human_states():
+    assert [label for _, label in stage_workspace.FILTERS] == [
+        "Все", "Не размеченные", "Размеченные", "Неинтересные"
+    ]
 
 
 def test_save_next_is_consumed_only_by_active_stage_queue():
