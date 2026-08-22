@@ -9,6 +9,7 @@ def test_migration_has_active_partial_unique_and_skip_locked():
     assert "WHERE status IN ('QUEUED','RUNNING')" in sql
     assert "UNIQUE INDEX" in sql
     assert "retry_of_job_id" in sql
+    assert "GRANT SELECT, INSERT, UPDATE, DELETE" in sql
     source = Path(queue.__file__).read_text()
     assert "FOR UPDATE SKIP LOCKED" in source
 

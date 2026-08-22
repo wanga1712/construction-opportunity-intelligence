@@ -44,4 +44,7 @@ ON crm_v3_inference_jobs (heartbeat_at, id) WHERE status='RUNNING';
 CREATE INDEX IF NOT EXISTS ix_crm_v3_inference_jobs_procurement
 ON crm_v3_inference_jobs (procurement_id, created_at DESC);
 
+GRANT SELECT, INSERT, UPDATE, DELETE ON crm_v3_inference_jobs TO crm_app;
+GRANT USAGE, SELECT ON SEQUENCE crm_v3_inference_jobs_id_seq TO crm_app;
+
 COMMIT;
