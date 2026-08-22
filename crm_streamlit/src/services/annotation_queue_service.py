@@ -272,6 +272,20 @@ def fetch_queue_counters(crm_db: Any) -> dict[str, int]:
             (SELECT count(*) FROM canonical_open) -
                 (SELECT count(*) FROM open_assessed) AS open_without_assessment,
             (
+                SELECT count(*) FROM open_assessed oa
+                WHERE EXISTS (
+                    SELECT 1 FROM crm_v3_expert_annotations ea
+                    WHERE ea.procurement_id = oa.id AND ea.is_current = TRUE
+                )
+            ) AS open_assessed_annotated,
+            (
+                SELECT count(*) FROM open_assessed oa
+                WHERE NOT EXISTS (
+                    SELECT 1 FROM crm_v3_expert_annotations ea
+                    WHERE ea.procurement_id = oa.id AND ea.is_current = TRUE
+                )
+            ) AS open_assessed_unannotated,
+            (
                 SELECT count(*)
                 FROM procurement_ai_assessments ai
                 WHERE {_current_assessment_sql("ai")}
@@ -416,10 +430,12 @@ def batch_annotated_flags(crm_db: Any, procurement_ids: Sequence[int]) -> dict[i
 def fetch_procurement_header(crm_db: Any, procurement_id: int) -> dict | None:
     rows = crm_db.execute_query(
         """
-        SELECT cp.id, cp.auction_name, cp.initial_price, cp.delivery_region,
+        SELECT cp.id, cp.auction_name, cp.initial_price, cp.final_price,
+               cp.delivery_region,
                cp.okpd_code, cp.okpd_name, cp.crm_stage, cp.award_status,
                cp.end_date, cp.contract_number, cp.customer, cp.source_table,
-               cp.tender_link
+               cp.source_id, cp.tender_link, cp.crm_created_at,
+               cp.crm_updated_at, cp.source_updated_at
         FROM crm_procurements cp
         WHERE cp.id = %s
         LIMIT 1

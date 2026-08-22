@@ -44,6 +44,8 @@ RESOURCE_GUARANTEE_COMMIT=`0d1ba41951d3a5fa21ed2f85c809b7cb85071139`
 
 ## PRIOR CURRENT WIP — 2026-08-17
 
+**CRM-V3-EXPERT-ANNOTATION-CARD-UX-AND-PROVENANCE-1** — `[x]` **PASS**. Separate branch `codex/CRM-V3-EXPERT-ANNOTATION-CARD-UX-AND-PROVENANCE-1`. Dedicated annotation card now has structured header and five workbench tabs; real per-document observations with match/evidence and additive JSON priority; multi-source factual provenance timeline; legacy RAW warning and annotation actions preserved. Targeted S13 tests `23 passed`; service active / HTTP 200; AppTest on real procurement 1013 has five tabs, source link, authority separation, factual history, actions and zero exceptions. The current open+assessed queue has zero stored document observations, so live empty-state is truthful and non-empty rows are fixture-tested; no acceptance data was manufactured. No publication/model/prompt/normal CRM/schema changes. Report: `docs/reports/expert_annotation_mvp/PHASE_C_CARD_UX_AND_PROVENANCE.md`.
+
 **CRM-V3-PRODUCTION-RECOVERY-EXPERT-CALIBRATION-AND-DOCUMENT-LEARNING-BASELINE-1** — `[~]` **PHASE 2–3 CODE COMPLETE / PHASE 1 UI FROZEN**. Operator accepted Phase 1 nested procurement view as the last working look. Do not merge to `main` any commit that changes that appearance.
 
 **Phase 1** — `[x]` accepted. Nested pills `Предварительно ИИ` / `✓ Подтверждено`; stage tabs Лиды / Подготовка к торгам / Идут торги / Комиссия / На рассмотрении / Разыгранные.

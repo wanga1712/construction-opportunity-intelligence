@@ -27,8 +27,15 @@ from src.services.annotation_readiness import (
     is_training_eligible,
     training_eligibility_reasons,
 )
+from src.services.annotation_card_provenance import (
+    document_filename,
+    load_annotation_history,
+    project_document_rows,
+    source_law,
+)
 from src.ui.components.analytics_v2.annotation_card import (
     _build_out_of_profile_payload,
+    _document_priority_payload,
     _training_evidence_quality,
     model_category_rows,
     rejected_raw_categories,
@@ -119,6 +126,8 @@ def test_fetch_queue_counters_shape() -> None:
             "canonical_open": 3025,
             "open_assessed": 66,
             "open_without_assessment": 2959,
+            "open_assessed_annotated": 47,
+            "open_assessed_unannotated": 19,
             "all_current_assessments": 3693,
             "publication_visible_open_assessed": 20,
             "publication_hidden_open_assessed": 46,
@@ -127,6 +136,8 @@ def test_fetch_queue_counters_shape() -> None:
     ]])
     c = fetch_queue_counters(db)
     assert c["open_assessed"] == 66
+    assert c["open_assessed_annotated"] == 47
+    assert c["open_assessed_unannotated"] == 19
     assert c["all_current_assessments"] == 3693
 
 
@@ -203,6 +214,50 @@ def test_out_of_profile_payload() -> None:
     assert payload["training_evidence_quality"] == "LEGACY_NO_RAW"
     assert payload["annotation_review_scope"] == "OUT_OF_PROFILE"
     assert payload["annotation_completeness"] == "COMPLETE"
+
+
+def test_document_projection_exposes_per_document_matches_and_evidence() -> None:
+    rows = project_document_rows([{
+        "document_title": "Техническое задание.pdf",
+        "source_document_url": "https://example/doc.pdf",
+        "matched_categories": ["computers"],
+        "product_mentions": ["сервер"],
+        "commercial_evidence_found": True,
+    }])
+    assert rows[0]["file_name"] == "Техническое задание.pdf"
+    assert rows[0]["match_found"] is True
+    assert rows[0]["evidence_found"] is True
+    assert rows[0]["category_signals"] == ["computers"]
+
+
+def test_document_filename_and_source_law_fallbacks() -> None:
+    assert document_filename({"source_document_url": "https://example/files/spec.docx"}) == "spec.docx"
+    assert source_law("reestr_contract_223_fz") == "223-ФЗ"
+    assert source_law("reestr_contract_44_fz") == "44-ФЗ"
+
+
+def test_document_priority_payload_is_additive_json(monkeypatch) -> None:
+    import src.ui.components.analytics_v2.annotation_card as card
+    monkeypatch.setattr(card.st, "session_state", {
+        "ann_7_document_priorities": {"doc-a": "first", "doc-b": "second", "doc-c": "none"}
+    })
+    assert _document_priority_payload(7) == [
+        {"document_key": "doc-a", "priority": "first"},
+        {"document_key": "doc-b", "priority": "second"},
+    ]
+
+
+def test_history_uses_real_persisted_events_only() -> None:
+    class HistoryDb:
+        def execute_query(self, sql, params):
+            if "procurement_ai_assessments" in sql:
+                return [{"id": 1, "assessment_version": 1, "status": "SUCCESS", "completed_at": "2026-08-10", "inference_run_id": None, "change_fields": []}]
+            if "crm_procurement_category_opportunities" in sql:
+                return [{"commercial_category_code": "computers", "candidate_medal": "SILVER", "created_at": "2026-08-11"}]
+            return []
+    events = load_annotation_history(HistoryDb(), 7, {"crm_created_at": "2026-08-09", "source_table": "223"})
+    assert [event["authority"] for event in events] == ["SOURCE_FACT", "MODEL_OR_LEGACY", "BUSINESS_RULE"]
+    assert not any("эксперт" in event["title"].lower() for event in events)
 
 
 def test_training_eligibility_excludes_partial_and_unreviewed() -> None:

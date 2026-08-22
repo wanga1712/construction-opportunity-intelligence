@@ -36,7 +36,14 @@ _SESSION_PAGE = "annotation_wb_page"
 _SESSION_PAGE_SIZE = "annotation_wb_page_size"
 _SESSION_SELECTED = "annotation_wb_selected_id"
 _QUEUE_SESSION_KEY = "annotation_wb_queue"
-_BUILD_ID = "CRM-V3-EXPERT-ANNOTATION-MVP-1/B.1"
+_BUILD_ID = "CRM-V3-EXPERT-ANNOTATION-MVP-1/count-clarity"
+_WIDGET_KEYS = (
+    "annotation_wb_queue_mode",
+    "annotation_wb_annotation_status",
+    "annotation_wb_model_source",
+    "annotation_wb_publication_visibility",
+    "annotation_wb_model_category",
+)
 
 
 def _filters_from_session() -> AnnotationQueueFilters:
@@ -72,23 +79,42 @@ def render_annotation_workbench_page(service: Optional[Any]) -> None:
     crm_db = service.crm_db
 
     counters = fetch_queue_counters(crm_db)
-    c1, c2, c3, c4, c5, c6, c7 = st.columns(7)
-    c1.metric("Активные закупки", counters.get("canonical_open", 0))
-    c2.metric("С оценкой ИИ", counters.get("open_assessed", 0))
-    c3.metric("Без оценки ИИ", counters.get("open_without_assessment", 0))
-    c4.metric("Все current AI", counters.get("all_current_assessments", 0))
-    c5.metric("В CRM (open+assessed)", counters.get("publication_visible_open_assessed", 0))
-    c6.metric("Скрыто gate", counters.get("publication_hidden_open_assessed", 0))
-    c7.metric("Разметок", counters.get("expert_annotations_total", 0))
-
     filters = _render_filters(crm_db)
     _store_filters(filters)
 
     queue_ids = fetch_queue_ids(crm_db, filters)
+    c1, c2, c3, c4 = st.columns(4)
+    c1.metric("Активные закупки с оценкой ИИ", counters.get("open_assessed", 0))
+    c2.metric("Не размечено", counters.get("open_assessed_unannotated", 0))
+    c3.metric("Размечено", counters.get("open_assessed_annotated", 0))
+    c4.metric("Текущий фильтр", len(queue_ids))
+
+    queue_labels = {
+        QUEUE_MODE_OPEN_ASSESSED: "Активные с оценкой ИИ",
+        QUEUE_MODE_ALL_CURRENT: "Все текущие оценки ИИ",
+    }
+    annotation_labels = {
+        ANNOTATION_FILTER_UNANNOTATED: "Не размечено",
+        ANNOTATION_FILTER_ANNOTATED: "Размечено",
+        ANNOTATION_FILTER_ALL: "Все",
+    }
+    source_labels = {
+        MODEL_SOURCE_ALL: "Все",
+        MODEL_SOURCE_RAW: "RAW доступен",
+        MODEL_SOURCE_LEGACY: "Legacy / RAW недоступен",
+    }
+    publication_labels = {
+        PUBLICATION_FILTER_ALL: "Все (gate не применяется)",
+        PUBLICATION_FILTER_VISIBLE: "Только видно в CRM",
+        PUBLICATION_FILTER_HIDDEN: "Только скрыто gate",
+    }
     st.info(
-        f"**Очередь: {len(queue_ids)} карточек** · publication gate **не** применяется · "
-        f"open+assessed всего: {counters.get('open_assessed', 0)} · "
-        f"publication-visible: {counters.get('publication_visible_open_assessed', 0)}"
+        "**Активные фильтры:** "
+        f"{queue_labels[filters.queue_mode]} · "
+        f"{annotation_labels[filters.annotation_status]} · "
+        f"источник: {source_labels[filters.model_source]} · "
+        f"publication: {publication_labels[filters.publication_visibility]} · "
+        f"категория: {filters.model_category} · **результат: {len(queue_ids)}**"
     )
     if not queue_ids:
         st.info("Очередь пуста для текущих фильтров.")
@@ -157,6 +183,17 @@ def render_annotation_workbench_page(service: Optional[Any]) -> None:
 
 def _render_filters(crm_db: Any) -> AnnotationQueueFilters:
     prev = _filters_from_session()
+    if st.button("Сбросить фильтры разметки", key="annotation_wb_reset_filters"):
+        for key in (
+            _SESSION_FILTERS,
+            _SESSION_PAGE,
+            _SESSION_SELECTED,
+            _QUEUE_SESSION_KEY,
+            *_WIDGET_KEYS,
+        ):
+            st.session_state.pop(key, None)
+        st.rerun()
+
     f1, f2, f3, f4, f5 = st.columns(5)
 
     queue_opts = {
@@ -184,24 +221,28 @@ def _render_filters(crm_db: Any) -> AnnotationQueueFilters:
         list(queue_opts.keys()),
         format_func=lambda k: queue_opts[k],
         index=list(queue_opts.keys()).index(prev.queue_mode),
+        key=_WIDGET_KEYS[0],
     )
     a_key = f2.selectbox(
         "ANNOTATION STATUS",
         list(ann_opts.keys()),
         format_func=lambda k: ann_opts[k],
         index=list(ann_opts.keys()).index(prev.annotation_status),
+        key=_WIDGET_KEYS[1],
     )
     s_key = f3.selectbox(
         "MODEL SOURCE",
         list(src_opts.keys()),
         format_func=lambda k: src_opts[k],
         index=list(src_opts.keys()).index(prev.model_source),
+        key=_WIDGET_KEYS[2],
     )
     p_key = f4.selectbox(
         "PUBLICATION VISIBILITY",
         list(pub_opts.keys()),
         format_func=lambda k: pub_opts[k],
         index=list(pub_opts.keys()).index(prev.publication_visibility),
+        key=_WIDGET_KEYS[3],
     )
 
     cat_choices = ["all"] + fetch_model_category_choices(crm_db)
@@ -209,6 +250,7 @@ def _render_filters(crm_db: Any) -> AnnotationQueueFilters:
         "MODEL CATEGORY",
         cat_choices,
         index=cat_choices.index(prev.model_category) if prev.model_category in cat_choices else 0,
+        key=_WIDGET_KEYS[4],
     )
 
     return AnnotationQueueFilters(
