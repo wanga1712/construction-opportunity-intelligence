@@ -37,7 +37,7 @@ from src.ui.page_deps import (
     requires_companies_service,
 )
 from src.ui.system_health_page import render_system_health_page
-from src.ui.v3_analytics_page import render_v3_analytics_page
+from src.ui.annotation_workbench_page import render_annotation_workbench_page
 from src.ui.waterproofing_page import render_waterproofing_page
 
 DB_WATCH_INTERVAL_SEC = 20
@@ -149,6 +149,8 @@ def _render_page(page: str, service: Optional[CompaniesService]) -> None:
         render_crm_profiles_page(None)
     elif page == "category_registry":
         render_category_registry_page(service)
+    elif page == "expert_annotation":
+        render_annotation_workbench_page(service)
     else:
         st.info("Раздел в разработке.")
 

@@ -11,7 +11,11 @@
 - Размер рабочего Python-модуля: до 300 строк — желательно; 300–450 допустимо при цельности; свыше 450 требуется записанное объяснение или декомпозиция.
 - Изменение поведения сначала фиксируется тестом или явно записанным ожидаемым результатом.
 
-## CURRENT WIP — 2026-08-21
+## CURRENT WIP — 2026-08-22
+
+**CRM-V3-EXPERT-ANNOTATION-MVP-1** — `[~]` **PHASE B — РАЗМЕТКА workbench (implementation)**. Dedicated annotation page bypasses publication gate; default queue = canonical open + current assessment (~66); secondary = all current assessments (~3693). Normal CRM unchanged. Branch/worktree: `CRM-V3-EXPERT-ANNOTATION-MVP-1` (clean, separate from Phase 10 SHADOW uncommitted work).
+
+## PRIOR — 2026-08-21
 
 **CRM-V3-MODEL-AUTHORITY-RESTORATION-1** — `[~]` **PHASE 9 PASS / CLOSE_CANDIDATE (SHADOW; STOP)**. Full ACTIVE registry + subject_interpretation + research-priority contract on v9 SHADOW. Production remains Qwen2.5:7b + v5. Paint discoverability YES; 37082/23591/27355 fixed on SHADOW; INVALID_CATEGORY_CODE surface still >0 (no Ollama enum). Do not cut over.
 
