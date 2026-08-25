@@ -9,14 +9,14 @@ import streamlit as st
 
 from src.services.annotation_card_provenance import source_law
 from src.services.annotation_state_service import (
-    ANNOTATED, NOT_INTERESTING, UNANNOTATED, annotation_state_counts,
+    NOT_INTERESTING, REVIEWED, UNREVIEWED, annotation_state_counts,
     load_current_annotation_states,
 )
 from src.ui.components.analytics_v2.card_trust import fmt_date, fmt_price
 
 SECTIONS = ("Обзор", "Модель / Категории", "Документы", "История", "Экспертная разметка")
-FILTERS = (("ALL", "Все"), (UNANNOTATED, "Не размеченные"),
-           (ANNOTATED, "Размеченные"), (NOT_INTERESTING, "Неинтересные"))
+FILTERS = (("ALL", "Все"), (UNREVIEWED, "Не проверено"),
+           (REVIEWED, "Проверено"), (NOT_INTERESTING, "Неинтересные"))
 AI_LABELS = {"ASSESSED": "🤖 AI оценено", "UNASSESSED": "🤖 AI не оценено",
              "INCOMPLETE": "⚠ AI оценка неполная", "FAILED": "❌ Ошибка AI"}
 BUSINESS_LABELS = {"IN_PROFILE": "🟢 В профиле", "OUT_OF_PROFILE": "⚪ AI: вне профиля"}
@@ -54,12 +54,13 @@ def format_okpd_preview(card: dict) -> str | None:
 def _summary(card: dict, stage: str, effective: Any, state: dict, published: bool) -> None:
     amount, amount_label = _amount(card, stage)
     deadline, deadline_label = _deadline(card, stage)
-    human = {UNANNOTATED: "👤 Не размечено", ANNOTATED: "✓ Размечено",
-             NOT_INTERESTING: "⛔ Неинтересная"}[state["annotation_state"]]
+    human = ["✓ Проверено"] if state.get("has_annotation") else ["👤 Не проверено"]
+    if state.get("is_not_interesting") or state.get("annotation_state") == NOT_INTERESTING:
+        human.append("⛔ Неинтересная")
     medal = _clean(getattr(effective, "best_candidate_level", None) if effective else None)
     business = _clean(getattr(effective, "business_relevance", None) if effective else None)
     ai = _clean(getattr(effective, "ai_status", None) if effective else None) or "UNASSESSED"
-    chips = [MEDAL_LABELS.get(medal, medal) if medal else None, human,
+    chips = [MEDAL_LABELS.get(medal, medal) if medal else None, *human,
              AI_LABELS.get(ai, f"🤖 {ai}"), BUSINESS_LABELS.get(business) if business else None,
              "✓ Опубликовано в CRM" if published else "Не опубликовано менеджерам"]
     for icon, value in (("📦", card.get("crm_category")), ("🏗", card.get("proposed_object_type")),
@@ -94,20 +95,23 @@ def _source_actions(card: dict) -> None:
 
 def render_stage_workspace(cards: list[dict], *, session_key: str, stage: str,
                            stage_label: str, effective_map: dict | None = None,
-                           workset_ids: list[int] | None = None) -> str:
+                           workset_ids: list[int] | None = None,
+                           annotation_states: dict[int, dict] | None = None,
+                           selected_annotation_filter: str | None = None) -> str:
     from src.services.annotation_queue_service import batch_publication_visibility
     from src.services.db_bootstrap import connect_databases
     _, _, crm_db, _ = connect_databases()
     all_ids = workset_ids or [card["id"] for card in cards]
-    all_states = load_current_annotation_states(all_ids, crm_db)
-    counts = annotation_state_counts(all_states)
+    all_states = annotation_states or load_current_annotation_states(all_ids, crm_db)
     page_states = {card["id"]: all_states[card["id"]] for card in cards}
     publication = batch_publication_visibility(crm_db, [card["id"] for card in cards])
-    filter_key = f"annotation_state_filter_{session_key}"
-    labels = [f"{label} · {counts[key]}" for key, label in FILTERS]
-    selected_label = st.pills("Экспертная разметка", labels, default=labels[0], key=filter_key)
-    selected_state = FILTERS[labels.index(selected_label)][0]
-    visible = cards if selected_state == "ALL" else [card for card in cards if page_states[card["id"]]["annotation_state"] == selected_state]
+    selected_state = selected_annotation_filter or render_review_filter(all_states, session_key)
+    def included(state: dict) -> bool:
+        if selected_state == "ALL": return True
+        if selected_state == UNREVIEWED: return not state.get("has_annotation")
+        if selected_state == REVIEWED: return bool(state.get("has_annotation"))
+        return bool(state.get("is_not_interesting") or state.get("annotation_state") == NOT_INTERESTING)
+    visible = [card for card in cards if included(page_states[card["id"]])]
     active_key = f"active_inline_{session_key}"
     focused = st.session_state.get(session_key)
     if focused in [card["id"] for card in visible]:
@@ -127,6 +131,33 @@ def render_stage_workspace(cards: list[dict], *, session_key: str, stage: str,
             if canonical_section != "Обзор" and st.session_state.get(active_key) == pid:
                 _render_expensive_section(pid, canonical_section)
     return "INLINE"
+
+
+def render_review_filter(states: dict[int, dict], session_key: str, *, on_change=None) -> str:
+    """Render persisted review progress/outcome counters and return the selected key."""
+    counts = annotation_state_counts(states)
+    labels = [f"{label} · {counts[key]}" for key, label in FILTERS]
+    selected_label = st.pills(
+        "Эксперт",
+        labels,
+        default=labels[0],
+        key=f"annotation_state_filter_{session_key}",
+        on_change=on_change,
+    )
+    return FILTERS[labels.index(selected_label)][0]
+
+
+def filtered_review_ids(states: dict[int, dict], selected_state: str) -> list[int]:
+    if selected_state == "ALL":
+        return list(states)
+    if selected_state == UNREVIEWED:
+        return [pid for pid, state in states.items() if not state.get("has_annotation")]
+    if selected_state == REVIEWED:
+        return [pid for pid, state in states.items() if state.get("has_annotation")]
+    return [
+        pid for pid, state in states.items()
+        if state.get("is_not_interesting") or state.get("annotation_state") == NOT_INTERESTING
+    ]
 
 
 def _render_expensive_section(procurement_id: int, section: str) -> None:

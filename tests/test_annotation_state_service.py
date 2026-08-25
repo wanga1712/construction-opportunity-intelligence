@@ -1,5 +1,6 @@
 from src.services.annotation_state_service import (
-    ANNOTATED, NOT_INTERESTING, UNANNOTATED, annotation_state_counts,
+    ANNOTATED, NOT_INTERESTING, REVIEWED, UNANNOTATED, UNREVIEWED,
+    annotation_state_counts,
     classify_annotation_payload, load_current_annotation_states,
 )
 
@@ -20,9 +21,12 @@ class DB:
                 {"id": 8, "procurement_id": 3, "annotation_version": 1,
                  "created_at": "now", "payload": {"expert_medal": "NCE"}}]
 
-def test_batch_loader_one_query_and_partition():
+def test_batch_loader_one_query_and_review_progress_with_outcome_subset():
     db = DB(); states = load_current_annotation_states([1, 2, 3], db)
     assert len(db.calls) == 1
     assert [states[i]["annotation_state"] for i in (1, 2, 3)] == [UNANNOTATED, ANNOTATED, NOT_INTERESTING]
     counts = annotation_state_counts(states)
-    assert counts["ALL"] == counts[UNANNOTATED] + counts[ANNOTATED] + counts[NOT_INTERESTING] == 3
+    assert counts["ALL"] == counts[UNREVIEWED] + counts[REVIEWED] == 3
+    assert counts[REVIEWED] == 2
+    assert counts[NOT_INTERESTING] == 1
+    assert counts[NOT_INTERESTING] <= counts[REVIEWED]

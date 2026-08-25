@@ -49,7 +49,7 @@ def test_inline_sections_are_lazy_and_shared():
 
 def test_annotation_filter_has_all_four_human_states():
     assert [label for _, label in stage_workspace.FILTERS] == [
-        "Все", "Не размеченные", "Размеченные", "Неинтересные"
+        "Все", "Не проверено", "Проверено", "Неинтересные"
     ]
 
 

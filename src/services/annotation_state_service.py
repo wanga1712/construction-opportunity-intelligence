@@ -6,6 +6,9 @@ from typing import Any
 UNANNOTATED = "UNANNOTATED"
 ANNOTATED = "ANNOTATED"
 NOT_INTERESTING = "NOT_INTERESTING"
+UNREVIEWED = "UNREVIEWED"
+REVIEWED = "REVIEWED"
+PROFILED = "PROFILED"
 
 
 def classify_annotation_payload(payload: dict | None) -> str:
@@ -31,6 +34,7 @@ def load_current_annotation_states(procurement_ids: list[int], crm_db: Any) -> d
         pid: {"has_annotation": False, "annotation_id": None,
               "annotation_version": None, "created_at": None,
               "annotation_state": UNANNOTATED,
+              "is_reviewed": False, "is_not_interesting": False,
               "expert_commercial_verdict": None, "expert_scope_verdict": None,
               "annotation_completeness": None, "payload": None}
         for pid in ids
@@ -46,12 +50,15 @@ def load_current_annotation_states(procurement_ids: list[int], crm_db: Any) -> d
     for row in rows:
         payload = row.get("payload") or {}
         pid = int(row["procurement_id"])
+        outcome = classify_annotation_payload(payload)
         states[pid] = {
             "has_annotation": True,
             "annotation_id": row.get("id"),
             "annotation_version": row.get("annotation_version"),
             "created_at": row.get("created_at"),
-            "annotation_state": classify_annotation_payload(payload),
+            "annotation_state": outcome,
+            "is_reviewed": True,
+            "is_not_interesting": outcome == NOT_INTERESTING,
             "expert_commercial_verdict": payload.get("expert_commercial_verdict"),
             "expert_scope_verdict": payload.get("expert_scope_verdict"),
             "annotation_completeness": payload.get("annotation_completeness"),
@@ -61,8 +68,22 @@ def load_current_annotation_states(procurement_ids: list[int], crm_db: Any) -> d
 
 
 def annotation_state_counts(states: dict[int, dict]) -> dict[str, int]:
-    counts = {UNANNOTATED: 0, ANNOTATED: 0, NOT_INTERESTING: 0}
-    for value in states.values():
-        counts[value["annotation_state"]] += 1
-    counts["ALL"] = len(states)
+    """Project review progress and outcome subset from persisted current rows."""
+    reviewed = sum(bool(value.get("has_annotation")) for value in states.values())
+    not_interesting = sum(
+        bool(value.get("has_annotation"))
+        and (value.get("is_not_interesting") or value.get("annotation_state") == NOT_INTERESTING)
+        for value in states.values()
+    )
+    total = len(states)
+    counts = {
+        "ALL": total,
+        UNREVIEWED: total - reviewed,
+        REVIEWED: reviewed,
+        NOT_INTERESTING: not_interesting,
+        PROFILED: reviewed - not_interesting,
+        # Compatibility keys for older service consumers.
+        UNANNOTATED: total - reviewed,
+        ANNOTATED: reviewed,
+    }
     return counts

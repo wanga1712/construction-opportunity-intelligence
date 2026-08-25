@@ -1,4 +1,6 @@
 from contextlib import nullcontext
+import sys
+from types import SimpleNamespace
 
 import pytest
 
@@ -27,6 +29,14 @@ class FakeStreamlit:
     def selectbox(self, label, options, **kwargs):
         self.events.append(("selectbox", label, options, kwargs))
         return options[kwargs.get("index", 0)]
+
+    def radio(self, label, options, **kwargs):
+        self.events.append(("radio", label, options, kwargs))
+        return options[kwargs.get("index", 0)]
+
+    def pills(self, label, options, **kwargs):
+        self.events.append(("pills", label, options, kwargs))
+        return kwargs.get("default", options[0])
 
     def button(self, label, **kwargs):
         self.events.append(("button", label, kwargs))
@@ -66,8 +76,15 @@ def test_tabs_empty_data_uses_existing_messages_without_database(monkeypatch):
     fake_st = FakeStreamlit()
     monkeypatch.setattr(tabs, "st", fake_st)
     monkeypatch.setattr(tabs, "_load_sync_info", lambda: {})
-    monkeypatch.setattr(tabs, "_load_torgi", lambda: [])
-    monkeypatch.setattr(tabs, "_load_razygranye", lambda: [])
+    monkeypatch.setattr(tabs, "_stage_workset_ids", lambda _stage: [])
+    monkeypatch.setattr(tabs, "_page_offset", lambda _stage, _total: (1, 0))
+    monkeypatch.setattr(tabs, "_load_torgi", lambda *_args: [])
+    monkeypatch.setattr(tabs, "_load_razygranye", lambda *_args: [])
+    import src.services.annotation_state_service as state_service
+    monkeypatch.setattr(state_service, "load_current_annotation_states", lambda *_args: {})
+    monkeypatch.setitem(sys.modules, "src.services.db_bootstrap", SimpleNamespace(
+        connect_databases=lambda: (None, None, object(), "")
+    ))
 
     tabs._render_torgi_tab()
     tabs._render_razygranye_tab()
