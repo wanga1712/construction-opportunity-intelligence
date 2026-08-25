@@ -10,12 +10,35 @@ import streamlit as st
 
 from src.ui.components.analytics_v2.annotation_queue import bind_and_advance
 from src.ui.components.analytics_v2.card_feed import render_card_feed
-from src.ui.components.analytics_v2.stage_workspace import render_stage_workspace
+from src.ui.components.analytics_v2.stage_workspace import (
+    filtered_review_ids,
+    render_review_filter,
+    render_stage_workspace,
+)
 
 _SESSION_TORGI    = "selected_torgi_id"
 _SESSION_KOMISSIA = "selected_komissia_id"
 _SESSION_RAZYGR   = "selected_razygr_id"
 _PAGE_SIZE = 25
+FARTHEST_DEADLINE_FIRST = "FARTHEST_DEADLINE_FIRST"
+NEAREST_DEADLINE_FIRST = "NEAREST_DEADLINE_FIRST"
+DEADLINE_SORT_LABELS = {
+    FARTHEST_DEADLINE_FIRST: "Сначала дальние",
+    NEAREST_DEADLINE_FIRST: "Сначала ближайшие",
+}
+
+
+def torgi_deadline_order_by(sort_mode: str) -> str:
+    """Trusted deterministic SQL ordering, applied before LIMIT/OFFSET."""
+    direction = "ASC" if sort_mode == NEAREST_DEADLINE_FIRST else "DESC"
+    return (
+        f"cp.end_date {direction} NULLS LAST, "
+        "cp.initial_price DESC NULLS LAST, cp.id DESC"
+    )
+
+
+def _reset_torgi_page() -> None:
+    st.session_state.pop("torgi_workset_page", None)
 
 
 # ─── DB helpers ───────────────────────────────────────────────────────────────
@@ -47,7 +70,8 @@ def _stage_workset_ids(stage: str) -> list[int]:
     """Return factual filtered workset IDs for true counts (one bounded-column query)."""
     import psycopg2
     if stage == "torgi":
-        where = "cp.crm_stage='torgi' AND cp.award_status='submission_open' AND cp.end_date>=CURRENT_DATE"
+        from src.services.commercial_routing_v3.submission_window import actionable_submission_sql
+        where = "cp.crm_stage='torgi' AND cp.award_status='submission_open' AND " + actionable_submission_sql("cp")
         cat_stage = "torgi"
     elif stage == "commission":
         where = "cp.crm_stage='torgi' AND cp.award_status IN ('submission_closed_waiting_award','award_not_found')"
@@ -77,16 +101,24 @@ def _page_offset(stage: str, total: int) -> tuple[int, int]:
     return int(page), (int(page) - 1) * _PAGE_SIZE
 
 
-def _load_torgi(limit: int = 25, offset: int = 0) -> list[dict]:
+def _load_torgi(limit: int = 25, offset: int = 0,
+                sort_mode: str = FARTHEST_DEADLINE_FIRST,
+                allowed_ids: list[int] | None = None) -> list[dict]:
     """Lifecycle-valid expert workset; manager publication is not an admission gate."""
     try:
         import psycopg2
         from psycopg2.extras import RealDictCursor
 
         from src.services.db_bootstrap import connect_databases
+        from src.services.commercial_routing_v3.submission_window import actionable_submission_sql
         cat_sql, cat_params = _get_category_filter("torgi")
         params = dict(cat_params); params.update({"limit": limit, "offset": offset})
+        review_sql = "TRUE"
+        if allowed_ids is not None:
+            review_sql = "cp.id = ANY(%(allowed_ids)s)"
+            params["allowed_ids"] = allowed_ids or [-1]
 
+        order_by = torgi_deadline_order_by(sort_mode)
         conn = psycopg2.connect(**_pg())
         with conn.cursor(cursor_factory=RealDictCursor) as cur:
             cur.execute(f"""
@@ -118,9 +150,10 @@ def _load_torgi(limit: int = 25, offset: int = 0) -> list[dict]:
                 LEFT JOIN procurement_ai_assessments ai ON ai.procurement_id = cp.id AND ai.is_current = TRUE
                 WHERE cp.crm_stage = 'torgi'
                   AND cp.award_status = 'submission_open'
-                  AND cp.end_date >= CURRENT_DATE
+                  AND {actionable_submission_sql("cp")}
                   AND ({cat_sql})
-                ORDER BY cp.end_date ASC, cp.match_score DESC
+                  AND ({review_sql})
+                ORDER BY {order_by}
                 LIMIT %(limit)s OFFSET %(offset)s
             """, params)
             rows = [dict(r) for r in cur.fetchall()]
@@ -385,8 +418,24 @@ def _render_torgi_tab() -> None:
             st.rerun()
 
     workset_ids = _stage_workset_ids("torgi")
-    page, offset = _page_offset("torgi", len(workset_ids))
-    cards = _load_torgi(_PAGE_SIZE, offset)
+    sort_mode = st.radio(
+        "Сортировка по сроку",
+        list(DEADLINE_SORT_LABELS),
+        format_func=lambda value: DEADLINE_SORT_LABELS[value],
+        horizontal=True,
+        key="torgi_deadline_sort",
+        on_change=_reset_torgi_page,
+    )
+    from src.services.annotation_state_service import load_current_annotation_states
+    from src.services.db_bootstrap import connect_databases
+    _, _, crm_db, _ = connect_databases()
+    annotation_states = load_current_annotation_states(workset_ids, crm_db)
+    selected_review = render_review_filter(
+        annotation_states, _SESSION_TORGI, on_change=_reset_torgi_page
+    )
+    selected_ids = filtered_review_ids(annotation_states, selected_review)
+    page, offset = _page_offset("torgi", len(selected_ids))
+    cards = _load_torgi(_PAGE_SIZE, offset, sort_mode, selected_ids)
 
     if not cards:
         st.info("Нет тендеров в стадии торгов.")
@@ -405,17 +454,12 @@ def _render_torgi_tab() -> None:
 
     filtered = cards_layer
 
-    # ── Sort by effective assessment (explicit rank tuple) ──────────────────
-    filtered = sorted(
-        filtered,
-        key=lambda c: _torgi_sort_key(c, eff_map),
-        reverse=True,
-    )
+    # SQL deadline ordering is global and already applied before pagination.
     filtered = bind_and_advance(filtered, _SESSION_TORGI, st.session_state)
 
     selected_id = st.session_state.get(_SESSION_TORGI)
     st.markdown(f"### Идут торги · {len(workset_ids)}")
-    st.caption(f"Показано {offset + 1}–{offset + len(cards)} из {len(workset_ids)}")
+    st.caption(f"Показано {offset + 1}–{offset + len(cards)} из {len(selected_ids)}")
 
     render_stage_workspace(
         filtered,
@@ -424,6 +468,8 @@ def _render_torgi_tab() -> None:
         stage_label="Идут торги",
         effective_map=eff_map,
         workset_ids=workset_ids,
+        annotation_states=annotation_states,
+        selected_annotation_filter=selected_review,
     )
 
 

@@ -1,0 +1,339 @@
+{
+  "control": {
+    "id": 17758,
+    "contract_number": "32615833902",
+    "tender_link": "https://zakupki.gov.ru/epz/order/notice/notice223/common-info.html?regNumber=32615833902",
+    "end_date": "2032-03-24",
+    "award_status": "submission_open",
+    "crm_stage": "torgi",
+    "source_table": "reestr_contract_223_fz"
+  },
+  "control_view": {
+    "procurement_number": "32615833902",
+    "public_url": "https://zakupki.gov.ru/epz/order/notice/notice223/common-info.html?regNumber=32615833902",
+    "validity": "VERIFIED_FACTUAL",
+    "render_direct_link": true,
+    "notice_info_id": null
+  },
+  "stats": {
+    "223_TOTAL": 23886,
+    "223_LINK_PUBLIC_EPZ": 23886,
+    "223_LINK_PRIVATE_LK": 0,
+    "223_LINK_OTHER": 0,
+    "223_LINK_NULL": 0
+  },
+  "by_stage": {
+    "submission_closed_waiting_award": {
+      "public_epz": 21712,
+      "private_lk": 0,
+      "other": 0,
+      "null": 0,
+      "n": 21712
+    },
+    "submission_open": {
+      "public_epz": 2161,
+      "private_lk": 0,
+      "other": 0,
+      "null": 0,
+      "n": 2161
+    },
+    "commission": {
+      "public_epz": 13,
+      "private_lk": 0,
+      "other": 0,
+      "null": 0,
+      "n": 13
+    }
+  },
+  "PRIVATE_LK_WITH_PUBLIC_NUMBER": 0,
+  "PRIVATE_LK_WITHOUT_PUBLIC_NUMBER": 0,
+  "leftover_sample": [],
+  "affected_remaining_private": {
+    "open_223_private": 0,
+    "open_44_private": 0,
+    "commission_223_private": 0,
+    "commission_44_private": 0,
+    "awarded_223_private": 0,
+    "awarded_44_private": 0,
+    "open_223_public": 2161,
+    "open_44_public": 5306
+  },
+  "buckets": [
+    {
+      "law": "223",
+      "within_30": 2116,
+      "d31_90": 3,
+      "d91_180": 36,
+      "d181_365": 2,
+      "over_365": 4,
+      "total": 2161
+    },
+    {
+      "law": "44",
+      "within_30": 5294,
+      "d31_90": 12,
+      "d91_180": 0,
+      "d181_365": 0,
+      "over_365": 0,
+      "total": 5306
+    }
+  ],
+  "over365": [
+    {
+      "id": 17293,
+      "contract_number": "32615857174",
+      "end_date": "2032-03-30",
+      "start_date": "2026-03-30",
+      "source_updated_at": "2026-07-29 23:35:45.891732+03:00",
+      "tender_link": "https://zakupki.gov.ru/epz/order/notice/notice223/common-info.html?regNumber=32615857174"
+    },
+    {
+      "id": 18062,
+      "contract_number": "32615858025",
+      "end_date": "2032-03-30",
+      "start_date": "2026-03-30",
+      "source_updated_at": "2026-07-29 23:35:45.891732+03:00",
+      "tender_link": "https://zakupki.gov.ru/epz/order/notice/notice223/common-info.html?regNumber=32615858025"
+    },
+    {
+      "id": 17758,
+      "contract_number": "32615833902",
+      "end_date": "2032-03-24",
+      "start_date": "2026-03-24",
+      "source_updated_at": "2026-07-29 23:35:45.891732+03:00",
+      "tender_link": "https://zakupki.gov.ru/epz/order/notice/notice223/common-info.html?regNumber=32615833902"
+    },
+    {
+      "id": 17084,
+      "contract_number": "32515489436",
+      "end_date": "2031-12-04",
+      "start_date": "2025-12-04",
+      "source_updated_at": "2026-07-29 23:35:45.891732+03:00",
+      "tender_link": "https://zakupki.gov.ru/epz/order/notice/notice223/common-info.html?regNumber=32515489436"
+    }
+  ],
+  "parity44": [
+    {
+      "CRM_ID": 886,
+      "LAW": "44",
+      "PROCUREMENT_NUMBER": "0158300058126000051",
+      "CURRENT_TENDER_LINK": "https://zakupki.gov.ru/epz/order/notice/ea20/view/common-info.html?regNumber=0158300058126000051",
+      "RESOLVED_PUBLIC_URL": "https://zakupki.gov.ru/epz/order/notice/ea20/view/common-info.html?regNumber=0158300058126000051",
+      "RENDER_DIRECT": true,
+      "LINK_MATCHES_IDENTITY": true,
+      "DEADLINE": "2026-08-25",
+      "RESULT": "PASS"
+    },
+    {
+      "CRM_ID": 7836,
+      "LAW": "44",
+      "PROCUREMENT_NUMBER": "0318300076126000083",
+      "CURRENT_TENDER_LINK": "https://zakupki.gov.ru/epz/order/notice/ea20/view/common-info.html?regNumber=0318300076126000083",
+      "RESOLVED_PUBLIC_URL": "https://zakupki.gov.ru/epz/order/notice/ea20/view/common-info.html?regNumber=0318300076126000083",
+      "RENDER_DIRECT": true,
+      "LINK_MATCHES_IDENTITY": true,
+      "DEADLINE": "2026-08-25",
+      "RESULT": "PASS"
+    },
+    {
+      "CRM_ID": 9477,
+      "LAW": "44",
+      "PROCUREMENT_NUMBER": "0148300000626000841",
+      "CURRENT_TENDER_LINK": "https://zakupki.gov.ru/epz/order/notice/ea20/view/common-info.html?regNumber=0148300000626000841",
+      "RESOLVED_PUBLIC_URL": "https://zakupki.gov.ru/epz/order/notice/ea20/view/common-info.html?regNumber=0148300000626000841",
+      "RENDER_DIRECT": true,
+      "LINK_MATCHES_IDENTITY": true,
+      "DEADLINE": "2026-08-25",
+      "RESULT": "PASS"
+    },
+    {
+      "CRM_ID": 11425,
+      "LAW": "44",
+      "PROCUREMENT_NUMBER": "0358300074326000003",
+      "CURRENT_TENDER_LINK": "https://zakupki.gov.ru/epz/order/notice/zk20/view/common-info.html?regNumber=0358300074326000003",
+      "RESOLVED_PUBLIC_URL": "https://zakupki.gov.ru/epz/order/notice/zk20/view/common-info.html?regNumber=0358300074326000003",
+      "RENDER_DIRECT": true,
+      "LINK_MATCHES_IDENTITY": true,
+      "DEADLINE": "2026-08-25",
+      "RESULT": "PASS"
+    },
+    {
+      "CRM_ID": 11882,
+      "LAW": "44",
+      "PROCUREMENT_NUMBER": "0848300062226000779",
+      "CURRENT_TENDER_LINK": "https://zakupki.gov.ru/epz/order/notice/ea20/view/common-info.html?regNumber=0848300062226000779",
+      "RESOLVED_PUBLIC_URL": "https://zakupki.gov.ru/epz/order/notice/ea20/view/common-info.html?regNumber=0848300062226000779",
+      "RENDER_DIRECT": true,
+      "LINK_MATCHES_IDENTITY": true,
+      "DEADLINE": "2026-08-25",
+      "RESULT": "PASS"
+    },
+    {
+      "CRM_ID": 14588,
+      "LAW": "44",
+      "PROCUREMENT_NUMBER": "0148300000626000885",
+      "CURRENT_TENDER_LINK": "https://zakupki.gov.ru/epz/order/notice/zk20/view/common-info.html?regNumber=0148300000626000885",
+      "RESOLVED_PUBLIC_URL": "https://zakupki.gov.ru/epz/order/notice/zk20/view/common-info.html?regNumber=0148300000626000885",
+      "RENDER_DIRECT": true,
+      "LINK_MATCHES_IDENTITY": true,
+      "DEADLINE": "2026-08-25",
+      "RESULT": "PASS"
+    },
+    {
+      "CRM_ID": 14641,
+      "LAW": "44",
+      "PROCUREMENT_NUMBER": "0348100059426000010",
+      "CURRENT_TENDER_LINK": "https://zakupki.gov.ru/epz/order/notice/ea20/view/common-info.html?regNumber=0348100059426000010",
+      "RESOLVED_PUBLIC_URL": "https://zakupki.gov.ru/epz/order/notice/ea20/view/common-info.html?regNumber=0348100059426000010",
+      "RENDER_DIRECT": true,
+      "LINK_MATCHES_IDENTITY": true,
+      "DEADLINE": "2026-08-25",
+      "RESULT": "PASS"
+    },
+    {
+      "CRM_ID": 15114,
+      "LAW": "44",
+      "PROCUREMENT_NUMBER": "0355100004526000099",
+      "CURRENT_TENDER_LINK": "https://zakupki.gov.ru/epz/order/notice/ok20/view/common-info.html?regNumber=0355100004526000099",
+      "RESOLVED_PUBLIC_URL": "https://zakupki.gov.ru/epz/order/notice/ok20/view/common-info.html?regNumber=0355100004526000099",
+      "RENDER_DIRECT": true,
+      "LINK_MATCHES_IDENTITY": true,
+      "DEADLINE": "2026-08-25",
+      "RESULT": "PASS"
+    },
+    {
+      "CRM_ID": 15308,
+      "LAW": "44",
+      "PROCUREMENT_NUMBER": "0372100049626001729",
+      "CURRENT_TENDER_LINK": "https://zakupki.gov.ru/epz/order/notice/ea20/view/common-info.html?regNumber=0372100049626001729",
+      "RESOLVED_PUBLIC_URL": "https://zakupki.gov.ru/epz/order/notice/ea20/view/common-info.html?regNumber=0372100049626001729",
+      "RENDER_DIRECT": true,
+      "LINK_MATCHES_IDENTITY": true,
+      "DEADLINE": "2026-08-25",
+      "RESULT": "PASS"
+    },
+    {
+      "CRM_ID": 21225,
+      "LAW": "44",
+      "PROCUREMENT_NUMBER": "0373200041526000737",
+      "CURRENT_TENDER_LINK": "https://zakupki.gov.ru/epz/order/notice/ok20/view/common-info.html?regNumber=0373200041526000737",
+      "RESOLVED_PUBLIC_URL": "https://zakupki.gov.ru/epz/order/notice/ok20/view/common-info.html?regNumber=0373200041526000737",
+      "RENDER_DIRECT": true,
+      "LINK_MATCHES_IDENTITY": true,
+      "DEADLINE": "2026-08-25",
+      "RESULT": "PASS"
+    }
+  ],
+  "parity223": [
+    {
+      "CRM_ID": 1016,
+      "LAW": "223",
+      "PROCUREMENT_NUMBER": "32615629477",
+      "CURRENT_TENDER_LINK": "https://zakupki.gov.ru/epz/order/notice/notice223/common-info.html?regNumber=32615629477",
+      "RESOLVED_PUBLIC_URL": "https://zakupki.gov.ru/epz/order/notice/notice223/common-info.html?regNumber=32615629477",
+      "RENDER_DIRECT": true,
+      "LINK_MATCHES_IDENTITY": true,
+      "DEADLINE": "2026-08-25",
+      "RESULT": "PASS"
+    },
+    {
+      "CRM_ID": 17166,
+      "LAW": "223",
+      "PROCUREMENT_NUMBER": "32615647064",
+      "CURRENT_TENDER_LINK": "https://zakupki.gov.ru/epz/order/notice/notice223/common-info.html?regNumber=32615647064",
+      "RESOLVED_PUBLIC_URL": "https://zakupki.gov.ru/epz/order/notice/notice223/common-info.html?regNumber=32615647064",
+      "RENDER_DIRECT": true,
+      "LINK_MATCHES_IDENTITY": true,
+      "DEADLINE": "2026-08-25",
+      "RESULT": "PASS"
+    },
+    {
+      "CRM_ID": 17285,
+      "LAW": "223",
+      "PROCUREMENT_NUMBER": "32615626098",
+      "CURRENT_TENDER_LINK": "https://zakupki.gov.ru/epz/order/notice/notice223/common-info.html?regNumber=32615626098",
+      "RESOLVED_PUBLIC_URL": "https://zakupki.gov.ru/epz/order/notice/notice223/common-info.html?regNumber=32615626098",
+      "RENDER_DIRECT": true,
+      "LINK_MATCHES_IDENTITY": true,
+      "DEADLINE": "2026-08-25",
+      "RESULT": "PASS"
+    },
+    {
+      "CRM_ID": 17352,
+      "LAW": "223",
+      "PROCUREMENT_NUMBER": "32615618312",
+      "CURRENT_TENDER_LINK": "https://zakupki.gov.ru/epz/order/notice/notice223/common-info.html?regNumber=32615618312",
+      "RESOLVED_PUBLIC_URL": "https://zakupki.gov.ru/epz/order/notice/notice223/common-info.html?regNumber=32615618312",
+      "RENDER_DIRECT": true,
+      "LINK_MATCHES_IDENTITY": true,
+      "DEADLINE": "2026-08-25",
+      "RESULT": "PASS"
+    },
+    {
+      "CRM_ID": 17415,
+      "LAW": "223",
+      "PROCUREMENT_NUMBER": "32615631860",
+      "CURRENT_TENDER_LINK": "https://zakupki.gov.ru/epz/order/notice/notice223/common-info.html?regNumber=32615631860",
+      "RESOLVED_PUBLIC_URL": "https://zakupki.gov.ru/epz/order/notice/notice223/common-info.html?regNumber=32615631860",
+      "RENDER_DIRECT": true,
+      "LINK_MATCHES_IDENTITY": true,
+      "DEADLINE": "2026-08-25",
+      "RESULT": "PASS"
+    },
+    {
+      "CRM_ID": 17671,
+      "LAW": "223",
+      "PROCUREMENT_NUMBER": "32616232719",
+      "CURRENT_TENDER_LINK": "https://zakupki.gov.ru/epz/order/notice/notice223/common-info.html?regNumber=32616232719",
+      "RESOLVED_PUBLIC_URL": "https://zakupki.gov.ru/epz/order/notice/notice223/common-info.html?regNumber=32616232719",
+      "RENDER_DIRECT": true,
+      "LINK_MATCHES_IDENTITY": true,
+      "DEADLINE": "2026-08-25",
+      "RESULT": "PASS"
+    },
+    {
+      "CRM_ID": 18483,
+      "LAW": "223",
+      "PROCUREMENT_NUMBER": "32616230933",
+      "CURRENT_TENDER_LINK": "https://zakupki.gov.ru/epz/order/notice/notice223/common-info.html?regNumber=32616230933",
+      "RESOLVED_PUBLIC_URL": "https://zakupki.gov.ru/epz/order/notice/notice223/common-info.html?regNumber=32616230933",
+      "RENDER_DIRECT": true,
+      "LINK_MATCHES_IDENTITY": true,
+      "DEADLINE": "2026-08-25",
+      "RESULT": "PASS"
+    },
+    {
+      "CRM_ID": 24024,
+      "LAW": "223",
+      "PROCUREMENT_NUMBER": "32616286862",
+      "CURRENT_TENDER_LINK": "https://zakupki.gov.ru/epz/order/notice/notice223/common-info.html?regNumber=32616286862",
+      "RESOLVED_PUBLIC_URL": "https://zakupki.gov.ru/epz/order/notice/notice223/common-info.html?regNumber=32616286862",
+      "RENDER_DIRECT": true,
+      "LINK_MATCHES_IDENTITY": true,
+      "DEADLINE": "2026-08-25",
+      "RESULT": "PASS"
+    },
+    {
+      "CRM_ID": 24482,
+      "LAW": "223",
+      "PROCUREMENT_NUMBER": "32616286904",
+      "CURRENT_TENDER_LINK": "https://zakupki.gov.ru/epz/order/notice/notice223/common-info.html?regNumber=32616286904",
+      "RESOLVED_PUBLIC_URL": "https://zakupki.gov.ru/epz/order/notice/notice223/common-info.html?regNumber=32616286904",
+      "RENDER_DIRECT": true,
+      "LINK_MATCHES_IDENTITY": true,
+      "DEADLINE": "2026-08-25",
+      "RESULT": "PASS"
+    },
+    {
+      "CRM_ID": 24515,
+      "LAW": "223",
+      "PROCUREMENT_NUMBER": "32616285944",
+      "CURRENT_TENDER_LINK": "https://zakupki.gov.ru/epz/order/notice/notice223/common-info.html?regNumber=32616285944",
+      "RESOLVED_PUBLIC_URL": "https://zakupki.gov.ru/epz/order/notice/notice223/common-info.html?regNumber=32616285944",
+      "RENDER_DIRECT": true,
+      "LINK_MATCHES_IDENTITY": true,
+      "DEADLINE": "2026-08-25",
+      "RESULT": "PASS"
+    }
+  ]
+}
