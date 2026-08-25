@@ -44,6 +44,13 @@ def _clean(value: Any) -> str | None:
     return None if not text or text.lower() in {"unknown", "unassessed", "none", "—"} else text
 
 
+def format_okpd_preview(card: dict) -> str | None:
+    """Compose factual already-loaded OKPD values; never invent a placeholder."""
+    code = _clean(card.get("okpd_code"))
+    name = _clean(card.get("okpd_name"))
+    return " — ".join(filter(None, (code, name))) or None
+
+
 def _summary(card: dict, stage: str, effective: Any, state: dict, published: bool) -> None:
     amount, amount_label = _amount(card, stage)
     deadline, deadline_label = _deadline(card, stage)
@@ -69,6 +76,9 @@ def _summary(card: dict, stage: str, effective: Any, state: dict, published: boo
         f"<div style='min-width:0'><b style='font-size:20px;white-space:nowrap'>{icon} {escape(str(value))}</b><br><small>{escape(label)}</small></div>"
         for icon, value, label in facts) + "</div>", unsafe_allow_html=True)
     st.markdown(f"🏢 {escape(str(card.get('customer') or '—'))} &nbsp;&nbsp; 📍 {escape(str(card.get('delivery_region') or '—'))}", unsafe_allow_html=True)
+    value = format_okpd_preview(card)
+    if value:
+        st.markdown(f"🏷 **ОКПД2:** {escape(value)}", unsafe_allow_html=True)
     if stage == "AWARDED" and card.get("contractor_name"):
         st.markdown(f"**Подрядчик / победитель:** {card['contractor_name']}")
 
@@ -108,6 +118,7 @@ def render_stage_workspace(cards: list[dict], *, session_key: str, stage: str,
         with st.container(border=True):
             _summary(card, stage, (effective_map or {}).get(pid), page_states[pid], publication.get(pid, False))
             _source_actions(card)
+            _render_first_decision_gate(pid, page_states[pid], active_key)
             section_labels = list(SECTIONS); section_labels[2] = f"Документы · {card.get('file_count') or 0}"
             section = st.pills("Раздел карточки", section_labels, default=section_labels[0],
                                key=f"inline_card_tab_{pid}", label_visibility="collapsed",
@@ -128,3 +139,26 @@ def _render_expensive_section(procurement_id: int, section: str) -> None:
     render_annotation_section(crm_db=crm_db, procurement_id=procurement_id, header=header,
                               assessment=load_model_assessment_for_annotation(procurement_id, crm_db),
                               existing_annotation=load_expert_annotation(procurement_id, crm_db), section=section)
+
+
+def _render_first_decision_gate(procurement_id: int, state: dict, active_key: str) -> None:
+    """Keep the fastest human decision on the card surface; load writes lazily."""
+    from src.ui.components.analytics_v2.annotation_card import scope_decision_key
+
+    key = scope_decision_key(procurement_id)
+    st.markdown("---")
+    st.markdown("##### 👤 ЭКСПЕРТНАЯ ПРОВЕРКА")
+    st.markdown("**1. Закупка относится к нашему профилю?**")
+    yes, no, unsure = st.columns(3)
+    clicked = None
+    if yes.button("✓ Да", key=f"scope_yes_{procurement_id}", use_container_width=True):
+        clicked = "YES"
+    if no.button("✕ Нет", key=f"scope_no_{procurement_id}", use_container_width=True):
+        clicked = "NO"
+    if unsure.button("? Не уверен", key=f"scope_uncertain_{procurement_id}", use_container_width=True):
+        clicked = "UNCERTAIN"
+    if clicked:
+        st.session_state[key] = clicked
+        st.session_state[active_key] = procurement_id
+    if st.session_state.get(key) and st.session_state.get(active_key) == procurement_id:
+        _render_expensive_section(procurement_id, "Первое решение")

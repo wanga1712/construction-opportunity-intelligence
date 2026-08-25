@@ -11,7 +11,15 @@
 - Размер рабочего Python-модуля: до 300 строк — желательно; 300–450 допустимо при цельности; свыше 450 требуется записанное объяснение или декомпозиция.
 - Изменение поведения сначала фиксируется тестом или явно записанным ожидаемым результатом.
 
-## CURRENT WIP — 2026-08-23
+## CURRENT WIP — 2026-08-25
+
+**CRM-V3-EXPERT-FIRST-DECISION-GATE-AND-OKPD-PREVIEW-1** — `[x]` **PASS / STOP**. The real inline Analytics card now shows factual batch-loaded OKPD2 and asks `Закупка относится к нашему профилю?` before the secondary advanced workspace. NO uses the canonical OUT_OF_PROFILE helper with optional reason and SAVE+NEXT without category/object/stage/medal; YES preserves editable expert fields without copying model values; UNCERTAIN remains an unresolved session draft. Model suggestions are read-only and advanced labels are human-readable. Focused local/S13 suites: 33 PASS each; real production route AppTest on control CRM id 11235 PASS with zero exceptions; screenshots accepted; no production save or fake AI assessment; service active / HTTP 200. Implementation `b47f4241`; report: `docs/reports/expert_first_decision_gate_okpd_preview/IMPLEMENTATION_AND_PRODUCTION_ACCEPTANCE.md`. No model/prompt/input, queue/worker, publication, document pipeline/parser, schema or DDL change. STOP after this WIP.
+
+**Expected result recorded before behavior change:** the first scope question is visible without opening advanced annotation; NO saves canonical human OUT_OF_PROFILE without category/object/stage/medal and supports SAVE+NEXT; YES leaves advanced fields editable without copying model values; UNCERTAIN remains unresolved and never becomes NOT_INTERESTING; absent OKPD emits no empty row; all card data remains batch-loaded with zero per-card SQL.
+
+**Current WIP size note:** `stage_workspace.py` is 164 lines. The pre-existing stateful `annotation_card.py` grew from 633 to 757 lines because the first-decision branch shares its Streamlit session/rerun and canonical persistence boundary; splitting that boundary in this UI-only WIP would risk the verified save semantics. Broader decomposition remains assigned to the recorded Stage 2 component task.
+
+## PRIOR CURRENT WIP — 2026-08-23
 
 **CRM-V3-MINIMUM-SUBMISSION-WINDOW-CORRECTION-1** — `[x]` **PASS / STOP**. Shared `MIN_REMAINING_SUBMISSION_DAYS=2` authority now governs Analytics OPEN, annotation queue, routing/model eligibility, durable queue enqueue identity and worker pre-inference cancellation. Production snapshot: 7460 formal open → 117 today + 1110 tomorrow excluded → 6233 actionable; unassessed/bulk scope 7390→6165. Local/S13 focused suites 15 PASS; real route AppTest PASS at 6233 with zero exceptions; queue depth 0, Candidate inference disabled, no bulk/canary. Implementation `4e76d8f`; exact standalone runtime `ec47e860`; service active / HTTP 200. Report: `docs/reports/minimum_submission_window_correction/IMPLEMENTATION_AND_PRODUCTION_ACCEPTANCE.md`. STOP.
 

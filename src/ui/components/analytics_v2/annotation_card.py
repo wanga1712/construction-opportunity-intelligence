@@ -39,6 +39,19 @@ from src.ui.components.analytics_v2.annotation_card_sections import (
 from src.ui.components.analytics_v2.annotation_queue import GO_NEXT_FROM_KEY, GO_NEXT_KEY
 
 _CREATED_BY_FALLBACK = "SuperUser"
+SCOPE_DECISIONS = ("YES", "NO", "UNCERTAIN")
+REJECTION_REASONS = {
+    "NOT_OUR_PRODUCT_OR_WORK": "Не наша продукция / работы",
+    "NOT_OUR_OBJECT": "Не наш объект",
+    "NOT_OUR_STAGE": "Не наша стадия",
+    "OTHER": "Другое",
+}
+MEDAL_OPTIONS = (None, "GOLD", "SILVER", "BRONZE", "WOOD")
+MEDAL_LABELS = {None: "Не выбрано", "GOLD": "🥇 GOLD", "SILVER": "🥈 SILVER", "BRONZE": "🥉 BRONZE", "WOOD": "🪵 WOOD"}
+
+
+def scope_decision_key(procurement_id: int) -> str:
+    return _sk(procurement_id, "scope_decision")
 
 
 def _training_evidence_quality(assessment: dict | None) -> str:
@@ -139,6 +152,7 @@ def _init_fast_draft(
         st.session_state[_sk(procurement_id, "review_scope")] = p.get("annotation_review_scope") or "CATEGORY_ONLY"
         st.session_state[_sk(procurement_id, "completeness")] = p.get("annotation_completeness") or "PARTIAL"
         st.session_state[_sk(procurement_id, "evidence_state")] = p.get("evidence_state") or "SUFFICIENT"
+        st.session_state[_sk(procurement_id, "medal")] = p.get("expert_medal") if p.get("expert_medal") in MEDAL_OPTIONS else None
         st.session_state[_sk(procurement_id, "document_priorities")] = {
             item.get("document_key"): item.get("priority")
             for item in (p.get("document_review_priorities") or [])
@@ -169,6 +183,7 @@ def _init_fast_draft(
         st.session_state[_sk(procurement_id, "review_scope")] = "CATEGORY_ONLY"
         st.session_state[_sk(procurement_id, "completeness")] = "PARTIAL"
         st.session_state[_sk(procurement_id, "evidence_state")] = "SUFFICIENT"
+        st.session_state[_sk(procurement_id, "medal")] = None
         st.session_state[_sk(procurement_id, "document_priorities")] = {}
     st.session_state[sk_init] = True
 
@@ -245,6 +260,40 @@ def _build_out_of_profile_payload(assessment: dict | None, created_by: str) -> d
     }
 
 
+def _render_primary_scope_decision(
+    procurement_id: int,
+    assessment: dict | None,
+    created_by: str,
+    crm_db: Any,
+) -> None:
+    """Render the selected first decision without requiring the advanced form."""
+    decision = st.session_state.get(scope_decision_key(procurement_id))
+    if decision == "NO":
+        st.error("⛔ Закупка будет сохранена как «Вне нашего профиля».")
+        reason_codes = list(REJECTION_REASONS)
+        reason = st.selectbox(
+            "Почему? (необязательно)",
+            [None, *reason_codes],
+            key=_sk(procurement_id, "rejection_reason"),
+            format_func=lambda value: "Не указывать" if value is None else REJECTION_REASONS[value],
+        )
+        if st.button(
+            "Сохранить и следующая →",
+            key=_sk(procurement_id, "scope_no_save_next"),
+            type="primary",
+        ):
+            payload = _build_out_of_profile_payload(assessment, created_by)
+            if reason:
+                payload["expert_out_of_profile_reason"] = reason
+            _persist(procurement_id, payload, assessment, created_by, crm_db, save_and_next=True)
+    elif decision == "YES":
+        st.success("✓ Закупка относится к нашему профилю.")
+        st.caption("Продолжите с категорией, объектом, стадией и коммерческой оценкой в «Расширенной разметке».")
+    elif decision == "UNCERTAIN":
+        st.warning("? Решение пока не принято. Проверьте категорию или документы.")
+        st.caption("Модель / Категории, Документы и Расширенная разметка остаются доступны ниже.")
+
+
 def render_annotation_card(
     *,
     crm_db: Any,
@@ -285,8 +334,10 @@ def render_annotation_card(
     with history_tab:
         render_history(card_view["history"])
     with expert_tab:
+        st.markdown("##### Расширенная разметка")
         _render_expert_object_stage(procurement_id, assessment, expert_obj_types, expert_subtypes, expert_stages)
         _render_ranked_expert_categories(procurement_id, cat_codes, cat_labels)
+        _render_medal(procurement_id)
         _render_review_contract(procurement_id, card_view["documents"])
         _render_technical_details(assessment, existing_annotation)
 
@@ -318,6 +369,9 @@ def render_annotation_section(
     categories = load_categories_for_selector(crm_db)
     cat_codes = [c["code"] for c in categories]
     cat_labels = [f"{c['code']} ({c['name']})" for c in categories]
+    if section == "Первое решение":
+        _render_primary_scope_decision(procurement_id, assessment, created_by, crm_db)
+        return
     if section == "Модель / Категории":
         _render_ai_block(assessment)
         _render_business_block(assessment)
@@ -335,8 +389,10 @@ def render_annotation_section(
     expert_obj_types = collect_expert_object_types(crm_db)
     expert_stages = collect_expert_work_stages(crm_db)
     expert_subtypes = collect_expert_object_subtypes(crm_db)
+    st.markdown("##### Расширенная разметка")
     _render_expert_object_stage(procurement_id, assessment, expert_obj_types, expert_subtypes, expert_stages)
     _render_ranked_expert_categories(procurement_id, cat_codes, cat_labels)
+    _render_medal(procurement_id)
     _render_review_contract(procurement_id, card_view["documents"])
     _render_technical_details(assessment, existing_annotation)
     b1, b2, b3 = st.columns(3)
@@ -354,16 +410,20 @@ def render_annotation_section(
 
 def _render_ai_block(assessment: dict | None) -> None:
     with st.container(border=True):
-        st.markdown("##### 🤖 ИИ ПРЕДЛОЖИЛ")
+        st.markdown("##### 🤖 ИИ предложил")
         view = model_view_from_assessment(assessment)
+        has_suggestion = any((view.get("object_type"), view.get("object_subtype"), view.get("work_stage"), view.get("hypotheses")))
+        if not has_suggestion and not assessment:
+            st.caption("🤖 ИИ пока не определил объект и стадию")
+            return
         if view.get("provenance") == "UNKNOWN_LEGACY":
             st.warning("⚠ **ИСТОРИЧЕСКАЯ ОЦЕНКА** — RAW модели не сохранён")
             nr = (assessment or {}).get("normalized_result") or {}
             st.caption(
-                f"subject: `{nr.get('subject_interpretation') or '—'}` · "
-                f"form: `{nr.get('procurement_form') or '—'}` · "
-                f"object: `{nr.get('object_type') or '—'}` / `{nr.get('object_subtype') or '—'}` · "
-                f"stage: `{nr.get('project_stage') or nr.get('work_stage') or '—'}`"
+                f"Предмет: `{nr.get('subject_interpretation') or '—'}` · "
+                f"Форма: `{nr.get('procurement_form') or '—'}` · "
+                f"Объект: `{nr.get('object_type') or '—'}` / `{nr.get('object_subtype') or '—'}` · "
+                f"Стадия: `{nr.get('project_stage') or nr.get('work_stage') or '—'}`"
             )
             legacy = _legacy_category_rows(assessment)
             if legacy:
@@ -374,9 +434,9 @@ def _render_ai_block(assessment: dict | None) -> None:
 
         st.caption(f"MODEL_VALIDATED · inference_run_id=`{(assessment or {}).get('inference_run_id')}`")
         st.markdown(
-            f"**object:** `{view.get('object_type') or '—'}` / `{view.get('object_subtype') or '—'}` · "
-            f"**stage:** `{view.get('work_stage') or '—'}` · "
-            f"**form:** `{view.get('procurement_form') or '—'}`"
+            f"**Объект:** `{view.get('object_type') or '—'}` / `{view.get('object_subtype') or '—'}` · "
+            f"**Стадия:** `{view.get('work_stage') or '—'}` · "
+            f"**Форма:** `{view.get('procurement_form') or '—'}`"
         )
         nr = (assessment or {}).get("normalized_result") or {}
         if nr.get("subject_interpretation"):
@@ -489,19 +549,36 @@ def _render_expert_object_stage(
     view = model_view_from_assessment(assessment)
     nr = (assessment or {}).get("normalized_result") or {}
     st.markdown("---")
-    st.markdown("##### Объект / стадия (эксперт)")
-    st.caption(
-        f"ИИ предложил: `{view.get('object_type') or nr.get('object_type') or '—'}` / "
-        f"`{view.get('object_subtype') or nr.get('object_subtype') or '—'}` / "
-        f"`{view.get('work_stage') or nr.get('project_stage') or '—'}`"
+    st.markdown("##### 🤖 Модель — только для чтения")
+    suggestions = (
+        ("🏗 Объект", view.get("object_type") or nr.get("object_type")),
+        ("Подтип", view.get("object_subtype") or nr.get("object_subtype")),
+        ("🛠 Стадия", view.get("work_stage") or nr.get("project_stage")),
     )
+    visible = [(label, value) for label, value in suggestions if value]
+    if visible:
+        for label, value in visible:
+            st.caption(f"{label}: {value}")
+    else:
+        st.caption("🤖 ИИ пока не определил объект и стадию")
+    st.markdown("##### 👤 Эксперт")
     st.text_input(
-        "expert_object_type",
+        "Тип объекта",
         key=_sk(procurement_id, "obj_type"),
         help=", ".join(obj_types[:8]) if obj_types else "",
     )
-    st.text_input("expert_object_subtype", key=_sk(procurement_id, "obj_subtype"))
-    st.text_input("expert_work_stage", key=_sk(procurement_id, "work_stage"))
+    st.text_input("Подтип / уточнение объекта", key=_sk(procurement_id, "obj_subtype"))
+    st.text_input("Стадия / вид работ", key=_sk(procurement_id, "work_stage"))
+
+
+def _render_medal(procurement_id: int) -> None:
+    st.markdown("##### Коммерческая оценка")
+    st.selectbox(
+        "Медаль",
+        MEDAL_OPTIONS,
+        key=_sk(procurement_id, "medal"),
+        format_func=lambda value: MEDAL_LABELS[value],
+    )
 
 
 def _render_ranked_expert_categories(
@@ -540,9 +617,12 @@ def _render_ranked_expert_categories(
 def _render_review_contract(procurement_id: int, documents: list[dict]) -> None:
     st.markdown("---")
     st.markdown("##### Объём и полнота экспертной проверки")
-    st.selectbox("annotation_review_scope", REVIEW_SCOPES, key=_sk(procurement_id, "review_scope"))
-    st.selectbox("annotation_completeness", COMPLETENESS_STATES, key=_sk(procurement_id, "completeness"))
-    st.selectbox("evidence_state", EVIDENCE_STATES, key=_sk(procurement_id, "evidence_state"))
+    review_labels = {"CATEGORY_ONLY": "Проверена категория", "FULL": "Полная проверка", "OUT_OF_PROFILE": "Вне нашего профиля"}
+    completeness_labels = {"PARTIAL": "Частичная проверка", "COMPLETE": "Проверка завершена"}
+    evidence_labels = {"SUFFICIENT": "Данных достаточно", "INSUFFICIENT": "Нужно больше данных", "NEEDS_DOCUMENT_RESEARCH": "Нужно проверить документы"}
+    st.selectbox("Объём проверки", REVIEW_SCOPES, key=_sk(procurement_id, "review_scope"), format_func=lambda value: review_labels.get(value, value))
+    st.selectbox("Полнота проверки", COMPLETENESS_STATES, key=_sk(procurement_id, "completeness"), format_func=lambda value: completeness_labels.get(value, value))
+    st.selectbox("Достаточность данных", EVIDENCE_STATES, key=_sk(procurement_id, "evidence_state"), format_func=lambda value: evidence_labels.get(value, value))
     findings = [
         observation
         for document in documents
@@ -606,7 +686,7 @@ def _build_workbench_payload(procurement_id: int, assessment: dict | None, creat
         expert_obj_subtype=st.session_state.get(_sk(procurement_id, "obj_subtype"), "").strip(),
         expert_work_stage=st.session_state.get(_sk(procurement_id, "work_stage"), "").strip(),
         expert_commercial_verdict="ACTIONABLE",
-        expert_medal=None,
+        expert_medal=st.session_state.get(_sk(procurement_id, "medal")),
         medal_reason=None,
         medal_comment="",
         error_reasons=["MISSING_CATEGORY"] if has_adds else (["EXTRA_CATEGORY"] if has_rejects else []),
