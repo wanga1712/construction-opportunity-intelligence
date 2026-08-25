@@ -66,7 +66,13 @@ def test_rejection_reason_is_optional_additive_json_metadata_without_schema_chan
 
 
 def test_human_labels_replace_raw_primary_widget_labels():
-    source = Path("src/ui/components/analytics_v2/annotation_card.py").read_text(encoding="utf-8")
+    source = "\n".join(
+        Path(path).read_text(encoding="utf-8")
+        for path in (
+            "src/ui/components/analytics_v2/annotation_card.py",
+            "src/ui/components/analytics_v2/guided_annotation.py",
+        )
+    )
     assert 'st.text_input("expert_object_type"' not in source
     assert 'st.text_input("expert_object_subtype"' not in source
     assert 'st.text_input("expert_work_stage"' not in source
