@@ -4,6 +4,12 @@ WIP: `CRM-V3-PROCUREMENT-IDENTITY-LINK-AND-DEADLINE-CORRECTNESS-1`
 Date: 2026-08-25  
 Host: S13 `/opt/CRM_Streamlit` service `crm-streamlit`
 
+```
+IMPLEMENTATION_COMMIT=831a5ef3e3e297eacf57621cddf87b3a989d2dae
+CLOSURE_COMMIT=a2e5b834af326363f2f56d8f5d5d2c64d7b68866
+DEPLOYED_RUNTIME_COMMIT=ec3561513a6e954414e27128e90184d7d8385268
+```
+
 ## Baseline
 
 User-reported prior closure `a7f9a7f1e20b8e8214b98fe2e7da3150529f1b53` was **not resolvable** on GitHub or S13 at start.
