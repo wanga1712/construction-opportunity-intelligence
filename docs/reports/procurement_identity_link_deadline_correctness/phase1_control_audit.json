@@ -1,0 +1,692 @@
+{
+  "db_warn": "",
+  "opp_columns": [
+    "id",
+    "procurement_id",
+    "assessment_id",
+    "commercial_category_code",
+    "commercial_subcategory_code",
+    "opportunity_track",
+    "commercial_state",
+    "last_source_event",
+    "last_source_seen_at",
+    "source_missing_since",
+    "source_sync_status",
+    "source_contour",
+    "procurement_form",
+    "analysis_mode",
+    "category_confidence",
+    "research_action",
+    "research_priority",
+    "research_value_score",
+    "commercial_priority_score",
+    "candidate_medal",
+    "expected_category_value",
+    "category_value_basis",
+    "reason_codes",
+    "positive_evidence",
+    "negative_evidence",
+    "registry_version",
+    "registry_hash",
+    "prompt_version",
+    "routing_version",
+    "model_name",
+    "status",
+    "created_at",
+    "updated_at",
+    "candidate_initial_score",
+    "candidate_initial_medal",
+    "candidate_initial_at",
+    "candidate_initial_scoring_version",
+    "initial_medal_provenance",
+    "confirmed_base_score",
+    "confirmed_base_medal",
+    "confirmed_at",
+    "confirmed_scoring_version",
+    "current_effective_score",
+    "current_effective_medal",
+    "current_effective_at",
+    "current_effective_reason",
+    "semantic_hypothesis"
+  ],
+  "control_candidates": [
+    {
+      "id": 17758,
+      "source_table": "reestr_contract_223_fz",
+      "source_id": 151355,
+      "contract_number": "32615833902",
+      "tender_link": "https://lk.zakupki.gov.ru/223/purchase/private/purchase/notice-info/details.html?noticeInfoId=19557278",
+      "start_date": "2026-03-24",
+      "end_date": "2032-03-24",
+      "delivery_end_date": null,
+      "source_updated_at": "2026-07-29 23:35:45.891732+03:00",
+      "crm_updated_at": "2026-08-25 18:48:37.659043+03:00",
+      "auction_name": "поставка и установка камер видеонаблюдения для МБ ДОУ № 8",
+      "initial_price": "142470",
+      "customer": "МУНИЦИПАЛЬНОЕ БЮДЖЕТНОЕ ДОШКОЛЬНОЕ ОБРАЗОВАТЕЛЬНОЕ УЧРЕЖДЕНИЕ ДЕТСКИЙ САД № 8",
+      "delivery_region": "Южный федеральный округ",
+      "okpd_code": "26.40.33.111",
+      "okpd_name": "Видеокамеры для систем видеонаблюдения, видеоаналитики и охранного телевидения",
+      "award_status": "submission_open",
+      "crm_stage": "torgi",
+      "ai_assessment_status": "COMPLETED"
+    },
+    {
+      "id": 66854,
+      "source_table": "reestr_contract_223_fz",
+      "source_id": 164744,
+      "contract_number": "32616314181",
+      "tender_link": "https://lk.zakupki.gov.ru/223/purchase/private/purchase/notice-info/details.html?noticeInfoId=20167502",
+      "start_date": "2026-08-23",
+      "end_date": "2026-08-23",
+      "delivery_end_date": null,
+      "source_updated_at": "2026-08-23 00:00:10.114153+03:00",
+      "crm_updated_at": "2026-08-25 18:49:14.692134+03:00",
+      "auction_name": "работы по строительству газопроводов среднего и низкого давления до границы земельного участка с установкой ГРПШ по  Ставропольский край, городской округ город Ставрополь, г. Ставрополь, территория СНТ \"Зорька\", 541",
+      "initial_price": "948177.32",
+      "customer": "ОБЩЕСТВО С ОГРАНИЧЕННОЙ ОТВЕТСТВЕННОСТЬЮ \"ШПАКОВСКРАЙГАЗ\"",
+      "delivery_region": "Северо-Кавказский федеральный округ",
+      "okpd_code": "42.21.12.120",
+      "okpd_name": "Трубопровод местный для газа (газопровод)",
+      "award_status": "submission_closed_waiting_award",
+      "crm_stage": "torgi",
+      "ai_assessment_status": "UNASSESSED"
+    }
+  ],
+  "CONTROL": {
+    "id": 17758,
+    "source_table": "reestr_contract_223_fz",
+    "source_id": 151355,
+    "contract_number": "32615833902",
+    "tender_link": "https://lk.zakupki.gov.ru/223/purchase/private/purchase/notice-info/details.html?noticeInfoId=19557278",
+    "start_date": "2026-03-24",
+    "end_date": "2032-03-24",
+    "delivery_end_date": null,
+    "source_updated_at": "2026-07-29 23:35:45.891732+03:00",
+    "crm_updated_at": "2026-08-25 18:48:37.659043+03:00",
+    "auction_name": "поставка и установка камер видеонаблюдения для МБ ДОУ № 8",
+    "initial_price": "142470",
+    "customer": "МУНИЦИПАЛЬНОЕ БЮДЖЕТНОЕ ДОШКОЛЬНОЕ ОБРАЗОВАТЕЛЬНОЕ УЧРЕЖДЕНИЕ ДЕТСКИЙ САД № 8",
+    "delivery_region": "Южный федеральный округ",
+    "okpd_code": "26.40.33.111",
+    "okpd_name": "Видеокамеры для систем видеонаблюдения, видеоаналитики и охранного телевидения",
+    "award_status": "submission_open",
+    "crm_stage": "torgi",
+    "ai_assessment_status": "COMPLETED"
+  },
+  "CONTROL_AI": {
+    "id": 6075,
+    "assessment_version": 1,
+    "status": "SUCCESS",
+    "is_current": true,
+    "proposed_route_profile": "UNASSESSED",
+    "proposed_object_type": "unknown",
+    "proposed_procurement_type": "UNASSESSED",
+    "confidence": "0.5",
+    "reasons": "v3_routing_success",
+    "normalized_result": {
+      "brands": [],
+      "cohort_key": "223_FZ_OPEN_UNASSESSED",
+      "confidence": 0.5,
+      "model_name": "",
+      "cohort_size": 0,
+      "object_type": "unknown",
+      "category_fit": "OUT_OF_PROFILE",
+      "reason_codes": [],
+      "work_methods": [],
+      "analysis_mode": "GENERAL_DISCOVERY",
+      "cohort_median": 10000000.0,
+      "model_version": "qwen2.5:7b",
+      "object_domain": null,
+      "project_stage": null,
+      "registry_hash": "",
+      "route_profile": "UNASSESSED",
+      "rules_version": 1,
+      "analysis_modes": [
+        "GENERAL_DISCOVERY"
+      ],
+      "category_state": "CANDIDATE",
+      "object_context": [],
+      "object_subtype": null,
+      "prompt_version": "v3_category_centric_routing_7b_v5",
+      "schema_version": "v2",
+      "source_contour": "CORPORATE_223FZ",
+      "candidate_level": null,
+      "candidate_score": null,
+      "download_action": "SKIP",
+      "routing_version": "v3",
+      "stability_count": 1,
+      "v3_schema_ready": true,
+      "material_signals": [],
+      "procurement_form": "DIRECT_GOODS_PURCHASE",
+      "procurement_type": "UNASSESSED",
+      "registry_version": 1,
+      "application_areas": [],
+      "assessment_changed": false,
+      "assessment_version": 1,
+      "discovery_required": false,
+      "normalized_summary": "v3_routing_success",
+      "expected_categories": [],
+      "unlikely_categories": null,
+      "document_search_plan": null,
+      "business_scope_status": "OUT_OF_PROFILE",
+      "category_opportunities": [],
+      "overall_research_action": "SKIP",
+      "v3_runtime_execution_allowed": true,
+      "v3_schema_missing_components": [],
+      "commercial_category_hypotheses": []
+    },
+    "inference_run_id": null
+  },
+  "CONTROL_OPPS": [],
+  "CONTROL_PUBLICATION_VISIBLE": false,
+  "S7_ERROR": "cannot convert dictionary update sequence element #0 to a sequence",
+  "S7_SOURCE": null,
+  "LINK_STATS_223_OPEN": {
+    "total": 1992,
+    "public_epz": 0,
+    "private_lk": 1992,
+    "other": 0,
+    "null_link": 0
+  },
+  "LINK_STATS_44_OPEN": {
+    "total": 5306,
+    "public_epz": 5306,
+    "private_lk": 0,
+    "other": 0,
+    "null_link": 0
+  },
+  "AFFECTED_COMMISSION_223_PRIVATE_LK": 13,
+  "AFFECTED_COMMISSION_44_PRIVATE_LK": 0,
+  "AFFECTED_AWARDED_223_PRIVATE_LK": 0,
+  "AFFECTED_AWARDED_44_PRIVATE_LK": 0,
+  "DEADLINE_BUCKETS": [
+    {
+      "bucket": "181_365",
+      "law": "223",
+      "n": 2
+    },
+    {
+      "bucket": "31_90",
+      "law": "223",
+      "n": 3
+    },
+    {
+      "bucket": "31_90",
+      "law": "44",
+      "n": 12
+    },
+    {
+      "bucket": "91_180",
+      "law": "223",
+      "n": 38
+    },
+    {
+      "bucket": "OVER_365",
+      "law": "223",
+      "n": 4
+    },
+    {
+      "bucket": "WITHIN_30",
+      "law": "223",
+      "n": 1945
+    },
+    {
+      "bucket": "WITHIN_30",
+      "law": "44",
+      "n": 5294
+    }
+  ],
+  "FARTHEST_50": [
+    {
+      "id": 18062,
+      "source_table": "reestr_contract_223_fz",
+      "contract_number": "32615858025",
+      "end_date": "2032-03-30",
+      "tender_link": "https://lk.zakupki.gov.ru/223/purchase/private/purchase/notice-info/details.html?noticeInfoId=19587113",
+      "title": "выполнение работ по изготовлению и установке цельносварных ограждений для МБ ДОУ № 8",
+      "initial_price": "117600"
+    },
+    {
+      "id": 17293,
+      "source_table": "reestr_contract_223_fz",
+      "contract_number": "32615857174",
+      "end_date": "2032-03-30",
+      "tender_link": "https://lk.zakupki.gov.ru/223/purchase/private/purchase/notice-info/details.html?noticeInfoId=19586095",
+      "title": "выполнение работ по замене навеса МБ ДОУ № 14",
+      "initial_price": "296789.51"
+    },
+    {
+      "id": 17758,
+      "source_table": "reestr_contract_223_fz",
+      "contract_number": "32615833902",
+      "end_date": "2032-03-24",
+      "tender_link": "https://lk.zakupki.gov.ru/223/purchase/private/purchase/notice-info/details.html?noticeInfoId=19557278",
+      "title": "поставка и установка камер видеонаблюдения для МБ ДОУ № 8",
+      "initial_price": "142470"
+    },
+    {
+      "id": 17084,
+      "source_table": "reestr_contract_223_fz",
+      "contract_number": "32515489436",
+      "end_date": "2031-12-04",
+      "tender_link": "https://lk.zakupki.gov.ru/223/purchase/private/purchase/notice-info/details.html?noticeInfoId=19126511",
+      "title": "выполнение работ по изготовлению и установке цельносварных ограждений для МБ ДОУ № 8",
+      "initial_price": "112000"
+    },
+    {
+      "id": 18476,
+      "source_table": "reestr_contract_223_fz",
+      "contract_number": "32615874112",
+      "end_date": "2027-04-02",
+      "tender_link": "https://lk.zakupki.gov.ru/223/purchase/private/purchase/notice-info/details.html?noticeInfoId=19607203",
+      "title": "Поставка лабораторного оборудования (принадлежности для цифрового микроскопа)",
+      "initial_price": "738663"
+    },
+    {
+      "id": 17580,
+      "source_table": "reestr_contract_223_fz",
+      "contract_number": "32615811319",
+      "end_date": "2027-03-31",
+      "tender_link": "https://lk.zakupki.gov.ru/223/purchase/private/purchase/notice-info/details.html?noticeInfoId=19529211",
+      "title": "Поставка приборов учета электрической энергии в соответствии со спецификацией.",
+      "initial_price": "400051.22"
+    },
+    {
+      "id": 17148,
+      "source_table": "reestr_contract_223_fz",
+      "contract_number": "32615694290",
+      "end_date": "2027-02-11",
+      "tender_link": "https://lk.zakupki.gov.ru/223/purchase/private/purchase/notice-info/details.html?noticeInfoId=19383399",
+      "title": "Оказание услуг по содержанию, техническому обслуживанию и ремонту кабельных и воздушных линий, проведению мероприятий во",
+      "initial_price": "30000000"
+    },
+    {
+      "id": 17352,
+      "source_table": "reestr_contract_223_fz",
+      "contract_number": "32615618312",
+      "end_date": "2027-01-31",
+      "tender_link": "https://lk.zakupki.gov.ru/223/purchase/private/purchase/notice-info/details.html?noticeInfoId=19286862",
+      "title": "Поставка аккумуляторов 6СТ-190А/ч 12v для нужд флота ООО \"РОДНЫЕ ПОЛЯ\"",
+      "initial_price": "500000"
+    },
+    {
+      "id": 17285,
+      "source_table": "reestr_contract_223_fz",
+      "contract_number": "32615626098",
+      "end_date": "2027-01-21",
+      "tender_link": "https://lk.zakupki.gov.ru/223/purchase/private/purchase/notice-info/details.html?noticeInfoId=19296874",
+      "title": "Поставка лабораторного оборудования",
+      "initial_price": "278920"
+    },
+    {
+      "id": 101879,
+      "source_table": "reestr_contract_223_fz",
+      "contract_number": "32616050792",
+      "end_date": "2026-12-31",
+      "tender_link": "https://lk.zakupki.gov.ru/223/purchase/private/purchase/notice-info/details.html?noticeInfoId=19830658",
+      "title": "Товар",
+      "initial_price": "314000"
+    },
+    {
+      "id": 18423,
+      "source_table": "reestr_contract_223_fz",
+      "contract_number": "32615873058",
+      "end_date": "2026-12-31",
+      "tender_link": "https://lk.zakupki.gov.ru/223/purchase/private/purchase/notice-info/details.html?noticeInfoId=19605812",
+      "title": "Поставка буксы 608АМ.09.04.005",
+      "initial_price": "248200"
+    },
+    {
+      "id": 18366,
+      "source_table": "reestr_contract_223_fz",
+      "contract_number": "32615870972",
+      "end_date": "2026-12-31",
+      "tender_link": "https://lk.zakupki.gov.ru/223/purchase/private/purchase/notice-info/details.html?noticeInfoId=19603162",
+      "title": "Работы по ремонту подъезда в многоквартирном доме, находящемся в управлении ООО «ЖКХ-Радужный»",
+      "initial_price": "154467"
+    },
+    {
+      "id": 18265,
+      "source_table": "reestr_contract_223_fz",
+      "contract_number": "32615865490",
+      "end_date": "2026-12-31",
+      "tender_link": "https://lk.zakupki.gov.ru/223/purchase/private/purchase/notice-info/details.html?noticeInfoId=19596183",
+      "title": "Поставка пожарно-технического вооружения",
+      "initial_price": "180700"
+    },
+    {
+      "id": 17945,
+      "source_table": "reestr_contract_223_fz",
+      "contract_number": "32615836470",
+      "end_date": "2026-12-31",
+      "tender_link": "https://lk.zakupki.gov.ru/223/purchase/private/purchase/notice-info/details.html?noticeInfoId=19560381",
+      "title": "Принять и оплатить товар( бензоинструмент, электроинструмент, расходные и строительные материалы",
+      "initial_price": "500000"
+    },
+    {
+      "id": 17735,
+      "source_table": "reestr_contract_223_fz",
+      "contract_number": "32615815510",
+      "end_date": "2026-12-31",
+      "tender_link": "https://lk.zakupki.gov.ru/223/purchase/private/purchase/notice-info/details.html?noticeInfoId=19534364",
+      "title": "Поставка строительных и промышленных материалов.",
+      "initial_price": "400000"
+    },
+    {
+      "id": 17718,
+      "source_table": "reestr_contract_223_fz",
+      "contract_number": "32615780656",
+      "end_date": "2026-12-31",
+      "tender_link": "https://lk.zakupki.gov.ru/223/purchase/private/purchase/notice-info/details.html?noticeInfoId=19490346",
+      "title": "Поставка прибора энергетика многофункционального портативного",
+      "initial_price": "516000"
+    },
+    {
+      "id": 17663,
+      "source_table": "reestr_contract_223_fz",
+      "contract_number": "32615855973",
+      "end_date": "2026-12-31",
+      "tender_link": "https://lk.zakupki.gov.ru/223/purchase/private/purchase/notice-info/details.html?noticeInfoId=19584567",
+      "title": "Работы по ремонту подъезда в многоквартирном доме, находящемся в управлении ООО «ЖКХ-Радужный»",
+      "initial_price": "397289"
+    },
+    {
+      "id": 17656,
+      "source_table": "reestr_contract_223_fz",
+      "contract_number": "32615818692",
+      "end_date": "2026-12-31",
+      "tender_link": "https://lk.zakupki.gov.ru/223/purchase/private/purchase/notice-info/details.html?noticeInfoId=19538309",
+      "title": "Работы по ремонту подъездов в многоквартирном доме, находящемся в управлении ООО «ЖКХ-Радужный»",
+      "initial_price": "370903"
+    },
+    {
+      "id": 17654,
+      "source_table": "reestr_contract_223_fz",
+      "contract_number": "32615855828",
+      "end_date": "2026-12-31",
+      "tender_link": "https://lk.zakupki.gov.ru/223/purchase/private/purchase/notice-info/details.html?noticeInfoId=19584488",
+      "title": "Работы по ремонту подъездов в многоквартирном доме, находящемся в управлении ООО «ЖКХ-Радужный»",
+      "initial_price": "550830"
+    },
+    {
+      "id": 17638,
+      "source_table": "reestr_contract_223_fz",
+      "contract_number": "32615856012",
+      "end_date": "2026-12-31",
+      "tender_link": "https://lk.zakupki.gov.ru/223/purchase/private/purchase/notice-info/details.html?noticeInfoId=19584700",
+      "title": "Работы по ремонту подъезда в многоквартирном доме, находящемся в управлении ООО «ЖКХ-Радужный»",
+      "initial_price": "399670"
+    },
+    {
+      "id": 17517,
+      "source_table": "reestr_contract_223_fz",
+      "contract_number": "32615694242",
+      "end_date": "2026-12-31",
+      "tender_link": "https://lk.zakupki.gov.ru/223/purchase/private/purchase/notice-info/details.html?noticeInfoId=19382318",
+      "title": "выполнение работ по текущему ремонту комнаты № 122 общежития девочек Губернского лицея, расположенного по  г. Пенза, ул.",
+      "initial_price": "239969"
+    },
+    {
+      "id": 17508,
+      "source_table": "reestr_contract_223_fz",
+      "contract_number": "32615713204",
+      "end_date": "2026-12-31",
+      "tender_link": "https://lk.zakupki.gov.ru/223/purchase/private/purchase/notice-info/details.html?noticeInfoId=19406193",
+      "title": "ТО извещателей пожарной сигнализации",
+      "initial_price": "199992"
+    },
+    {
+      "id": 17421,
+      "source_table": "reestr_contract_223_fz",
+      "contract_number": "32615850388",
+      "end_date": "2026-12-31",
+      "tender_link": "https://lk.zakupki.gov.ru/223/purchase/private/purchase/notice-info/details.html?noticeInfoId=19577612",
+      "title": "для нужд ОГАУ \"Валуйский лесхоз\"",
+      "initial_price": "388200"
+    },
+    {
+      "id": 17380,
+      "source_table": "reestr_contract_223_fz",
+      "contract_number": "32515540487",
+      "end_date": "2026-12-31",
+      "tender_link": "https://lk.zakupki.gov.ru/223/purchase/private/purchase/notice-info/details.html?noticeInfoId=19190573",
+      "title": "Оказание услуг по техническому обслуживанию грузового лифта",
+      "initial_price": "44160"
+    },
+    {
+      "id": 17370,
+      "source_table": "reestr_contract_223_fz",
+      "contract_number": "32615686891",
+      "end_date": "2026-12-31",
+      "tender_link": "https://lk.zakupki.gov.ru/223/purchase/private/purchase/notice-info/details.html?noticeInfoId=19372943",
+      "title": "Приобретение электротоваров",
+      "initial_price": "200000"
+    },
+    {
+      "id": 17324,
+      "source_table": "reestr_contract_223_fz",
+      "contract_number": "32615671660",
+      "end_date": "2026-12-31",
+      "tender_link": "https://lk.zakupki.gov.ru/223/purchase/private/purchase/notice-info/details.html?noticeInfoId=19354054",
+      "title": "Устройство канализационных колодцев",
+      "initial_price": "306000.42"
+    },
+    {
+      "id": 17208,
+      "source_table": "reestr_contract_223_fz",
+      "contract_number": "32615602949",
+      "end_date": "2026-12-31",
+      "tender_link": "https://lk.zakupki.gov.ru/223/purchase/private/purchase/notice-info/details.html?noticeInfoId=19266674",
+      "title": "Поставка и монтаж дополнительного оборудования концертного зала",
+      "initial_price": "1271916"
+    },
+    {
+      "id": 17206,
+      "source_table": "reestr_contract_223_fz",
+      "contract_number": "32515486275",
+      "end_date": "2026-12-31",
+      "tender_link": "https://lk.zakupki.gov.ru/223/purchase/private/purchase/notice-info/details.html?noticeInfoId=19122245",
+      "title": "Услуга по техническому обслуживанию и ремонту системы видеонаблюдения для нужд ООО \"МЭК\"",
+      "initial_price": "104580"
+    },
+    {
+      "id": 17175,
+      "source_table": "reestr_contract_223_fz",
+      "contract_number": "32615603233",
+      "end_date": "2026-12-31",
+      "tender_link": "https://lk.zakupki.gov.ru/223/purchase/private/purchase/notice-info/details.html?noticeInfoId=19266990",
+      "title": "Поставка продукции электрооборудования",
+      "initial_price": "800000"
+    },
+    {
+      "id": 17119,
+      "source_table": "reestr_contract_223_fz",
+      "contract_number": "32615596835",
+      "end_date": "2026-12-31",
+      "tender_link": "https://lk.zakupki.gov.ru/223/purchase/private/purchase/notice-info/details.html?noticeInfoId=19258605",
+      "title": "Техническое обслуживание",
+      "initial_price": "1319634.61"
+    },
+    {
+      "id": 17115,
+      "source_table": "reestr_contract_223_fz",
+      "contract_number": "32515567000",
+      "end_date": "2026-12-31",
+      "tender_link": "https://lk.zakupki.gov.ru/223/purchase/private/purchase/notice-info/details.html?noticeInfoId=19222650",
+      "title": "Техническое обслуживание и ремонт лифтов и систем диспетчерского контроля за работой лифтов",
+      "initial_price": "205404"
+    },
+    {
+      "id": 17112,
+      "source_table": "reestr_contract_223_fz",
+      "contract_number": "32615792332",
+      "end_date": "2026-12-31",
+      "tender_link": "https://lk.zakupki.gov.ru/223/purchase/private/purchase/notice-info/details.html?noticeInfoId=19505206",
+      "title": "Работы по ремонту подъездов в многоквартирном доме, находящемся в управлении ООО «ЖКХ-Радужный»",
+      "initial_price": "799339"
+    },
+    {
+      "id": 17093,
+      "source_table": "reestr_contract_223_fz",
+      "contract_number": "32615792374",
+      "end_date": "2026-12-31",
+      "tender_link": "https://lk.zakupki.gov.ru/223/purchase/private/purchase/notice-info/details.html?noticeInfoId=19505265",
+      "title": "Работы по ремонту подъезда в многоквартирном доме, находящемся в управлении ООО «ЖКХ-Радужный»",
+      "initial_price": "158453"
+    },
+    {
+      "id": 1020,
+      "source_table": "reestr_contract_223_fz",
+      "contract_number": "32615712992",
+      "end_date": "2026-12-31",
+      "tender_link": "https://lk.zakupki.gov.ru/223/purchase/private/purchase/notice-info/details.html?noticeInfoId=19404468",
+      "title": "Поставка товаров",
+      "initial_price": "590000"
+    },
+    {
+      "id": 1014,
+      "source_table": "reestr_contract_223_fz",
+      "contract_number": "32515595257",
+      "end_date": "2026-12-31",
+      "tender_link": "https://lk.zakupki.gov.ru/223/purchase/private/purchase/notice-info/details.html?noticeInfoId=19256782",
+      "title": "Субподрядные работы",
+      "initial_price": "18853016.8"
+    },
+    {
+      "id": 1013,
+      "source_table": "reestr_contract_223_fz",
+      "contract_number": "32615714954",
+      "end_date": "2026-12-31",
+      "tender_link": "https://lk.zakupki.gov.ru/223/purchase/private/purchase/notice-info/details.html?noticeInfoId=19408302",
+      "title": "Поставка программно-аппаратного комплекса «Астарта iBase Антифрод» с USB ключом с поддержкой интерфейса подключения к пр",
+      "initial_price": "1400000"
+    },
+    {
+      "id": 579,
+      "source_table": "reestr_contract_223_fz",
+      "contract_number": "32615716231",
+      "end_date": "2026-12-31",
+      "tender_link": "https://lk.zakupki.gov.ru/223/purchase/private/purchase/notice-info/details.html?noticeInfoId=19409836",
+      "title": "Системный блок Vimark i3-12100, H610M-E, 16Gb, SSD 512Gb, 450W, Windows 11Ноутбук 15.6\" WVA FHD ASUS X1502VA-BQ1373 silv",
+      "initial_price": "120000"
+    },
+    {
+      "id": 568,
+      "source_table": "reestr_contract_223_fz",
+      "contract_number": "32615825485",
+      "end_date": "2026-12-31",
+      "tender_link": "https://lk.zakupki.gov.ru/223/purchase/private/purchase/notice-info/details.html?noticeInfoId=19546849",
+      "title": "Поставка расходных материалов для цветного принтера",
+      "initial_price": "10000"
+    },
+    {
+      "id": 17390,
+      "source_table": "reestr_contract_223_fz",
+      "contract_number": "32615602662",
+      "end_date": "2026-12-30",
+      "tender_link": "https://lk.zakupki.gov.ru/223/purchase/private/purchase/notice-info/details.html?noticeInfoId=19266339",
+      "title": "Оказание услуг по техническому обслуживанию систем отопления, горячего водоснабжения, индивидуальных тепловых пунктов, у",
+      "initial_price": "175000"
+    },
+    {
+      "id": 17229,
+      "source_table": "reestr_contract_223_fz",
+      "contract_number": "32615747459",
+      "end_date": "2026-12-30",
+      "tender_link": "https://lk.zakupki.gov.ru/223/purchase/private/purchase/notice-info/details.html?noticeInfoId=19446793",
+      "title": "Прочая закупка",
+      "initial_price": "14050"
+    },
+    {
+      "id": 17120,
+      "source_table": "reestr_contract_223_fz",
+      "contract_number": "32615603801",
+      "end_date": "2026-12-29",
+      "tender_link": "https://lk.zakupki.gov.ru/223/purchase/private/purchase/notice-info/details.html?noticeInfoId=19267755",
+      "title": "Закупка у единственного поставщика (подрядчика, исполнителя) на право заключения договора на выполнение работ по реконст",
+      "initial_price": "11903732.07"
+    },
+    {
+      "id": 17309,
+      "source_table": "reestr_contract_223_fz",
+      "contract_number": "32515585651",
+      "end_date": "2026-12-26",
+      "tender_link": "https://lk.zakupki.gov.ru/223/purchase/private/purchase/notice-info/details.html?noticeInfoId=19245192",
+      "title": "Выполнение работ по текущему ремонту мужского санузла для маломобильных групп населения",
+      "initial_price": "525076.9"
+    },
+    {
+      "id": 17144,
+      "source_table": "reestr_contract_223_fz",
+      "contract_number": "32515577857",
+      "end_date": "2026-12-25",
+      "tender_link": "https://lk.zakupki.gov.ru/223/purchase/private/purchase/notice-info/details.html?noticeInfoId=19235783",
+      "title": "Поставка средств индивидуальной защиты",
+      "initial_price": "3100000"
+    },
+    {
+      "id": 1017,
+      "source_table": "reestr_contract_223_fz",
+      "contract_number": "32615699026",
+      "end_date": "2026-12-17",
+      "tender_link": "https://lk.zakupki.gov.ru/223/purchase/private/purchase/notice-info/details.html?noticeInfoId=19388156",
+      "title": "Поставка сервисного набора для МФУ",
+      "initial_price": "160000"
+    },
+    {
+      "id": 44385,
+      "source_table": "reestr_contract_44_fz",
+      "contract_number": "0318100051226000067",
+      "end_date": "2026-10-19",
+      "tender_link": "https://zakupki.gov.ru/epz/order/notice/ok20/view/common-info.html?regNumber=0318100051226000067",
+      "title": "Капитальный ремонт укрепительных (противооползневых) сооружений на км 159+470 - км 159+485, км 160+150 - км 160+180, км ",
+      "initial_price": "401838510.00"
+    },
+    {
+      "id": 48768,
+      "source_table": "reestr_contract_44_fz",
+      "contract_number": "0318100051226000060",
+      "end_date": "2026-10-15",
+      "tender_link": "https://zakupki.gov.ru/epz/order/notice/ok20/view/common-info.html?regNumber=0318100051226000060",
+      "title": "Устройство слоев износа на участке км 83+684 - км 92+000 автомобильной дороги Р-217 \"Кавказ\" автомобильная дорога М-4 \"Д",
+      "initial_price": "116281452.00"
+    },
+    {
+      "id": 48765,
+      "source_table": "reestr_contract_44_fz",
+      "contract_number": "0318100051226000061",
+      "end_date": "2026-10-15",
+      "tender_link": "https://zakupki.gov.ru/epz/order/notice/ok20/view/common-info.html?regNumber=0318100051226000061",
+      "title": "Устройство слоев износа на участке км 50+683 - км 64+193 автомобильной дороги А-160 Майкоп - Бжедугхабль - Адыгейск - Ус",
+      "initial_price": "438770647.00"
+    },
+    {
+      "id": 13688,
+      "source_table": "reestr_contract_44_fz",
+      "contract_number": "0318100051226000068",
+      "end_date": "2026-10-13",
+      "tender_link": "https://zakupki.gov.ru/epz/order/notice/ok20/view/common-info.html?regNumber=0318100051226000068",
+      "title": "Капитальный ремонт укрепительных (противооползневых) сооружений на км 155+860 - км 155+880, км 157+630 - км 157+690, км ",
+      "initial_price": "569784859.00"
+    },
+    {
+      "id": 48766,
+      "source_table": "reestr_contract_44_fz",
+      "contract_number": "0318100051226000063",
+      "end_date": "2026-10-09",
+      "tender_link": "https://zakupki.gov.ru/epz/order/notice/ok20/view/common-info.html?regNumber=0318100051226000063",
+      "title": "Устройство слоев износа на участке км 40+000 - км 50+683 автомобильной дороги А-160 Майкоп - Бжедугхабль - Адыгейск - Ус",
+      "initial_price": "280084019.00"
+    },
+    {
+      "id": 48763,
+      "source_table": "reestr_contract_44_fz",
+      "contract_number": "0318100051226000059",
+      "end_date": "2026-10-09",
+      "tender_link": "https://zakupki.gov.ru/epz/order/notice/ok20/view/common-info.html?regNumber=0318100051226000059",
+      "title": "\"Устройство слоёв износа на  км 40+000 - км 42+300, км 42+433 - км 42+650, км 42+694 - км 43+003, км 43+107 - км 44+220,",
+      "initial_price": "654321000.00"
+    }
+  ]
+}

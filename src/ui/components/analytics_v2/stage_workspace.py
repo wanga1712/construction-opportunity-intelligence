@@ -3,7 +3,6 @@ from __future__ import annotations
 
 from html import escape
 from typing import Any
-from urllib.parse import urlparse
 
 import streamlit as st
 
@@ -85,12 +84,19 @@ def _summary(card: dict, stage: str, effective: Any, state: dict, published: boo
 
 
 def _source_actions(card: dict) -> None:
-    url = _clean(card.get("tender_link"))
-    if url:
-        host = (urlparse(url).hostname or "").lower()
-        st.link_button("🔗 Закупка на ЕИС" if "zakupki.gov.ru" in host else "🔗 Открыть закупку", url)
+    from src.services.procurement_identity import resolve_procurement_link
+
+    view = resolve_procurement_link(
+        source_table=card.get("source_table"),
+        contract_number=card.get("contract_number"),
+        tender_link=card.get("tender_link"),
+    )
+    if view.procurement_number:
+        st.markdown(f"📋 **№ закупки:** `{view.procurement_number}`")
+    if view.render_direct_link and view.public_url:
+        st.link_button("🔗 Закупка на ЕИС", view.public_url)
     else:
-        st.caption("🔗 Ссылка на закупку отсутствует")
+        st.caption(view.caption or "Прямая ссылка на закупку не подтверждена")
 
 
 def render_stage_workspace(cards: list[dict], *, session_key: str, stage: str,

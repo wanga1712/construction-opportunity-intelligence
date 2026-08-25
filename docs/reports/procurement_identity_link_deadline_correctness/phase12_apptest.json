@@ -1,0 +1,101 @@
+{
+  "exceptions": [],
+  "control_row": {
+    "id": 17758,
+    "contract_number": "32615833902",
+    "tender_link": "https://zakupki.gov.ru/epz/order/notice/notice223/common-info.html?regNumber=32615833902",
+    "source_table": "reestr_contract_223_fz"
+  },
+  "control_view": {
+    "number": "32615833902",
+    "public_url": "https://zakupki.gov.ru/epz/order/notice/notice223/common-info.html?regNumber=32615833902",
+    "render": true,
+    "validity": "VERIFIED_FACTUAL"
+  },
+  "control_private_lk_in_db": false,
+  "sample_views": [
+    {
+      "id": 66322,
+      "law": "44",
+      "number": "0121300045726000194",
+      "public_url": "https://zakupki.gov.ru/epz/order/notice/zk20/view/common-info.html?regNumber=0121300045726000194",
+      "render": true,
+      "private_lk_rendered": false
+    },
+    {
+      "id": 64786,
+      "law": "44",
+      "number": "0348400009126000026",
+      "public_url": "https://zakupki.gov.ru/epz/order/notice/zk20/view/common-info.html?regNumber=0348400009126000026",
+      "render": true,
+      "private_lk_rendered": false
+    },
+    {
+      "id": 62951,
+      "law": "44",
+      "number": "0368100007826000057",
+      "public_url": "https://zakupki.gov.ru/epz/order/notice/zk20/view/common-info.html?regNumber=0368100007826000057",
+      "render": true,
+      "private_lk_rendered": false
+    },
+    {
+      "id": 62511,
+      "law": "44",
+      "number": "0355100003026000006",
+      "public_url": "https://zakupki.gov.ru/epz/order/notice/zk20/view/common-info.html?regNumber=0355100003026000006",
+      "render": true,
+      "private_lk_rendered": false
+    },
+    {
+      "id": 61977,
+      "law": "44",
+      "number": "0133300004726000116",
+      "public_url": "https://zakupki.gov.ru/epz/order/notice/zk20/view/common-info.html?regNumber=0133300004726000116",
+      "render": true,
+      "private_lk_rendered": false
+    },
+    {
+      "id": 119065,
+      "law": "223",
+      "number": "32615892318",
+      "public_url": "https://zakupki.gov.ru/epz/order/notice/notice223/common-info.html?regNumber=32615892318",
+      "render": true,
+      "private_lk_rendered": false
+    },
+    {
+      "id": 119064,
+      "law": "223",
+      "number": "32615890116",
+      "public_url": "https://zakupki.gov.ru/epz/order/notice/notice223/common-info.html?regNumber=32615890116",
+      "render": true,
+      "private_lk_rendered": false
+    },
+    {
+      "id": 119063,
+      "law": "223",
+      "number": "32615892073",
+      "public_url": "https://zakupki.gov.ru/epz/order/notice/notice223/common-info.html?regNumber=32615892073",
+      "render": true,
+      "private_lk_rendered": false
+    },
+    {
+      "id": 119062,
+      "law": "223",
+      "number": "32615623638",
+      "public_url": "https://zakupki.gov.ru/epz/order/notice/notice223/common-info.html?regNumber=32615623638",
+      "render": true,
+      "private_lk_rendered": false
+    },
+    {
+      "id": 119061,
+      "law": "223",
+      "number": "32615623454",
+      "public_url": "https://zakupki.gov.ru/epz/order/notice/notice223/common-info.html?regNumber=32615623454",
+      "render": true,
+      "private_lk_rendered": false
+    }
+  ],
+  "sample_private_rendered": 0,
+  "ui_has_procurement_number_label": false,
+  "markdown_sample": "<style>\n:root {\n    --crm-primary: #0176D3;\n    --crm-app-bg: #E8EDF3;\n    --crm-surface: #F8FAFC;\n    --crm-card: #FFFFFF;\n    --crm-card-2: #F3F6FA;\n    --crm-input: #FFFFFF;\n    --crm-input-focus: #FFFFFF;\n    --crm-border: #D7DEE8;\n    --crm-border-soft: #E4E9F0;\n    --crm-text: #181818;\n    --crm-muted: #5F6B7A;\n    --crm-muted-2: #706E6B;\n    --crm-chip-bg: #EEF4FB;\n    --crm-chip-text: #0176D3;\n    --crm-hover: #EEF3F8;\n    --crm-shadow: rgba(24, 39, 75, 0.07);\n}\n\n.stApp {\n    background:\n        radial-gradient(circle at top left, rgba(1,118,211,0.16), transparent 34rem),\n        linear-gradient(180deg, rgba(255,255,255,0.02), transparent 14rem),\n        var(--crm-app-bg) !important;\n    color: var(--crm-text) !important;\n}\n.block-container {\n    padding-top: 1.8rem !important;\n}\n\nh1, h2, h3, h4, h5, h6,\np, label, span, div, [data-testid=\"stMarkdownContainer\"] {\n    color: inherit;\n}\ndiv[data-testid=\"stSidebar\"] {\n    background: var(--crm-surface) !important;\n    border-right: 1px solid var(--crm-border-soft) !important;\n}\ndiv[data-testid=\"stSidebar\"] .block-container {\n    padding-top: 1.25rem;\n}\n\ndiv[data-testid=\"stVerticalBlockBorderWrapper\"],\n[data-testid=\"stExpander\"]"
+}

@@ -436,6 +436,13 @@ def _upsert_one(crm_db, row: Dict[str, Any], existing: Optional[Dict[str, Any]],
     okpd_name = row.get("okpd_name")
     if okpd_name is not None:
         okpd_name = str(okpd_name).strip() or None
+    from src.services.procurement_identity import canonical_tender_link_for_storage
+
+    tender_link = canonical_tender_link_for_storage(
+        source_table=row.get("source_table"),
+        contract_number=cn,
+        tender_link=row.get("tender_link"),
+    )
     payload = {
         "source_table": row.get("source_table"),
         "source_id": int(row["source_id"]),
@@ -452,7 +459,7 @@ def _upsert_one(crm_db, row: Dict[str, Any], existing: Optional[Dict[str, Any]],
         "end_date": row.get("end_date"),
         "delivery_start_date": row.get("delivery_start_date"),
         "delivery_end_date": row.get("delivery_end_date"),
-        "tender_link": row.get("tender_link"),
+        "tender_link": tender_link,
         "source_updated_at": row.get("source_updated_at"),
         "crm_stage": crm_stage,
         "award_status": award_status,

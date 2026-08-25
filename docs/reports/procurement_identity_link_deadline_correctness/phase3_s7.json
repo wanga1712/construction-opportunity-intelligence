@@ -1,0 +1,270 @@
+{
+  "by_title": [
+    {
+      "id": 17758,
+      "source_id": 151355,
+      "contract_number": "32615833902",
+      "tender_link": "https://lk.zakupki.gov.ru/223/purchase/private/purchase/notice-info/details.html?noticeInfoId=19557278",
+      "end_date": "2032-03-24",
+      "start_date": "2026-03-24",
+      "title": "поставка и установка камер видеонаблюдения для МБ ДОУ № 8",
+      "initial_price": "142470",
+      "award_status": "submission_open"
+    }
+  ],
+  "by_notice_info_20167502": [
+    {
+      "id": 66854,
+      "source_id": 164744,
+      "contract_number": "32616314181",
+      "tender_link": "https://lk.zakupki.gov.ru/223/purchase/private/purchase/notice-info/details.html?noticeInfoId=20167502",
+      "end_date": "2026-08-23",
+      "title": "работы по строительству газопроводов среднего и низкого давления до границы земе",
+      "award_status": "submission_closed_waiting_award",
+      "crm_stage": "torgi"
+    }
+  ],
+  "by_reg_32615833902": [
+    {
+      "id": 17758,
+      "source_id": 151355,
+      "contract_number": "32615833902",
+      "tender_link": "https://lk.zakupki.gov.ru/223/purchase/private/purchase/notice-info/details.html?noticeInfoId=19557278",
+      "end_date": "2032-03-24",
+      "title": "поставка и установка камер видеонаблюдения для МБ ДОУ № 8"
+    }
+  ],
+  "s7_223_columns": [
+    [
+      "id",
+      "integer"
+    ],
+    [
+      "contract_number",
+      "text"
+    ],
+    [
+      "tender_link",
+      "text"
+    ],
+    [
+      "start_date",
+      "date"
+    ],
+    [
+      "end_date",
+      "date"
+    ],
+    [
+      "delivery_start_date",
+      "date"
+    ],
+    [
+      "delivery_end_date",
+      "date"
+    ],
+    [
+      "auction_name",
+      "text"
+    ],
+    [
+      "initial_price",
+      "numeric"
+    ],
+    [
+      "final_price",
+      "numeric"
+    ],
+    [
+      "guarantee_amount",
+      "numeric"
+    ],
+    [
+      "customer_id",
+      "integer"
+    ],
+    [
+      "contractor_id",
+      "integer"
+    ],
+    [
+      "trading_platform_id",
+      "integer"
+    ],
+    [
+      "okpd_id",
+      "integer"
+    ],
+    [
+      "delivery_region",
+      "text"
+    ],
+    [
+      "delivery_address",
+      "text"
+    ],
+    [
+      "region_id",
+      "integer"
+    ],
+    [
+      "placer",
+      "text"
+    ],
+    [
+      "placer_inn",
+      "text"
+    ],
+    [
+      "status_id",
+      "integer"
+    ],
+    [
+      "created_at",
+      "timestamp with time zone"
+    ],
+    [
+      "updated_at",
+      "timestamp with time zone"
+    ]
+  ],
+  "s7_identity_fields": {
+    "id": 151355,
+    "contract_number": "32615833902",
+    "tender_link": "https://lk.zakupki.gov.ru/223/purchase/private/purchase/notice-info/details.html?noticeInfoId=19557278",
+    "start_date": "2026-03-24",
+    "end_date": "2032-03-24",
+    "delivery_start_date": null,
+    "delivery_end_date": null,
+    "auction_name": "поставка и установка камер видеонаблюдения для МБ ДОУ № 8",
+    "initial_price": "142470",
+    "final_price": null,
+    "customer_id": 7194,
+    "contractor_id": null,
+    "trading_platform_id": 61,
+    "okpd_id": 3245,
+    "delivery_region": "Южный федеральный округ",
+    "region_id": 39,
+    "status_id": null,
+    "updated_at": "2026-07-29 20:35:45.891732+00:00"
+  },
+  "s7_blob_hits": {
+    "tender_link": {
+      "len": 102,
+      "has_32615833902": false,
+      "has_19557278": true,
+      "snippets": [
+        "noticeInfoId=19557278",
+        "https://lk.zakupki.gov.ru/223/purchase/private/purchase/notice-info/details.html?noticeInfoId=19557278"
+      ]
+    }
+  },
+  "s7_notice_like_all": {
+    "delivery_region": "Южный федеральный округ",
+    "region_id": 39
+  },
+  "sample_223_open_10": [
+    {
+      "crm_id": 18062,
+      "crm_contract_number": "32615858025",
+      "crm_tender_link": "https://lk.zakupki.gov.ru/223/purchase/private/purchase/notice-info/details.html?noticeInfoId=19587113",
+      "crm_end_date": "2032-03-30",
+      "s7_contract_number": "32615858025",
+      "s7_tender_link": "https://lk.zakupki.gov.ru/223/purchase/private/purchase/notice-info/details.html?noticeInfoId=19587113",
+      "s7_end_date": "2032-03-30",
+      "s7_start_date": "2026-03-30"
+    },
+    {
+      "crm_id": 17293,
+      "crm_contract_number": "32615857174",
+      "crm_tender_link": "https://lk.zakupki.gov.ru/223/purchase/private/purchase/notice-info/details.html?noticeInfoId=19586095",
+      "crm_end_date": "2032-03-30",
+      "s7_contract_number": "32615857174",
+      "s7_tender_link": "https://lk.zakupki.gov.ru/223/purchase/private/purchase/notice-info/details.html?noticeInfoId=19586095",
+      "s7_end_date": "2032-03-30",
+      "s7_start_date": "2026-03-30"
+    },
+    {
+      "crm_id": 17758,
+      "crm_contract_number": "32615833902",
+      "crm_tender_link": "https://lk.zakupki.gov.ru/223/purchase/private/purchase/notice-info/details.html?noticeInfoId=19557278",
+      "crm_end_date": "2032-03-24",
+      "s7_contract_number": "32615833902",
+      "s7_tender_link": "https://lk.zakupki.gov.ru/223/purchase/private/purchase/notice-info/details.html?noticeInfoId=19557278",
+      "s7_end_date": "2032-03-24",
+      "s7_start_date": "2026-03-24"
+    },
+    {
+      "crm_id": 17084,
+      "crm_contract_number": "32515489436",
+      "crm_tender_link": "https://lk.zakupki.gov.ru/223/purchase/private/purchase/notice-info/details.html?noticeInfoId=19126511",
+      "crm_end_date": "2031-12-04",
+      "s7_contract_number": "32515489436",
+      "s7_tender_link": "https://lk.zakupki.gov.ru/223/purchase/private/purchase/notice-info/details.html?noticeInfoId=19126511",
+      "s7_end_date": "2031-12-04",
+      "s7_start_date": "2025-12-04"
+    },
+    {
+      "crm_id": 18476,
+      "crm_contract_number": "32615874112",
+      "crm_tender_link": "https://lk.zakupki.gov.ru/223/purchase/private/purchase/notice-info/details.html?noticeInfoId=19607203",
+      "crm_end_date": "2027-04-02",
+      "s7_contract_number": "32615874112",
+      "s7_tender_link": "https://lk.zakupki.gov.ru/223/purchase/private/purchase/notice-info/details.html?noticeInfoId=19607203",
+      "s7_end_date": "2027-04-02",
+      "s7_start_date": "2026-04-02"
+    },
+    {
+      "crm_id": 17580,
+      "crm_contract_number": "32615811319",
+      "crm_tender_link": "https://lk.zakupki.gov.ru/223/purchase/private/purchase/notice-info/details.html?noticeInfoId=19529211",
+      "crm_end_date": "2027-03-31",
+      "s7_contract_number": "32615811319",
+      "s7_tender_link": "https://lk.zakupki.gov.ru/223/purchase/private/purchase/notice-info/details.html?noticeInfoId=19529211",
+      "s7_end_date": "2027-03-31",
+      "s7_start_date": "2026-03-18"
+    },
+    {
+      "crm_id": 17148,
+      "crm_contract_number": "32615694290",
+      "crm_tender_link": "https://lk.zakupki.gov.ru/223/purchase/private/purchase/notice-info/details.html?noticeInfoId=19383399",
+      "crm_end_date": "2027-02-11",
+      "s7_contract_number": "32615694290",
+      "s7_tender_link": "https://lk.zakupki.gov.ru/223/purchase/private/purchase/notice-info/details.html?noticeInfoId=19383399",
+      "s7_end_date": "2027-02-11",
+      "s7_start_date": "2026-02-11"
+    },
+    {
+      "crm_id": 17352,
+      "crm_contract_number": "32615618312",
+      "crm_tender_link": "https://lk.zakupki.gov.ru/223/purchase/private/purchase/notice-info/details.html?noticeInfoId=19286862",
+      "crm_end_date": "2027-01-31",
+      "s7_contract_number": "32615618312",
+      "s7_tender_link": "https://lk.zakupki.gov.ru/223/purchase/private/purchase/notice-info/details.html?noticeInfoId=19286862",
+      "s7_end_date": "2027-01-31",
+      "s7_start_date": "2026-01-15"
+    },
+    {
+      "crm_id": 17285,
+      "crm_contract_number": "32615626098",
+      "crm_tender_link": "https://lk.zakupki.gov.ru/223/purchase/private/purchase/notice-info/details.html?noticeInfoId=19296874",
+      "crm_end_date": "2027-01-21",
+      "s7_contract_number": "32615626098",
+      "s7_tender_link": "https://lk.zakupki.gov.ru/223/purchase/private/purchase/notice-info/details.html?noticeInfoId=19296874",
+      "s7_end_date": "2026-08-25",
+      "s7_start_date": "2026-08-25"
+    },
+    {
+      "crm_id": 101879,
+      "crm_contract_number": "32616050792",
+      "crm_tender_link": "https://lk.zakupki.gov.ru/223/purchase/private/purchase/notice-info/details.html?noticeInfoId=19830658",
+      "crm_end_date": "2026-12-31",
+      "s7_contract_number": "32616050792",
+      "s7_tender_link": "https://lk.zakupki.gov.ru/223/purchase/private/purchase/notice-info/details.html?noticeInfoId=19830658",
+      "s7_end_date": "2026-12-31",
+      "s7_start_date": "2026-08-23"
+    }
+  ],
+  "control_ai_scope": "OUT_OF_PROFILE",
+  "control_opps_empty": true
+}
