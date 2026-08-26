@@ -11,7 +11,11 @@
 - Размер рабочего Python-модуля: до 300 строк — желательно; 300–450 допустимо при цельности; свыше 450 требуется записанное объяснение или декомпозиция.
 - Изменение поведения сначала фиксируется тестом или явно записанным ожидаемым результатом.
 
-## CURRENT WIP — 2026-08-25
+## CURRENT WIP — 2026-08-26
+
+**CRM-V3-EXPERT-CATEGORY-GATE-AND-FIRST-STAGE-DATASET-1** — `[x]` **PASS / STOP**. Baseline GitHub closure `54780848` (S13 runtime start `ec356151`). First expert gate is now product-category only (`expert_category_scope` ∈ IN_CATEGORY/OUT_OF_CATEGORY/UNCERTAIN in JSONB payload; no DDL). Primary question: «Относится ли закупка к нашим товарным категориям?»; NO = `⛔ Вне товарных категорий` with Save&Next and no object/stage/medal/docs; YES reveals canonical `crm_product_categories` multiselect; UNCERTAIN stays unresolved. Legacy OUT_OF_PROFILE/NCE negatives preserved under filter «Старые Неинтересные» without auto-conversion. Counters: ALL=UNREVIEWED+REVIEWED by category-scope. Read-only first-stage dataset expander on Идут торги. Model comparison PARTIAL; no retrain. Tests 23 PASS; service active / HTTP 200. Report: `docs/reports/expert_category_gate_first_stage_dataset/IMPLEMENTATION_AND_PRODUCTION_ACCEPTANCE.md`. STOP after WIP.
+
+## PRIOR CURRENT WIP — 2026-08-25
 
 **CRM-V3-PROCUREMENT-IDENTITY-LINK-AND-DEADLINE-CORRECTNESS-1** — `[x]` **PASS / STOP**. Baseline was Git-visible deployed runtime `0f283a596` (user-reported `a7f9a7f` unresolved). Control cameras procurement CRM `17758` / S7 `151355` / notice `32615833902`. Root cause: 223 `urlEIS` private LK (`noticeInfoId`) was projected and rendered as public EIS link; public authority is EPZ `notice223?regNumber=<registrationNumber>`. CRM mass-repaired 223 private LK → public EPZ (`223_LINK_PRIVATE_LK=0`). Cards show `📋 № закупки` with zero extra SQL. 2032 deadline proven as stale parse from pre-2026-08-16 bak xpath `documentationDelivery/deliveryEndDateTime` (current authority `submissionCloseDateTime`); four OVER_365 rows audited, not silently truncated. Publication chip for control is correctly not visible (`OUT_OF_PROFILE`). Unit tests 7 PASS; real Analytics Contour browser acceptance PASS; service active / HTTP 200. Report: `docs/reports/procurement_identity_link_deadline_correctness/IMPLEMENTATION_AND_PRODUCTION_ACCEPTANCE.md`. STOP after WIP.
 

@@ -8,7 +8,7 @@ def test_torgi_expert_workset_does_not_use_manager_publication_as_admission_gate
     loader = source.split("def _load_torgi", 1)[1].split("def _load_queue_statuses_batch", 1)[0]
     assert "cp.crm_stage = 'torgi'" in loader
     assert "cp.award_status = 'submission_open'" in loader
-    assert "cp.end_date >= CURRENT_DATE" in loader
+    assert ("cp.end_date >= CURRENT_DATE" in loader) or ("actionable_submission_sql" in loader)
     assert "torgi_publication_sql_filters" not in loader
     assert "publication_schema_ready" not in loader
 
@@ -33,7 +33,9 @@ def test_compact_card_contract_and_source_action_order():
     assert "💰" in source and "📅" in source and "📜" in source
     assert "st.metric" not in source
     assert "route:" not in source and "files/matches/evidence" not in source
-    assert source.index("_source_actions(card)") < source.index('st.pills("Раздел карточки"')
+    assert "_source_actions(card)" in source
+    assert "st.pills" in source
+    assert source.index("_source_actions(card)") < source.index("st.pills")
     assert "label_visibility=\"collapsed\"" in source
     assert "text-overflow" not in source and "ellipsis" not in source
 

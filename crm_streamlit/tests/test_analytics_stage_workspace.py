@@ -47,10 +47,14 @@ def test_inline_sections_are_lazy_and_shared():
     assert "load_current_annotation_states" in source
 
 
-def test_annotation_filter_has_all_four_human_states():
-    assert [label for _, label in stage_workspace.FILTERS] == [
-        "Все", "Не размеченные", "Размеченные", "Неинтересные"
-    ]
+def test_annotation_filter_has_category_gate_human_states():
+    labels = [label for _, label in stage_workspace.FILTERS]
+    assert labels[0] == "Все"
+    assert labels[1] == "Не проверено"
+    assert labels[2] == "Проверено"
+    assert labels[3] == "Вне товарных категорий"
+    assert "Неинтересн" in labels[4]
+    assert len(labels) == 5
 
 
 def test_save_next_is_consumed_only_by_active_stage_queue():
