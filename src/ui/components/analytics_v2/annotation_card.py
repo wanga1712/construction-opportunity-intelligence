@@ -264,32 +264,74 @@ def _render_primary_scope_decision(
     subtypes: list[str],
     stages: list[str],
 ) -> None:
-    """Render the selected first decision without requiring the advanced form."""
+    """Stage-1 product category gate: title+OKPD only; no object/stage/medal/docs."""
+    from src.services.annotation_category_gate import (
+        OUT_OF_CATEGORY_BADGE,
+        build_in_category_payload,
+        build_out_of_category_payload,
+        build_uncertain_payload,
+    )
+
     decision = st.session_state.get(scope_decision_key(procurement_id))
     if decision == "NO":
-        st.error("⛔ Закупка будет сохранена как «Вне нашего профиля».")
-        reason_codes = list(REJECTION_REASONS)
-        reason = st.selectbox(
-            "Почему? (необязательно)",
-            [None, *reason_codes],
-            key=_sk(procurement_id, "rejection_reason"),
-            format_func=lambda value: "Не указывать" if value is None else REJECTION_REASONS[value],
+        st.error(f"{OUT_OF_CATEGORY_BADGE} — закупка не относится ни к одной товарной категории.")
+        st.caption("Объект, стадия, медаль и документы на этом этапе не требуются.")
+        comment = st.text_input(
+            "Комментарий (необязательно)",
+            key=_sk(procurement_id, "category_gate_comment"),
         )
         if st.button(
             "Сохранить и следующая →",
             key=_sk(procurement_id, "scope_no_save_next"),
             type="primary",
         ):
-            payload = _build_out_of_profile_payload(assessment, created_by)
-            if reason:
-                payload["expert_out_of_profile_reason"] = reason
+            payload = build_out_of_category_payload(
+                assessment=assessment, created_by=created_by, comment=comment or ""
+            )
             _persist(procurement_id, payload, assessment, created_by, crm_db, save_and_next=True)
-    elif decision == "YES":
-        st.success("✓ Закупка относится к нашему профилю.")
-        _render_guided_positive(procurement_id, assessment, categories, crm_db, obj_types, subtypes, stages)
-    elif decision == "UNCERTAIN":
-        st.warning("? Решение пока не принято. Проверьте категорию или документы.")
-        st.caption("Модель / Категории, Документы и Расширенная разметка остаются доступны ниже.")
+        return
+    if decision == "YES":
+        st.success("✓ Закупка относится к нашим товарным категориям.")
+        st.markdown("**К какой товарной категории относится закупка?**")
+        name_by_code = {c["code"]: c.get("name") or c["code"] for c in categories}
+        labels = [f"{name_by_code[c['code']]}  · `{c['code']}`" for c in categories]
+        label_to_code = {labels[i]: categories[i]["code"] for i in range(len(categories))}
+        selected_labels = st.multiselect(
+            "Товарные категории (канонический реестр)",
+            options=labels,
+            key=_sk(procurement_id, "category_gate_multiselect"),
+            help="Можно выбрать одну или несколько активных категорий.",
+        )
+        selected_codes = [label_to_code[label] for label in selected_labels if label in label_to_code]
+        left, right = st.columns(2)
+        save = left.button("💾 Сохранить", key=_sk(procurement_id, "scope_yes_save"))
+        save_next = right.button(
+            "Сохранить и следующая →",
+            key=_sk(procurement_id, "scope_yes_save_next"),
+            type="primary",
+        )
+        if save or save_next:
+            if not selected_codes:
+                st.error("Выберите хотя бы одну товарную категорию.")
+                return
+            payload = build_in_category_payload(
+                assessment=assessment,
+                created_by=created_by,
+                category_codes=selected_codes,
+                category_names=name_by_code,
+            )
+            _persist(procurement_id, payload, assessment, created_by, crm_db, save_and_next=save_next)
+        return
+    if decision == "UNCERTAIN":
+        st.warning("? Title + ОКПД2 недостаточно для уверенного решения.")
+        st.caption("Не классифицируем как IN/OUT. Можно сохранить и вернуться позже.")
+        if st.button(
+            "Сохранить «Не уверен» и следующая →",
+            key=_sk(procurement_id, "scope_uncertain_save_next"),
+            type="primary",
+        ):
+            payload = build_uncertain_payload(assessment=assessment, created_by=created_by)
+            _persist(procurement_id, payload, assessment, created_by, crm_db, save_and_next=True)
 
 
 def render_annotation_card(

@@ -28,6 +28,34 @@ DEADLINE_SORT_LABELS = {
 }
 
 
+def _render_first_stage_dataset_panel(crm_db, annotation_states: dict) -> None:
+    """Read-only first-stage category-gate dataset for smoke batch progress."""
+    from src.services.annotation_category_gate import (
+        IN_CATEGORY,
+        OUT_OF_CATEGORY,
+        UNCERTAIN,
+        first_stage_dataset_rows,
+    )
+    from src.services.annotation_state_service import annotation_state_counts
+
+    counts = annotation_state_counts(annotation_states)
+    with st.expander(
+        "Первый этап · датасет (title + ОКПД → товарные категории)",
+        expanded=False,
+    ):
+        st.caption(
+            f"Проверено: {counts.get('REVIEWED', 0)} · "
+            f"В категории: {counts.get(IN_CATEGORY, 0)} · "
+            f"Вне категорий: {counts.get(OUT_OF_CATEGORY, 0)} · "
+            f"Не уверен: {counts.get(UNCERTAIN, 0)}"
+        )
+        rows = first_stage_dataset_rows(crm_db, limit=80)
+        if not rows:
+            st.info("Пока нет разметок с expert_category_scope. Цель smoke-batch: 30–40.")
+            return
+        st.dataframe(rows, use_container_width=True, hide_index=True)
+
+
 def torgi_deadline_order_by(sort_mode: str) -> str:
     """Trusted deterministic SQL ordering, applied before LIMIT/OFFSET."""
     direction = "ASC" if sort_mode == NEAREST_DEADLINE_FIRST else "DESC"
@@ -460,6 +488,7 @@ def _render_torgi_tab() -> None:
     selected_id = st.session_state.get(_SESSION_TORGI)
     st.markdown(f"### Идут торги · {len(workset_ids)}")
     st.caption(f"Показано {offset + 1}–{offset + len(cards)} из {len(selected_ids)}")
+    _render_first_stage_dataset_panel(crm_db, annotation_states)
 
     render_stage_workspace(
         filtered,
