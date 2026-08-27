@@ -13,7 +13,7 @@
 
 ## CURRENT WIP — 2026-08-26
 
-**CRM-V3-EXPERT-OBJECT-AND-PROCUREMENT-MODE-STAGED-ANNOTATION-1** — `[~]` **IN PROGRESS**. Baseline GitHub `4010e77` / S13 runtime start `b9c45be`. Staged expert path on Analytics cards: factual source contour (read-only from `source_table`) → controlled object sector/type → `expert_procurement_mode` → preserved product-category gate. No medal/model/DDL. Report: `docs/reports/expert_object_procurement_mode_staged_annotation/IMPLEMENTATION_AND_PRODUCTION_ACCEPTANCE.md`.
+**CRM-V3-EXPERT-OBJECT-AND-PROCUREMENT-MODE-STAGED-ANNOTATION-1** — `[x]` **PASS / STOP**. Baseline GitHub `4010e77` / S13 runtime start `b9c45be`. Staged expert path: factual source contour (read-only `source_table`) → controlled object sector/type → `expert_procurement_mode` → preserved product-category gate. SERVICES_MODE_REQUIRED=NO. Implementation `8696b56`; S13 deployed runtime `afa14ed`; local suite 50 PASS / S13 27 PASS; AppTest exceptions 0 / HTTP 200. Report: `docs/reports/expert_object_procurement_mode_staged_annotation/IMPLEMENTATION_AND_PRODUCTION_ACCEPTANCE.md`. STOP after WIP. Next (not started): `CRM-V3-EXPERT-PRODUCT-CATEGORY-AND-COMMERCIAL-MEDAL-STAGE-1`.
 
 ## PRIOR CURRENT WIP — 2026-08-26
 
