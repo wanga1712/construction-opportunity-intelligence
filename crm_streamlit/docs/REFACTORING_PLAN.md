@@ -13,6 +13,10 @@
 
 ## CURRENT WIP — 2026-08-27
 
+**CRM-V3-LIFECYCLE-TRUTH-SOURCE-FILTER-AND-AI-DECISION-VISIBILITY-1** — `[x]` **PASS / STOP**. Baseline GitHub `1df482a` / S13 start git `c5db3ad` (overlay triage `c9868f5`). Count drift 1829→~2500+ proven as same-day CRM projection growth; effective lifecycle identity `(law_family, contract_number)` with AWARDED>COMMISSION>OPEN; NULL deadline ≠ OPEN; factual «Идут торги» SQL; law filter 44/223 (615 NOT_AVAILABLE — missing projection path); AI structured decision block on primary card. Implementation `047cb82` (+ residual `_sync_source` NULL-deadline writer fix); S13 overlay runtime `047cb82` then redeploy of follow-up; UI_TORGI_ALL=3782 = 3272+510+0; invariants AWARDED/NULL/PAST in torgi = 0; local+S13 focused tests PASS; AppTest exceptions 0 / HTTP 200. Report: `docs/reports/lifecycle_truth_source_filter_ai_decision_visibility/IMPLEMENTATION_AND_PRODUCTION_ACCEPTANCE.md`. STOP.
+
+## PRIOR CURRENT WIP — 2026-08-27
+
 **CRM-V3-EXPERT-FAST-CATEGORY-TRIAGE-AND-POSITIVE-ONLY-DEEP-ANNOTATION-1** — `[x]` **PASS / STOP**. Baseline GitHub `b32c6ab` / S13 start `c5db3ad`. Category gate first; OUT/UNCERTAIN one-action Save&Next without object/mode/commercial/medal; deep annotation only after IN_CATEGORY; triage counters separated from deep completeness; sparse stage dataset valid. Implementation `c9868f5`; S13 overlay runtime `c9868f5`; local+S13 focused 42 PASS; AppTest exceptions 0 / HTTP 200. Report: `docs/reports/expert_fast_category_triage_positive_only_deep_annotation/IMPLEMENTATION_AND_PRODUCTION_ACCEPTANCE.md`. STOP. Next: `MANUAL_FAST_TRIAGE_OF_REAL_PROCUREMENTS`.
 
 ## PRIOR CURRENT WIP — 2026-08-27
