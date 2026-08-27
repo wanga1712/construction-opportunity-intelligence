@@ -13,6 +13,10 @@
 
 ## CURRENT WIP — 2026-08-27
 
+**CRM-V3-EXPERT-FAST-CATEGORY-TRIAGE-AND-POSITIVE-ONLY-DEEP-ANNOTATION-1** — `[x]` **PASS / STOP**. Baseline GitHub `b32c6ab` / S13 start `c5db3ad`. Category gate first; OUT/UNCERTAIN one-action Save&Next without object/mode/commercial/medal; deep annotation only after IN_CATEGORY; triage counters separated from deep completeness; sparse stage dataset valid. Implementation `c9868f5`; S13 overlay runtime `c9868f5`; local+S13 focused 42 PASS; AppTest exceptions 0 / HTTP 200. Report: `docs/reports/expert_fast_category_triage_positive_only_deep_annotation/IMPLEMENTATION_AND_PRODUCTION_ACCEPTANCE.md`. STOP. Next: `MANUAL_FAST_TRIAGE_OF_REAL_PROCUREMENTS`.
+
+## PRIOR CURRENT WIP — 2026-08-27
+
 **CRM-V3-EXPERT-PRODUCT-CATEGORY-AND-COMMERCIAL-MEDAL-STAGE-1** — `[x]` **PASS / STOP**. Baseline GitHub `8a96424` / S13 start `6b38299`. Product subcategory + `expert_commercial_entry` (≠ source contour) + human medal GOLD–WOOD for IN_CATEGORY+COMMERCIAL. OUT_OF_CATEGORY / NON_COMMERCIAL do not require medal. Implementation `b41f6ed`; local 61 PASS / S13 38 PASS; AppTest PASS / exceptions 0 / HTTP 200. Report: `docs/reports/expert_product_category_commercial_medal_stage/IMPLEMENTATION_AND_PRODUCTION_ACCEPTANCE.md`. STOP. Next: MANUALLY_ANNOTATE_30_TO_40_REAL_CARDS.
 
 ## PRIOR CURRENT WIP — 2026-08-26
