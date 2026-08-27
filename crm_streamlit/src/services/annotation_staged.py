@@ -176,47 +176,56 @@ def has_object_classification(payload: dict | None) -> bool:
     return bool(object_sector_of(payload) and object_type_of(payload))
 
 
-def is_staged_complete(payload: dict | None) -> bool:
-    """Full completeness for this WIP.
+def is_category_triage_complete(payload: dict | None) -> bool:
+    """Category gate done — OUT/UNCERTAIN/IN all count; sparse negatives are valid."""
+    return bool(category_scope_of(payload))
 
-    OUT_OF_CATEGORY: object + mode + scope
-    UNCERTAIN scope: object + mode + scope (may stay partial if incomplete object)
-    IN_CATEGORY + COMMERCIAL: + category + commercial_entry + medal
-    IN_CATEGORY + NON_COMMERCIAL: + category + commercial_entry (no medal)
-    IN_CATEGORY + UNCERTAIN entry: + category + commercial_entry (no medal)
-    """
-    if not payload:
+
+def is_deep_annotation_complete(payload: dict | None) -> bool:
+    """Full positive deep annotation (IN_CATEGORY only)."""
+    if not payload or category_scope_of(payload) != IN_CATEGORY:
         return False
-    scope = category_scope_of(payload)
-    if not scope:
+    if not category_codes_of(payload):
         return False
     if not has_object_classification(payload):
         return False
     if not procurement_mode_of(payload):
-        return False
-    if scope == OUT_OF_CATEGORY:
-        return True
-    if scope == UNCERTAIN:
-        return True
-    if scope != IN_CATEGORY:
-        return False
-    if not category_codes_of(payload):
         return False
     entry = commercial_entry_of(payload)
     if not entry:
         return False
     if entry == COMMERCIAL:
         return bool(medal_of(payload))
-    # NON_COMMERCIAL / UNCERTAIN entry — medal not required
     return True
 
 
+def is_staged_complete(payload: dict | None) -> bool:
+    """Compatibility alias.
+
+    OUT_OF_CATEGORY / UNCERTAIN: triage-only (scope alone) — valid sparse rows.
+    IN_CATEGORY: deep annotation complete.
+    """
+    if not payload:
+        return False
+    scope = category_scope_of(payload)
+    if scope in (OUT_OF_CATEGORY, UNCERTAIN):
+        return True
+    if scope == IN_CATEGORY:
+        return is_deep_annotation_complete(payload)
+    return False
+
+
 def is_partially_reviewed(payload: dict | None) -> bool:
-    if not payload or is_staged_complete(payload):
+    """IN_CATEGORY with scope but incomplete deep fields."""
+    if not payload:
+        return False
+    scope = category_scope_of(payload)
+    if scope == IN_CATEGORY and not is_deep_annotation_complete(payload):
+        return True
+    if is_category_triage_complete(payload) or is_staged_complete(payload):
         return False
     return bool(
-        category_scope_of(payload)
-        or has_object_classification(payload)
+        has_object_classification(payload)
         or procurement_mode_of(payload)
         or commercial_entry_of(payload)
         or medal_of(payload)
@@ -243,37 +252,54 @@ def staged_card_summary(
     """Compact structured result for primary card after save."""
     if not payload:
         return {"status": "UNREVIEWED", "lines": []}
-    if not is_partially_reviewed(payload) and not is_staged_complete(payload):
+    scope = category_scope_of(payload)
+    if not scope and not is_partially_reviewed(payload):
         return {"status": "UNREVIEWED", "lines": []}
+
+    # Sparse negatives: badge only — no blank object/mode/commercial lines.
+    if scope == OUT_OF_CATEGORY:
+        return {
+            "status": "TRIAGED",
+            "lines": [("⛔", "Вне товарных категорий")],
+        }
+    if scope == UNCERTAIN and not is_deep_annotation_complete(payload):
+        return {
+            "status": "TRIAGED",
+            "lines": [("?", "Товарная принадлежность: не уверен")],
+        }
+
     lines: list[tuple[str, str]] = []
+    if scope == IN_CATEGORY:
+        cats = category_display_labels(payload, name_by_code=name_by_code)
+        if cats:
+            lines.append(("📦", ", ".join(cats)))
+        else:
+            lines.append(("✓", "В товарных категориях"))
     obj = object_summary_label(payload)
     if obj:
         lines.append(("🏢", obj))
     mode = procurement_mode_label(procurement_mode_of(payload))
     if mode:
         lines.append(("🛠", mode))
-    scope = category_scope_of(payload)
-    if scope == OUT_OF_CATEGORY:
-        lines.append(("⛔", "Вне товарных категорий"))
-    elif scope == UNCERTAIN:
-        lines.append(("?", "Товарная принадлежность: не уверен"))
-    elif scope == IN_CATEGORY:
-        cats = category_display_labels(payload, name_by_code=name_by_code)
-        if cats:
-            lines.append(("📦", ", ".join(cats)))
-        entry = commercial_entry_of(payload)
-        if entry == COMMERCIAL:
-            lines.append(("✓", "Коммерчески подходит"))
-            med = medal_label(medal_of(payload))
-            if med:
-                lines.append(("🥇" if medal_of(payload) == "GOLD" else "🏅", med))
-        elif entry == NON_COMMERCIAL:
-            lines.append(("⛔", "Коммерчески не подходит"))
-        elif entry == ENTRY_UNCERTAIN:
-            lines.append(("?", "Коммерческая оценка: не уверен"))
-        elif legacy_commercial_state(payload):
-            lines.append(("⚠", "Legacy коммерческое состояние — нужна доразметка"))
-    status = "REVIEWED" if is_staged_complete(payload) else "PARTIAL"
+    entry = commercial_entry_of(payload)
+    if entry == COMMERCIAL:
+        lines.append(("✓", "Коммерчески подходит"))
+        med = medal_label(medal_of(payload))
+        if med:
+            lines.append(("🥇" if medal_of(payload) == "GOLD" else "🏅", med))
+    elif entry == NON_COMMERCIAL:
+        lines.append(("⛔", "Коммерчески не подходит"))
+    elif entry == ENTRY_UNCERTAIN:
+        lines.append(("?", "Коммерческая оценка: не уверен"))
+    elif legacy_commercial_state(payload):
+        lines.append(("⚠", "Legacy коммерческое состояние — нужна доразметка"))
+
+    if is_deep_annotation_complete(payload):
+        status = "REVIEWED"
+    elif is_category_triage_complete(payload):
+        status = "TRIAGED" if scope != IN_CATEGORY else "PARTIAL"
+    else:
+        status = "PARTIAL"
     return {"status": status, "lines": lines}
 
 
@@ -336,7 +362,7 @@ def compare_human_vs_model_staged(
 
 
 def first_stage_dataset_rows_staged(crm_db: Any, *, limit: int = 200) -> list[dict]:
-    """Extended staged dataset including commercial/medal/subcategory fields."""
+    """Sparse staged dataset: OUT/UNCERTAIN with NULL deep fields is valid."""
     from src.services.annotation_category_gate import CATEGORY_SCOPE_FIELD as CSF
 
     rows = crm_db.execute_query(
@@ -351,6 +377,8 @@ def first_stage_dataset_rows_staged(crm_db: Any, *, limit: int = 200) -> list[di
             COALESCE(a.payload->>'{CSF}', '') <> ''
             OR COALESCE(a.payload->>'{OBJECT_SECTOR_FIELD}', '') <> ''
             OR COALESCE(a.payload->>'{PROCUREMENT_MODE_FIELD}', '') <> ''
+            OR COALESCE(a.payload->>'{COMMERCIAL_ENTRY_FIELD}', '') <> ''
+            OR COALESCE(a.payload->>'{MEDAL_FIELD}', '') <> ''
           )
         ORDER BY a.created_at DESC
         LIMIT %s
@@ -360,7 +388,12 @@ def first_stage_dataset_rows_staged(crm_db: Any, *, limit: int = 200) -> list[di
     out = []
     for row in rows or []:
         payload = row.get("payload") or {}
+        if isinstance(payload, str):
+            import json
+
+            payload = json.loads(payload)
         comparison = compare_human_vs_model_staged(payload=payload, assessment=None)
+        scope = category_scope_of(payload)
         base = {
             "procurement_id": row["procurement_id"],
             "procurement_number": row.get("contract_number"),
@@ -371,7 +404,7 @@ def first_stage_dataset_rows_staged(crm_db: Any, *, limit: int = 200) -> list[di
             OBJECT_TYPE_FIELD: object_type_of(payload),
             OBJECT_SUBTYPE_FIELD: object_subtype_of(payload),
             PROCUREMENT_MODE_FIELD: procurement_mode_of(payload),
-            CATEGORY_SCOPE_FIELD: category_scope_of(payload),
+            CATEGORY_SCOPE_FIELD: scope,
             CATEGORY_CODES_FIELD: category_codes_of(payload),
             SUBCATEGORY_CODES_FIELD: subcategory_codes_of(payload),
             COMMERCIAL_ENTRY_FIELD: commercial_entry_of(payload),
@@ -380,6 +413,15 @@ def first_stage_dataset_rows_staged(crm_db: Any, *, limit: int = 200) -> list[di
             "annotation_created_at": row.get("created_at"),
             "annotation_version": row.get("annotation_version"),
             "staged_complete": is_staged_complete(payload),
+            "category_triage_complete": is_category_triage_complete(payload),
+            "deep_annotation_complete": is_deep_annotation_complete(payload),
+            "sparse_stage_row_valid": True,
+            "out_of_category_sparse_valid": scope == OUT_OF_CATEGORY,
+            "in_category_dataset": scope is not None,
+            "object_dataset": bool(object_type_of(payload)),
+            "mode_dataset": bool(procurement_mode_of(payload)),
+            "commercial_dataset": bool(commercial_entry_of(payload)),
+            "medal_dataset": bool(medal_of(payload)),
             "object_match": comparison.get("object_match"),
             "mode_match": comparison.get("mode_match"),
             "category_scope_match": comparison.get("category_scope_match"),
@@ -389,3 +431,57 @@ def first_stage_dataset_rows_staged(crm_db: Any, *, limit: int = 200) -> list[di
         }
         out.append(enrich_dataset_row(base, row.get("source_table")))
     return out
+
+
+def count_stage_datasets(crm_db: Any) -> dict[str, int]:
+    """Independent stage counts; CATEGORY >= OBJECT >= MEDAL is expected."""
+    from src.services.annotation_category_gate import CATEGORY_SCOPE_FIELD as CSF
+
+    row = crm_db.execute_query(
+        f"""
+        SELECT
+          COUNT(*) FILTER (
+            WHERE COALESCE(a.payload->>'{CSF}', '') <> ''
+          ) AS category_dataset_count,
+          COUNT(*) FILTER (
+            WHERE COALESCE(a.payload->>'{OBJECT_TYPE_FIELD}', '') <> ''
+          ) AS object_dataset_count,
+          COUNT(*) FILTER (
+            WHERE COALESCE(a.payload->>'{PROCUREMENT_MODE_FIELD}', '') <> ''
+          ) AS mode_dataset_count,
+          COUNT(*) FILTER (
+            WHERE COALESCE(a.payload->>'{COMMERCIAL_ENTRY_FIELD}', '') <> ''
+          ) AS commercial_dataset_count,
+          COUNT(*) FILTER (
+            WHERE COALESCE(a.payload->>'{MEDAL_FIELD}', '') <> ''
+          ) AS medal_dataset_count,
+          COUNT(*) FILTER (
+            WHERE COALESCE(a.payload->>'{CSF}', '') <> ''
+          ) AS category_triage_reviewed,
+          COUNT(*) FILTER (
+            WHERE COALESCE(a.payload->>'{CSF}', '') = '{IN_CATEGORY}'
+              AND COALESCE(a.payload->'{CATEGORY_CODES_FIELD}'->>0, '') <> ''
+              AND COALESCE(a.payload->>'{OBJECT_TYPE_FIELD}', '') <> ''
+              AND COALESCE(a.payload->>'{PROCUREMENT_MODE_FIELD}', '') <> ''
+              AND COALESCE(a.payload->>'{COMMERCIAL_ENTRY_FIELD}', '') <> ''
+              AND (
+                COALESCE(a.payload->>'{COMMERCIAL_ENTRY_FIELD}', '') <> '{COMMERCIAL}'
+                OR COALESCE(a.payload->>'{MEDAL_FIELD}', '') <> ''
+              )
+          ) AS deep_annotation_complete
+        FROM crm_v3_expert_annotations a
+        WHERE a.is_current = TRUE
+        """,
+        (),
+    )
+    r = (row or [{}])[0] if row else {}
+    keys = (
+        "category_dataset_count",
+        "object_dataset_count",
+        "mode_dataset_count",
+        "commercial_dataset_count",
+        "medal_dataset_count",
+        "category_triage_reviewed",
+        "deep_annotation_complete",
+    )
+    return {k: int(r.get(k) or 0) for k in keys}

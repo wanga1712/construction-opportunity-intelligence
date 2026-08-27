@@ -52,8 +52,8 @@ def render_object_stage_controls(
     assessment: dict | None = None,
     human_type_suggestions: list[str] | None = None,
 ) -> None:
-    """1. Object sector → type → optional subtype (+ propose new type)."""
-    st.markdown("**1. Что это за объект?**")
+    """Object sector → type → optional subtype (+ propose new type)."""
+    st.markdown("**3. Что это за объект?**")
     render_ai_suggestions_readonly(assessment)
 
     sector_key = _sk(procurement_id, "obj_sector")
@@ -117,7 +117,7 @@ def render_procurement_mode_controls(
     *,
     assessment: dict | None = None,
 ) -> None:
-    st.markdown("**2. Что закупают?**")
+    st.markdown("**4. Что закупают?**")
     hint = model_procurement_mode_hint(assessment)
     if hint:
         st.caption(f"🤖 ИИ предложил тип закупки: {PROCUREMENT_MODE_LABELS_RU.get(hint, hint)} (только чтение)")
@@ -146,10 +146,10 @@ def render_product_category_controls(
     subcategories_by_category: dict[str, list[dict]],
     assessment: dict | None = None,
 ) -> list[str]:
-    """4. Product category + optional subcategory (canonical registries only)."""
+    """Product category + optional subcategory (canonical registries only)."""
     from src.services.annotation_category_gate import derive_model_stage1_scope
 
-    st.markdown("**4. Категория продукции**")
+    st.markdown("**2. К какой категории относится?**")
     model_scope, model_codes = derive_model_stage1_scope(assessment)
     if model_codes:
         st.caption(
@@ -335,18 +335,29 @@ def init_staged_draft_from_payload(procurement_id: int, payload: dict | None) ->
     st.session_state[flag] = True
 
 
-def validate_staged_minimum(draft: dict[str, Any], *, require_in_category_extras: bool = False) -> list[str]:
+def validate_staged_minimum(
+    draft: dict[str, Any],
+    *,
+    require_in_category_extras: bool = False,
+    require_deep_fields: bool | None = None,
+) -> list[str]:
+    """Validate deep annotation only for IN_CATEGORY.
+
+    OUT_OF_CATEGORY / UNCERTAIN triage never requires object/mode/category/medal.
+    """
+    need_deep = require_in_category_extras if require_deep_fields is None else require_deep_fields
+    if not need_deep:
+        return []
     missing = []
+    if not draft.get("category_codes"):
+        missing.append("товарную категорию")
     if not draft.get("object_sector") or not draft.get("object_type"):
         missing.append("объект (сектор и тип)")
     if not draft.get("procurement_mode"):
         missing.append("тип закупки")
-    if require_in_category_extras:
-        if not draft.get("category_codes"):
-            missing.append("товарную категорию")
-        entry = draft.get("commercial_entry")
-        if not entry:
-            missing.append("коммерческую оценку")
-        elif entry == "COMMERCIAL" and not draft.get("expert_medal"):
-            missing.append("медаль")
+    entry = draft.get("commercial_entry")
+    if not entry:
+        missing.append("коммерческую оценку")
+    elif entry == "COMMERCIAL" and not draft.get("expert_medal"):
+        missing.append("медаль")
     return missing

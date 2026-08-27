@@ -270,7 +270,7 @@ def _render_primary_scope_decision(
     *,
     existing_annotation: dict | None = None,
 ) -> None:
-    """Staged path: object → mode → category gate → product → commercial → medal."""
+    """Category gate first; deep fields only after IN_CATEGORY."""
     from src.services.annotation_category_gate import (
         FIRST_GATE_QUESTION,
         OUT_OF_CATEGORY_BADGE,
@@ -292,14 +292,8 @@ def _render_primary_scope_decision(
 
     payload_seed = (existing_annotation or {}).get("payload") if existing_annotation else None
     init_staged_draft_from_payload(procurement_id, payload_seed)
-    render_object_stage_controls(
-        procurement_id,
-        assessment=assessment,
-        human_type_suggestions=obj_types,
-    )
-    render_procurement_mode_controls(procurement_id, assessment=assessment)
 
-    st.markdown(f"**3. {FIRST_GATE_QUESTION}**")
+    st.markdown(f"**1. {FIRST_GATE_QUESTION}**")
     decision = st.session_state.get(scope_decision_key(procurement_id))
     yes, no, unsure = st.columns(3)
     if yes.button("✓ Да", key=_sk(procurement_id, "scope_yes_inner"), use_container_width=True):
@@ -307,16 +301,30 @@ def _render_primary_scope_decision(
         decision = "YES"
     if no.button("✕ Нет", key=_sk(procurement_id, "scope_no_inner"), use_container_width=True):
         st.session_state[scope_decision_key(procurement_id)] = "NO"
-        decision = "NO"
+        _persist(
+            procurement_id,
+            build_out_of_category_payload(assessment=assessment, created_by=created_by),
+            assessment,
+            created_by,
+            crm_db,
+            save_and_next=True,
+        )
+        return
     if unsure.button("? Не уверен", key=_sk(procurement_id, "scope_unc_inner"), use_container_width=True):
         st.session_state[scope_decision_key(procurement_id)] = "UNCERTAIN"
-        decision = "UNCERTAIN"
-
-    def _persist_staged(base: dict, *, save_and_next: bool, require_in_category_extras: bool = False) -> None:
-        draft = read_staged_draft(procurement_id)
-        missing = validate_staged_minimum(
-            draft, require_in_category_extras=require_in_category_extras
+        _persist(
+            procurement_id,
+            build_uncertain_payload(assessment=assessment, created_by=created_by),
+            assessment,
+            created_by,
+            crm_db,
+            save_and_next=True,
         )
+        return
+
+    def _persist_deep(base: dict, *, save_and_next: bool) -> None:
+        draft = read_staged_draft(procurement_id)
+        missing = validate_staged_minimum(draft, require_in_category_extras=True)
         if missing:
             st.error("Заполните: " + ", ".join(missing) + ".")
             return
@@ -330,81 +338,89 @@ def _render_primary_scope_decision(
             commercial_entry=draft.get("commercial_entry"),
             expert_medal=draft.get("expert_medal"),
         )
-        if require_in_category_extras:
-            payload = apply_subcategory_map(
-                payload,
-                subcategory_by_category=draft.get("subcategory_by_category") or {},
-            )
+        payload = apply_subcategory_map(
+            payload,
+            subcategory_by_category=draft.get("subcategory_by_category") or {},
+        )
         _persist(procurement_id, payload, assessment, created_by, crm_db, save_and_next=save_and_next)
 
     if decision == "NO":
-        st.error(f"{OUT_OF_CATEGORY_BADGE} — закупка не относится ни к одной товарной категории.")
-        st.caption("Категория, коммерческая оценка, медаль и документы не требуются.")
-        comment = st.text_input(
-            "Комментарий (необязательно)",
-            key=_sk(procurement_id, "category_gate_comment"),
-        )
+        st.error(f"{OUT_OF_CATEGORY_BADGE}")
+        st.caption("Объект, тип закупки, категория, коммерческая оценка и медаль не требуются.")
         if st.button(
             "Сохранить и следующая →",
             key=_sk(procurement_id, "scope_no_save_next"),
             type="primary",
         ):
-            _persist_staged(
-                build_out_of_category_payload(
-                    assessment=assessment, created_by=created_by, comment=comment or ""
-                ),
+            _persist(
+                procurement_id,
+                build_out_of_category_payload(assessment=assessment, created_by=created_by),
+                assessment,
+                created_by,
+                crm_db,
                 save_and_next=True,
             )
         return
-    if decision == "YES":
-        st.success("✓ Закупка относится к нашим товарным категориям.")
-        cache_key = _sk(procurement_id, "subcat_cache")
-        if cache_key not in st.session_state:
-            all_codes = [c["code"] for c in categories]
-            st.session_state[cache_key] = load_subcategories_for_categories(all_codes, crm_db)
-        subcats = st.session_state[cache_key]
-        selected_codes = render_product_category_controls(
-            procurement_id,
-            categories=categories,
-            subcategories_by_category=subcats,
-            assessment=assessment,
-        )
-        render_commercial_and_medal_controls(procurement_id, assessment=assessment)
-        name_by_code = {c["code"]: c.get("name") or c["code"] for c in categories}
-        left, right = st.columns(2)
-        save = left.button("💾 Сохранить", key=_sk(procurement_id, "scope_yes_save"))
-        save_next = right.button(
-            "Сохранить и следующая →",
-            key=_sk(procurement_id, "scope_yes_save_next"),
-            type="primary",
-        )
-        if save or save_next:
-            draft = read_staged_draft(procurement_id)
-            codes = draft.get("category_codes") or selected_codes
-            if not codes:
-                st.error("Выберите хотя бы одну товарную категорию.")
-                return
-            base = build_in_category_payload(
-                assessment=assessment,
-                created_by=created_by,
-                category_codes=codes,
-                category_names=name_by_code,
-            )
-            _persist_staged(base, save_and_next=save_next, require_in_category_extras=True)
-        return
     if decision == "UNCERTAIN":
         st.warning("? Title + ОКПД2 недостаточно для уверенного решения по категориям.")
-        st.caption("Не классифицируем как IN/OUT. Объект и тип закупки всё равно сохраняются.")
+        st.caption("Глубокая разметка не требуется. Можно сохранить и перейти дальше.")
         if st.button(
             "Сохранить «Не уверен» и следующая →",
             key=_sk(procurement_id, "scope_uncertain_save_next"),
             type="primary",
         ):
-            _persist_staged(
+            _persist(
+                procurement_id,
                 build_uncertain_payload(assessment=assessment, created_by=created_by),
+                assessment,
+                created_by,
+                crm_db,
                 save_and_next=True,
             )
+        return
+    if decision != "YES":
+        return
 
+    st.success("✓ Закупка относится к нашим товарным категориям — заполните глубокую разметку.")
+    cache_key = _sk(procurement_id, "subcat_cache")
+    if cache_key not in st.session_state:
+        all_codes = [c["code"] for c in categories]
+        st.session_state[cache_key] = load_subcategories_for_categories(all_codes, crm_db)
+    subcats = st.session_state[cache_key]
+    selected_codes = render_product_category_controls(
+        procurement_id,
+        categories=categories,
+        subcategories_by_category=subcats,
+        assessment=assessment,
+    )
+    render_object_stage_controls(
+        procurement_id,
+        assessment=assessment,
+        human_type_suggestions=obj_types,
+    )
+    render_procurement_mode_controls(procurement_id, assessment=assessment)
+    render_commercial_and_medal_controls(procurement_id, assessment=assessment)
+    name_by_code = {c["code"]: c.get("name") or c["code"] for c in categories}
+    left, right = st.columns(2)
+    save = left.button("💾 Сохранить", key=_sk(procurement_id, "scope_yes_save"))
+    save_next = right.button(
+        "Сохранить и следующая →",
+        key=_sk(procurement_id, "scope_yes_save_next"),
+        type="primary",
+    )
+    if save or save_next:
+        draft = read_staged_draft(procurement_id)
+        codes = draft.get("category_codes") or selected_codes
+        if not codes:
+            st.error("Выберите хотя бы одну товарную категорию.")
+            return
+        base = build_in_category_payload(
+            assessment=assessment,
+            created_by=created_by,
+            category_codes=codes,
+            category_names=name_by_code,
+        )
+        _persist_deep(base, save_and_next=save_next)
 
 
 def render_annotation_card(

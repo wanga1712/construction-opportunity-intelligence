@@ -70,8 +70,8 @@ def test_legacy_negative_not_auto_converted():
     assert is_legacy_negative_payload({**legacy, CATEGORY_SCOPE_FIELD: OUT_OF_CATEGORY}) is False
 
 
-def test_counters_use_staged_reviewed_semantics():
-    """Category-only / IN without commercial stay partial; OUT with object/mode is REVIEWED."""
+def test_counters_use_category_triage_reviewed_semantics():
+    """OUT/UNCERTAIN scope alone is triage REVIEWED; IN without deep is triaged but not deep-complete."""
     from src.services.annotation_staged import merge_staged_fields
     from src.services.expert_procurement_mode import WORKS
 
@@ -127,13 +127,17 @@ def test_counters_use_staged_reviewed_semantics():
     states = load_current_annotation_states([10, 11, 12, 13, 14], DB())
     counts = annotation_state_counts(states)
     assert counts["ALL"] == counts[UNREVIEWED] + counts[REVIEWED] == 5
-    assert counts[REVIEWED] == 1
-    assert counts[UNREVIEWED] == 4
+    assert counts[REVIEWED] == 3
+    assert counts[UNREVIEWED] == 2
     assert counts[OUT_OF_CATEGORY] == 2
     assert counts[LEGACY_NOT_INTERESTING] == 1
+    assert counts["CATEGORY_TRIAGE_REVIEWED"] == 3
+    assert counts["DEEP_ANNOTATION_COMPLETE"] == 0
     assert states[10]["is_category_reviewed"] is True
-    assert states[10]["is_staged_complete"] is False
+    assert states[10]["is_staged_complete"] is True
+    assert states[11]["is_category_reviewed"] is True
     assert states[11]["is_staged_complete"] is False
+    assert states[11]["is_deep_annotation_complete"] is False
     assert states[14]["is_staged_complete"] is True
     assert classify_annotation_payload({CATEGORY_SCOPE_FIELD: OUT_OF_CATEGORY}) == OUT_OF_CATEGORY
 

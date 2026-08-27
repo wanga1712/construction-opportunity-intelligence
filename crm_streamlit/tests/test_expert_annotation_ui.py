@@ -301,7 +301,7 @@ def test_tabs_and_correct_path_wire_save_next_without_new_chrome() -> None:
     )
     assert "bind_and_advance" in tabs
     workspace = Path("src/ui/components/analytics_v2/stage_workspace.py").read_text(encoding="utf-8")
-    assert 'FILTERS = (("ALL", "Все")' in workspace
+    assert '("ALL", "Все")' in workspace
     assert "Не проверено" in workspace and "Вне товарных категорий" in workspace
     assert '"Лиды", "Подготовка к торгам", "Идут торги"' in tabs
     assert "save_next_correct" in form

@@ -1,4 +1,4 @@
-"""Tests for staged object + procurement-mode annotation."""
+"""Tests for staged object + procurement-mode annotation + fast category triage."""
 from __future__ import annotations
 
 from src.services.annotation_category_gate import (
@@ -11,6 +11,8 @@ from src.services.annotation_category_gate import (
     build_uncertain_payload,
 )
 from src.services.annotation_staged import (
+    is_category_triage_complete,
+    is_deep_annotation_complete,
     is_partially_reviewed,
     is_staged_complete,
     merge_staged_fields,
@@ -37,6 +39,7 @@ from src.services.expert_procurement_mode import (
 )
 from src.services.source_contour import LAW_44, LAW_223, LAW_615, resolve_source_contour
 from src.ui.components.analytics_v2.stage_workspace import FILTERS
+from src.ui.components.analytics_v2.staged_annotation_ui import validate_staged_minimum
 
 
 def test_source_contour_is_factual_read_only_authority():
@@ -53,7 +56,6 @@ def test_source_contour_is_factual_read_only_authority():
     assert c615["law_code"] == LAW_615
     assert "Капитальный ремонт" in c615["contour_label"]
 
-    # Do not invent commercial from title-like tokens alone — only source_table.
     assert resolve_source_contour("notice_44_commercial_looking")["law_code"] == LAW_44
 
 
@@ -76,6 +78,7 @@ def test_procurement_modes_persist_in_payload():
         assert payload[OBJECT_SECTOR_FIELD] == "RESIDENTIAL"
         assert payload[OBJECT_TYPE_FIELD] == "APARTMENT_BUILDING"
         assert is_staged_complete(payload)
+        assert is_category_triage_complete(payload)
 
 
 def test_category_gate_preserved_with_staged_fields():
@@ -99,24 +102,51 @@ def test_category_gate_preserved_with_staged_fields():
     assert payload[CATEGORY_SCOPE_FIELD] == IN_CATEGORY
     assert payload["expert_category_codes"] == ["waterproofing"]
     assert is_staged_complete(payload)
+    assert is_deep_annotation_complete(payload)
 
 
-def test_out_of_category_does_not_require_product_category():
+def test_out_of_category_sparse_row_is_valid_without_object_or_mode():
+    payload = build_out_of_category_payload(assessment=None, created_by="t")
+    assert payload[CATEGORY_SCOPE_FIELD] == OUT_OF_CATEGORY
+    assert payload["expert_category_codes"] == []
+    assert is_category_triage_complete(payload)
+    assert is_staged_complete(payload)
+    assert not is_deep_annotation_complete(payload)
+    assert not is_partially_reviewed(payload)
+    summary = staged_card_summary(payload)
+    assert summary["status"] == "TRIAGED"
+    assert summary["lines"] == [("⛔", "Вне товарных категорий")]
+    assert validate_staged_minimum({}, require_in_category_extras=False) == []
+
+
+def test_out_of_category_with_optional_deep_fields_still_complete():
     payload = merge_staged_fields(
         build_out_of_category_payload(assessment=None, created_by="t"),
         object_sector="INFRASTRUCTURE",
         object_type="ENERGY_INFRASTRUCTURE",
         procurement_mode=DIRECT_SUPPLY,
     )
-    assert payload[CATEGORY_SCOPE_FIELD] == OUT_OF_CATEGORY
-    assert payload["expert_category_codes"] == []
     assert is_staged_complete(payload)
+    # Compact card must not clutter with object/mode for OUT.
+    summary = staged_card_summary(payload)
+    assert summary["lines"] == [("⛔", "Вне товарных категорий")]
 
 
-def test_legacy_category_only_is_partial_not_fully_reviewed():
+def test_uncertain_fast_defer_without_deep_fields():
+    payload = build_uncertain_payload(assessment=None, created_by="t")
+    assert payload[CATEGORY_SCOPE_FIELD] == UNCERTAIN
+    assert is_category_triage_complete(payload)
+    assert is_staged_complete(payload)
+    assert not is_deep_annotation_complete(payload)
+    summary = staged_card_summary(payload)
+    assert summary["status"] == "TRIAGED"
+
+
+def test_legacy_category_only_out_is_triaged_not_partial():
     payload = {CATEGORY_SCOPE_FIELD: OUT_OF_CATEGORY}
-    assert is_partially_reviewed(payload)
-    assert not is_staged_complete(payload)
+    assert is_category_triage_complete(payload)
+    assert is_staged_complete(payload)
+    assert not is_partially_reviewed(payload)
 
     class DB:
         def execute_query(self, sql, params):
@@ -145,42 +175,33 @@ def test_legacy_category_only_is_partial_not_fully_reviewed():
     states = load_current_annotation_states([10, 11, 12], DB())
     counts = annotation_state_counts(states)
     assert counts["ALL"] == counts[UNREVIEWED] + counts[REVIEWED] == 3
-    assert counts[REVIEWED] == 1
-    assert counts[UNREVIEWED] == 2
+    assert counts[REVIEWED] == 2
+    assert counts[UNREVIEWED] == 1
     assert counts[OUT_OF_CATEGORY] == 2
-    assert states[10]["is_partial"] is True
+    assert counts["CATEGORY_TRIAGE_REVIEWED"] == 2
+    assert counts["DEEP_ANNOTATION_COMPLETE"] == 0
+    assert states[10]["is_category_reviewed"] is True
+    assert states[10]["is_staged_complete"] is True
     assert states[11]["is_staged_complete"] is True
 
 
-def test_structured_summary_hides_blanks_when_unreviewed():
-    assert staged_card_summary(None)["status"] == "UNREVIEWED"
-    assert staged_card_summary({})["lines"] == []
-    summary = staged_card_summary(
-        merge_staged_fields(
-            build_out_of_category_payload(assessment=None, created_by="t"),
-            object_sector="INDUSTRIAL",
-            object_type="ENERGY_FACILITY",
-            procurement_mode=DIRECT_SUPPLY,
-        )
+def test_in_category_partial_until_deep_complete():
+    base = build_in_category_payload(
+        assessment=None, created_by="t", category_codes=["waterproofing"]
     )
-    assert summary["status"] == "REVIEWED"
-    assert any(line[0] == "🏢" for line in summary["lines"])
-    assert any(line[0] == "🛠" for line in summary["lines"])
-    assert any("Вне товарных категорий" in line[1] for line in summary["lines"])
+    assert is_category_triage_complete(base)
+    assert not is_staged_complete(base)
+    assert is_partially_reviewed(base)
 
 
-def test_uncertain_category_persists_without_fake_certainty():
-    payload = merge_staged_fields(
-        build_uncertain_payload(assessment=None, created_by="t"),
-        object_sector="UNCERTAIN",
-        object_type="UNCERTAIN_OBJECT",
-        procurement_mode=MODE_UNCERTAIN,
-    )
-    assert payload[CATEGORY_SCOPE_FIELD] == UNCERTAIN
-    assert is_staged_complete(payload)
-
-
-def test_filters_include_category_secondary_without_dropping_legacy():
+def test_filters_are_triage_first_with_medal_subset():
     keys = [k for k, _ in FILTERS]
-    assert UNREVIEWED in keys and REVIEWED in keys
+    labels = [lab for _, lab in FILTERS]
+    assert keys[0] == "ALL"
+    assert UNREVIEWED in keys
     assert IN_CATEGORY in keys and OUT_OF_CATEGORY in keys and UNCERTAIN in keys
+    assert "Вне товарных категорий" in labels
+    assert "GOLD" in labels and "Коммерчески не подходит" in labels
+    assert any("Неинтересн" in lab for lab in labels)
+    # Primary list no longer requires a separate "Проверено" pill.
+    assert REVIEWED not in keys

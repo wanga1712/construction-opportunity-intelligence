@@ -12,7 +12,13 @@ from src.services.annotation_category_gate import (
     category_scope_of,
     is_legacy_negative_payload,
 )
-from src.services.annotation_staged import is_partially_reviewed, is_staged_complete, subcategory_codes_of
+from src.services.annotation_staged import (
+    is_category_triage_complete,
+    is_deep_annotation_complete,
+    is_partially_reviewed,
+    is_staged_complete,
+    subcategory_codes_of,
+)
 from src.services.expert_commercial_entry import (
     COMMERCIAL,
     NON_COMMERCIAL,
@@ -84,6 +90,8 @@ def load_current_annotation_states(procurement_ids: list[int], crm_db: Any) -> d
             "annotation_state": UNANNOTATED,
             "is_reviewed": False,
             "is_category_reviewed": False,
+            "is_category_triage_complete": False,
+            "is_deep_annotation_complete": False,
             "is_staged_complete": False,
             "is_partial": False,
             "is_not_interesting": False,
@@ -119,6 +127,8 @@ def load_current_annotation_states(procurement_ids: list[int], crm_db: Any) -> d
         scope = category_scope_of(payload)
         legacy = is_legacy_negative_payload(payload)
         outcome = classify_annotation_payload(payload)
+        triage = is_category_triage_complete(payload)
+        deep = is_deep_annotation_complete(payload)
         staged = is_staged_complete(payload)
         partial = is_partially_reviewed(payload)
         states[pid] = {
@@ -127,8 +137,11 @@ def load_current_annotation_states(procurement_ids: list[int], crm_db: Any) -> d
             "annotation_version": row.get("annotation_version"),
             "created_at": row.get("created_at"),
             "annotation_state": outcome,
-            "is_reviewed": staged,
-            "is_category_reviewed": bool(scope),
+            # Primary "reviewed" = category triage (IN/OUT/UNCERTAIN), not deep.
+            "is_reviewed": triage,
+            "is_category_reviewed": triage,
+            "is_category_triage_complete": triage,
+            "is_deep_annotation_complete": deep,
             "is_staged_complete": staged,
             "is_partial": partial,
             "is_not_interesting": outcome == NOT_INTERESTING or scope == OUT_OF_CATEGORY,
@@ -152,9 +165,10 @@ def load_current_annotation_states(procurement_ids: list[int], crm_db: Any) -> d
 
 
 def annotation_state_counts(states: dict[int, dict]) -> dict[str, int]:
-    """Staged progress counters including commercial secondary filters."""
+    """Category-triage primary counters; deep/medal are secondary."""
     total = len(states)
-    reviewed = sum(1 for value in states.values() if value.get("is_staged_complete"))
+    triaged = sum(1 for value in states.values() if value.get("is_category_reviewed"))
+    deep = sum(1 for value in states.values() if value.get("is_deep_annotation_complete"))
     out_of_category = sum(
         1 for value in states.values() if value.get("expert_category_scope") == OUT_OF_CATEGORY
     )
@@ -172,18 +186,28 @@ def annotation_state_counts(states: dict[int, dict]) -> dict[str, int]:
     )
     legacy = sum(1 for value in states.values() if value.get("is_legacy_negative"))
     not_interesting = legacy + out_of_category
+    gold = sum(1 for value in states.values() if value.get("expert_medal") == "GOLD")
+    silver = sum(1 for value in states.values() if value.get("expert_medal") == "SILVER")
+    bronze = sum(1 for value in states.values() if value.get("expert_medal") == "BRONZE")
+    wood = sum(1 for value in states.values() if value.get("expert_medal") == "WOOD")
     return {
         "ALL": total,
-        UNREVIEWED: total - reviewed,
-        REVIEWED: reviewed,
+        UNREVIEWED: total - triaged,
+        REVIEWED: triaged,
+        "CATEGORY_TRIAGE_REVIEWED": triaged,
+        "DEEP_ANNOTATION_COMPLETE": deep,
         OUT_OF_CATEGORY: out_of_category,
         IN_CATEGORY: in_category,
         UNCERTAIN: uncertain,
         COMMERCIAL: commercial,
         NON_COMMERCIAL: non_commercial,
+        "GOLD": gold,
+        "SILVER": silver,
+        "BRONZE": bronze,
+        "WOOD": wood,
         LEGACY_NOT_INTERESTING: legacy,
         NOT_INTERESTING: not_interesting,
-        PROFILED: max(0, reviewed - out_of_category),
-        UNANNOTATED: total - reviewed,
-        ANNOTATED: reviewed,
+        PROFILED: max(0, triaged - out_of_category),
+        UNANNOTATED: total - triaged,
+        ANNOTATED: triaged,
     }
