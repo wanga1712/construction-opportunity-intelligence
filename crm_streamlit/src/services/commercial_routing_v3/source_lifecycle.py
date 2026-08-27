@@ -46,10 +46,11 @@ def normalize_source_lifecycle_event(
     Rules (canonical):
       awarded / razygranye                         → AWARDED
       commission_work / commission / award_not_found → WAITING_SOURCE_OUTCOME
+        (award_not_found on open table with NULL end_date is UNKNOWN — see below)
       open/torgi AND end_date < as_of              → WAITING_SOURCE_OUTCOME
-      open/torgi AND (end_date >= as_of or unknown) → OPEN
-        (unknown deadline stays OPEN only when still in open table; prefer
-         filling end_date from source — do not invent.)
+      open/torgi AND end_date >= as_of             → OPEN
+      open/torgi AND end_date is NULL              → UNKNOWN
+        (missing factual deadline is never silently OPEN)
     """
     table = (source_table or "").strip().lower()
     stage = (crm_stage or "").strip().lower()
@@ -61,14 +62,15 @@ def normalize_source_lifecycle_event(
     if "awarded" in table or stage == "razygranye" or award == "awarded":
         return SourceLifecycleEvent.AWARDED
 
-    # WAITING: commission layer or explicit award_not_found
-    if (
-        "commission" in table
-        or stage == "commission"
-        or award in ("award_not_found", "commission")
-    ):
+    # Explicit commission table/stage
+    if "commission" in table or stage == "commission" or award == "commission":
         return SourceLifecycleEvent.WAITING_SOURCE_OUTCOME
 
+    # award_not_found with known past deadline → waiting; with NULL → UNKNOWN
+    if award == "award_not_found":
+        if deadline is None:
+            return SourceLifecycleEvent.UNKNOWN
+        return SourceLifecycleEvent.WAITING_SOURCE_OUTCOME
     is_open_surface = (
         stage == "torgi"
         or award in ("submission_open", "submission_closed_waiting_award")
@@ -82,7 +84,10 @@ def normalize_source_lifecycle_event(
         )
     )
     if is_open_surface:
-        if deadline is not None and deadline < today:
+        # Missing factual deadline is UNKNOWN — never silently OPEN.
+        if deadline is None:
+            return SourceLifecycleEvent.UNKNOWN
+        if deadline < today:
             return SourceLifecycleEvent.WAITING_SOURCE_OUTCOME
         return SourceLifecycleEvent.OPEN
 
@@ -114,7 +119,8 @@ def lifecycle_crm_stage_status(
         return "torgi", "submission_closed_waiting_award"
     if event == SourceLifecycleEvent.OPEN:
         return "torgi", "submission_open"
-    return "torgi", "submission_open"
+    # UNKNOWN: stored but not admitted to Идут торги / Комиссия feeds.
+    return "torgi", "award_not_found"
 
 
 def lifecycle_label_ru(event: SourceLifecycleEvent | str) -> str:

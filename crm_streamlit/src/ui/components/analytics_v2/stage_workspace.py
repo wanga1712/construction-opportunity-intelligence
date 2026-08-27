@@ -102,6 +102,63 @@ def _human_chips(state: dict) -> list[str]:
     return chips
 
 
+def _render_ai_decision_block(card: dict, effective: Any, state: dict) -> None:
+    """Primary-card read-only AI decisions + expert contrast."""
+    from src.services.ai_decision_summary import build_ai_decision_summary
+
+    assessment = {
+        "normalized_result": card.get("normalized_result"),
+        "proposed_object_type": card.get("proposed_object_type"),
+        "proposed_route_profile": card.get("proposed_route_profile"),
+        "proposed_procurement_type": card.get("proposed_procurement_type"),
+        "confidence": card.get("confidence"),
+        "reasons": card.get("reasons"),
+    }
+    if effective is not None:
+        nr = getattr(effective, "normalized_result", None)
+        if nr:
+            assessment["normalized_result"] = nr
+        for attr in (
+            "validated_model_result",
+            "business_rule_result",
+            "inference_run_id",
+            "model_provenance",
+            "proposed_object_type",
+            "proposed_route_profile",
+        ):
+            val = getattr(effective, attr, None)
+            if val is not None:
+                assessment[attr] = val
+
+    summary = build_ai_decision_summary(assessment)
+    st.markdown("**🤖 ИИ предложил**")
+    for label, value in summary["fields"]:
+        st.caption(f"{label}: {value}")
+    st.caption("Только чтение. Исправление — в блоке экспертной разметки ниже.")
+
+    scope = state.get("expert_category_scope")
+    if scope or state.get("is_category_reviewed"):
+        st.markdown("**👤 Эксперт**")
+        if scope == OUT_OF_CATEGORY:
+            st.caption("Товарная принадлежность: Вне товарных категорий")
+        elif scope == IN_CATEGORY:
+            st.caption("Товарная принадлежность: В товарных категориях")
+            if state.get("expert_category_codes"):
+                st.caption("Категория: " + ", ".join(state["expert_category_codes"]))
+        elif scope == UNCERTAIN:
+            st.caption("Товарная принадлежность: Не уверен")
+        if state.get("expert_object_type"):
+            st.caption(f"Объект: {state.get('expert_object_type')}")
+        if state.get("expert_procurement_mode"):
+            st.caption(f"Режим закупки: {state.get('expert_procurement_mode')}")
+        if state.get("expert_commercial_entry"):
+            st.caption(f"Коммерция: {state.get('expert_commercial_entry')}")
+        if state.get("expert_medal"):
+            st.caption(f"Medal: {state.get('expert_medal')}")
+    else:
+        st.markdown("**👤 Эксперт:** не проверено")
+
+
 def _render_structured_result(state: dict) -> None:
     summary = staged_card_summary(state.get("payload"))
     if summary["status"] == "UNREVIEWED":
@@ -163,6 +220,7 @@ def _summary(card: dict, stage: str, effective: Any, state: dict, published: boo
         st.caption("ОКПД2: не указан в карточке")
     if stage == "AWARDED" and card.get("contractor_name"):
         st.markdown(f"**Подрядчик / победитель:** {card['contractor_name']}")
+    _render_ai_decision_block(card, effective, state)
     if state.get("is_category_reviewed") or state.get("is_partial"):
         _render_structured_result(state)
 

@@ -19,6 +19,7 @@ from src.ui.components.analytics_v2.stage_workspace import (
 _SESSION_TORGI    = "selected_torgi_id"
 _SESSION_KOMISSIA = "selected_komissia_id"
 _SESSION_RAZYGR   = "selected_razygr_id"
+_SESSION_LAW_FILTER = "analytics_law_filter"
 _PAGE_SIZE = 25
 FARTHEST_DEADLINE_FIRST = "FARTHEST_DEADLINE_FIRST"
 NEAREST_DEADLINE_FIRST = "NEAREST_DEADLINE_FIRST"
@@ -26,6 +27,47 @@ DEADLINE_SORT_LABELS = {
     FARTHEST_DEADLINE_FIRST: "Сначала дальние",
     NEAREST_DEADLINE_FIRST: "Сначала ближайшие",
 }
+
+
+def _selected_law_filter() -> str:
+    from src.services.effective_lifecycle import LAW_FILTER_OPTIONS
+
+    return st.session_state.get(_SESSION_LAW_FILTER) or LAW_FILTER_OPTIONS[0][0]
+
+
+def _render_law_filter(*, reset_keys: tuple[str, ...]) -> str:
+    """Law filter before pagination; resets stage pages on change."""
+    from src.services.effective_lifecycle import (
+        LAW_615,
+        LAW_615_IN_ANALYTICS_WORKSET,
+        LAW_615_MISSING_PATH,
+        LAW_FILTER_OPTIONS,
+    )
+
+    labels = [label for _, label in LAW_FILTER_OPTIONS]
+    keys = [key for key, _ in LAW_FILTER_OPTIONS]
+    current = _selected_law_filter()
+    try:
+        default_idx = keys.index(current)
+    except ValueError:
+        default_idx = 0
+
+    def _on_law_change() -> None:
+        for key in reset_keys:
+            st.session_state.pop(key, None)
+
+    selected_label = st.pills(
+        "Закон / источник",
+        labels,
+        default=labels[default_idx],
+        key=f"{_SESSION_LAW_FILTER}_pills",
+        on_change=_on_law_change,
+    )
+    law = keys[labels.index(selected_label)]
+    st.session_state[_SESSION_LAW_FILTER] = law
+    if law == LAW_615 and not LAW_615_IN_ANALYTICS_WORKSET:
+        st.caption(f"615-ПП: {LAW_615_MISSING_PATH}")
+    return law
 
 
 def _render_first_stage_dataset_panel(crm_db, annotation_states: dict) -> None:
@@ -144,18 +186,25 @@ def _get_category_filter(stage: str) -> tuple[str, dict]:
     return build_category_sql_filter(selected_cats, set())
 
 
-def _stage_workset_ids(stage: str) -> list[int]:
+def _stage_workset_ids(stage: str, *, law: str | None = None) -> list[int]:
     """Return factual filtered workset IDs for true counts (one bounded-column query)."""
     import psycopg2
+
+    from src.services.effective_lifecycle import (
+        factual_awarded_sql,
+        factual_commission_sql,
+        factual_open_torgi_sql,
+    )
+
+    law = law if law is not None else _selected_law_filter()
     if stage == "torgi":
-        from src.services.commercial_routing_v3.submission_window import actionable_submission_sql
-        where = "cp.crm_stage='torgi' AND cp.award_status='submission_open' AND " + actionable_submission_sql("cp")
+        where = factual_open_torgi_sql("cp", law=law)
         cat_stage = "torgi"
     elif stage == "commission":
-        where = "cp.crm_stage='torgi' AND cp.award_status IN ('submission_closed_waiting_award','award_not_found')"
+        where = factual_commission_sql("cp", law=law)
         cat_stage = "commission"
     else:
-        where = "cp.crm_stage='razygranye'"
+        where = factual_awarded_sql("cp", law=law)
         cat_stage = "razygranye"
     cat_sql, params = _get_category_filter(cat_stage)
     conn = psycopg2.connect(**_pg())
@@ -181,14 +230,14 @@ def _page_offset(stage: str, total: int) -> tuple[int, int]:
 
 def _load_torgi(limit: int = 25, offset: int = 0,
                 sort_mode: str = FARTHEST_DEADLINE_FIRST,
-                allowed_ids: list[int] | None = None) -> list[dict]:
+                allowed_ids: list[int] | None = None,
+                law: str | None = None) -> list[dict]:
     """Lifecycle-valid expert workset; manager publication is not an admission gate."""
     try:
         import psycopg2
         from psycopg2.extras import RealDictCursor
 
-        from src.services.db_bootstrap import connect_databases
-        from src.services.commercial_routing_v3.submission_window import actionable_submission_sql
+        from src.services.effective_lifecycle import factual_open_torgi_sql
         cat_sql, cat_params = _get_category_filter("torgi")
         params = dict(cat_params); params.update({"limit": limit, "offset": offset})
         review_sql = "TRUE"
@@ -197,6 +246,7 @@ def _load_torgi(limit: int = 25, offset: int = 0,
             params["allowed_ids"] = allowed_ids or [-1]
 
         order_by = torgi_deadline_order_by(sort_mode)
+        where = factual_open_torgi_sql("cp", law=law if law is not None else _selected_law_filter())
         conn = psycopg2.connect(**_pg())
         with conn.cursor(cursor_factory=RealDictCursor) as cur:
             cur.execute(f"""
@@ -226,9 +276,7 @@ def _load_torgi(limit: int = 25, offset: int = 0,
                 FROM crm_procurements cp
                 LEFT JOIN crm_category_candidates cc ON cc.procurement_id = cp.id
                 LEFT JOIN procurement_ai_assessments ai ON ai.procurement_id = cp.id AND ai.is_current = TRUE
-                WHERE cp.crm_stage = 'torgi'
-                  AND cp.award_status = 'submission_open'
-                  AND {actionable_submission_sql("cp")}
+                WHERE {where}
                   AND ({cat_sql})
                   AND ({review_sql})
                 ORDER BY {order_by}
@@ -359,14 +407,17 @@ def _load_effective_map(cards: list[dict]) -> dict:
 
 
 
-def _load_komissia(limit: int = 25, offset: int = 0) -> list[dict]:
+def _load_komissia(limit: int = 25, offset: int = 0, *, law: str | None = None) -> list[dict]:
     """Подача закрыта — ждём решения комиссии."""
     try:
         import psycopg2
         from psycopg2.extras import RealDictCursor
 
+        from src.services.effective_lifecycle import factual_commission_sql
+
         cat_sql, cat_params = _get_category_filter("commission")
         params = dict(cat_params); params.update({"limit": limit, "offset": offset})
+        where = factual_commission_sql("cp", law=law if law is not None else _selected_law_filter())
 
         conn = psycopg2.connect(**_pg())
         with conn.cursor(cursor_factory=RealDictCursor) as cur:
@@ -390,8 +441,7 @@ def _load_komissia(limit: int = 25, offset: int = 0) -> list[dict]:
                 FROM crm_procurements cp
                 LEFT JOIN crm_category_candidates cc ON cc.procurement_id = cp.id
                 LEFT JOIN procurement_ai_assessments ai ON ai.procurement_id = cp.id AND ai.is_current = TRUE
-                WHERE cp.crm_stage = 'torgi'
-                  AND cp.award_status IN ('submission_closed_waiting_award', 'award_not_found')
+                WHERE {where}
                   AND ({cat_sql})
                 ORDER BY cp.end_date DESC, cp.match_score DESC
                 LIMIT %(limit)s OFFSET %(offset)s
@@ -404,13 +454,16 @@ def _load_komissia(limit: int = 25, offset: int = 0) -> list[dict]:
         return []
 
 
-def _load_razygranye(limit: int = 25, offset: int = 0) -> list[dict]:
+def _load_razygranye(limit: int = 25, offset: int = 0, *, law: str | None = None) -> list[dict]:
     try:
         import psycopg2
         from psycopg2.extras import RealDictCursor
 
+        from src.services.effective_lifecycle import factual_awarded_sql
+
         cat_sql, cat_params = _get_category_filter("razygranye")
         params = dict(cat_params); params.update({"limit": limit, "offset": offset})
+        where = factual_awarded_sql("cp", law=law if law is not None else _selected_law_filter())
 
         conn = psycopg2.connect(**_pg())
         with conn.cursor(cursor_factory=RealDictCursor) as cur:
@@ -445,7 +498,7 @@ def _load_razygranye(limit: int = 25, offset: int = 0) -> list[dict]:
                 FROM crm_procurements cp
                 LEFT JOIN crm_category_candidates cc ON cc.procurement_id = cp.id
                 LEFT JOIN procurement_ai_assessments ai ON ai.procurement_id = cp.id AND ai.is_current = TRUE
-                WHERE cp.crm_stage = 'razygranye'
+                WHERE {where}
                   AND ({cat_sql})
                 ORDER BY cp.contract_signed_at DESC NULLS LAST
                 LIMIT %(limit)s OFFSET %(offset)s
@@ -495,7 +548,8 @@ def _render_torgi_tab() -> None:
             st.cache_data.clear()
             st.rerun()
 
-    workset_ids = _stage_workset_ids("torgi")
+    law = _render_law_filter(reset_keys=("torgi_workset_page",))
+    workset_ids = _stage_workset_ids("torgi", law=law)
     sort_mode = st.radio(
         "Сортировка по сроку",
         list(DEADLINE_SORT_LABELS),
@@ -513,7 +567,7 @@ def _render_torgi_tab() -> None:
     )
     selected_ids = filtered_review_ids(annotation_states, selected_review)
     page, offset = _page_offset("torgi", len(selected_ids))
-    cards = _load_torgi(_PAGE_SIZE, offset, sort_mode, selected_ids)
+    cards = _load_torgi(_PAGE_SIZE, offset, sort_mode, selected_ids, law=law)
 
     if not cards:
         st.info("Нет тендеров в стадии торгов.")
@@ -537,6 +591,7 @@ def _render_torgi_tab() -> None:
 
     selected_id = st.session_state.get(_SESSION_TORGI)
     st.markdown(f"### Идут торги · {len(workset_ids)}")
+    st.caption(f"Закон/источник: {law} · factual OPEN only")
     st.caption(f"Показано {offset + 1}–{offset + len(cards)} из {len(selected_ids)}")
     _render_first_stage_dataset_panel(crm_db, annotation_states)
 
@@ -556,15 +611,16 @@ def _render_torgi_tab() -> None:
 # ─── Комиссия-таб ─────────────────────────────────────────────────────────────
 
 def _render_komissia_tab() -> None:
+    law = _render_law_filter(reset_keys=("commission_workset_page",))
     col_hdr, col_sync = st.columns([3, 2])
     with col_sync:
         if st.button("↻ Обновить", key="komissia_sync_btn"):
             st.cache_data.clear()
             st.rerun()
 
-    workset_ids = _stage_workset_ids("commission")
+    workset_ids = _stage_workset_ids("commission", law=law)
     page, offset = _page_offset("commission", len(workset_ids))
-    cards = _load_komissia(_PAGE_SIZE, offset)
+    cards = _load_komissia(_PAGE_SIZE, offset, law=law)
 
     if not cards:
         st.info("Нет тендеров на стадии работы комиссии.")
@@ -593,15 +649,16 @@ def _render_komissia_tab() -> None:
 # ─── Разыгранные-таб ──────────────────────────────────────────────────────────
 
 def _render_razygranye_tab() -> None:
+    law = _render_law_filter(reset_keys=("razygranye_workset_page",))
     col_hdr, col_sync = st.columns([3, 2])
     with col_sync:
         if st.button("↻ Обновить данные", key="razygr_sync_btn"):
             st.cache_data.clear()
             st.rerun()
 
-    workset_ids = _stage_workset_ids("razygranye")
+    workset_ids = _stage_workset_ids("razygranye", law=law)
     page, offset = _page_offset("razygranye", len(workset_ids))
-    cards = _load_razygranye(_PAGE_SIZE, offset)
+    cards = _load_razygranye(_PAGE_SIZE, offset, law=law)
     if not cards:
         st.info("Нет разыгранных закупок.")
         return
