@@ -29,31 +29,68 @@ DEADLINE_SORT_LABELS = {
 
 
 def _render_first_stage_dataset_panel(crm_db, annotation_states: dict) -> None:
-    """Read-only first-stage category-gate dataset for smoke batch progress."""
+    """Read-only staged dataset: object / mode / category gate."""
     from src.services.annotation_category_gate import (
         IN_CATEGORY,
         OUT_OF_CATEGORY,
         UNCERTAIN,
         first_stage_dataset_rows,
     )
-    from src.services.annotation_state_service import annotation_state_counts
+    from src.services.annotation_state_service import REVIEWED, UNREVIEWED, annotation_state_counts
+    from src.services.expert_object_taxonomy import OBJECT_SECTOR_VALUES
+    from src.services.expert_procurement_mode import PROCUREMENT_MODE_OPTIONS
 
     counts = annotation_state_counts(annotation_states)
     with st.expander(
-        "Первый этап · датасет (title + ОКПД → товарные категории)",
+        "Первый этап · staged датасет (объект → тип закупки → категории)",
         expanded=False,
     ):
         st.caption(
-            f"Проверено: {counts.get('REVIEWED', 0)} · "
+            f"Проверено: {counts.get(REVIEWED, 0)} · "
+            f"Не проверено: {counts.get(UNREVIEWED, 0)} · "
             f"В категории: {counts.get(IN_CATEGORY, 0)} · "
             f"Вне категорий: {counts.get(OUT_OF_CATEGORY, 0)} · "
             f"Не уверен: {counts.get(UNCERTAIN, 0)}"
         )
-        rows = first_stage_dataset_rows(crm_db, limit=80)
+        rows = first_stage_dataset_rows(crm_db, limit=120)
         if not rows:
-            st.info("Пока нет разметок с expert_category_scope. Цель smoke-batch: 30–40.")
+            st.info("Пока нет staged-разметок. Цель smoke-batch: 30–40.")
             return
-        st.dataframe(rows, use_container_width=True, hide_index=True)
+        f1, f2, f3, f4 = st.columns(4)
+        reviewed_only = f1.selectbox(
+            "Статус",
+            ["Все", "Проверено", "Не проверено / частично"],
+            key="staged_ds_reviewed",
+        )
+        sector_f = f2.selectbox(
+            "Сектор",
+            ["Все"] + list(OBJECT_SECTOR_VALUES),
+            key="staged_ds_sector",
+        )
+        mode_f = f3.selectbox(
+            "Тип закупки",
+            ["Все"] + list(PROCUREMENT_MODE_OPTIONS),
+            key="staged_ds_mode",
+        )
+        scope_f = f4.selectbox(
+            "Категории",
+            ["Все", IN_CATEGORY, OUT_OF_CATEGORY, UNCERTAIN],
+            key="staged_ds_scope",
+        )
+        filtered = []
+        for row in rows:
+            if reviewed_only == "Проверено" and not row.get("staged_complete"):
+                continue
+            if reviewed_only.startswith("Не проверено") and row.get("staged_complete"):
+                continue
+            if sector_f != "Все" and row.get("expert_object_sector") != sector_f:
+                continue
+            if mode_f != "Все" and row.get("expert_procurement_mode") != mode_f:
+                continue
+            if scope_f != "Все" and row.get("expert_category_scope") != scope_f:
+                continue
+            filtered.append(row)
+        st.dataframe(filtered, use_container_width=True, hide_index=True)
 
 
 def torgi_deadline_order_by(sort_mode: str) -> str:

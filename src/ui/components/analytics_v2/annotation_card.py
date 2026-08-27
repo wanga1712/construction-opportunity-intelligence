@@ -152,6 +152,8 @@ def _init_fast_draft(
         )
         st.session_state[_sk(procurement_id, "obj_type")] = p.get("expert_object_type") or ""
         st.session_state[_sk(procurement_id, "obj_subtype")] = p.get("expert_object_subtype") or ""
+        st.session_state[_sk(procurement_id, "obj_sector")] = p.get("expert_object_sector") or ""
+        st.session_state[_sk(procurement_id, "proc_mode")] = p.get("expert_procurement_mode") or ""
         st.session_state[_sk(procurement_id, "work_stage")] = p.get("expert_work_stage") or ""
         st.session_state[_sk(procurement_id, "absence_confirmed")] = bool(
             p.get("expert_category_absence_confirmed")
@@ -171,6 +173,8 @@ def _init_fast_draft(
         st.session_state[_sk(procurement_id, "rejected")] = []
         st.session_state[_sk(procurement_id, "obj_type")] = ""
         st.session_state[_sk(procurement_id, "obj_subtype")] = ""
+        st.session_state[_sk(procurement_id, "obj_sector")] = ""
+        st.session_state[_sk(procurement_id, "proc_mode")] = ""
         st.session_state[_sk(procurement_id, "work_stage")] = ""
         st.session_state[_sk(procurement_id, "absence_confirmed")] = False
         st.session_state[_sk(procurement_id, "review_scope")] = "CATEGORY_ONLY"
@@ -263,19 +267,67 @@ def _render_primary_scope_decision(
     obj_types: list[str],
     subtypes: list[str],
     stages: list[str],
+    *,
+    existing_annotation: dict | None = None,
 ) -> None:
-    """Stage-1 product category gate: title+OKPD only; no object/stage/medal/docs."""
+    """Staged path: object → procurement mode → product category gate (no medal)."""
     from src.services.annotation_category_gate import (
+        FIRST_GATE_QUESTION,
         OUT_OF_CATEGORY_BADGE,
         build_in_category_payload,
         build_out_of_category_payload,
         build_uncertain_payload,
     )
+    from src.services.annotation_staged import merge_staged_fields
+    from src.ui.components.analytics_v2.staged_annotation_ui import (
+        init_staged_draft_from_payload,
+        read_staged_draft,
+        render_object_stage_controls,
+        render_procurement_mode_controls,
+        validate_staged_minimum,
+    )
 
+    payload_seed = (existing_annotation or {}).get("payload") if existing_annotation else None
+    init_staged_draft_from_payload(procurement_id, payload_seed)
+    render_object_stage_controls(
+        procurement_id,
+        assessment=assessment,
+        human_type_suggestions=obj_types,
+    )
+    render_procurement_mode_controls(procurement_id, assessment=assessment)
+
+    st.markdown(f"**3. {FIRST_GATE_QUESTION}**")
     decision = st.session_state.get(scope_decision_key(procurement_id))
+    yes, no, unsure = st.columns(3)
+    if yes.button("✓ Да", key=_sk(procurement_id, "scope_yes_inner"), use_container_width=True):
+        st.session_state[scope_decision_key(procurement_id)] = "YES"
+        decision = "YES"
+    if no.button("✕ Нет", key=_sk(procurement_id, "scope_no_inner"), use_container_width=True):
+        st.session_state[scope_decision_key(procurement_id)] = "NO"
+        decision = "NO"
+    if unsure.button("? Не уверен", key=_sk(procurement_id, "scope_unc_inner"), use_container_width=True):
+        st.session_state[scope_decision_key(procurement_id)] = "UNCERTAIN"
+        decision = "UNCERTAIN"
+
+    def _persist_staged(base: dict, *, save_and_next: bool) -> None:
+        draft = read_staged_draft(procurement_id)
+        missing = validate_staged_minimum(draft)
+        if missing:
+            st.error("Заполните: " + ", ".join(missing) + ".")
+            return
+        payload = merge_staged_fields(
+            base,
+            object_sector=draft["object_sector"],
+            object_type=draft["object_type"],
+            object_subtype=draft.get("object_subtype"),
+            procurement_mode=draft["procurement_mode"],
+            taxonomy_proposals=draft.get("taxonomy_proposals") or [],
+        )
+        _persist(procurement_id, payload, assessment, created_by, crm_db, save_and_next=save_and_next)
+
     if decision == "NO":
         st.error(f"{OUT_OF_CATEGORY_BADGE} — закупка не относится ни к одной товарной категории.")
-        st.caption("Объект, стадия, медаль и документы на этом этапе не требуются.")
+        st.caption("Медаль и документы на этом этапе не требуются.")
         comment = st.text_input(
             "Комментарий (необязательно)",
             key=_sk(procurement_id, "category_gate_comment"),
@@ -285,14 +337,16 @@ def _render_primary_scope_decision(
             key=_sk(procurement_id, "scope_no_save_next"),
             type="primary",
         ):
-            payload = build_out_of_category_payload(
-                assessment=assessment, created_by=created_by, comment=comment or ""
+            _persist_staged(
+                build_out_of_category_payload(
+                    assessment=assessment, created_by=created_by, comment=comment or ""
+                ),
+                save_and_next=True,
             )
-            _persist(procurement_id, payload, assessment, created_by, crm_db, save_and_next=True)
         return
     if decision == "YES":
         st.success("✓ Закупка относится к нашим товарным категориям.")
-        st.markdown("**К какой товарной категории относится закупка?**")
+        st.markdown("**Категории:**")
         name_by_code = {c["code"]: c.get("name") or c["code"] for c in categories}
         labels = [f"{name_by_code[c['code']]}  · `{c['code']}`" for c in categories]
         label_to_code = {labels[i]: categories[i]["code"] for i in range(len(categories))}
@@ -314,24 +368,28 @@ def _render_primary_scope_decision(
             if not selected_codes:
                 st.error("Выберите хотя бы одну товарную категорию.")
                 return
-            payload = build_in_category_payload(
-                assessment=assessment,
-                created_by=created_by,
-                category_codes=selected_codes,
-                category_names=name_by_code,
+            _persist_staged(
+                build_in_category_payload(
+                    assessment=assessment,
+                    created_by=created_by,
+                    category_codes=selected_codes,
+                    category_names=name_by_code,
+                ),
+                save_and_next=save_next,
             )
-            _persist(procurement_id, payload, assessment, created_by, crm_db, save_and_next=save_next)
         return
     if decision == "UNCERTAIN":
-        st.warning("? Title + ОКПД2 недостаточно для уверенного решения.")
-        st.caption("Не классифицируем как IN/OUT. Можно сохранить и вернуться позже.")
+        st.warning("? Title + ОКПД2 недостаточно для уверенного решения по категориям.")
+        st.caption("Не классифицируем как IN/OUT. Объект и тип закупки всё равно сохраняются.")
         if st.button(
             "Сохранить «Не уверен» и следующая →",
             key=_sk(procurement_id, "scope_uncertain_save_next"),
             type="primary",
         ):
-            payload = build_uncertain_payload(assessment=assessment, created_by=created_by)
-            _persist(procurement_id, payload, assessment, created_by, crm_db, save_and_next=True)
+            _persist_staged(
+                build_uncertain_payload(assessment=assessment, created_by=created_by),
+                save_and_next=True,
+            )
 
 
 def render_annotation_card(
@@ -413,6 +471,7 @@ def render_annotation_section(
             procurement_id, assessment, created_by, crm_db, categories,
             collect_expert_object_types(crm_db), collect_expert_object_subtypes(crm_db),
             collect_expert_work_stages(crm_db),
+            existing_annotation=existing_annotation,
         )
         return
     if section == "Модель / Категории":

@@ -13,6 +13,10 @@
 
 ## CURRENT WIP — 2026-08-26
 
+**CRM-V3-EXPERT-OBJECT-AND-PROCUREMENT-MODE-STAGED-ANNOTATION-1** — `[~]` **IN PROGRESS**. Baseline GitHub `4010e77` / S13 runtime start `b9c45be`. Staged expert path on Analytics cards: factual source contour (read-only from `source_table`) → controlled object sector/type → `expert_procurement_mode` → preserved product-category gate. No medal/model/DDL. Report: `docs/reports/expert_object_procurement_mode_staged_annotation/IMPLEMENTATION_AND_PRODUCTION_ACCEPTANCE.md`.
+
+## PRIOR CURRENT WIP — 2026-08-26
+
 **CRM-V3-EXPERT-CATEGORY-GATE-AND-FIRST-STAGE-DATASET-1** — `[x]` **PASS / STOP**. Baseline GitHub closure `54780848` (S13 runtime start `ec356151`). First expert gate is now product-category only (`expert_category_scope` ∈ IN_CATEGORY/OUT_OF_CATEGORY/UNCERTAIN in JSONB payload; no DDL). Primary question: «Относится ли закупка к нашим товарным категориям?»; NO = `⛔ Вне товарных категорий` with Save&Next and no object/stage/medal/docs; YES reveals canonical `crm_product_categories` multiselect; UNCERTAIN stays unresolved. Legacy OUT_OF_PROFILE/NCE negatives preserved under filter «Старые Неинтересные» without auto-conversion. Counters: ALL=UNREVIEWED+REVIEWED by category-scope. Read-only first-stage dataset expander on Идут торги. Model comparison PARTIAL; no retrain. Tests 23 PASS; service active / HTTP 200. Report: `docs/reports/expert_category_gate_first_stage_dataset/IMPLEMENTATION_AND_PRODUCTION_ACCEPTANCE.md`. STOP after WIP.
 
 ## PRIOR CURRENT WIP — 2026-08-25

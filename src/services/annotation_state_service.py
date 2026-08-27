@@ -12,6 +12,13 @@ from src.services.annotation_category_gate import (
     category_scope_of,
     is_legacy_negative_payload,
 )
+from src.services.annotation_staged import is_partially_reviewed, is_staged_complete
+from src.services.expert_object_taxonomy import (
+    object_sector_of,
+    object_subtype_of,
+    object_type_of,
+)
+from src.services.expert_procurement_mode import procurement_mode_of
 
 # Re-export filter keys for UI/tests.
 __all__ = [
@@ -68,10 +75,16 @@ def load_current_annotation_states(procurement_ids: list[int], crm_db: Any) -> d
             "annotation_state": UNANNOTATED,
             "is_reviewed": False,
             "is_category_reviewed": False,
+            "is_staged_complete": False,
+            "is_partial": False,
             "is_not_interesting": False,
             "is_legacy_negative": False,
             "expert_category_scope": None,
             "expert_category_codes": [],
+            "expert_object_sector": None,
+            "expert_object_type": None,
+            "expert_object_subtype": None,
+            "expert_procurement_mode": None,
             "expert_commercial_verdict": None,
             "expert_scope_verdict": None,
             "annotation_completeness": None,
@@ -93,18 +106,27 @@ def load_current_annotation_states(procurement_ids: list[int], crm_db: Any) -> d
         scope = category_scope_of(payload)
         legacy = is_legacy_negative_payload(payload)
         outcome = classify_annotation_payload(payload)
+        staged = is_staged_complete(payload)
+        partial = is_partially_reviewed(payload)
         states[pid] = {
             "has_annotation": True,
             "annotation_id": row.get("id"),
             "annotation_version": row.get("annotation_version"),
             "created_at": row.get("created_at"),
             "annotation_state": outcome,
-            "is_reviewed": bool(scope),
+            # Primary progress: full staged completeness (object+mode+category).
+            "is_reviewed": staged,
             "is_category_reviewed": bool(scope),
+            "is_staged_complete": staged,
+            "is_partial": partial,
             "is_not_interesting": outcome == NOT_INTERESTING or scope == OUT_OF_CATEGORY,
             "is_legacy_negative": legacy,
             "expert_category_scope": scope,
             "expert_category_codes": category_codes_of(payload),
+            "expert_object_sector": object_sector_of(payload),
+            "expert_object_type": object_type_of(payload),
+            "expert_object_subtype": object_subtype_of(payload),
+            "expert_procurement_mode": procurement_mode_of(payload),
             "expert_commercial_verdict": payload.get("expert_commercial_verdict"),
             "expert_scope_verdict": payload.get("expert_scope_verdict"),
             "annotation_completeness": payload.get("annotation_completeness"),
@@ -114,13 +136,14 @@ def load_current_annotation_states(procurement_ids: list[int], crm_db: Any) -> d
 
 
 def annotation_state_counts(states: dict[int, dict]) -> dict[str, int]:
-    """Category-gate progress counters.
+    """Staged progress counters.
 
-    ALL = UNREVIEWED + REVIEWED where REVIEWED means expert_category_scope exists.
-    Legacy negatives without category_scope remain in UNREVIEWED and LEGACY filter.
+    ALL = UNREVIEWED + REVIEWED where REVIEWED means full staged completeness.
+    Category secondary filters still use expert_category_scope.
+    Legacy / category-only annotations without object/mode stay UNREVIEWED (partial).
     """
     total = len(states)
-    reviewed = sum(1 for value in states.values() if value.get("is_category_reviewed"))
+    reviewed = sum(1 for value in states.values() if value.get("is_staged_complete"))
     out_of_category = sum(
         1 for value in states.values() if value.get("expert_category_scope") == OUT_OF_CATEGORY
     )

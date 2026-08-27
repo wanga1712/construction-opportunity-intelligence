@@ -64,22 +64,26 @@ def is_legacy_negative_payload(payload: dict | None) -> bool:
     )
 
 
-def build_out_of_category_payload(
+def _base_gate_payload(
     *,
     assessment: dict | None,
     created_by: str,
-    comment: str = "",
+    scope: str,
+    category_codes: list[str],
+    opportunities: list[dict],
+    comment: str,
+    evidence_state: str,
+    annotation_completeness: str,
 ) -> dict:
-    """Stage-1 NO: OUT_OF_PRODUCT_CATEGORY only — no NCE/OUT_OF_PROFILE authority."""
     return {
         "model_assessment_id": (assessment or {}).get("id"),
-        CATEGORY_SCOPE_FIELD: OUT_OF_CATEGORY,
-        CATEGORY_CODES_FIELD: [],
+        CATEGORY_SCOPE_FIELD: scope,
+        CATEGORY_CODES_FIELD: category_codes,
         "annotation_review_scope": "CATEGORY_GATE",
-        "annotation_completeness": "COMPLETE",
-        "evidence_state": "SUFFICIENT",
+        "annotation_completeness": annotation_completeness,
+        "evidence_state": evidence_state,
         "expert_comment": comment or "",
-        "opportunities": [],
+        "opportunities": opportunities,
         "rejected_model_opportunities": [],
         "taxonomy_proposals": [],
         "training_evidence_quality": (
@@ -89,6 +93,25 @@ def build_out_of_category_payload(
         ),
         "created_by": created_by,
     }
+
+
+def build_out_of_category_payload(
+    *,
+    assessment: dict | None,
+    created_by: str,
+    comment: str = "",
+) -> dict:
+    """Stage-1 NO: OUT_OF_PRODUCT_CATEGORY only — no NCE/OUT_OF_PROFILE authority."""
+    return _base_gate_payload(
+        assessment=assessment,
+        created_by=created_by,
+        scope=OUT_OF_CATEGORY,
+        category_codes=[],
+        opportunities=[],
+        comment=comment,
+        evidence_state="SUFFICIENT",
+        annotation_completeness="COMPLETE",
+    )
 
 
 def build_in_category_payload(
@@ -113,24 +136,16 @@ def build_in_category_payload(
                 "comment": "",
             }
         )
-    return {
-        "model_assessment_id": (assessment or {}).get("id"),
-        CATEGORY_SCOPE_FIELD: IN_CATEGORY,
-        CATEGORY_CODES_FIELD: codes,
-        "annotation_review_scope": "CATEGORY_GATE",
-        "annotation_completeness": "PARTIAL",
-        "evidence_state": "SUFFICIENT",
-        "expert_comment": "",
-        "opportunities": opportunities,
-        "rejected_model_opportunities": [],
-        "taxonomy_proposals": [],
-        "training_evidence_quality": (
-            "IMMUTABLE_MODEL_TRACE"
-            if assessment and assessment.get("inference_run_id")
-            else "LEGACY_NO_RAW"
-        ),
-        "created_by": created_by,
-    }
+    return _base_gate_payload(
+        assessment=assessment,
+        created_by=created_by,
+        scope=IN_CATEGORY,
+        category_codes=codes,
+        opportunities=opportunities,
+        comment="",
+        evidence_state="SUFFICIENT",
+        annotation_completeness="PARTIAL",
+    )
 
 
 def build_uncertain_payload(
@@ -139,24 +154,16 @@ def build_uncertain_payload(
     created_by: str,
     comment: str = "",
 ) -> dict:
-    return {
-        "model_assessment_id": (assessment or {}).get("id"),
-        CATEGORY_SCOPE_FIELD: UNCERTAIN,
-        CATEGORY_CODES_FIELD: [],
-        "annotation_review_scope": "CATEGORY_GATE",
-        "annotation_completeness": "PARTIAL",
-        "evidence_state": "INSUFFICIENT",
-        "expert_comment": comment or "",
-        "opportunities": [],
-        "rejected_model_opportunities": [],
-        "taxonomy_proposals": [],
-        "training_evidence_quality": (
-            "IMMUTABLE_MODEL_TRACE"
-            if assessment and assessment.get("inference_run_id")
-            else "LEGACY_NO_RAW"
-        ),
-        "created_by": created_by,
-    }
+    return _base_gate_payload(
+        assessment=assessment,
+        created_by=created_by,
+        scope=UNCERTAIN,
+        category_codes=[],
+        opportunities=[],
+        comment=comment,
+        evidence_state="INSUFFICIENT",
+        annotation_completeness="PARTIAL",
+    )
 
 
 def derive_model_stage1_scope(assessment: dict | None) -> tuple[str | None, list[str]]:
@@ -220,39 +227,7 @@ def compare_human_vs_model(
 
 
 def first_stage_dataset_rows(crm_db: Any, *, limit: int = 200) -> list[dict]:
-    """Read-only first-stage reviewed rows for export/view."""
-    rows = crm_db.execute_query(
-        f"""
-        SELECT a.procurement_id, a.annotation_version, a.created_at, a.payload,
-               p.contract_number, p.source_table, p.auction_name,
-               p.okpd_code, p.okpd_name
-        FROM crm_v3_expert_annotations a
-        JOIN crm_procurements p ON p.id = a.procurement_id
-        WHERE a.is_current = TRUE
-          AND COALESCE(a.payload->>'{CATEGORY_SCOPE_FIELD}', '') <> ''
-        ORDER BY a.created_at DESC
-        LIMIT %s
-        """,
-        (limit,),
-    )
-    out = []
-    for row in rows or []:
-        payload = row.get("payload") or {}
-        law = "223" if "223" in str(row.get("source_table") or "") else (
-            "44" if "44" in str(row.get("source_table") or "") else "OTHER"
-        )
-        out.append(
-            {
-                "procurement_id": row["procurement_id"],
-                "procurement_number": row.get("contract_number"),
-                "law": law,
-                "title": row.get("auction_name"),
-                "okpd_code": row.get("okpd_code"),
-                "okpd_name": row.get("okpd_name"),
-                "expert_category_scope": category_scope_of(payload),
-                "expert_category_codes": category_codes_of(payload),
-                "annotation_created_at": row.get("created_at"),
-                "annotation_version": row.get("annotation_version"),
-            }
-        )
-    return out
+    """Read-only first-stage rows including staged object/mode fields."""
+    from src.services.annotation_staged import first_stage_dataset_rows_staged
+
+    return first_stage_dataset_rows_staged(crm_db, limit=limit)
