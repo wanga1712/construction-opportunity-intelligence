@@ -29,7 +29,7 @@ DEADLINE_SORT_LABELS = {
 
 
 def _render_first_stage_dataset_panel(crm_db, annotation_states: dict) -> None:
-    """Read-only staged dataset: object / mode / category gate."""
+    """Read-only staged dataset: object / mode / category / commercial / medal."""
     from src.services.annotation_category_gate import (
         IN_CATEGORY,
         OUT_OF_CATEGORY,
@@ -37,12 +37,14 @@ def _render_first_stage_dataset_panel(crm_db, annotation_states: dict) -> None:
         first_stage_dataset_rows,
     )
     from src.services.annotation_state_service import REVIEWED, UNREVIEWED, annotation_state_counts
+    from src.services.expert_commercial_entry import COMMERCIAL, NON_COMMERCIAL
+    from src.services.expert_medal_stage import MEDAL_VALUES
     from src.services.expert_object_taxonomy import OBJECT_SECTOR_VALUES
     from src.services.expert_procurement_mode import PROCUREMENT_MODE_OPTIONS
 
     counts = annotation_state_counts(annotation_states)
     with st.expander(
-        "Первый этап · staged датасет (объект → тип закупки → категории)",
+        "Staged датасет (объект → тип → категории → коммерция → медаль)",
         expanded=False,
     ):
         st.caption(
@@ -50,13 +52,14 @@ def _render_first_stage_dataset_panel(crm_db, annotation_states: dict) -> None:
             f"Не проверено: {counts.get(UNREVIEWED, 0)} · "
             f"В категории: {counts.get(IN_CATEGORY, 0)} · "
             f"Вне категорий: {counts.get(OUT_OF_CATEGORY, 0)} · "
-            f"Не уверен: {counts.get(UNCERTAIN, 0)}"
+            f"Коммерчески: {counts.get(COMMERCIAL, 0)} · "
+            f"Не коммерчески: {counts.get(NON_COMMERCIAL, 0)}"
         )
         rows = first_stage_dataset_rows(crm_db, limit=120)
         if not rows:
             st.info("Пока нет staged-разметок. Цель smoke-batch: 30–40.")
             return
-        f1, f2, f3, f4 = st.columns(4)
+        f1, f2, f3, f4, f5 = st.columns(5)
         reviewed_only = f1.selectbox(
             "Статус",
             ["Все", "Проверено", "Не проверено / частично"],
@@ -77,6 +80,11 @@ def _render_first_stage_dataset_panel(crm_db, annotation_states: dict) -> None:
             ["Все", IN_CATEGORY, OUT_OF_CATEGORY, UNCERTAIN],
             key="staged_ds_scope",
         )
+        entry_f = f5.selectbox(
+            "Коммерция / медаль",
+            ["Все", COMMERCIAL, NON_COMMERCIAL, UNCERTAIN, *MEDAL_VALUES],
+            key="staged_ds_entry",
+        )
         filtered = []
         for row in rows:
             if reviewed_only == "Проверено" and not row.get("staged_complete"):
@@ -89,6 +97,11 @@ def _render_first_stage_dataset_panel(crm_db, annotation_states: dict) -> None:
                 continue
             if scope_f != "Все" and row.get("expert_category_scope") != scope_f:
                 continue
+            if entry_f != "Все":
+                if entry_f in MEDAL_VALUES and row.get("expert_medal") != entry_f:
+                    continue
+                if entry_f not in MEDAL_VALUES and row.get("expert_commercial_entry") != entry_f:
+                    continue
             filtered.append(row)
         st.dataframe(filtered, use_container_width=True, hide_index=True)
 

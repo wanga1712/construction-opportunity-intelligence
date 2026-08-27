@@ -270,7 +270,7 @@ def _render_primary_scope_decision(
     *,
     existing_annotation: dict | None = None,
 ) -> None:
-    """Staged path: object → procurement mode → product category gate (no medal)."""
+    """Staged path: object → mode → category gate → product → commercial → medal."""
     from src.services.annotation_category_gate import (
         FIRST_GATE_QUESTION,
         OUT_OF_CATEGORY_BADGE,
@@ -278,12 +278,15 @@ def _render_primary_scope_decision(
         build_out_of_category_payload,
         build_uncertain_payload,
     )
-    from src.services.annotation_staged import merge_staged_fields
+    from src.services.annotation_staged import apply_subcategory_map, merge_staged_fields
+    from src.services.expert_annotation_service import load_subcategories_for_categories
     from src.ui.components.analytics_v2.staged_annotation_ui import (
         init_staged_draft_from_payload,
         read_staged_draft,
+        render_commercial_and_medal_controls,
         render_object_stage_controls,
         render_procurement_mode_controls,
+        render_product_category_controls,
         validate_staged_minimum,
     )
 
@@ -309,9 +312,11 @@ def _render_primary_scope_decision(
         st.session_state[scope_decision_key(procurement_id)] = "UNCERTAIN"
         decision = "UNCERTAIN"
 
-    def _persist_staged(base: dict, *, save_and_next: bool) -> None:
+    def _persist_staged(base: dict, *, save_and_next: bool, require_in_category_extras: bool = False) -> None:
         draft = read_staged_draft(procurement_id)
-        missing = validate_staged_minimum(draft)
+        missing = validate_staged_minimum(
+            draft, require_in_category_extras=require_in_category_extras
+        )
         if missing:
             st.error("Заполните: " + ", ".join(missing) + ".")
             return
@@ -322,12 +327,19 @@ def _render_primary_scope_decision(
             object_subtype=draft.get("object_subtype"),
             procurement_mode=draft["procurement_mode"],
             taxonomy_proposals=draft.get("taxonomy_proposals") or [],
+            commercial_entry=draft.get("commercial_entry"),
+            expert_medal=draft.get("expert_medal"),
         )
+        if require_in_category_extras:
+            payload = apply_subcategory_map(
+                payload,
+                subcategory_by_category=draft.get("subcategory_by_category") or {},
+            )
         _persist(procurement_id, payload, assessment, created_by, crm_db, save_and_next=save_and_next)
 
     if decision == "NO":
         st.error(f"{OUT_OF_CATEGORY_BADGE} — закупка не относится ни к одной товарной категории.")
-        st.caption("Медаль и документы на этом этапе не требуются.")
+        st.caption("Категория, коммерческая оценка, медаль и документы не требуются.")
         comment = st.text_input(
             "Комментарий (необязательно)",
             key=_sk(procurement_id, "category_gate_comment"),
@@ -346,17 +358,19 @@ def _render_primary_scope_decision(
         return
     if decision == "YES":
         st.success("✓ Закупка относится к нашим товарным категориям.")
-        st.markdown("**Категории:**")
-        name_by_code = {c["code"]: c.get("name") or c["code"] for c in categories}
-        labels = [f"{name_by_code[c['code']]}  · `{c['code']}`" for c in categories]
-        label_to_code = {labels[i]: categories[i]["code"] for i in range(len(categories))}
-        selected_labels = st.multiselect(
-            "Товарные категории (канонический реестр)",
-            options=labels,
-            key=_sk(procurement_id, "category_gate_multiselect"),
-            help="Можно выбрать одну или несколько активных категорий.",
+        cache_key = _sk(procurement_id, "subcat_cache")
+        if cache_key not in st.session_state:
+            all_codes = [c["code"] for c in categories]
+            st.session_state[cache_key] = load_subcategories_for_categories(all_codes, crm_db)
+        subcats = st.session_state[cache_key]
+        selected_codes = render_product_category_controls(
+            procurement_id,
+            categories=categories,
+            subcategories_by_category=subcats,
+            assessment=assessment,
         )
-        selected_codes = [label_to_code[label] for label in selected_labels if label in label_to_code]
+        render_commercial_and_medal_controls(procurement_id, assessment=assessment)
+        name_by_code = {c["code"]: c.get("name") or c["code"] for c in categories}
         left, right = st.columns(2)
         save = left.button("💾 Сохранить", key=_sk(procurement_id, "scope_yes_save"))
         save_next = right.button(
@@ -365,18 +379,18 @@ def _render_primary_scope_decision(
             type="primary",
         )
         if save or save_next:
-            if not selected_codes:
+            draft = read_staged_draft(procurement_id)
+            codes = draft.get("category_codes") or selected_codes
+            if not codes:
                 st.error("Выберите хотя бы одну товарную категорию.")
                 return
-            _persist_staged(
-                build_in_category_payload(
-                    assessment=assessment,
-                    created_by=created_by,
-                    category_codes=selected_codes,
-                    category_names=name_by_code,
-                ),
-                save_and_next=save_next,
+            base = build_in_category_payload(
+                assessment=assessment,
+                created_by=created_by,
+                category_codes=codes,
+                category_names=name_by_code,
             )
+            _persist_staged(base, save_and_next=save_next, require_in_category_extras=True)
         return
     if decision == "UNCERTAIN":
         st.warning("? Title + ОКПД2 недостаточно для уверенного решения по категориям.")
@@ -390,6 +404,7 @@ def _render_primary_scope_decision(
                 build_uncertain_payload(assessment=assessment, created_by=created_by),
                 save_and_next=True,
             )
+
 
 
 def render_annotation_card(

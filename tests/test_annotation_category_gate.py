@@ -71,7 +71,7 @@ def test_legacy_negative_not_auto_converted():
 
 
 def test_counters_use_staged_reviewed_semantics():
-    """Category-only rows stay readable but are not fully REVIEWED without object/mode."""
+    """Category-only / IN without commercial stay partial; OUT with object/mode is REVIEWED."""
     from src.services.annotation_staged import merge_staged_fields
     from src.services.expert_procurement_mode import WORKS
 
@@ -110,19 +110,32 @@ def test_counters_use_staged_reviewed_semantics():
                         "expert_scope_verdict": "OUT_OF_PROFILE",
                     },
                 },
+                {
+                    "id": 4,
+                    "procurement_id": 14,
+                    "annotation_version": 1,
+                    "created_at": "t",
+                    "payload": merge_staged_fields(
+                        {CATEGORY_SCOPE_FIELD: OUT_OF_CATEGORY, "expert_category_codes": []},
+                        object_sector="SOCIAL",
+                        object_type="SCHOOL",
+                        procurement_mode=WORKS,
+                    ),
+                },
             ]
 
-    states = load_current_annotation_states([10, 11, 12, 13], DB())
+    states = load_current_annotation_states([10, 11, 12, 13, 14], DB())
     counts = annotation_state_counts(states)
-    assert counts["ALL"] == counts[UNREVIEWED] + counts[REVIEWED] == 4
+    assert counts["ALL"] == counts[UNREVIEWED] + counts[REVIEWED] == 5
     assert counts[REVIEWED] == 1
-    assert counts[UNREVIEWED] == 3
-    assert counts[OUT_OF_CATEGORY] == 1
+    assert counts[UNREVIEWED] == 4
+    assert counts[OUT_OF_CATEGORY] == 2
     assert counts[LEGACY_NOT_INTERESTING] == 1
     assert states[10]["is_category_reviewed"] is True
     assert states[10]["is_staged_complete"] is False
+    assert states[11]["is_staged_complete"] is False
+    assert states[14]["is_staged_complete"] is True
     assert classify_annotation_payload({CATEGORY_SCOPE_FIELD: OUT_OF_CATEGORY}) == OUT_OF_CATEGORY
-
 
 def test_model_comparison_is_partial_when_model_scope_missing():
     result = compare_human_vs_model(

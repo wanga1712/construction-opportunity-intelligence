@@ -79,6 +79,9 @@ def test_procurement_modes_persist_in_payload():
 
 
 def test_category_gate_preserved_with_staged_fields():
+    from src.services.expert_commercial_entry import COMMERCIAL
+    from src.services.expert_medal_stage import GOLD
+
     base = build_in_category_payload(
         assessment={"id": 1},
         created_by="t",
@@ -90,6 +93,8 @@ def test_category_gate_preserved_with_staged_fields():
         object_sector="RESIDENTIAL",
         object_type="APARTMENT_BUILDING",
         procurement_mode=WORKS,
+        commercial_entry=COMMERCIAL,
+        expert_medal=GOLD,
     )
     assert payload[CATEGORY_SCOPE_FIELD] == IN_CATEGORY
     assert payload["expert_category_codes"] == ["waterproofing"]
@@ -159,8 +164,9 @@ def test_structured_summary_hides_blanks_when_unreviewed():
         )
     )
     assert summary["status"] == "REVIEWED"
-    assert any("Объект" in line[0] for line in summary["lines"])
-    assert any("Формат" in line[0] for line in summary["lines"])
+    assert any(line[0] == "🏢" for line in summary["lines"])
+    assert any(line[0] == "🛠" for line in summary["lines"])
+    assert any("Вне товарных категорий" in line[1] for line in summary["lines"])
 
 
 def test_uncertain_category_persists_without_fake_certainty():

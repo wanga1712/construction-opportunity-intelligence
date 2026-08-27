@@ -11,7 +11,11 @@
 - Размер рабочего Python-модуля: до 300 строк — желательно; 300–450 допустимо при цельности; свыше 450 требуется записанное объяснение или декомпозиция.
 - Изменение поведения сначала фиксируется тестом или явно записанным ожидаемым результатом.
 
-## CURRENT WIP — 2026-08-26
+## CURRENT WIP — 2026-08-27
+
+**CRM-V3-EXPERT-PRODUCT-CATEGORY-AND-COMMERCIAL-MEDAL-STAGE-1** — `[~]` **IN PROGRESS**. Baseline GitHub `8a96424` / S13 start `6b38299`. Extends staged annotation with product subcategory, `expert_commercial_entry` (≠ source contour), and human medal GOLD–WOOD for IN_CATEGORY+COMMERCIAL. OUT_OF_CATEGORY / NON_COMMERCIAL do not require medal. No model/publication/DDL. Report: `docs/reports/expert_product_category_commercial_medal_stage/IMPLEMENTATION_AND_PRODUCTION_ACCEPTANCE.md`.
+
+## PRIOR CURRENT WIP — 2026-08-26
 
 **CRM-V3-EXPERT-OBJECT-AND-PROCUREMENT-MODE-STAGED-ANNOTATION-1** — `[x]` **PASS / STOP**. Baseline GitHub `4010e77` / S13 runtime start `b9c45be`. Staged expert path: factual source contour (read-only `source_table`) → controlled object sector/type → `expert_procurement_mode` → preserved product-category gate. SERVICES_MODE_REQUIRED=NO. Implementation `8696b56`; S13 deployed runtime `afa14ed`; local suite 50 PASS / S13 27 PASS; AppTest exceptions 0 / HTTP 200. Report: `docs/reports/expert_object_procurement_mode_staged_annotation/IMPLEMENTATION_AND_PRODUCTION_ACCEPTANCE.md`. STOP after WIP. Next (not started): `CRM-V3-EXPERT-PRODUCT-CATEGORY-AND-COMMERCIAL-MEDAL-STAGE-1`.
 
