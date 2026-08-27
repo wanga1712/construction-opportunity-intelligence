@@ -601,13 +601,11 @@ def _sync_source(
     for row in rows:
         try:
             end_date = row.get("end_date")
-            today = date.today()
             if crm_stage == "torgi":
-                award_status = (
-                    "submission_open"
-                    if end_date is None or today <= end_date
-                    else "submission_closed_waiting_award"
-                )
+                from src.services.effective_lifecycle import open_row_award_status
+
+                # NULL end_date → award_not_found (UNKNOWN), never submission_open.
+                award_status = open_row_award_status(end_date)
             elif crm_stage == "razygranye":
                 award_status = "awarded"
             else:
