@@ -23,6 +23,8 @@ from src.services.annotation_state_service import (
     annotation_state_counts,
     load_current_annotation_states,
 )
+from src.services.expert_commercial_entry import COMMERCIAL, NON_COMMERCIAL
+from src.services.expert_medal_stage import BRONZE, GOLD, SILVER, WOOD
 from src.services.source_contour import resolve_source_contour
 from src.ui.components.analytics_v2.card_trust import fmt_date, fmt_price
 
@@ -32,7 +34,9 @@ FILTERS = (
     (UNREVIEWED, "Не проверено"),
     (REVIEWED, "Проверено"),
     (IN_CATEGORY, "В категории"),
-    (OUT_OF_CATEGORY, "Вне товарных категорий"),
+    (OUT_OF_CATEGORY, "Вне категорий"),
+    (COMMERCIAL, "Коммерчески подходит"),
+    (NON_COMMERCIAL, "Коммерчески не подходит"),
     (UNCERTAIN, "Не уверен"),
     (LEGACY_NOT_INTERESTING, "Старые «Неинтересные»"),
 )
@@ -40,6 +44,7 @@ AI_LABELS = {"ASSESSED": "🤖 AI оценено", "UNASSESSED": "🤖 AI не �
              "INCOMPLETE": "⚠ AI оценка неполная", "FAILED": "❌ Ошибка AI"}
 BUSINESS_LABELS = {"IN_PROFILE": "🟢 В профиле", "OUT_OF_PROFILE": "⚪ AI: вне профиля"}
 MEDAL_LABELS = {"GOLD": "🥇 GOLD", "SILVER": "🥈 SILVER", "BRONZE": "🥉 BRONZE", "WOOD": "🪵 WOOD"}
+MEDAL_FILTERS = (GOLD, SILVER, BRONZE, WOOD)
 
 
 def _activate_inline(active_key: str, procurement_id: int) -> None:
@@ -182,7 +187,16 @@ def _filter_matches(state: dict, selected_state: str) -> bool:
     if selected_state == OUT_OF_CATEGORY:
         return state.get("expert_category_scope") == OUT_OF_CATEGORY
     if selected_state == UNCERTAIN:
-        return state.get("expert_category_scope") == UNCERTAIN
+        return (
+            state.get("expert_category_scope") == UNCERTAIN
+            or state.get("expert_commercial_entry") == "UNCERTAIN"
+        )
+    if selected_state == COMMERCIAL:
+        return state.get("expert_commercial_entry") == COMMERCIAL
+    if selected_state == NON_COMMERCIAL:
+        return state.get("expert_commercial_entry") == NON_COMMERCIAL
+    if selected_state in MEDAL_FILTERS:
+        return state.get("expert_medal") == selected_state
     if selected_state == LEGACY_NOT_INTERESTING:
         return bool(state.get("is_legacy_negative"))
     return False

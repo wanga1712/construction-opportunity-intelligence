@@ -12,7 +12,14 @@ from src.services.annotation_category_gate import (
     category_scope_of,
     is_legacy_negative_payload,
 )
-from src.services.annotation_staged import is_partially_reviewed, is_staged_complete
+from src.services.annotation_staged import is_partially_reviewed, is_staged_complete, subcategory_codes_of
+from src.services.expert_commercial_entry import (
+    COMMERCIAL,
+    NON_COMMERCIAL,
+    commercial_entry_of,
+    legacy_commercial_state,
+)
+from src.services.expert_medal_stage import medal_of
 from src.services.expert_object_taxonomy import (
     object_sector_of,
     object_subtype_of,
@@ -32,6 +39,8 @@ __all__ = [
     "IN_CATEGORY",
     "UNCERTAIN",
     "LEGACY_NOT_INTERESTING",
+    "COMMERCIAL",
+    "NON_COMMERCIAL",
     "classify_annotation_payload",
     "load_current_annotation_states",
     "annotation_state_counts",
@@ -81,10 +90,14 @@ def load_current_annotation_states(procurement_ids: list[int], crm_db: Any) -> d
             "is_legacy_negative": False,
             "expert_category_scope": None,
             "expert_category_codes": [],
+            "expert_subcategory_codes": [],
             "expert_object_sector": None,
             "expert_object_type": None,
             "expert_object_subtype": None,
             "expert_procurement_mode": None,
+            "expert_commercial_entry": None,
+            "expert_medal": None,
+            "legacy_commercial_state": None,
             "expert_commercial_verdict": None,
             "expert_scope_verdict": None,
             "annotation_completeness": None,
@@ -114,7 +127,6 @@ def load_current_annotation_states(procurement_ids: list[int], crm_db: Any) -> d
             "annotation_version": row.get("annotation_version"),
             "created_at": row.get("created_at"),
             "annotation_state": outcome,
-            # Primary progress: full staged completeness (object+mode+category).
             "is_reviewed": staged,
             "is_category_reviewed": bool(scope),
             "is_staged_complete": staged,
@@ -123,10 +135,14 @@ def load_current_annotation_states(procurement_ids: list[int], crm_db: Any) -> d
             "is_legacy_negative": legacy,
             "expert_category_scope": scope,
             "expert_category_codes": category_codes_of(payload),
+            "expert_subcategory_codes": subcategory_codes_of(payload),
             "expert_object_sector": object_sector_of(payload),
             "expert_object_type": object_type_of(payload),
             "expert_object_subtype": object_subtype_of(payload),
             "expert_procurement_mode": procurement_mode_of(payload),
+            "expert_commercial_entry": commercial_entry_of(payload),
+            "expert_medal": medal_of(payload),
+            "legacy_commercial_state": legacy_commercial_state(payload),
             "expert_commercial_verdict": payload.get("expert_commercial_verdict"),
             "expert_scope_verdict": payload.get("expert_scope_verdict"),
             "annotation_completeness": payload.get("annotation_completeness"),
@@ -136,12 +152,7 @@ def load_current_annotation_states(procurement_ids: list[int], crm_db: Any) -> d
 
 
 def annotation_state_counts(states: dict[int, dict]) -> dict[str, int]:
-    """Staged progress counters.
-
-    ALL = UNREVIEWED + REVIEWED where REVIEWED means full staged completeness.
-    Category secondary filters still use expert_category_scope.
-    Legacy / category-only annotations without object/mode stay UNREVIEWED (partial).
-    """
+    """Staged progress counters including commercial secondary filters."""
     total = len(states)
     reviewed = sum(1 for value in states.values() if value.get("is_staged_complete"))
     out_of_category = sum(
@@ -153,8 +164,13 @@ def annotation_state_counts(states: dict[int, dict]) -> dict[str, int]:
     uncertain = sum(
         1 for value in states.values() if value.get("expert_category_scope") == UNCERTAIN
     )
+    commercial = sum(
+        1 for value in states.values() if value.get("expert_commercial_entry") == COMMERCIAL
+    )
+    non_commercial = sum(
+        1 for value in states.values() if value.get("expert_commercial_entry") == NON_COMMERCIAL
+    )
     legacy = sum(1 for value in states.values() if value.get("is_legacy_negative"))
-    # Compatibility: old NOT_INTERESTING = legacy + new out-of-category
     not_interesting = legacy + out_of_category
     return {
         "ALL": total,
@@ -163,6 +179,8 @@ def annotation_state_counts(states: dict[int, dict]) -> dict[str, int]:
         OUT_OF_CATEGORY: out_of_category,
         IN_CATEGORY: in_category,
         UNCERTAIN: uncertain,
+        COMMERCIAL: commercial,
+        NON_COMMERCIAL: non_commercial,
         LEGACY_NOT_INTERESTING: legacy,
         NOT_INTERESTING: not_interesting,
         PROFILED: max(0, reviewed - out_of_category),

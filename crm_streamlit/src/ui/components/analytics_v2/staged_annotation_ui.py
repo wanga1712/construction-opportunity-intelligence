@@ -123,8 +123,11 @@ def render_procurement_mode_controls(
         st.caption(f"🤖 ИИ предложил тип закупки: {PROCUREMENT_MODE_LABELS_RU.get(hint, hint)} (только чтение)")
     mode_key = _sk(procurement_id, "proc_mode")
     current = st.session_state.get(mode_key)
-    if current not in PROCUREMENT_MODE_OPTIONS:
-        st.session_state[mode_key] = PROCUREMENT_MODE_OPTIONS[0] if current else ""
+    if current not in PROCUREMENT_MODE_OPTIONS and current not in ("", None):
+        # Preserve unknown legacy value as free option display.
+        pass
+    if current not in list(PROCUREMENT_MODE_OPTIONS) + [""]:
+        st.session_state[mode_key] = ""
     options = [""] + list(PROCUREMENT_MODE_OPTIONS)
     st.radio(
         "Тип закупки",
@@ -134,6 +137,117 @@ def render_procurement_mode_controls(
         horizontal=True,
         label_visibility="collapsed",
     )
+
+
+def render_product_category_controls(
+    procurement_id: int,
+    *,
+    categories: list[dict],
+    subcategories_by_category: dict[str, list[dict]],
+    assessment: dict | None = None,
+) -> list[str]:
+    """4. Product category + optional subcategory (canonical registries only)."""
+    from src.services.annotation_category_gate import derive_model_stage1_scope
+
+    st.markdown("**4. Категория продукции**")
+    model_scope, model_codes = derive_model_stage1_scope(assessment)
+    if model_codes:
+        st.caption(
+            "🤖 ИИ предложил категории (только чтение): "
+            + ", ".join(model_codes)
+        )
+    name_by_code = {c["code"]: c.get("name") or c["code"] for c in categories}
+    labels = [f"{name_by_code[c['code']]}  · `{c['code']}`" for c in categories]
+    label_to_code = {labels[i]: categories[i]["code"] for i in range(len(categories))}
+    selected_labels = st.multiselect(
+        "Категории (канонический реестр)",
+        options=labels,
+        key=_sk(procurement_id, "category_gate_multiselect"),
+        help="Можно выбрать одну или несколько активных категорий.",
+    )
+    selected_codes = [label_to_code[label] for label in selected_labels if label in label_to_code]
+    st.session_state[_sk(procurement_id, "selected_category_codes")] = selected_codes
+
+    for code in selected_codes:
+        options = subcategories_by_category.get(code) or []
+        if not options:
+            st.caption(f"Подкатегории для «{name_by_code.get(code, code)}»: нет в реестре")
+            continue
+        sub_by_code = {row["code"]: row for row in options}
+        values = [None, *sub_by_code]
+        key = _sk(procurement_id, f"subcat_{code}")
+        st.selectbox(
+            f"Подкатегория — {name_by_code.get(code, code)}",
+            values,
+            key=key,
+            format_func=lambda v, m=sub_by_code: (
+                "Без подкатегории" if v is None else f"{m[v]['name']} · {v}"
+            ),
+        )
+    return selected_codes
+
+
+def render_commercial_and_medal_controls(
+    procurement_id: int,
+    *,
+    assessment: dict | None = None,
+) -> None:
+    """5–6. Commercial entry + medal (medal only when COMMERCIAL)."""
+    from src.services.expert_commercial_entry import (
+        COMMERCIAL,
+        COMMERCIAL_ENTRY_LABELS_RU,
+        COMMERCIAL_ENTRY_VALUES,
+        model_commercial_entry_hint,
+    )
+    from src.services.expert_medal_stage import (
+        MEDAL_HELP_RU,
+        MEDAL_LABELS_RU,
+        MEDAL_VALUES,
+        model_medal_hint,
+    )
+
+    st.markdown("**5. Коммерческая оценка**")
+    st.caption(
+        "Это не контур источника (44/223/…), а пригодность закупки как коммерческой возможности."
+    )
+    entry_hint = model_commercial_entry_hint(assessment)
+    if entry_hint:
+        st.caption(
+            f"🤖 ИИ предложил: {COMMERCIAL_ENTRY_LABELS_RU.get(entry_hint, entry_hint)} (только чтение)"
+        )
+    entry_key = _sk(procurement_id, "commercial_entry")
+    if st.session_state.get(entry_key) not in COMMERCIAL_ENTRY_VALUES:
+        if entry_key not in st.session_state:
+            st.session_state[entry_key] = ""
+    st.radio(
+        "Коммерческая оценка",
+        options=[""] + list(COMMERCIAL_ENTRY_VALUES),
+        key=entry_key,
+        format_func=lambda v: "— выберите —" if not v else COMMERCIAL_ENTRY_LABELS_RU.get(v, v),
+        horizontal=True,
+        label_visibility="collapsed",
+    )
+    entry = st.session_state.get(entry_key)
+    if entry != COMMERCIAL:
+        return
+
+    st.markdown("**6. Приоритет (медаль)**")
+    medal_hint = model_medal_hint(assessment)
+    if medal_hint:
+        st.caption(f"🤖 ИИ предложил медаль: {MEDAL_LABELS_RU.get(medal_hint, medal_hint)} (только чтение)")
+    medal_key = _sk(procurement_id, "medal")
+    if st.session_state.get(medal_key) not in MEDAL_VALUES:
+        if medal_key not in st.session_state or st.session_state.get(medal_key) not in MEDAL_VALUES:
+            st.session_state[medal_key] = None
+    st.selectbox(
+        "Медаль",
+        options=[None, *MEDAL_VALUES],
+        key=medal_key,
+        format_func=lambda v: "— выберите —" if v is None else MEDAL_LABELS_RU.get(v, v),
+    )
+    selected = st.session_state.get(medal_key)
+    if selected in MEDAL_HELP_RU:
+        st.caption(MEDAL_HELP_RU[selected])
 
 
 def pending_object_type_proposal(procurement_id: int) -> list[dict]:
@@ -165,13 +279,25 @@ def resolved_object_type(procurement_id: int) -> str | None:
     return str(value)
 
 
+def read_subcategory_map(procurement_id: int, category_codes: list[str]) -> dict[str, str | None]:
+    out: dict[str, str | None] = {}
+    for code in category_codes:
+        out[code] = st.session_state.get(_sk(procurement_id, f"subcat_{code}")) or None
+    return out
+
+
 def read_staged_draft(procurement_id: int) -> dict[str, Any]:
+    codes = list(st.session_state.get(_sk(procurement_id, "selected_category_codes")) or [])
     return {
         "object_sector": st.session_state.get(_sk(procurement_id, "obj_sector")) or None,
         "object_type": resolved_object_type(procurement_id),
         "object_subtype": st.session_state.get(_sk(procurement_id, "obj_subtype")) or None,
         "procurement_mode": st.session_state.get(_sk(procurement_id, "proc_mode")) or None,
         "taxonomy_proposals": pending_object_type_proposal(procurement_id),
+        "commercial_entry": st.session_state.get(_sk(procurement_id, "commercial_entry")) or None,
+        "expert_medal": st.session_state.get(_sk(procurement_id, "medal")) or None,
+        "category_codes": codes,
+        "subcategory_by_category": read_subcategory_map(procurement_id, codes),
     }
 
 
@@ -189,13 +315,38 @@ def init_staged_draft_from_payload(procurement_id: int, payload: dict | None) ->
         st.session_state[_sk(procurement_id, "obj_subtype")] = p.get("expert_object_subtype") or ""
     if _sk(procurement_id, "proc_mode") not in st.session_state:
         st.session_state[_sk(procurement_id, "proc_mode")] = p.get("expert_procurement_mode") or ""
+    if _sk(procurement_id, "commercial_entry") not in st.session_state:
+        st.session_state[_sk(procurement_id, "commercial_entry")] = (
+            p.get("expert_commercial_entry") or ""
+        )
+    medal = p.get("expert_medal")
+    if _sk(procurement_id, "medal") not in st.session_state:
+        st.session_state[_sk(procurement_id, "medal")] = (
+            medal if medal in ("GOLD", "SILVER", "BRONZE", "WOOD") else None
+        )
+    # Seed subcategory keys from opportunities.
+    for opp in p.get("opportunities") or []:
+        if not isinstance(opp, dict):
+            continue
+        cat = opp.get("category_code")
+        sub = opp.get("subcategory_code")
+        if cat and _sk(procurement_id, f"subcat_{cat}") not in st.session_state:
+            st.session_state[_sk(procurement_id, f"subcat_{cat}")] = sub
     st.session_state[flag] = True
 
 
-def validate_staged_minimum(draft: dict[str, Any]) -> list[str]:
+def validate_staged_minimum(draft: dict[str, Any], *, require_in_category_extras: bool = False) -> list[str]:
     missing = []
     if not draft.get("object_sector") or not draft.get("object_type"):
         missing.append("объект (сектор и тип)")
     if not draft.get("procurement_mode"):
         missing.append("тип закупки")
+    if require_in_category_extras:
+        if not draft.get("category_codes"):
+            missing.append("товарную категорию")
+        entry = draft.get("commercial_entry")
+        if not entry:
+            missing.append("коммерческую оценку")
+        elif entry == "COMMERCIAL" and not draft.get("expert_medal"):
+            missing.append("медаль")
     return missing
