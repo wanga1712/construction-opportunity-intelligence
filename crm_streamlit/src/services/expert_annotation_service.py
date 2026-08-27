@@ -480,6 +480,18 @@ def load_subcategories(category_code: str, crm_db: Any) -> list[dict]:
         return []
 
 
+def load_subcategories_for_categories(
+    category_codes: list[str], crm_db: Any
+) -> dict[str, list[dict]]:
+    """Batch subcategory lookup for selected category codes (no per-widget N+1 invent)."""
+    out: dict[str, list[dict]] = {}
+    for code in category_codes or []:
+        text = str(code or "").strip()
+        if text:
+            out[text] = load_subcategories(text, crm_db)
+    return out
+
+
 def collect_expert_object_types(crm_db: Any) -> list[str]:
     """Return distinct expert_object_type values from previously saved expert annotations.
 

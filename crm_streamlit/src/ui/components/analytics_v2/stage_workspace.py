@@ -6,9 +6,7 @@ from typing import Any
 
 import streamlit as st
 
-from src.services.annotation_card_provenance import source_law
 from src.services.annotation_category_gate import (
-    FIRST_GATE_QUESTION,
     IN_CATEGORY,
     LEGACY_NEGATIVE_BADGE,
     LEGACY_NOT_INTERESTING,
@@ -18,12 +16,14 @@ from src.services.annotation_category_gate import (
     build_out_of_category_payload,
     build_uncertain_payload,
 )
+from src.services.annotation_staged import staged_card_summary
 from src.services.annotation_state_service import (
     REVIEWED,
     UNREVIEWED,
     annotation_state_counts,
     load_current_annotation_states,
 )
+from src.services.source_contour import resolve_source_contour
 from src.ui.components.analytics_v2.card_trust import fmt_date, fmt_price
 
 SECTIONS = ("Обзор", "Модель / Категории", "Документы", "История", "Экспертная разметка")
@@ -31,7 +31,9 @@ FILTERS = (
     ("ALL", "Все"),
     (UNREVIEWED, "Не проверено"),
     (REVIEWED, "Проверено"),
+    (IN_CATEGORY, "В категории"),
     (OUT_OF_CATEGORY, "Вне товарных категорий"),
+    (UNCERTAIN, "Не уверен"),
     (LEGACY_NOT_INTERESTING, "Старые «Неинтересные»"),
 )
 AI_LABELS = {"ASSESSED": "🤖 AI оценено", "UNASSESSED": "🤖 AI не оценено",
@@ -71,7 +73,7 @@ def format_okpd_preview(card: dict) -> str | None:
 def _human_chips(state: dict) -> list[str]:
     chips: list[str] = []
     scope = state.get("expert_category_scope")
-    if state.get("is_category_reviewed"):
+    if state.get("is_staged_complete"):
         chips.append("✓ Проверено")
         if scope == OUT_OF_CATEGORY:
             chips.append(OUT_OF_CATEGORY_BADGE)
@@ -79,11 +81,26 @@ def _human_chips(state: dict) -> list[str]:
             chips.append("✓ В товарных категориях")
         elif scope == UNCERTAIN:
             chips.append("? Не уверен (категории)")
+    elif state.get("is_partial") or state.get("is_category_reviewed"):
+        chips.append("👤 Частично · нужно дополнить")
+        if scope == OUT_OF_CATEGORY:
+            chips.append(OUT_OF_CATEGORY_BADGE)
     else:
         chips.append("👤 Не проверено")
         if state.get("is_legacy_negative"):
             chips.append(LEGACY_NEGATIVE_BADGE)
     return chips
+
+
+def _render_structured_result(state: dict) -> None:
+    summary = staged_card_summary(state.get("payload"))
+    if summary["status"] == "UNREVIEWED":
+        st.caption("👤 Не проверено")
+        return
+    title = "👤 Проверено" if summary["status"] == "REVIEWED" else "👤 Частично проверено"
+    st.markdown(f"**{title}**")
+    for label, value in summary["lines"]:
+        st.markdown(f"{label}: **{escape(str(value))}**", unsafe_allow_html=True)
 
 
 def _summary(card: dict, stage: str, effective: Any, state: dict, published: bool) -> None:
@@ -95,10 +112,7 @@ def _summary(card: dict, stage: str, effective: Any, state: dict, published: boo
     chips = [MEDAL_LABELS.get(medal, medal) if medal else None, *_human_chips(state),
              AI_LABELS.get(ai, f"🤖 {ai}"), BUSINESS_LABELS.get(business) if business else None,
              "✓ Опубликовано в CRM" if published else "Не опубликовано менеджерам"]
-    for icon, value in (("📦", card.get("crm_category")), ("🏗", card.get("proposed_object_type")),
-                        ("🛠", card.get("proposed_procurement_type"))):
-        if _clean(value):
-            chips.append(f"{icon} {_clean(value)}")
+    # Do not surface model proposed_object as human truth chips.
     chips.extend(filter(None, [f"📎 {card.get('file_count')} документов" if card.get("file_count") else None,
                                f"🔎 {card.get('match_count')} совпадений" if card.get("match_count") else None,
                                f"✅ {card.get('evidence_count')} подтверждений" if card.get("evidence_count") else None]))
@@ -108,8 +122,12 @@ def _summary(card: dict, stage: str, effective: Any, state: dict, published: boo
         f"{escape(card.get('auction_name') or 'Закупка без названия')}</div>",
         unsafe_allow_html=True,
     )
-    facts = (("💰", fmt_price(amount), amount_label), ("📅", fmt_date(deadline), deadline_label),
-             ("📜", source_law(card.get("source_table")), "Источник"))
+    contour = resolve_source_contour(card.get("source_table"))
+    facts = (
+        ("💰", fmt_price(amount), amount_label),
+        ("📅", fmt_date(deadline), deadline_label),
+        ("📜", contour["card_primary"], contour["card_secondary"]),
+    )
     st.markdown(
         "<div style='display:grid;grid-template-columns:repeat(auto-fit,minmax(min(145px,100%),1fr));gap:10px;width:100%'>"
         + "".join(
@@ -132,6 +150,8 @@ def _summary(card: dict, stage: str, effective: Any, state: dict, published: boo
         st.caption("ОКПД2: не указан в карточке")
     if stage == "AWARDED" and card.get("contractor_name"):
         st.markdown(f"**Подрядчик / победитель:** {card['contractor_name']}")
+    if state.get("is_staged_complete") or state.get("is_partial") or state.get("is_category_reviewed"):
+        _render_structured_result(state)
 
 
 def _source_actions(card: dict) -> None:
@@ -154,11 +174,15 @@ def _filter_matches(state: dict, selected_state: str) -> bool:
     if selected_state == "ALL":
         return True
     if selected_state == UNREVIEWED:
-        return not state.get("is_category_reviewed")
+        return not state.get("is_staged_complete")
     if selected_state == REVIEWED:
-        return bool(state.get("is_category_reviewed"))
+        return bool(state.get("is_staged_complete"))
+    if selected_state == IN_CATEGORY:
+        return state.get("expert_category_scope") == IN_CATEGORY
     if selected_state == OUT_OF_CATEGORY:
         return state.get("expert_category_scope") == OUT_OF_CATEGORY
+    if selected_state == UNCERTAIN:
+        return state.get("expert_category_scope") == UNCERTAIN
     if selected_state == LEGACY_NOT_INTERESTING:
         return bool(state.get("is_legacy_negative"))
     return False
@@ -256,17 +280,16 @@ def _render_legacy_reclassify(procurement_id: int, active_key: str) -> None:
     from src.ui.components.analytics_v2.annotation_card import _persist, scope_decision_key
     from src.ui.components.analytics_v2.annotation_queue import GO_NEXT_FROM_KEY, GO_NEXT_KEY
 
-    st.info(f"Старая метка: **Неинтересная**. Новая классификация (этап 1 — товарные категории):")
+    st.info("Старая метка: **Неинтересная**. Новая классификация (этап 1 — объект / тип / категории):")
     c1, c2, c3 = st.columns(3)
     created_by = st.session_state.get("user_name") or "expert"
     _, _, crm_db, _ = connect_databases()
     assessment = load_model_assessment_for_annotation(procurement_id, crm_db)
     if c1.button("Вне товарных категорий", key=f"legacy_out_{procurement_id}", use_container_width=True):
-        payload = build_out_of_category_payload(assessment=assessment, created_by=created_by)
-        _persist(procurement_id, payload, assessment, created_by, crm_db, save_and_next=True)
+        st.session_state[scope_decision_key(procurement_id)] = "NO"
+        st.session_state[active_key] = procurement_id
         return
     if c2.button("Не относится только по другой причине", key=f"legacy_other_{procurement_id}", use_container_width=True):
-        # Keep unresolved for category gate; mark uncertain + comment.
         payload = build_uncertain_payload(
             assessment=assessment,
             created_by=created_by,
@@ -275,10 +298,9 @@ def _render_legacy_reclassify(procurement_id: int, active_key: str) -> None:
         _persist(procurement_id, payload, assessment, created_by, crm_db, save_and_next=True)
         return
     if c3.button("Не уверен", key=f"legacy_unsure_{procurement_id}", use_container_width=True):
-        payload = build_uncertain_payload(assessment=assessment, created_by=created_by)
-        _persist(procurement_id, payload, assessment, created_by, crm_db, save_and_next=True)
+        st.session_state[scope_decision_key(procurement_id)] = "UNCERTAIN"
+        st.session_state[active_key] = procurement_id
         return
-    # Allow opening YES category path if operator wants to reverse legacy.
     if st.button("Пересмотреть: относится к категориям →", key=f"legacy_yes_{procurement_id}"):
         st.session_state[scope_decision_key(procurement_id)] = "YES"
         st.session_state[active_key] = procurement_id
@@ -294,8 +316,9 @@ def _render_first_decision_gate(
     card: dict | None = None,
     session_key: str | None = None,
 ) -> None:
-    """Keep the fastest human category-gate decision on the card surface."""
+    """Staged expert surface: object → procurement mode → category gate."""
     from src.ui.components.analytics_v2.annotation_card import scope_decision_key
+    from src.ui.components.analytics_v2.staged_annotation_ui import render_source_contour_banner
 
     key = scope_decision_key(procurement_id)
     # Restore persisted stage-1 decision into session for display continuity.
@@ -304,25 +327,25 @@ def _render_first_decision_gate(
         st.session_state[key] = mapping.get(state["expert_category_scope"])
 
     st.markdown("---")
-    st.markdown("##### 👤 ЭКСПЕРТНАЯ ПРОВЕРКА")
+    st.markdown("##### 👤 ЭКСПЕРТНАЯ РАЗМЕТКА")
+    render_source_contour_banner((card or {}).get("source_table"))
+
     if state.get("is_legacy_negative") and not state.get("is_category_reviewed"):
         _render_legacy_reclassify(procurement_id, active_key)
-        if st.session_state.get(key) == "YES" and st.session_state.get(active_key) == procurement_id:
+        if st.session_state.get(key) and st.session_state.get(active_key) == procurement_id:
             _render_expensive_section(procurement_id, "Первое решение")
         return
 
-    st.caption("Решение по title + ОКПД2. Документы и модель на этом этапе не требуются.")
-    st.markdown(f"**1. {FIRST_GATE_QUESTION}**")
-    yes, no, unsure = st.columns(3)
-    clicked = None
-    if yes.button("✓ Да", key=f"scope_yes_{procurement_id}", use_container_width=True):
-        clicked = "YES"
-    if no.button("✕ Нет", key=f"scope_no_{procurement_id}", use_container_width=True):
-        clicked = "NO"
-    if unsure.button("? Не уверен", key=f"scope_uncertain_{procurement_id}", use_container_width=True):
-        clicked = "UNCERTAIN"
-    if clicked:
-        st.session_state[key] = clicked
-        st.session_state[active_key] = procurement_id
-    if st.session_state.get(key) and st.session_state.get(active_key) == procurement_id:
-        _render_expensive_section(procurement_id, "Первое решение")
+    st.caption("Обычный путь: title + ОКПД2 + контур источника. Документы не обязательны.")
+    is_active = st.session_state.get(active_key) == procurement_id
+    if state.get("is_staged_complete") and not is_active:
+        if st.button("Изменить разметку", key=f"edit_staged_{procurement_id}"):
+            st.session_state[active_key] = procurement_id
+            st.rerun()
+        return
+    if not is_active:
+        if st.button("Разметить →", key=f"open_staged_{procurement_id}", type="primary"):
+            st.session_state[active_key] = procurement_id
+            st.rerun()
+        return
+    _render_expensive_section(procurement_id, "Первое решение")

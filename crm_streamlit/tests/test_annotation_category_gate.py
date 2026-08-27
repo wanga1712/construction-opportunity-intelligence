@@ -70,7 +70,11 @@ def test_legacy_negative_not_auto_converted():
     assert is_legacy_negative_payload({**legacy, CATEGORY_SCOPE_FIELD: OUT_OF_CATEGORY}) is False
 
 
-def test_counters_use_category_scope_reviewed_semantics():
+def test_counters_use_staged_reviewed_semantics():
+    """Category-only rows stay readable but are not fully REVIEWED without object/mode."""
+    from src.services.annotation_staged import merge_staged_fields
+    from src.services.expert_procurement_mode import WORKS
+
     class DB:
         def execute_query(self, sql, params):
             return [
@@ -86,10 +90,15 @@ def test_counters_use_category_scope_reviewed_semantics():
                     "procurement_id": 11,
                     "annotation_version": 1,
                     "created_at": "t",
-                    "payload": {
-                        CATEGORY_SCOPE_FIELD: IN_CATEGORY,
-                        "expert_category_codes": ["X"],
-                    },
+                    "payload": merge_staged_fields(
+                        {
+                            CATEGORY_SCOPE_FIELD: IN_CATEGORY,
+                            "expert_category_codes": ["X"],
+                        },
+                        object_sector="SOCIAL",
+                        object_type="SCHOOL",
+                        procurement_mode=WORKS,
+                    ),
                 },
                 {
                     "id": 3,
@@ -106,10 +115,12 @@ def test_counters_use_category_scope_reviewed_semantics():
     states = load_current_annotation_states([10, 11, 12, 13], DB())
     counts = annotation_state_counts(states)
     assert counts["ALL"] == counts[UNREVIEWED] + counts[REVIEWED] == 4
-    assert counts[REVIEWED] == 2
-    assert counts[UNREVIEWED] == 2
+    assert counts[REVIEWED] == 1
+    assert counts[UNREVIEWED] == 3
     assert counts[OUT_OF_CATEGORY] == 1
     assert counts[LEGACY_NOT_INTERESTING] == 1
+    assert states[10]["is_category_reviewed"] is True
+    assert states[10]["is_staged_complete"] is False
     assert classify_annotation_payload({CATEGORY_SCOPE_FIELD: OUT_OF_CATEGORY}) == OUT_OF_CATEGORY
 
 
