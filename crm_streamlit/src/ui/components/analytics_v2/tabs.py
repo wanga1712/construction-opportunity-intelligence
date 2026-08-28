@@ -640,7 +640,7 @@ def _render_torgi_tab() -> None:
     cards = _load_torgi(_PAGE_SIZE, offset, sort_mode, selected_ids, law=law)
 
     if not cards:
-        st.info("Нет тендеров по выбранным фильтрам.")
+        st.info("Нет тендеров в стадии торгов.")
         return
 
     # Enrichment
@@ -714,7 +714,7 @@ def _render_komissia_tab() -> None:
     cards = _load_komissia(_PAGE_SIZE, offset, selected_ids, law=law)
 
     if not cards:
-        st.info("Нет тендеров по выбранным фильтрам.")
+        st.info("Нет тендеров на стадии работы комиссии.")
         return
 
     eff_map = _load_effective_map(cards)
@@ -774,7 +774,7 @@ def _render_razygranye_tab() -> None:
     cards = _load_razygranye(_PAGE_SIZE, offset, selected_ids, law=law)
 
     if not cards:
-        st.info("Нет тендеров по выбранным фильтрам.")
+        st.info("Нет разыгранных закупок.")
         return
 
     eff_map = _load_effective_map(cards)
