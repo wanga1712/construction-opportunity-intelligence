@@ -264,6 +264,7 @@ def main():
         logger.info("Running Scenario 2: False No Documents Gate...")
         # Change pending queue row to FAILED, but keep document processed records empty
         doc_conn = orchestrator._get_doc_conn()
+        doc_conn.autocommit = True
         try:
             with doc_conn.cursor() as cur:
                 cur.execute("UPDATE document_processing_queue SET status = 'FAILED' WHERE procurement_id = %s AND status = 'PENDING'", (pid,))
