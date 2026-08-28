@@ -38,6 +38,7 @@ from src.services.expert_annotation_service import (
 from src.ui.components.analytics_v2.card_tabs_ai_readonly import (
     render_business_readonly_block,
     render_model_readonly_block,
+    render_learning_loop_results,
 )
 from src.ui.components.analytics_v2.card_tabs_ai_expert_form import (
     render_correct_fast_path,
@@ -78,13 +79,26 @@ def render_ai_tab(
     # ── Load data ──────────────────────────────────────────────────────────
     assessment = _load_assessment_safe(crm_db, procurement_id)
     existing_annotation = _load_annotation_safe(crm_db, procurement_id)
+    categories         = _load_categories_safe(crm_db)
+    expert_obj_types   = _load_expert_obj_types_safe(crm_db)
+    expert_stages      = _load_expert_stages_safe(crm_db)
+    expert_obj_subtypes = _load_expert_subtypes_safe(crm_db)
+    created_by         = _get_created_by()
 
+    # ── MODEL read-only block ──────────────────────────────────────────────
     render_model_readonly_block(assessment, ai_status)
-    render_learning_loop_results(crm_db, procurement_id)
+
+    # ── Learning Loop Results (Additive, Fail-safe) ───────────────────────
+    try:
+        render_learning_loop_results(crm_db, procurement_id)
+    except Exception as exc:
+        logger.warning(f"Failed to render learning loop results: {exc}")
+
     # ── BUSINESS read-only block (rules — never labeled as model) ─────────
     if ai_status == "ASSESSED":
         render_business_readonly_block(assessment)
 
+    # Show saved annotation banner if exists
     if existing_annotation:
         p = existing_annotation["payload"]
         verdict = p.get("expert_verdict", "—")
@@ -96,21 +110,59 @@ def render_ai_tab(
             f"вердикт: `{verdict}` · автор: {ann_by}"
         )
 
+    # ── Expert verdict radio ───────────────────────────────────────────────
     st.markdown("---")
-    st.warning(
-        "**Экспертная разметка выполняется только в sidebar → 🏷️ РАЗМЕТКА.**  "
-        "Вкладка «Идут торги» показывает publication-visible подмножество (~20), "
-        "не полную очередь open+assessed (~66)."
+    st.markdown("##### Оценка эксперта")
+    verdict_opts   = ["CORRECT", "PARTIALLY_CORRECT", "WRONG"]
+    verdict_labels = ["✅ ИИ определил правильно",
+                      "⚠️ Частично правильно",
+                      "❌ ИИ ошибся"]
+    prev_verdict = (existing_annotation or {}).get("payload", {}).get(
+        "expert_verdict", st.session_state.get(_sk(procurement_id, "verdict"), "CORRECT")
     )
-    if st.button(
-        "🏷️ Открыть эту карточку в РАЗМЕТКА",
-        key=f"goto_annotation_wb_{procurement_id}",
-        type="primary",
-    ):
-        st.session_state["nav_page"] = "expert_annotation"
-        st.session_state["annotation_wb_queue"] = procurement_id
-        st.session_state.pop("annotation_wb_filters", None)
-        st.rerun()
+    v_idx = verdict_opts.index(prev_verdict) if prev_verdict in verdict_opts else 0
+    sel_v_label = st.radio(
+        "Вердикт:",
+        options=verdict_labels,
+        index=v_idx,
+        key=_sk(procurement_id, "verdict_radio"),
+        horizontal=True,
+    )
+    selected_verdict = verdict_opts[verdict_labels.index(sel_v_label)]
+    # Sync to session state so expert form picks it up
+    st.session_state[_sk(procurement_id, "verdict")] = selected_verdict
+
+    # ── Render appropriate form ────────────────────────────────────────────
+    payload: dict | None = None
+
+    if selected_verdict == "CORRECT":
+        payload = render_correct_fast_path(
+            procurement_id, assessment, existing_annotation, created_by
+        )
+    else:
+        payload = render_expert_full_form(
+            procurement_id=procurement_id,
+            expert_verdict=selected_verdict,
+            assessment=assessment,
+            existing_annotation=existing_annotation,
+            categories=categories,
+            expert_object_types=expert_obj_types,
+            expert_work_stages=expert_stages,
+            expert_object_subtypes=expert_obj_subtypes,
+            created_by=created_by,
+        )
+
+    # ── Handle save ────────────────────────────────────────────────────────
+    if payload is not None:
+        save_and_next = payload.pop("_save_and_next", False)
+        _handle_save(
+            procurement_id=procurement_id,
+            payload=payload,
+            assessment=assessment,
+            created_by=created_by,
+            crm_db=crm_db,
+            save_and_next=save_and_next,
+        )
 
 
 # ─────────────────────────────────────────────────────────────────────────────

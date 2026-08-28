@@ -210,7 +210,7 @@ def render_learning_loop_results(crm_db: Any, procurement_id: int) -> None:
                    quantity, unit, raw_description, evidence_text, document_name,
                    page, sheet, row_num, position_number
             FROM crm_v3_product_findings
-            WHERE procurement_id = %s AND run_id = %s AND extractor_role = 'HUNTER'
+            WHERE procurement_id = %s AND model_run_id = %s AND extractor_role = 'HUNTER'
             ORDER BY id ASC
             """,
             (procurement_id, hunter_run_id),
