@@ -229,10 +229,20 @@ def main():
             with doc_conn.cursor() as cur:
                 # One completed, one pending!
                 cur.execute(
-                    "INSERT INTO document_processing_queue (procurement_id, status, pipeline_generation) VALUES (%s, 'COMPLETED', 'S13_V2')", (pid,)
+                    """
+                    INSERT INTO document_processing_queue 
+                    (procurement_id, source_table, source_id, contract_number, status, pipeline_generation) 
+                    VALUES (%s, 'crm_tenders_44fz', %s, %s, 'COMPLETED', 'S13_V2')
+                    """, 
+                    (pid, pid, f"CN-{pid}")
                 )
                 cur.execute(
-                    "INSERT INTO document_processing_queue (procurement_id, status, pipeline_generation) VALUES (%s, 'PENDING', 'S13_V2')", (pid,)
+                    """
+                    INSERT INTO document_processing_queue 
+                    (procurement_id, source_table, source_id, contract_number, status, pipeline_generation) 
+                    VALUES (%s, 'crm_tenders_44fz', %s, %s, 'PENDING', 'S13_V2')
+                    """, 
+                    (pid, pid, f"CN-{pid}")
                 )
         finally:
             doc_conn.close()
@@ -307,7 +317,14 @@ def main():
         doc_conn = orchestrator._get_doc_conn()
         try:
             with doc_conn.cursor() as cur:
-                cur.execute("INSERT INTO document_processing_queue (procurement_id, status, pipeline_generation) VALUES (%s, 'COMPLETED', 'S13_V2')", (pid_llm,))
+                cur.execute(
+                    """
+                    INSERT INTO document_processing_queue 
+                    (procurement_id, source_table, source_id, contract_number, status, pipeline_generation) 
+                    VALUES (%s, 'crm_tenders_44fz', %s, %s, 'COMPLETED', 'S13_V2')
+                    """, 
+                    (pid_llm, pid_llm, f"CN-{pid_llm}")
+                )
                 cur.execute("INSERT INTO document_files (id, procurement_id, file_name, download_status) VALUES (900000810, %s, 'doc1.pdf', 'COMPLETED')", (pid_llm,))
                 cur.execute("INSERT INTO document_processing_results (file_id, status, pages_processed, rows_extracted) VALUES (900000810, 'COMPLETED', 1, 100)")
         finally:
@@ -457,7 +474,12 @@ def main():
                 for offset in range(1, 151):
                     pid = 900000000 + offset
                     cur.execute(
-                        "INSERT INTO document_processing_queue (procurement_id, status, pipeline_generation) VALUES (%s, 'NO_LINKS', 'S13_V2')", (pid,)
+                        """
+                        INSERT INTO document_processing_queue 
+                        (procurement_id, source_table, source_id, contract_number, status, pipeline_generation) 
+                        VALUES (%s, 'crm_tenders_44fz', %s, %s, 'NO_LINKS', 'S13_V2')
+                        """, 
+                        (pid, pid, f"CN-{pid}")
                     )
         finally:
             doc_conn.close()
