@@ -171,6 +171,45 @@ class S13V2QueueProducer:
         upsert into document_intelligence.document_processing_queue.
         Returns dict with action='inserted'|'updated'|'skipped', or None.
         """
+        if os.getenv("LEARNING_MODE") == "EXHAUSTIVE_EVIDENCE_BASELINE":
+            # Load all active categories to prevent skips and establish a complete baseline
+            crm = psycopg2.connect(**self._crm_dsn)
+            try:
+                with crm.cursor() as cur:
+                    cur.execute("SELECT category_code FROM crm_product_categories WHERE is_active = TRUE")
+                    active_categories = [r[0] for r in cur.fetchall() if r[0]]
+            finally:
+                crm.close()
+
+            category_context = {
+                cat: {
+                    "research_action": "DEEP_RESEARCH",
+                    "priority": 100,
+                    "expected_role": "DIRECT_SUPPLY",
+                    "commercial_entry_point": "YES"
+                }
+                for cat in active_categories
+            }
+
+            task = {
+                "procurement_id":  a["procurement_id"],
+                "source_table":    a.get("source_table", ""),
+                "source_id":       a.get("source_id"),
+                "contract_number": a.get("contract_number"),
+                "assessment_id":   a["assessment_id"],
+                "category_codes":  active_categories,
+                "category_context": category_context,
+                "candidate_level": a.get("candidate_level"),
+                "candidate_score": float(a["candidate_score"]) if a.get("candidate_score") else None,
+                "research_action": "DEEP_RESEARCH",
+                "research_depth":  "highest",
+                "queue_lane":      "learning_baseline",
+                "priority_score":  100,
+            }
+            if dry_run:
+                return {"action": "dry_run", **task}
+            return self._upsert_queue_task(task)
+
         normalized = a.get("normalized_result") or {}
         if isinstance(normalized, str):
             try:
