@@ -260,8 +260,8 @@ JSON Schema to follow:
   "object_sector": "string or null",
   "object_type": "string or null",
   "object_subtype": "string or null",
-  "procurement_mode": "string or null (e.g. 'Works', 'Goods', 'Services', 'Design')",
-  "category_scope": "IN_CATEGORY" or "OUT_OF_CATEGORY",
+  "procurement_mode": "PROJECT" or "WORKS" or "PROJECT_AND_WORKS" or "DIRECT_SUPPLY" or "UNCERTAIN",
+  "category_scope": "IN_CATEGORY" or "OUT_OF_CATEGORY" or "UNCERTAIN",
   "categories": ["string (category codes from registry)"],
   "subcategories": ["string (subcategory codes from registry)"],
   "detected_products": [
@@ -284,8 +284,8 @@ JSON Schema to follow:
       }}
     }}
   ],
-  "commercial_entry": "YES" or "NO",
-  "medal_hypothesis": "GOLD" or "SILVER" or "BRONZE" or "WOOD" or "NON_COMMERCIAL",
+  "commercial_entry": "COMMERCIAL" or "NON_COMMERCIAL" or "UNCERTAIN",
+  "medal_hypothesis": "GOLD" or "SILVER" or "BRONZE" or "WOOD",
   "confidence": number (between 0.0 and 1.0),
   "evidence_references": [
     {{
@@ -357,7 +357,12 @@ Lifecycle: {facts.get("normalized_lifecycle")}
 OUTPUT INSTRUCTIONS:
 ==================================================
 You MUST return a single, valid JSON object matching the schema below.
-Evaluate independently each field: Object classification, Procurement mode, Category scope, each Category, each Product, Commercial entry, and Medal.
+Evaluate independently each field comparing Hunter's hypothesis to the canonical active categories and extracted evidence.
+For reference, the canonical vocabularies are:
+- Category Scope: IN_CATEGORY, OUT_OF_CATEGORY, UNCERTAIN
+- Procurement Mode: PROJECT, WORKS, PROJECT_AND_WORKS, DIRECT_SUPPLY, UNCERTAIN
+- Commercial Entry: COMMERCIAL, NON_COMMERCIAL, UNCERTAIN
+- Medal: GOLD, SILVER, BRONZE, WOOD
 Determine if you agree, disagree, or partially agree.
 Also answer: "Did Hunter miss any product or category present in the researched documents?" If so, list them in `auditor_discovered_candidate` with exact evidence.
 
@@ -612,33 +617,15 @@ JSON Schema:
         """Save a terminal trace record for non-completed or failed document processing."""
         facts = self.fetch_procurement_facts(procurement_id) or {}
         source_snapshot_hash = compute_md5(facts)
+        docs, doc_set_hash = self.fetch_document_research_summary(procurement_id)
+        evidence = self.fetch_document_evidence(procurement_id)
+        evidence_hash = compute_md5(evidence)
         registry = self.load_active_categories()
         reg_hash = self.compute_registry_hash(registry)
         model_version = "qwen2.5:7b"
         
-        # Determine attempt number
-        existing_trace = self.crm_db.execute_query_one(
-            """
-            SELECT id, attempt_count
-            FROM crm_v3_autonomous_analysis_traces
-            WHERE procurement_id = %s
-              AND registry_hash = %s
-              AND hunter_prompt_version = %s
-              AND auditor_prompt_version = %s
-              AND model_version = %s
-            ORDER BY id DESC LIMIT 1
-            """,
-            (
-                procurement_id,
-                reg_hash,
-                HUNTER_PROMPT_VERSION,
-                AUDITOR_PROMPT_VERSION,
-                model_version,
-            )
-        )
-        attempt = 1
-        if existing_trace:
-            attempt = (existing_trace["attempt_count"] or 1) + 1
+        # Document/terminal failures do not consume LLM attempts. Set attempt_count to 0.
+        attempt = 0
 
         self.crm_db.execute_update(
             """
@@ -647,11 +634,13 @@ JSON Schema:
                 extracted_evidence_hash, consensus_state, research_completeness,
                 registry_hash, hunter_prompt_version, auditor_prompt_version,
                 model_version, attempt_count, last_error
-            ) VALUES (%s, %s, NULL, NULL, %s, %s, %s, %s, %s, %s, %s, NULL)
+            ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, NULL)
             """,
             (
                 procurement_id,
                 source_snapshot_hash,
+                doc_set_hash,
+                evidence_hash,
                 consensus_state,
                 research_completeness,
                 reg_hash,
@@ -668,40 +657,29 @@ JSON Schema:
         reg_hash = self.compute_registry_hash(registry)
         model_version = "qwen2.5:7b"
         
-        # Determine attempt number
+        # Resolve factual hashes first
+        facts = self.fetch_procurement_facts(procurement_id)
+        source_snapshot_hash = compute_md5(facts)
+        docs, doc_set_hash = self.fetch_document_research_summary(procurement_id)
+        evidence = self.fetch_document_evidence(procurement_id)
+        evidence_hash = compute_md5(evidence)
+        
+        # Determine actual LLM attempt number
         existing_trace = self.crm_db.execute_query_one(
             """
-            SELECT id, attempt_count, consensus_state
+            SELECT MAX(attempt_count) as max_attempts
             FROM crm_v3_autonomous_analysis_traces
             WHERE procurement_id = %s
-              AND registry_hash = %s
-              AND hunter_prompt_version = %s
-              AND auditor_prompt_version = %s
-              AND model_version = %s
-            ORDER BY id DESC LIMIT 1
+              AND research_completeness IN ('COMPLETE', 'PARTIAL')
             """,
-            (
-                procurement_id,
-                reg_hash,
-                HUNTER_PROMPT_VERSION,
-                AUDITOR_PROMPT_VERSION,
-                model_version,
-            )
+            (procurement_id,)
         )
-        
-        attempt = 1
-        if existing_trace:
-            attempt = (existing_trace["attempt_count"] or 1) + 1
+        existing_llm_attempts = (existing_trace["max_attempts"] or 0) if existing_trace else 0
+        attempt = existing_llm_attempts + 1
 
         try:
-            facts = self.fetch_procurement_facts(procurement_id)
             procurement_number = facts.get("contract_number")
             
-            # Load document details
-            docs, doc_set_hash = self.fetch_document_research_summary(procurement_id)
-            evidence = self.fetch_document_evidence(procurement_id)
-            evidence_hash = compute_md5(evidence)
-
             # 1. Build & Run Hunter
             hunter_prompt = self.build_hunter_prompt(facts, registry, docs, evidence, priors_text)
             
@@ -771,8 +749,6 @@ JSON Schema:
                         completeness = "PARTIAL"
                         break
 
-            source_snapshot_hash = compute_md5(facts)
-            
             # Save trace
             self.crm_db.execute_update(
                 """
@@ -811,7 +787,6 @@ JSON Schema:
             }
         except Exception as e:
             logger.error(f"Error in learning loop for procurement {procurement_id}: {str(e)}")
-            source_snapshot_hash = compute_md5(facts) if 'facts' in locals() else None
             self.crm_db.execute_update(
                 """
                 INSERT INTO crm_v3_autonomous_analysis_traces (
@@ -819,11 +794,13 @@ JSON Schema:
                     extracted_evidence_hash, consensus_state, research_completeness,
                     registry_hash, hunter_prompt_version, auditor_prompt_version,
                     model_version, attempt_count, last_error
-                ) VALUES (%s, %s, NULL, NULL, 'FAILED_PROCESSING', 'FAILED', %s, %s, %s, %s, %s, %s)
+                ) VALUES (%s, %s, %s, %s, 'FAILED_PROCESSING', 'FAILED', %s, %s, %s, %s, %s, %s)
                 """,
                 (
                     procurement_id,
                     source_snapshot_hash,
+                    doc_set_hash,
+                    evidence_hash,
                     reg_hash,
                     HUNTER_PROMPT_VERSION,
                     AUDITOR_PROMPT_VERSION,

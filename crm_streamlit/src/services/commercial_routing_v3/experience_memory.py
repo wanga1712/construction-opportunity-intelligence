@@ -65,7 +65,11 @@ class ExperienceMemory:
             # 1. Total Observations
             q_obs = f"""
                 SELECT COUNT(DISTINCT t.procurement_id)
-                FROM crm_v3_autonomous_analysis_traces t
+                FROM (
+                    SELECT DISTINCT ON (procurement_id) procurement_id
+                    FROM crm_v3_autonomous_analysis_traces
+                    ORDER BY procurement_id, id DESC
+                ) t
                 JOIN crm_procurements p ON p.id = t.procurement_id
                 WHERE {where_sql}
             """
@@ -76,8 +80,14 @@ class ExperienceMemory:
                 SELECT COUNT(DISTINCT f.procurement_id)
                 FROM crm_v3_product_findings f
                 JOIN crm_procurements p ON p.id = f.procurement_id
+                JOIN (
+                    SELECT DISTINCT ON (procurement_id) procurement_id, hunter_run_id, auditor_run_id
+                    FROM crm_v3_autonomous_analysis_traces
+                    ORDER BY procurement_id, id DESC
+                ) t ON t.procurement_id = f.procurement_id
                 WHERE {where_sql}
                   AND f.category_code = %s
+                  AND (f.run_id = t.hunter_run_id OR f.run_id = t.auditor_run_id)
             """
             machine_count = self.crm_db.execute_scalar(q_machine, params + [cat_code]) or 0
 
@@ -99,9 +109,15 @@ class ExperienceMemory:
                 FROM crm_v3_expert_annotations a
                 JOIN crm_procurements p ON p.id = a.procurement_id
                 JOIN crm_v3_product_findings f ON f.procurement_id = a.procurement_id
+                JOIN (
+                    SELECT DISTINCT ON (procurement_id) procurement_id, hunter_run_id, auditor_run_id
+                    FROM crm_v3_autonomous_analysis_traces
+                    ORDER BY procurement_id, id DESC
+                ) t ON t.procurement_id = f.procurement_id
                 WHERE {where_sql}
                   AND a.is_current = TRUE
                   AND f.category_code = %s
+                  AND (f.run_id = t.hunter_run_id OR f.run_id = t.auditor_run_id)
                   AND (
                       a.payload->'expert_category_scope'->>'verdict' = 'OUT_OF_CATEGORY'
                       OR a.payload->>'expert_verdict' = 'WRONG'
@@ -112,7 +128,11 @@ class ExperienceMemory:
             # 5. Auditor confirmed count
             q_auditor = f"""
                 SELECT COUNT(DISTINCT t.procurement_id)
-                FROM crm_v3_autonomous_analysis_traces t
+                FROM (
+                    SELECT DISTINCT ON (procurement_id) procurement_id, auditor_run_id
+                    FROM crm_v3_autonomous_analysis_traces
+                    ORDER BY procurement_id, id DESC
+                ) t
                 JOIN crm_procurements p ON p.id = t.procurement_id
                 JOIN crm_v3_model_inference_runs r ON r.id = t.auditor_run_id
                 WHERE {where_sql}
@@ -123,27 +143,39 @@ class ExperienceMemory:
             # 6. Not found after complete research (traces with 0 product findings for this category AND research is COMPLETE)
             q_not_found = f"""
                 SELECT COUNT(DISTINCT t.procurement_id)
-                FROM crm_v3_autonomous_analysis_traces t
+                FROM (
+                    SELECT DISTINCT ON (procurement_id) procurement_id, hunter_run_id, auditor_run_id, research_completeness
+                    FROM crm_v3_autonomous_analysis_traces
+                    ORDER BY procurement_id, id DESC
+                ) t
                 JOIN crm_procurements p ON p.id = t.procurement_id
                 WHERE {where_sql}
-                  AND COALESCE(t.research_completeness, 'COMPLETE') = 'COMPLETE'
+                  AND t.research_completeness = 'COMPLETE'
                   AND NOT EXISTS (
                       SELECT 1 FROM crm_v3_product_findings f 
-                      WHERE f.procurement_id = t.procurement_id AND f.category_code = %s
+                      WHERE f.procurement_id = t.procurement_id 
+                        AND f.category_code = %s
+                        AND (f.run_id = t.hunter_run_id OR f.run_id = t.auditor_run_id)
                   )
             """
             not_found_complete = self.crm_db.execute_scalar(q_not_found, params + [cat_code]) or 0
 
-            # 7. Unknown due to incomplete research (traces with 0 product findings for this category AND research is PARTIAL or FAILED)
+            # 7. Unknown due to incomplete research (traces with 0 product findings for this category AND research is PARTIAL or FAILED or NULL)
             q_partial = f"""
                 SELECT COUNT(DISTINCT t.procurement_id)
-                FROM crm_v3_autonomous_analysis_traces t
+                FROM (
+                    SELECT DISTINCT ON (procurement_id) procurement_id, hunter_run_id, auditor_run_id, research_completeness
+                    FROM crm_v3_autonomous_analysis_traces
+                    ORDER BY procurement_id, id DESC
+                ) t
                 JOIN crm_procurements p ON p.id = t.procurement_id
                 WHERE {where_sql}
-                  AND COALESCE(t.research_completeness, 'COMPLETE') IN ('PARTIAL', 'FAILED')
+                  AND COALESCE(t.research_completeness, 'PARTIAL') IN ('PARTIAL', 'FAILED')
                   AND NOT EXISTS (
                       SELECT 1 FROM crm_v3_product_findings f 
-                      WHERE f.procurement_id = t.procurement_id AND f.category_code = %s
+                      WHERE f.procurement_id = t.procurement_id 
+                        AND f.category_code = %s
+                        AND (f.run_id = t.hunter_run_id OR f.run_id = t.auditor_run_id)
                   )
             """
             unknown_partial = self.crm_db.execute_scalar(q_partial, params + [cat_code]) or 0
@@ -151,13 +183,19 @@ class ExperienceMemory:
             # 8. No documents (traces with 0 product findings for this category AND research is NO_DOCUMENTS)
             q_no_docs = f"""
                 SELECT COUNT(DISTINCT t.procurement_id)
-                FROM crm_v3_autonomous_analysis_traces t
+                FROM (
+                    SELECT DISTINCT ON (procurement_id) procurement_id, hunter_run_id, auditor_run_id, research_completeness
+                    FROM crm_v3_autonomous_analysis_traces
+                    ORDER BY procurement_id, id DESC
+                ) t
                 JOIN crm_procurements p ON p.id = t.procurement_id
                 WHERE {where_sql}
-                  AND COALESCE(t.research_completeness, 'COMPLETE') = 'NO_DOCUMENTS'
+                  AND t.research_completeness = 'NO_DOCUMENTS'
                   AND NOT EXISTS (
                       SELECT 1 FROM crm_v3_product_findings f 
-                      WHERE f.procurement_id = t.procurement_id AND f.category_code = %s
+                      WHERE f.procurement_id = t.procurement_id 
+                        AND f.category_code = %s
+                        AND (f.run_id = t.hunter_run_id OR f.run_id = t.auditor_run_id)
                   )
             """
             no_documents = self.crm_db.execute_scalar(q_no_docs, params + [cat_code]) or 0

@@ -47,24 +47,27 @@ def main():
             )
             files = cur.fetchall() or []
             
-        completeness = "COMPLETE"
-        for f in files:
-            download_status = f.get("download_status")
-            parse_status = f.get("parse_status")
-            
-            state = "SEARCHED"
-            if download_status in ("FAILED", "ERROR", "DOWNLOAD_FAILED"):
-                state = "DOWNLOAD_FAILED"
-            elif parse_status in ("FAILED", "ERROR", "PARSE_FAILED"):
-                state = "PARSE_FAILED"
-            elif parse_status in ("UNSUPPORTED", "UNSUPPORTED_FORMAT"):
-                state = "UNSUPPORTED_FORMAT"
-            elif parse_status in ("EMPTY", "EMPTY_DOCUMENT"):
-                state = "EMPTY_DOCUMENT"
+        if not files:
+            completeness = "NO_DOCUMENTS"
+        else:
+            completeness = "COMPLETE"
+            for f in files:
+                download_status = f.get("download_status")
+                parse_status = f.get("parse_status")
                 
-            if state in ("DOWNLOAD_FAILED", "PARSE_FAILED", "UNREADABLE", "PARTIALLY_SEARCHED", "UNSUPPORTED_FORMAT"):
-                completeness = "PARTIAL"
-                break
+                state = "SEARCHED"
+                if download_status in ("FAILED", "ERROR", "DOWNLOAD_FAILED"):
+                    state = "DOWNLOAD_FAILED"
+                elif parse_status in ("FAILED", "ERROR", "PARSE_FAILED"):
+                    state = "PARSE_FAILED"
+                elif parse_status in ("UNSUPPORTED", "UNSUPPORTED_FORMAT"):
+                    state = "UNSUPPORTED_FORMAT"
+                elif parse_status in ("EMPTY", "EMPTY_DOCUMENT"):
+                    state = "EMPTY_DOCUMENT"
+                    
+                if state in ("DOWNLOAD_FAILED", "PARSE_FAILED", "UNREADABLE", "PARTIALLY_SEARCHED", "UNSUPPORTED_FORMAT"):
+                    completeness = "PARTIAL"
+                    break
                 
         # Update trace
         crm_db.execute_update(

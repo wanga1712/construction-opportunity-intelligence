@@ -189,18 +189,32 @@ def render_learning_loop_results(crm_db: Any, procurement_id: int) -> None:
         (procurement_id,),
     ) or []
 
-    # Fetch product findings
-    products = crm_db.execute_query(
+    # Fetch latest trace to get the hunter_run_id for latest-run authority
+    latest_trace = crm_db.execute_query_one(
         """
-        SELECT category_code, product_type, product_name_normalized, brand, model,
-               quantity, unit, raw_description, evidence_text, document_name,
-               page, sheet, row_num, position_number
-        FROM crm_v3_product_findings
-        WHERE procurement_id = %s AND extractor_role = 'HUNTER'
-        ORDER BY id ASC
+        SELECT hunter_run_id
+        FROM crm_v3_autonomous_analysis_traces
+        WHERE procurement_id = %s
+        ORDER BY id DESC LIMIT 1
         """,
         (procurement_id,),
-    ) or []
+    )
+    hunter_run_id = latest_trace["hunter_run_id"] if latest_trace else None
+
+    # Fetch product findings matching latest run_id
+    products = []
+    if hunter_run_id is not None:
+        products = crm_db.execute_query(
+            """
+            SELECT category_code, product_type, product_name_normalized, brand, model,
+                   quantity, unit, raw_description, evidence_text, document_name,
+                   page, sheet, row_num, position_number
+            FROM crm_v3_product_findings
+            WHERE procurement_id = %s AND run_id = %s AND extractor_role = 'HUNTER'
+            ORDER BY id ASC
+            """,
+            (procurement_id, hunter_run_id),
+        ) or []
 
     with st.container(border=True):
         st.markdown("#### 🔍 Найдено в закупке (Умный поиск)")

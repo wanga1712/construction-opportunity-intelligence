@@ -311,7 +311,7 @@ class RewardLedgerService:
                         human_value=expert_medal,
                     )
 
-        if expert_comm == "NON_COMMERCIAL" and model_comm == "YES":
+        if expert_comm == "NON_COMMERCIAL" and model_comm == "COMMERCIAL":
             self.write_reward_event(
                 procurement_id=procurement_id,
                 field="commercial_entry",
