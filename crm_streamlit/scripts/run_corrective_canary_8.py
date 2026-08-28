@@ -552,10 +552,15 @@ def main():
     crm_db.execute_update(
         "DELETE FROM crm_procurements WHERE id BETWEEN 900000000 AND 900000999"
     )
+    crm_db.execute_update(
+        "DELETE FROM crm_product_categories WHERE category_code IN ('43.21.10', '43.21.20')"
+    )
     
     doc_conn = orchestrator._get_doc_conn()
+    doc_conn.autocommit = True
     try:
         with doc_conn.cursor() as cur:
+            cur.execute("DELETE FROM document_processing_results WHERE procurement_id BETWEEN 900000000 AND 900000999")
             cur.execute("DELETE FROM document_processing_queue WHERE procurement_id BETWEEN 900000000 AND 900000999")
             cur.execute("DELETE FROM document_files WHERE procurement_id BETWEEN 900000000 AND 900000999")
             cur.execute("DELETE FROM document_matches WHERE procurement_id BETWEEN 900000000 AND 900000999")
