@@ -15,7 +15,9 @@ def main():
     _, _, crm_db, _ = connect_databases()
     
     # Connection to doc DB on localhost
-    pwd_env = os.getenv("S13_DOCUMENT_DB_PASSWORD", "S13_Rotated_Docs_Password_2026!")
+    pwd_env = os.getenv("S13_DOCUMENT_DB_PASSWORD")
+    if not pwd_env:
+        raise ValueError("S13_DOCUMENT_DB_PASSWORD environment variable not set")
     doc_conn = psycopg2.connect(
         host=os.getenv("S13_DOCUMENT_DB_HOST", "127.0.0.1"),
         port=int(os.getenv("S13_DOCUMENT_DB_PORT", "5432")),

@@ -134,19 +134,33 @@ class ExperienceMemory:
             """
             not_found_complete = self.crm_db.execute_scalar(q_not_found, params + [cat_code]) or 0
 
-            # 7. Unknown due to incomplete research (traces with 0 product findings for this category AND research is PARTIAL)
+            # 7. Unknown due to incomplete research (traces with 0 product findings for this category AND research is PARTIAL or FAILED)
             q_partial = f"""
                 SELECT COUNT(DISTINCT t.procurement_id)
                 FROM crm_v3_autonomous_analysis_traces t
                 JOIN crm_procurements p ON p.id = t.procurement_id
                 WHERE {where_sql}
-                  AND COALESCE(t.research_completeness, 'COMPLETE') = 'PARTIAL'
+                  AND COALESCE(t.research_completeness, 'COMPLETE') IN ('PARTIAL', 'FAILED')
                   AND NOT EXISTS (
                       SELECT 1 FROM crm_v3_product_findings f 
                       WHERE f.procurement_id = t.procurement_id AND f.category_code = %s
                   )
             """
             unknown_partial = self.crm_db.execute_scalar(q_partial, params + [cat_code]) or 0
+
+            # 8. No documents (traces with 0 product findings for this category AND research is NO_DOCUMENTS)
+            q_no_docs = f"""
+                SELECT COUNT(DISTINCT t.procurement_id)
+                FROM crm_v3_autonomous_analysis_traces t
+                JOIN crm_procurements p ON p.id = t.procurement_id
+                WHERE {where_sql}
+                  AND COALESCE(t.research_completeness, 'COMPLETE') = 'NO_DOCUMENTS'
+                  AND NOT EXISTS (
+                      SELECT 1 FROM crm_v3_product_findings f 
+                      WHERE f.procurement_id = t.procurement_id AND f.category_code = %s
+                  )
+            """
+            no_documents = self.crm_db.execute_scalar(q_no_docs, params + [cat_code]) or 0
 
             stats_list.append({
                 "category_code": cat_code,
@@ -158,6 +172,7 @@ class ExperienceMemory:
                 "human_rejected": human_rejected,
                 "not_found_complete": not_found_complete,
                 "unknown_partial": unknown_partial,
+                "no_documents": no_documents,
             })
             
         return stats_list

@@ -180,6 +180,18 @@ class HunterAuditorOrchestrator:
             })
         return result
 
+    def format_evidence_for_prompt(self, evidence: List[Dict[str, Any]]) -> str:
+        """Format database evidence rows into a canonical text structure for LLM prompts."""
+        evidence_lines = []
+        for ev in evidence:
+            evidence_lines.append(
+                f"- Doc: {ev.get('document_name')}, Page/Sheet: {ev.get('page_or_sheet') or 'N/A'}, "
+                f"Row: {ev.get('row_number') or 'N/A'}, Text: {ev.get('row_data') or 'N/A'}, "
+                f"Matched: {ev.get('matched_term') or 'N/A'}, "
+                f"Cat/Subcat: {ev.get('category_code')}/{ev.get('subcategory_code')}"
+            )
+        return "\n".join(evidence_lines)
+
     def build_hunter_prompt(
         self,
         facts: Dict[str, Any],
@@ -191,7 +203,7 @@ class HunterAuditorOrchestrator:
         """Construct the prompt for Hunter role."""
         registry_str = json.dumps(registry, ensure_ascii=False, indent=2, default=str)
         docs_str = json.dumps(docs, ensure_ascii=False, indent=2, default=str)
-        evidence_str = json.dumps(evidence[:100], ensure_ascii=False, indent=2, default=str)  # Cap at 100 details to avoid context overflow
+        evidence_str = self.format_evidence_for_prompt(evidence[:100])
         
         return f"""You are the HUNTER model in a procurement learning loop.
 Your goal is HIGH RECALL. Find every commercially relevant product/category supported by the procurement evidence.
@@ -302,16 +314,7 @@ JSON Schema to follow:
         docs_str = json.dumps(docs, ensure_ascii=False, indent=2, default=str)
         registry_str = json.dumps(registry, ensure_ascii=False, indent=2, default=str)
         
-        # Format extracted evidence chunks
-        evidence_lines = []
-        for ev in evidence:
-            loc = ev.get("locator") or {}
-            evidence_lines.append(
-                f"- Doc: {ev.get('document_name')}, Page/Sheet: {loc.get('page') or loc.get('sheet') or 'N/A'}, "
-                f"Row: {loc.get('row') or 'N/A'}, Pos: {loc.get('position_number') or 'N/A'}, "
-                f"Text: {ev.get('text')}"
-            )
-        evidence_str = "\n".join(evidence_lines)
+        evidence_str = self.format_evidence_for_prompt(evidence[:100])
         
         return f"""You are the AUDITOR model in a procurement learning loop.
 Your job is NOT to repeat the Hunter model. Your job is to try to prove the Hunter decision WRONG.
@@ -594,113 +597,239 @@ JSON Schema:
             raise RuntimeError("Failed to insert model inference run record")
         return run_id
 
-    def run_learning_loop(self, procurement_id: int, priors_text: str = "") -> Dict[str, Any]:
-        """Runs the entire Hunter-Auditor loop sequentially for one procurement."""
-        facts = self.fetch_procurement_facts(procurement_id)
-        procurement_number = facts.get("contract_number")
-        
-        # Load registry
-        registry = self.load_active_categories()
-        
-        # Load document details
-        docs, doc_set_hash = self.fetch_document_research_summary(procurement_id)
-        evidence = self.fetch_document_evidence(procurement_id)
-        evidence_hash = compute_md5(evidence)
+    def compute_registry_hash(self, registry: List[Dict[str, Any]]) -> str:
+        """Compute MD5 hash of category registry."""
+        registry_sorted = sorted(registry, key=lambda x: x.get("category_code") or "")
+        registry_str = json.dumps(registry_sorted, sort_keys=True, default=str)
+        return hashlib.md5(registry_str.encode("utf-8")).hexdigest()
 
-        # 1. Build & Run Hunter
-        hunter_prompt = self.build_hunter_prompt(facts, registry, docs, evidence, priors_text)
-        
-        logger.info(f"Acquiring GPU lock for Hunter on procurement {procurement_id}...")
-        with acquire_gpu_inference(WORKLOAD_DOCUMENT) as arb:
-            logger.info("GPU acquired. Running Hunter inference...")
-            hunter_raw, hunter_meta, hunter_retries = generate_v3_routing_with_bounded_retry(
-                hunter_prompt,
-                procurement_id=procurement_id,
-                prompt_version=HUNTER_PROMPT_VERSION,
-            )
-            
-        hunter_run_id = self.save_inference_run_record(
-            procurement_id=procurement_id,
-            run_kind="SHADOW",
-            prompt=hunter_prompt,
-            raw_text=hunter_meta.get("raw_text") or "",
-            parsed_json=hunter_raw,
-            prompt_version=HUNTER_PROMPT_VERSION,
-            ollama_meta=hunter_meta,
-            retry_count=hunter_retries,
-        )
-        logger.info(f"Hunter completed. Run ID: {hunter_run_id}")
-
-        # Save Hunter product findings
-        detected_products = hunter_raw.get("detected_products") or []
-        self.save_product_findings(procurement_id, procurement_number, detected_products, hunter_run_id, "HUNTER")
-
-        # 2. Build & Run Auditor
-        auditor_prompt = self.build_auditor_prompt(facts, registry, docs, evidence, hunter_raw)
-        
-        logger.info(f"Acquiring GPU lock for Auditor on procurement {procurement_id}...")
-        with acquire_gpu_inference(WORKLOAD_DOCUMENT) as arb:
-            logger.info("GPU acquired. Running Auditor inference...")
-            auditor_raw, auditor_meta, auditor_retries = generate_v3_routing_with_bounded_retry(
-                auditor_prompt,
-                procurement_id=procurement_id,
-                prompt_version=AUDITOR_PROMPT_VERSION,
-            )
-            
-        auditor_run_id = self.save_inference_run_record(
-            procurement_id=procurement_id,
-            run_kind="SHADOW",
-            prompt=auditor_prompt,
-            raw_text=auditor_meta.get("raw_text") or "",
-            parsed_json=auditor_raw,
-            prompt_version=AUDITOR_PROMPT_VERSION,
-            ollama_meta=auditor_meta,
-            retry_count=auditor_retries,
-        )
-        logger.info(f"Auditor completed. Run ID: {auditor_run_id}")
-
-        # Save Auditor discovered candidates (missed products)
-        missed_products = auditor_raw.get("auditor_discovered_candidate") or []
-        self.save_product_findings(procurement_id, procurement_number, missed_products, auditor_run_id, "AUDITOR")
-
-        # 3. Consensus & Trace
-        consensus_state = self.evaluate_consensus(hunter_raw, auditor_raw)
-        logger.info(f"Consensus state: {consensus_state}")
-
-        completeness = "COMPLETE"
-        for d in docs:
-            if d.get("research_state") in ("DOWNLOAD_FAILED", "PARSE_FAILED", "UNREADABLE", "PARTIALLY_SEARCHED", "UNSUPPORTED_FORMAT"):
-                completeness = "PARTIAL"
-                break
-
+    def save_terminal_trace(
+        self,
+        procurement_id: int,
+        consensus_state: str,
+        research_completeness: str
+    ) -> None:
+        """Save a terminal trace record for non-completed or failed document processing."""
+        facts = self.fetch_procurement_facts(procurement_id) or {}
         source_snapshot_hash = compute_md5(facts)
+        registry = self.load_active_categories()
+        reg_hash = self.compute_registry_hash(registry)
+        model_version = "qwen2.5:7b"
         
-        # Save trace
+        # Determine attempt number
+        existing_trace = self.crm_db.execute_query_one(
+            """
+            SELECT id, attempt_count
+            FROM crm_v3_autonomous_analysis_traces
+            WHERE procurement_id = %s
+              AND registry_hash = %s
+              AND hunter_prompt_version = %s
+              AND auditor_prompt_version = %s
+              AND model_version = %s
+            ORDER BY id DESC LIMIT 1
+            """,
+            (
+                procurement_id,
+                reg_hash,
+                HUNTER_PROMPT_VERSION,
+                AUDITOR_PROMPT_VERSION,
+                model_version,
+            )
+        )
+        attempt = 1
+        if existing_trace:
+            attempt = (existing_trace["attempt_count"] or 1) + 1
+
         self.crm_db.execute_update(
             """
             INSERT INTO crm_v3_autonomous_analysis_traces (
                 procurement_id, source_snapshot_hash, document_set_hash,
-                extracted_evidence_hash, hunter_run_id, auditor_run_id,
-                consensus_state, research_completeness
-            ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+                extracted_evidence_hash, consensus_state, research_completeness,
+                registry_hash, hunter_prompt_version, auditor_prompt_version,
+                model_version, attempt_count, last_error
+            ) VALUES (%s, %s, NULL, NULL, %s, %s, %s, %s, %s, %s, %s, NULL)
             """,
             (
                 procurement_id,
                 source_snapshot_hash,
-                doc_set_hash,
-                evidence_hash,
-                hunter_run_id,
-                auditor_run_id,
                 consensus_state,
-                completeness,
+                research_completeness,
+                reg_hash,
+                HUNTER_PROMPT_VERSION,
+                AUDITOR_PROMPT_VERSION,
+                model_version,
+                attempt,
             ),
         )
 
-        return {
-            "procurement_id": procurement_id,
-            "hunter_run_id": hunter_run_id,
-            "auditor_run_id": auditor_run_id,
-            "consensus_state": consensus_state,
-            "hunter_result": hunter_raw,
-            "auditor_result": auditor_raw,
-        }
+    def run_learning_loop(self, procurement_id: int, priors_text: str = "") -> Dict[str, Any]:
+        """Runs the entire Hunter-Auditor loop sequentially for one procurement."""
+        registry = self.load_active_categories()
+        reg_hash = self.compute_registry_hash(registry)
+        model_version = "qwen2.5:7b"
+        
+        # Determine attempt number
+        existing_trace = self.crm_db.execute_query_one(
+            """
+            SELECT id, attempt_count, consensus_state
+            FROM crm_v3_autonomous_analysis_traces
+            WHERE procurement_id = %s
+              AND registry_hash = %s
+              AND hunter_prompt_version = %s
+              AND auditor_prompt_version = %s
+              AND model_version = %s
+            ORDER BY id DESC LIMIT 1
+            """,
+            (
+                procurement_id,
+                reg_hash,
+                HUNTER_PROMPT_VERSION,
+                AUDITOR_PROMPT_VERSION,
+                model_version,
+            )
+        )
+        
+        attempt = 1
+        if existing_trace:
+            attempt = (existing_trace["attempt_count"] or 1) + 1
+
+        try:
+            facts = self.fetch_procurement_facts(procurement_id)
+            procurement_number = facts.get("contract_number")
+            
+            # Load document details
+            docs, doc_set_hash = self.fetch_document_research_summary(procurement_id)
+            evidence = self.fetch_document_evidence(procurement_id)
+            evidence_hash = compute_md5(evidence)
+
+            # 1. Build & Run Hunter
+            hunter_prompt = self.build_hunter_prompt(facts, registry, docs, evidence, priors_text)
+            
+            logger.info(f"Acquiring GPU lock for Hunter on procurement {procurement_id}...")
+            with acquire_gpu_inference(WORKLOAD_DOCUMENT) as arb:
+                logger.info("GPU acquired. Running Hunter inference...")
+                hunter_raw, hunter_meta, hunter_retries = generate_v3_routing_with_bounded_retry(
+                    hunter_prompt,
+                    procurement_id=procurement_id,
+                    prompt_version=HUNTER_PROMPT_VERSION,
+                )
+                
+            hunter_run_id = self.save_inference_run_record(
+                procurement_id=procurement_id,
+                run_kind="SHADOW",
+                prompt=hunter_prompt,
+                raw_text=hunter_meta.get("raw_text") or "",
+                parsed_json=hunter_raw,
+                prompt_version=HUNTER_PROMPT_VERSION,
+                ollama_meta=hunter_meta,
+                retry_count=hunter_retries,
+            )
+            logger.info(f"Hunter completed. Run ID: {hunter_run_id}")
+
+            # Save Hunter product findings
+            detected_products = hunter_raw.get("detected_products") or []
+            self.save_product_findings(procurement_id, procurement_number, detected_products, hunter_run_id, "HUNTER")
+
+            # 2. Build & Run Auditor
+            auditor_prompt = self.build_auditor_prompt(facts, registry, docs, evidence, hunter_raw)
+            
+            logger.info(f"Acquiring GPU lock for Auditor on procurement {procurement_id}...")
+            with acquire_gpu_inference(WORKLOAD_DOCUMENT) as arb:
+                logger.info("GPU acquired. Running Auditor inference...")
+                auditor_raw, auditor_meta, auditor_retries = generate_v3_routing_with_bounded_retry(
+                    auditor_prompt,
+                    procurement_id=procurement_id,
+                    prompt_version=AUDITOR_PROMPT_VERSION,
+                )
+                
+            auditor_run_id = self.save_inference_run_record(
+                procurement_id=procurement_id,
+                run_kind="SHADOW",
+                prompt=auditor_prompt,
+                raw_text=auditor_meta.get("raw_text") or "",
+                parsed_json=auditor_raw,
+                prompt_version=AUDITOR_PROMPT_VERSION,
+                ollama_meta=auditor_meta,
+                retry_count=auditor_retries,
+            )
+            logger.info(f"Auditor completed. Run ID: {auditor_run_id}")
+
+            # Save Auditor discovered candidates (missed products)
+            missed_products = auditor_raw.get("auditor_discovered_candidate") or []
+            self.save_product_findings(procurement_id, procurement_number, missed_products, auditor_run_id, "AUDITOR")
+
+            # 3. Consensus & Trace
+            consensus_state = self.evaluate_consensus(hunter_raw, auditor_raw)
+            logger.info(f"Consensus state: {consensus_state}")
+
+            completeness = "COMPLETE"
+            if not docs:
+                completeness = "NO_DOCUMENTS"
+            else:
+                for d in docs:
+                    if d.get("research_state") in ("DOWNLOAD_FAILED", "PARSE_FAILED", "UNREADABLE", "PARTIALLY_SEARCHED", "UNSUPPORTED_FORMAT"):
+                        completeness = "PARTIAL"
+                        break
+
+            source_snapshot_hash = compute_md5(facts)
+            
+            # Save trace
+            self.crm_db.execute_update(
+                """
+                INSERT INTO crm_v3_autonomous_analysis_traces (
+                    procurement_id, source_snapshot_hash, document_set_hash,
+                    extracted_evidence_hash, hunter_run_id, auditor_run_id,
+                    consensus_state, research_completeness, registry_hash,
+                    hunter_prompt_version, auditor_prompt_version, model_version,
+                    attempt_count, last_error
+                ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, NULL)
+                """,
+                (
+                    procurement_id,
+                    source_snapshot_hash,
+                    doc_set_hash,
+                    evidence_hash,
+                    hunter_run_id,
+                    auditor_run_id,
+                    consensus_state,
+                    completeness,
+                    reg_hash,
+                    HUNTER_PROMPT_VERSION,
+                    AUDITOR_PROMPT_VERSION,
+                    model_version,
+                    attempt,
+                ),
+            )
+
+            return {
+                "procurement_id": procurement_id,
+                "hunter_run_id": hunter_run_id,
+                "auditor_run_id": auditor_run_id,
+                "consensus_state": consensus_state,
+                "hunter_result": hunter_raw,
+                "auditor_result": auditor_raw,
+            }
+        except Exception as e:
+            logger.error(f"Error in learning loop for procurement {procurement_id}: {str(e)}")
+            source_snapshot_hash = compute_md5(facts) if 'facts' in locals() else None
+            self.crm_db.execute_update(
+                """
+                INSERT INTO crm_v3_autonomous_analysis_traces (
+                    procurement_id, source_snapshot_hash, document_set_hash,
+                    extracted_evidence_hash, consensus_state, research_completeness,
+                    registry_hash, hunter_prompt_version, auditor_prompt_version,
+                    model_version, attempt_count, last_error
+                ) VALUES (%s, %s, NULL, NULL, 'FAILED_PROCESSING', 'FAILED', %s, %s, %s, %s, %s, %s)
+                """,
+                (
+                    procurement_id,
+                    source_snapshot_hash,
+                    reg_hash,
+                    HUNTER_PROMPT_VERSION,
+                    AUDITOR_PROMPT_VERSION,
+                    model_version,
+                    attempt,
+                    str(e),
+                ),
+            )
+            raise e

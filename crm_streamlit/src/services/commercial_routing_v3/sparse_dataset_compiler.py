@@ -142,11 +142,15 @@ class SparseDatasetCompiler:
                     }
 
         source_tbl = str(facts.get("source_table") or "").lower()
-        law_type = "44-FZ"
-        if "223" in source_tbl:
+        if "44" in source_tbl:
+            law_type = "44-FZ"
+        elif "223" in source_tbl:
             law_type = "223-FZ"
         elif "615" in source_tbl:
             law_type = "615-PP"
+        else:
+            logger.warning(f"[DatasetCompiler] Unknown source table '{source_tbl}' for procurement {procurement_id}. Omitting training row.")
+            return None
 
         # 5. Build full dataset entry
         entry = {

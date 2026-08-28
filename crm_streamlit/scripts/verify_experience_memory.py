@@ -33,6 +33,7 @@ def main():
         print(f"HUMAN_REJECTED={s['human_rejected']}")
         print(f"COMPLETE_RESEARCH_NOT_FOUND={s['not_found_complete']}")
         print(f"PARTIAL_UNKNOWN={s['unknown_partial']}")
+        print(f"NO_DOCUMENTS={s['no_documents']}")
 
 if __name__ == "__main__":
     main()
