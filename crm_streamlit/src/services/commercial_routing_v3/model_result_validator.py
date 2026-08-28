@@ -22,6 +22,7 @@ from src.domain.commercial_routing_v3 import (
 )
 from src.services.commercial_routing_v3.category_aliases import resolve_explicit_category_alias
 from src.services.commercial_routing_v3.candidate_scoring import looks_like_okpd_category_code
+from src.services.commercial_routing_v3.category_ref_transport import resolve_category_ref
 from src.domain.commercial_taxonomy import is_valid_commercial_category_code
 
 SCHEMA_VERSION_MODEL_VALIDATED = "v3_model_validated_1"
@@ -104,6 +105,7 @@ def _normalize_phase9_candidates(parsed: Dict[str, Any]) -> Dict[str, Any]:
     """Map commercial_category_candidates → hypotheses without inventing codes.
 
     Keeps subject_interpretation intact. Does not invent empty_hypothesis_status.
+    Preserves category_ref for transport resolution.
     """
     out = dict(parsed)
     cands = out.get("commercial_category_candidates")
@@ -133,6 +135,7 @@ def _normalize_phase9_candidates(parsed: Dict[str, Any]) -> Dict[str, Any]:
             mapped.append(
                 {
                     "category_code": c.get("category_code") or c.get("commercial_category_code"),
+                    "category_ref": c.get("category_ref") or c.get("ref"),
                     "subcategory_code": c.get("subcategory_code") or "SUBCATEGORY_NOT_ASSIGNED",
                     "opportunity_track": track,
                     "confidence": c.get("confidence"),
@@ -142,6 +145,7 @@ def _normalize_phase9_candidates(parsed: Dict[str, Any]) -> Dict[str, Any]:
                     "confirmation_required": bool(conf_req),
                     "research_priority": c.get("research_priority"),
                     "candidate_role": c.get("candidate_role"),
+                    "relevance_basis": c.get("relevance_basis"),
                 }
             )
         out["commercial_category_hypotheses"] = mapped
@@ -153,6 +157,7 @@ def validate_model_result(
     *,
     allowed_categories: Set[str],
     allowed_subcategories: Optional[Dict[str, Set[str]]] = None,
+    category_ref_map: Optional[Dict[str, str]] = None,
 ) -> ModelValidationResult:
     """Schema/type/enum-only interpretation of MODEL_RAW parse output."""
     errors: List[str] = []
@@ -232,29 +237,56 @@ def validate_model_result(
         errors.append("commercial_category_hypotheses_not_list")
         out["commercial_category_hypotheses"] = []
     else:
+        ref_map = category_ref_map or {}
+        use_ref_transport = bool(ref_map)
         for h in hyps_in[:5]:
             if not isinstance(h, dict):
                 errors.append("hypothesis_not_object")
                 continue
+
+            model_ref = h.get("category_ref") or h.get("ref")
+            model_ref_s = str(model_ref).strip().upper() if model_ref is not None else ""
             raw_cat = h.get("category_code") or h.get("commercial_category_code") or ""
             raw_cat_s = str(raw_cat).strip() if raw_cat is not None else ""
-            if not raw_cat_s:
-                errors.append("hypothesis_missing_category")
-                continue
-            alias = resolve_explicit_category_alias(raw_cat_s, allowed_categories=allowed_categories)
-            if alias:
-                cat = alias
-            elif looks_like_okpd_category_code(raw_cat_s):
-                errors.append(f"rejected_okpd_as_category:{raw_cat_s}")
-                continue
-            elif not is_valid_commercial_category_code(raw_cat_s):
-                errors.append(f"rejected_invalid_category_format:{raw_cat_s}")
-                continue
-            elif raw_cat_s not in allowed_categories:
-                errors.append(f"rejected_category_not_in_registry:{raw_cat_s}")
-                continue
+            cat: Optional[str] = None
+            transport_resolved: Optional[str] = None
+
+            if use_ref_transport:
+                # Ref transport: only explicit refs resolve. No fuzzy repair.
+                if not model_ref_s:
+                    if raw_cat_s:
+                        errors.append(f"rejected_code_under_ref_transport:{raw_cat_s}")
+                    else:
+                        errors.append("hypothesis_missing_category_ref")
+                    continue
+                resolved = resolve_category_ref(model_ref_s, ref_to_code=ref_map)
+                if not resolved:
+                    errors.append(f"rejected_invalid_category_ref:{model_ref_s}")
+                    continue
+                if resolved not in allowed_categories:
+                    errors.append(f"rejected_category_not_in_registry:{resolved}")
+                    continue
+                cat = resolved
+                transport_resolved = resolved
+                raw_cat_s = model_ref_s
             else:
-                cat = raw_cat_s
+                if not raw_cat_s:
+                    errors.append("hypothesis_missing_category")
+                    continue
+                alias = resolve_explicit_category_alias(raw_cat_s, allowed_categories=allowed_categories)
+                if alias:
+                    cat = alias
+                elif looks_like_okpd_category_code(raw_cat_s):
+                    errors.append(f"rejected_okpd_as_category:{raw_cat_s}")
+                    continue
+                elif not is_valid_commercial_category_code(raw_cat_s):
+                    errors.append(f"rejected_invalid_category_format:{raw_cat_s}")
+                    continue
+                elif raw_cat_s not in allowed_categories:
+                    errors.append(f"rejected_category_not_in_registry:{raw_cat_s}")
+                    continue
+                else:
+                    cat = raw_cat_s
 
             sub = h.get("subcategory_code") or h.get("commercial_subcategory_code")
             if sub == _SUB_SENTINEL:
@@ -299,9 +331,25 @@ def validate_model_result(
                 else:
                     errors.append(f"invalid_candidate_role:{role_raw}")
 
+            rb_raw = h.get("relevance_basis")
+            rb = None
+            if rb_raw is not None and str(rb_raw).strip():
+                rb_s = str(rb_raw).strip().upper()
+                if rb_s in {
+                    "DIRECT_METADATA_SIGNAL",
+                    "OKPD_SIGNAL",
+                    "OBJECT_STAGE_PLAUSIBILITY",
+                    "CONTEXTUAL_PRIOR",
+                }:
+                    rb = rb_s
+                else:
+                    errors.append(f"invalid_relevance_basis:{rb_raw}")
+
             row = {
                 "category_code": cat,
                 "model_raw_category_code": raw_cat_s,
+                "model_selected_category_ref": model_ref_s or None,
+                "transport_resolved_category_code": transport_resolved,
                 "subcategory_code": sub,
                 "opportunity_track": track,
                 "confidence": conf,
@@ -314,6 +362,7 @@ def validate_model_result(
                 "why_category": h.get("why_category"),
                 "research_priority": rp,
                 "candidate_role": role,
+                "relevance_basis": rb,
                 # Explicitly no score/medal invention.
                 "candidate_medal": None,
                 "candidate_score": None,
@@ -351,21 +400,37 @@ def validate_model_result(
         out["commercial_category_candidates"] = []
     else:
         valid_codes = {h["category_code"] for h in out.get("commercial_category_hypotheses") or []}
+        valid_refs = {
+            str(h.get("model_selected_category_ref") or "").strip().upper()
+            for h in out.get("commercial_category_hypotheses") or []
+            if h.get("model_selected_category_ref")
+        }
         kept = []
         for c in cands_in[:5]:
             if not isinstance(c, dict):
                 continue
+            cref = str(c.get("category_ref") or c.get("ref") or "").strip().upper()
             cc = str(c.get("category_code") or "").strip()
-            if cc in valid_codes:
-                kept.append(
-                    {
-                        "category_code": cc,
-                        "candidate_role": c.get("candidate_role"),
-                        "research_priority": c.get("research_priority"),
-                        "confirmation_required": c.get("confirmation_required"),
-                        "evidence_role": c.get("evidence_role"),
-                    }
-                )
+            match_code = cc in valid_codes if cc else False
+            match_ref = cref in valid_refs if cref else False
+            if not (match_code or match_ref):
+                continue
+            row_c: Dict[str, Any] = {
+                "candidate_role": c.get("candidate_role"),
+                "research_priority": c.get("research_priority"),
+                "confirmation_required": c.get("confirmation_required"),
+                "evidence_role": c.get("evidence_role"),
+                "relevance_basis": c.get("relevance_basis"),
+            }
+            if match_ref:
+                row_c["category_ref"] = cref
+                for h in out.get("commercial_category_hypotheses") or []:
+                    if str(h.get("model_selected_category_ref") or "").strip().upper() == cref:
+                        row_c["category_code"] = h["category_code"]
+                        break
+            else:
+                row_c["category_code"] = cc
+            kept.append(row_c)
         out["commercial_category_candidates"] = kept
 
     empty = out.get("empty_hypothesis_status")

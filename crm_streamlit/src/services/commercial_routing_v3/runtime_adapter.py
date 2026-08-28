@@ -4,7 +4,6 @@ from typing import Any, Dict, List
 
 from src.domain.commercial_routing_v3 import OpportunityTrack, ResearchAction
 from src.domain.commercial_routing_v3 import CategoryValueBasis
-from src.services.business_scope import canonicalize_business_scope
 
 
 _TRACK_TO_EXPECTED_ROLE: Dict[OpportunityTrack, str] = {
@@ -232,11 +231,7 @@ def decision_to_normalized_result(
         "routing_version": rvn or "v3",
         "model_name": mn or "",
         # Legacy keys expected by existing pipeline.
-        # Scope is UNKNOWN unless the decision explicitly carries a valid value.
-        # Never default missing model scope to IN_PROFILE.
-        "business_scope_status": canonicalize_business_scope(
-            _get(decision, "business_scope_status", None)
-        ),
+        "business_scope_status": "IN_PROFILE",
         "route_profile": "UNASSESSED",
         "category_opportunities": category_opportunities,
     }

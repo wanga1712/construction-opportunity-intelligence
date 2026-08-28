@@ -39,6 +39,7 @@ def run_shadow_inference(
     model_input: Optional[Dict[str, Any]] = None,
     allowed_categories: Optional[Set[str]] = None,
     allowed_subcategories: Optional[Dict[str, Set[str]]] = None,
+    category_ref_map: Optional[Dict[str, str]] = None,
     acquire_gpu: bool = True,
     dry_run_persist: bool = False,
     compute_business_preview: bool = True,
@@ -63,6 +64,8 @@ def run_shadow_inference(
     (Phase 7 A/B calibration). Default remains production v5 path.
     Optional ``experiment_model`` / ``format_json`` are SHADOW bake-off only
     (never production defaults).
+    Optional ``category_ref_map`` enables Phase 10 ref→code transport resolution
+    (dereference only; not semantic category selection).
     """
     engine = CommercialRoutingV3Engine(crm_db=crm_db)
     registry, allowed, subs = engine.load_registry()
@@ -123,6 +126,7 @@ def run_shadow_inference(
         retry_count=retry_count,
         allowed_categories=cats,
         allowed_subcategories=submap,
+        category_ref_map=category_ref_map,
         model_name=str(meta.get("model") or experiment_model or "qwen2.5:7b"),
         prompt_version=pv,
         dry_run=dry_run_persist,

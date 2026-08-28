@@ -37,6 +37,7 @@ from src.ui.components.analytics_v2.annotation_card_sections import (
     render_workbench_header,
 )
 from src.ui.components.analytics_v2.annotation_queue import GO_NEXT_FROM_KEY, GO_NEXT_KEY
+from src.ui.components.analytics_v2.learning_results import render_learning_results
 
 _CREATED_BY_FALLBACK = "SuperUser"
 
@@ -321,6 +322,10 @@ def render_annotation_section(
     if section == "Модель / Категории":
         _render_ai_block(assessment)
         _render_business_block(assessment)
+        try:
+            render_learning_results(crm_db, procurement_id)
+        except Exception as exc:
+            st.warning(f"Ошибка рендеринга результатов автономного анализа: {exc}")
         _render_category_verdicts(procurement_id, assessment, categories, cat_codes, cat_labels)
         return
     card_view = load_annotation_card_view(procurement_id, header, crm_db)
@@ -658,6 +663,12 @@ def _persist(
 ) -> None:
     try:
         new_id = save_expert_annotation(procurement_id, payload, created_by, crm_db)
+        try:
+            from src.services.commercial_routing_v3.reward_ledger_service import RewardLedgerService
+            rl_service = RewardLedgerService(crm_db)
+            rl_service.record_feedback_rewards(procurement_id, payload)
+        except Exception as exc:
+            st.warning(f"Не удалось записать награды: {exc}")
         write_audit_row(
             procurement_id=procurement_id,
             model_raw=(

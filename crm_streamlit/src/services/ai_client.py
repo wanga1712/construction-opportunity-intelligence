@@ -95,56 +95,32 @@ def generate_with_meta(
     timeout: int = 75,
     num_predict: int | None = None,
     format_json: bool = False,
-    use_chat: bool = False,
-    num_ctx: int | None = None,
 ) -> tuple[str, dict[str, Any]]:
-    """Return completion text plus Ollama timing/token meta.
-
-    ``use_chat`` routes through ``/api/chat`` (needed for some HF GGUF chat
-    templates such as T-lite-it-2.1 / Qwen3). Production V3 keeps ``/api/generate``.
-    """
+    """Return completion text plus Ollama timing/token meta."""
     base_url, selected_model = _settings(model)
-    options: dict[str, Any] = {}
-    if num_predict is not None:
-        options["num_predict"] = int(num_predict)
-    if num_ctx is not None:
-        options["num_ctx"] = int(num_ctx)
-
-    keep_alive = os.getenv("CRM_V3_OLLAMA_KEEP_ALIVE", "30m").strip()
-    body: dict[str, Any]
-    if use_chat:
-        body = {
-            "model": selected_model,
-            "messages": [{"role": "user", "content": prompt}],
-            "stream": False,
-            # Qwen3-family GGUFs default to thinking; without this, eval budget
-            # is consumed and content is empty (Phase 7.2 T-lite bake-off).
-            "think": False,
-        }
-        endpoint = f"{base_url}/api/chat"
-    else:
-        body = {
-            "model": selected_model,
-            "prompt": prompt,
-            "stream": False,
-        }
-        endpoint = f"{base_url}/api/generate"
-        if os.getenv("CRM_V3_OLLAMA_THINK", "").strip().lower() in {"0", "false", "no"}:
-            body["think"] = False
+    body: dict[str, Any] = {
+        "model": selected_model,
+        "prompt": prompt,
+        "stream": False,
+    }
     # Keep model resident during backlog drain / continuous routing (ops only).
+    keep_alive = os.getenv("CRM_V3_OLLAMA_KEEP_ALIVE", "30m").strip()
     if keep_alive:
         # Ollama accepts duration strings ("30m") or seconds; "-1" = forever.
         if keep_alive.lstrip("-").isdigit():
             body["keep_alive"] = int(keep_alive)
         else:
             body["keep_alive"] = keep_alive
+    options: dict[str, Any] = {}
+    if num_predict is not None:
+        options["num_predict"] = int(num_predict)
     if options:
         body["options"] = options
     if format_json:
         body["format"] = "json"
     payload = json.dumps(body, ensure_ascii=False).encode("utf-8")
     request = urllib.request.Request(
-        endpoint,
+        f"{base_url}/api/generate",
         data=payload,
         headers={"Content-Type": "application/json"},
     )
@@ -159,11 +135,7 @@ def generate_with_meta(
 
     if not isinstance(data, dict):
         raise ValueError("Ollama returned an invalid response")
-    if use_chat:
-        message = data.get("message") if isinstance(data.get("message"), dict) else {}
-        answer = message.get("content") if isinstance(message, dict) else None
-    else:
-        answer = data.get("response")
+    answer = data.get("response")
     if not isinstance(answer, str):
         raise ValueError("Ollama response does not contain text")
 
@@ -181,11 +153,9 @@ def generate_with_meta(
         "eval_duration_sec": _ns_to_sec(data.get("eval_duration")),
         "total_duration_sec": _ns_to_sec(data.get("total_duration")),
         "num_predict": num_predict,
-        "num_ctx": num_ctx,
-        "generation_endpoint": endpoint,
+        "generation_endpoint": f"{base_url}/api/generate",
         "structured_output_requested": bool(format_json),
         "structured_output_mode": STRUCTURED_OUTPUT_MODE_JSON if format_json else None,
-        "use_chat": bool(use_chat),
     }
     return answer, meta
 
@@ -202,22 +172,18 @@ def generate_v3_routing(
 
     experiment_model is only for explicitly named experiment callers; production
     must leave it None so assert_production_v3_model enforces 7b.
-    Experiment models use /api/chat so HF GGUF chat templates apply correctly.
     """
     if experiment_model:
         # Explicit experiment path — not production.
         model = experiment_model
-        use_chat = True
     else:
         model = assert_production_v3_model()
-        use_chat = False
     text, meta = generate_with_meta(
         prompt,
         model=model,
         timeout=timeout,
         num_predict=num_predict,
         format_json=format_json,
-        use_chat=use_chat,
     )
     proven = str(meta.get("model") or model)
     if experiment_model is None:
@@ -265,7 +231,6 @@ def generate_v3_routing_with_bounded_retry(
     last_failure_class = "OTHER"
     last_error: Exception | None = None
     last_meta: dict[str, Any] = {}
-    last_raw_text: str | None = None
     attempts_used = 0
 
     for attempt in range(1, int(max_attempts) + 1):
@@ -280,7 +245,6 @@ def generate_v3_routing_with_bounded_retry(
             attempt_predict = NUM_PREDICT_TRUNCATION_RETRY
             attempt_options_note = TRUNCATION_RETRY_REASON
         try:
-            # RAW capture point: exact Ollama response text before any mutation.
             raw_text, meta = generate_v3_routing(
                 prompt,
                 timeout=timeout,
@@ -288,7 +252,6 @@ def generate_v3_routing_with_bounded_retry(
                 format_json=format_json,
                 experiment_model=experiment_model,
             )
-            last_raw_text = raw_text
         except Exception as exc:
             last_error = exc
             last_failure_class = classify_format_failure("", exc=exc)
@@ -331,7 +294,6 @@ def generate_v3_routing_with_bounded_retry(
                 }
             )
             last_meta = dict(meta)
-            last_meta["raw_text"] = raw_text
             if attempt < int(max_attempts):
                 continue
             break
@@ -384,7 +346,6 @@ def generate_v3_routing_with_bounded_retry(
     fail_meta = dict(last_meta)
     fail_meta.update(
         {
-            "raw_text": last_raw_text,
             "model_format_retry_count": retries,
             "attempt_count": attempts_used,
             "attempt_history": history,

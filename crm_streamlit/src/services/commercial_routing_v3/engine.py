@@ -206,67 +206,33 @@ class CommercialRoutingV3Engine:
         registry_hash: str = "",
         model_name: str = "",
     ) -> RoutingDecisionV3:
-        import copy
-
-        # MODEL_VALIDATED_MUTATED_IN_MEMORY=NO — work only on copies.
-        model_validated = copy.deepcopy(ai_raw if isinstance(ai_raw, dict) else {})
         registry, allowed, subs = self.load_registry()
         has_okpd = bool(procurement.get("okpd_code"))
-        # normalize/enrich operate on a business working copy, never on model_validated.
-        business = normalize_v3_output(
-            copy.deepcopy(model_validated),
+        normalized = normalize_v3_output(
+            ai_raw,
             allowed_categories=allowed,
             allowed_subcategories=subs,
             has_okpd=has_okpd,
         )
-        # Re-assert MODEL fields from frozen snapshot after normalize (alias-only ok on copy).
-        business["object_classification"] = copy.deepcopy(
-            model_validated.get("object_classification")
-        )
-        business["commercial_category_hypotheses"] = copy.deepcopy(
-            model_validated.get("commercial_category_hypotheses") or []
-        )
-        business["procurement_form"] = model_validated.get("procurement_form")
-        business = enrich_object_mode_routing(
-            business, procurement, allowed_categories=allowed
+        normalized = enrich_object_mode_routing(
+            normalized, procurement, allowed_categories=allowed
         )
         from src.services.commercial_routing_v3.object_mode_routing import source_data_quality_label
 
         sq = source_data_quality_label(procurement)
-        # Score BUSINESS hypothesis set (model hyps + contextual priors), not MODEL list alone.
-        score_hyps = list(
-            business.get("business_category_hypotheses")
-            or business.get("commercial_category_hypotheses")
-            or []
-        )
-        scored = apply_candidate_scoring_to_hypotheses(
-            score_hyps,
+        normalized["commercial_category_hypotheses"] = apply_candidate_scoring_to_hypotheses(
+            list(normalized.get("commercial_category_hypotheses") or []),
             procurement=procurement,
-            normalized=business,
+            normalized=normalized,
             source_data_quality=sq,
         )
-        business["business_category_hypotheses"] = scored
-        # Keep MODEL commercial_category_hypotheses free of medals/scores.
-        business["commercial_category_hypotheses"] = copy.deepcopy(
-            model_validated.get("commercial_category_hypotheses") or []
-        )
-        business["object_classification"] = copy.deepcopy(
-            model_validated.get("object_classification")
-        )
-        normalized = business
         det = self.route_deterministic(procurement)
-        # Prefer business-coerced form for routing decision when present.
-        form_raw = (
-            normalized.get("business_procurement_form")
-            or normalized.get("procurement_form")
-            or det.procurement_form.value
-        )
-        form = ProcurementForm(form_raw)
+        form = ProcurementForm(normalized.get("procurement_form", det.procurement_form.value))
         hypotheses: List[CategoryOpportunityV3] = []
         price = float(procurement.get("price") or 0)
         _valid_actions = {a.value for a in ResearchAction}
 
-        for h in scored:
+        for h in normalized.get("commercial_category_hypotheses") or []:
             track = OpportunityTrack(h["opportunity_track"])
             conf = float(h.get("confidence") or 0)
             basis = CategoryValueBasis(h.get("category_value_basis", CategoryValueBasis.UNKNOWN_ADDRESSABLE_VALUE.value))
@@ -305,30 +271,23 @@ class CommercialRoutingV3Engine:
                 )
             )
 
-        empty_st = str(
-            normalized.get("business_empty_hypothesis_status")
-            if "business_empty_hypothesis_status" in normalized
-            else (normalized.get("empty_hypothesis_status") or "")
-        ).upper()
-        # MODEL empty status remains on model_validated; business may override for pipeline.
-        if empty_st == "NO_COMMERCIAL_ENTRY" and not scored:
+        empty_st = str(normalized.get("empty_hypothesis_status") or "").upper()
+        if empty_st == "NO_COMMERCIAL_ENTRY":
             discovery = False
             overall = ResearchAction.SKIP
         else:
             discovery = bool(normalized.get("discovery_required")) or self._needs_discovery(
                 form, hypotheses, procurement
             )
-            overall_raw = (
-                normalized.get("business_overall_research_action")
-                or normalized.get("overall_research_action")
-                or self._aggregate_action(hypotheses, discovery).value
-            )
+            overall_raw = normalized.get("overall_research_action") or self._aggregate_action(
+                hypotheses, discovery
+            ).value
             try:
                 overall = ResearchAction(overall_raw)
             except ValueError:
                 overall = self._aggregate_action(hypotheses, discovery)
 
-        decision = RoutingDecisionV3(
+        return RoutingDecisionV3(
             source_contour=det.source_contour,
             procurement_form=form,
             analysis_modes=[AnalysisMode(m) for m in normalized.get("analysis_modes") or []],
@@ -345,49 +304,23 @@ class CommercialRoutingV3Engine:
             prompt_version=PROMPT_VERSION,
             routing_version=ROUTING_VERSION,
             model_name=model_name,
-            empty_hypothesis_status=model_validated.get("empty_hypothesis_status"),
+            empty_hypothesis_status=normalized.get("empty_hypothesis_status"),
             empty_hypothesis_reason_codes=list(
                 normalized.get("empty_hypothesis_reason_codes") or []
             ),
             rejected_category_codes=list(normalized.get("rejected_category_codes") or []),
             preferred_opportunity_track=normalized.get("preferred_opportunity_track"),
             review_required=False
-            if empty_st == "NO_COMMERCIAL_ENTRY" and not scored
+            if empty_st == "NO_COMMERCIAL_ENTRY"
             else bool(normalized.get("review_required")),
             routing_mode=normalized.get("routing_mode"),
-            # MODEL authority for object classification
-            object_classification=copy.deepcopy(model_validated.get("object_classification")),
-            document_research_priority=list(
-                model_validated.get("document_research_priority")
-                or normalized.get("document_research_priority")
-                or []
-            ),
-            hypothesis_details=list(scored),
+            object_classification=normalized.get("object_classification"),
+            document_research_priority=list(normalized.get("document_research_priority") or []),
+            hypothesis_details=list(normalized.get("commercial_category_hypotheses") or []),
             awarded_context=normalized.get("awarded_context"),
             post_award_commercial_target=normalized.get("post_award_commercial_target"),
             post_award_commercial_target_name=normalized.get("post_award_commercial_target_name"),
         )
-        # Attach frozen model + business sidecar for Phase 6B callers (non-breaking).
-        setattr(decision, "_model_validated", model_validated)
-        setattr(
-            decision,
-            "_business_result",
-            {
-                "routing_mode": normalized.get("routing_mode"),
-                "business_object_classification": normalized.get(
-                    "business_object_classification"
-                ),
-                "business_procurement_form": normalized.get("business_procurement_form"),
-                "contextual_prior_hypotheses": list(
-                    normalized.get("contextual_prior_hypotheses") or []
-                ),
-                "business_category_hypotheses": list(scored),
-                "business_overall_research_action": getattr(
-                    decision.overall_research_action, "value", decision.overall_research_action
-                ),
-            },
-        )
-        return decision
 
     def _load_priors(self) -> List[Dict[str, Any]]:
         if not self.crm_db:

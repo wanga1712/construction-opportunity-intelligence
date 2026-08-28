@@ -93,7 +93,6 @@ def resolve_document_links(
         logger.warning("document link resolve failed: %s", exc)
 
     normalized = []
-    physical_rows: Dict[str, Dict[str, Any]] = {}
     urls = set()
     physical_keys = set()
     source_ids = set()
@@ -109,16 +108,11 @@ def resolve_document_links(
         if phys:
             if phys in physical_keys:
                 dup_physical += 1
-                grouped = physical_rows[phys]
-                grouped["source_row_count"] += 1
-                if sid is not None:
-                    grouped["source_document_ids"].append(sid)
                 continue
             physical_keys.add(phys)
-        item = {
+        normalized.append(
+            {
                 "source_document_id": sid,
-                "source_document_ids": [sid] if sid is not None else [],
-                "source_row_count": 1,
                 "document_url": url,
                 "document_name": r.get("file_name"),
                 "document_type": None,
@@ -126,9 +120,7 @@ def resolve_document_links(
                 "resolution_method": method,
                 "physical_download_key": phys,
             }
-        normalized.append(item)
-        if phys:
-            physical_rows[phys] = item
+        )
     return {
         "links": normalized,
         "link_count": len(links),

@@ -180,6 +180,7 @@ def build_run_from_ollama(
     retry_count: int,
     allowed_categories: Set[str],
     allowed_subcategories: Optional[Dict[str, Set[str]]] = None,
+    category_ref_map: Optional[Dict[str, str]] = None,
     model_name: Optional[str] = None,
     prompt_version: Optional[str] = None,
     schema_version: Optional[str] = None,
@@ -237,6 +238,7 @@ def build_run_from_ollama(
         clean_parsed,
         allowed_categories=allowed_categories,
         allowed_subcategories=allowed_subcategories,
+        category_ref_map=category_ref_map,
     )
     rec.validation_errors = list(vr.errors or [])
     if vr.status != "VALIDATED_SUCCESS" or vr.validated is None:
@@ -265,6 +267,7 @@ def capture_and_persist_inference_run(
     retry_count: int = 0,
     allowed_categories: Optional[Set[str]] = None,
     allowed_subcategories: Optional[Dict[str, Set[str]]] = None,
+    category_ref_map: Optional[Dict[str, str]] = None,
     model_name: Optional[str] = None,
     prompt_version: Optional[str] = None,
     dry_run: bool = False,
@@ -283,6 +286,7 @@ def capture_and_persist_inference_run(
         retry_count=retry_count,
         allowed_categories=cats,
         allowed_subcategories=allowed_subcategories,
+        category_ref_map=category_ref_map,
         model_name=model_name,
         prompt_version=prompt_version,
     )
