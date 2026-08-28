@@ -22,7 +22,10 @@ class FakeStreamlit:
 
     def columns(self, widths):
         self.events.append(("columns", widths))
-        return nullcontext(), nullcontext()
+        # Support variable number of returned columns
+        if isinstance(widths, int):
+            return [nullcontext() for _ in range(widths)]
+        return [nullcontext() for _ in range(len(widths))]
 
     def selectbox(self, label, options, **kwargs):
         self.events.append(("selectbox", label, options, kwargs))
@@ -37,6 +40,20 @@ class FakeStreamlit:
 
     def caption(self, message):
         self.events.append(("caption", message))
+
+    def markdown(self, body, **kwargs):
+        self.events.append(("markdown", body))
+
+    def radio(self, label, options, **kwargs):
+        self.events.append(("radio", label, options))
+        return options[0]
+
+    def number_input(self, label, min_value=None, max_value=None, value=None, **kwargs):
+        self.events.append(("number_input", label, value))
+        return value or 1
+
+    def write(self, *args, **kwargs):
+        self.events.append(("write", args))
 
 
 def test_tabs_names_order_payload_and_return_without_database(monkeypatch):
