@@ -87,7 +87,7 @@ class ExperienceMemory:
                 ) t ON t.procurement_id = f.procurement_id
                 WHERE {where_sql}
                   AND f.category_code = %s
-                  AND (f.run_id = t.hunter_run_id OR f.run_id = t.auditor_run_id)
+                  AND (f.model_run_id = t.hunter_run_id OR f.model_run_id = t.auditor_run_id)
             """
             machine_count = self.crm_db.execute_scalar(q_machine, params + [cat_code]) or 0
 
@@ -117,7 +117,7 @@ class ExperienceMemory:
                 WHERE {where_sql}
                   AND a.is_current = TRUE
                   AND f.category_code = %s
-                  AND (f.run_id = t.hunter_run_id OR f.run_id = t.auditor_run_id)
+                  AND (f.model_run_id = t.hunter_run_id OR f.model_run_id = t.auditor_run_id)
                   AND (
                       a.payload->'expert_category_scope'->>'verdict' = 'OUT_OF_CATEGORY'
                       OR a.payload->>'expert_verdict' = 'WRONG'
@@ -155,7 +155,7 @@ class ExperienceMemory:
                       SELECT 1 FROM crm_v3_product_findings f 
                       WHERE f.procurement_id = t.procurement_id 
                         AND f.category_code = %s
-                        AND (f.run_id = t.hunter_run_id OR f.run_id = t.auditor_run_id)
+                        AND (f.model_run_id = t.hunter_run_id OR f.model_run_id = t.auditor_run_id)
                   )
             """
             not_found_complete = self.crm_db.execute_scalar(q_not_found, params + [cat_code]) or 0
@@ -175,7 +175,7 @@ class ExperienceMemory:
                       SELECT 1 FROM crm_v3_product_findings f 
                       WHERE f.procurement_id = t.procurement_id 
                         AND f.category_code = %s
-                        AND (f.run_id = t.hunter_run_id OR f.run_id = t.auditor_run_id)
+                        AND (f.model_run_id = t.hunter_run_id OR f.model_run_id = t.auditor_run_id)
                   )
             """
             unknown_partial = self.crm_db.execute_scalar(q_partial, params + [cat_code]) or 0
@@ -195,7 +195,7 @@ class ExperienceMemory:
                       SELECT 1 FROM crm_v3_product_findings f 
                       WHERE f.procurement_id = t.procurement_id 
                         AND f.category_code = %s
-                        AND (f.run_id = t.hunter_run_id OR f.run_id = t.auditor_run_id)
+                        AND (f.model_run_id = t.hunter_run_id OR f.model_run_id = t.auditor_run_id)
                   )
             """
             no_documents = self.crm_db.execute_scalar(q_no_docs, params + [cat_code]) or 0
