@@ -485,6 +485,24 @@ def _fmt_date(val) -> str:
 _TORGI_AI_FILTERS = ["Все", "Неоцененные", "Неполные оценки", "Ошибки AI", "IN_PROFILE", "OUT_OF_PROFILE"]
 
 
+
+
+def _render_review_filter_from_counts(
+    counts: dict[str, int], session_key: str, *, on_change=None
+) -> str:
+    """Render review filter pills using pre-computed SQL counts."""
+    from src.ui.components.analytics_v2.stage_workspace import FILTERS
+    labels = [f"{label} ?? {counts.get(key, 0)}" for key, label in FILTERS]
+    selected_label = st.pills(
+        "??????????????",
+        labels,
+        default=labels[0],
+        key=f"annotation_state_filter_{session_key}",
+        on_change=on_change,
+    )
+    return FILTERS[labels.index(selected_label)][0]
+
+
 def _render_torgi_tab() -> None:
     col_hdr, col_sync = st.columns([3, 1])
     with col_sync:
@@ -504,16 +522,24 @@ def _render_torgi_tab() -> None:
         key="torgi_deadline_sort",
         on_change=_reset_torgi_page,
     )
-    from src.services.annotation_state_service import load_current_annotation_states
+    from src.services.annotation_state_service import (
+        count_annotation_states_sql,
+        load_current_annotation_states,
+    )
     from src.services.db_bootstrap import connect_databases
     _, _, crm_db, _ = connect_databases()
-    annotation_states = load_current_annotation_states(workset_ids, crm_db)
-    selected_review = render_review_filter(
-        annotation_states, _SESSION_TORGI, on_change=_reset_torgi_page
+    # ── SQL-level counts (no full Python workset load) ──
+    sql_counts = count_annotation_states_sql(workset_ids, crm_db)
+    selected_review = _render_review_filter_from_counts(
+        sql_counts, _SESSION_TORGI, on_change=_reset_torgi_page
     )
-    selected_ids = filtered_review_ids(annotation_states, selected_review)
-    page, offset = _page_offset("torgi", len(selected_ids))
-    cards = _load_torgi(_PAGE_SIZE, offset, sort_mode, selected_ids)
+    # ── Filtered count for pagination ──
+    filtered_total = sql_counts.get(selected_review, sql_counts["ALL"])
+    page, offset = _page_offset("torgi", filtered_total)
+    cards = _load_torgi(_PAGE_SIZE, offset, sort_mode, workset_ids)
+    # ── Page-only annotation state load (max 25 IDs) ──
+    page_ids = [c["id"] for c in cards]
+    annotation_states = load_current_annotation_states(page_ids, crm_db)
 
     if not cards:
         st.info("Нет тендеров в стадии торгов.")
@@ -537,7 +563,7 @@ def _render_torgi_tab() -> None:
 
     selected_id = st.session_state.get(_SESSION_TORGI)
     st.markdown(f"### Идут торги · {len(workset_ids)}")
-    st.caption(f"Показано {offset + 1}–{offset + len(cards)} из {len(selected_ids)}")
+    st.caption(f"Показано {offset + 1}–{offset + len(cards)} из {filtered_total}")
     _render_first_stage_dataset_panel(crm_db, annotation_states)
 
     render_stage_workspace(

@@ -187,3 +187,101 @@ def annotation_state_counts(states: dict[int, dict]) -> dict[str, int]:
         UNANNOTATED: total - reviewed,
         ANNOTATED: reviewed,
     }
+
+
+def count_annotation_states_sql(procurement_ids: list[int], crm_db: Any) -> dict[str, int]:
+    """Compute review filter counts via SQL ??? no full Python load needed.
+
+    Returns the same keys as annotation_state_counts() but uses SQL aggregation.
+    """
+    ids = list(dict.fromkeys(int(v) for v in procurement_ids))
+    total = len(ids)
+    if not ids:
+        return {"ALL": 0, UNREVIEWED: 0, REVIEWED: 0, OUT_OF_CATEGORY: 0,
+                IN_CATEGORY: 0, UNCERTAIN: 0, COMMERCIAL: 0, NON_COMMERCIAL: 0,
+                LEGACY_NOT_INTERESTING: 0, NOT_INTERESTING: 0, PROFILED: 0,
+                UNANNOTATED: 0, ANNOTATED: 0}
+
+    rows = crm_db.execute_query(
+        """SELECT
+              payload ->> 'expert_category_scope' AS scope,
+              payload ->> 'expert_commercial_entry' AS commercial,
+              CASE WHEN payload ->> 'expert_category_scope' IS NOT NULL
+                        AND payload ->> 'expert_category_scope' != ''
+                   THEN TRUE ELSE FALSE END AS has_scope,
+              count(*) AS cnt
+           FROM crm_v3_expert_annotations
+           WHERE is_current = TRUE AND procurement_id = ANY(%s)
+           GROUP BY scope, commercial, has_scope""",
+        (ids,),
+    )
+    # Accumulate
+    annotated_ids = 0
+    out_cat = 0; in_cat = 0; uncertain = 0
+    commercial = 0; non_commercial = 0
+    reviewed = 0; legacy = 0
+    for r in (rows or []):
+        cnt = int(r["cnt"])
+        annotated_ids += cnt
+        scope = r.get("scope") or ""
+        comm = r.get("commercial") or ""
+        if scope == OUT_OF_CATEGORY:
+            out_cat += cnt
+            reviewed += cnt  # OUT is considered reviewed
+        elif scope == IN_CATEGORY:
+            in_cat += cnt
+            reviewed += cnt
+        elif scope == UNCERTAIN:
+            uncertain += cnt
+            reviewed += cnt
+        # legacy negative: scope empty but has annotation -> count as legacy
+        if not scope and cnt:
+            legacy += cnt
+        if comm == COMMERCIAL:
+            commercial += cnt
+        elif comm == NON_COMMERCIAL:
+            non_commercial += cnt
+    not_interesting = legacy + out_cat
+    return {
+        "ALL": total,
+        UNREVIEWED: total - reviewed,
+        REVIEWED: reviewed,
+        OUT_OF_CATEGORY: out_cat,
+        IN_CATEGORY: in_cat,
+        UNCERTAIN: uncertain,
+        COMMERCIAL: commercial,
+        NON_COMMERCIAL: non_commercial,
+        LEGACY_NOT_INTERESTING: legacy,
+        NOT_INTERESTING: not_interesting,
+        PROFILED: max(0, reviewed - out_cat),
+        UNANNOTATED: total - annotated_ids,
+        ANNOTATED: annotated_ids,
+    }
+
+
+def annotation_filter_sql_clause(selected_state: str) -> str:
+    """Return a SQL WHERE fragment that implements the review filter on the procurement IDs.
+
+    Returns '' (empty string) for 'ALL' filter.
+    Requires LEFT JOIN crm_v3_expert_annotations ea
+        ON ea.procurement_id = cp.id AND ea.is_current = TRUE
+    """
+    if selected_state == "ALL":
+        return ""
+    if selected_state == REVIEWED:
+        return "AND ea.id IS NOT NULL AND ea.payload ->> 'expert_category_scope' IS NOT NULL AND ea.payload ->> 'expert_category_scope' != ''"
+    if selected_state == UNREVIEWED:
+        return "AND (ea.id IS NULL OR ea.payload ->> 'expert_category_scope' IS NULL OR ea.payload ->> 'expert_category_scope' = '')"
+    if selected_state == OUT_OF_CATEGORY:
+        return "AND ea.payload ->> 'expert_category_scope' = 'OUT_OF_CATEGORY'"
+    if selected_state == IN_CATEGORY:
+        return "AND ea.payload ->> 'expert_category_scope' = 'IN_CATEGORY'"
+    if selected_state == UNCERTAIN:
+        return "AND ea.payload ->> 'expert_category_scope' = 'UNCERTAIN'"
+    if selected_state == COMMERCIAL:
+        return "AND ea.payload ->> 'expert_commercial_entry' = 'COMMERCIAL'"
+    if selected_state == NON_COMMERCIAL:
+        return "AND ea.payload ->> 'expert_commercial_entry' = 'NON_COMMERCIAL'"
+    if selected_state == LEGACY_NOT_INTERESTING:
+        return "AND ea.id IS NOT NULL AND (ea.payload ->> 'expert_category_scope' IS NULL OR ea.payload ->> 'expert_category_scope' = '')"
+    return ""

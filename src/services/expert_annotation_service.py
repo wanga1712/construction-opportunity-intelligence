@@ -463,14 +463,16 @@ def load_subcategories(category_code: str, crm_db: Any) -> list[dict]:
     """Return subcategories for *category_code* ordered by name.
 
     Each item: {code, name}
+    Uses JOIN through crm_product_categories.id = crm_product_subcategories.category_id.
     """
     try:
         rows = crm_db.execute_query(
             """
-            SELECT subcategory_code, subcategory_name
-            FROM crm_product_subcategories
-            WHERE category_code = %s
-            ORDER BY subcategory_name
+            SELECT sc.subcategory_code, sc.subcategory_name
+            FROM crm_product_subcategories sc
+            JOIN crm_product_categories c ON c.id = sc.category_id
+            WHERE c.category_code = %s
+            ORDER BY sc.subcategory_name
             """,
             (category_code,),
         )
@@ -483,13 +485,30 @@ def load_subcategories(category_code: str, crm_db: Any) -> list[dict]:
 def load_subcategories_for_categories(
     category_codes: list[str], crm_db: Any
 ) -> dict[str, list[dict]]:
-    """Batch subcategory lookup for selected category codes (no per-widget N+1 invent)."""
-    out: dict[str, list[dict]] = {}
-    for code in category_codes or []:
-        text = str(code or "").strip()
-        if text:
-            out[text] = load_subcategories(text, crm_db)
-    return out
+    """Batch subcategory lookup ??? single SQL query for all requested codes."""
+    codes = [str(c or "").strip() for c in (category_codes or []) if str(c or "").strip()]
+    if not codes:
+        return {}
+    try:
+        rows = crm_db.execute_query(
+            """
+            SELECT c.category_code, sc.subcategory_code, sc.subcategory_name
+            FROM crm_product_subcategories sc
+            JOIN crm_product_categories c ON c.id = sc.category_id
+            WHERE c.category_code = ANY(%s)
+            ORDER BY c.category_code, sc.subcategory_name
+            """,
+            (codes,),
+        )
+        out: dict[str, list[dict]] = {code: [] for code in codes}
+        for r in (rows or []):
+            cat = r["category_code"]
+            if cat in out:
+                out[cat].append({"code": r["subcategory_code"], "name": r["subcategory_name"]})
+        return out
+    except Exception as exc:
+        logger.warning("load_subcategories_for_categories batch failed: %s", exc)
+        return {code: [] for code in codes}
 
 
 def collect_expert_object_types(crm_db: Any) -> list[str]:
