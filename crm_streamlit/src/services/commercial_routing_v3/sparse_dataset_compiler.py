@@ -28,7 +28,7 @@ class SparseDatasetCompiler:
         # 1. Load procurement facts
         facts_rows = self.crm_db.execute_query(
             """
-            SELECT id, contract_number, auction_name, okpd_code, okpd_name, initial_price
+            SELECT id, contract_number, auction_name, okpd_code, okpd_name, initial_price, source_table
             FROM crm_procurements
             WHERE id = %s
             """,
@@ -109,28 +109,51 @@ class SparseDatasetCompiler:
 
             # Compile Category Scope
             if expert_scope_val:
-                targets["category_scope"] = {
-                    "value": expert_scope_val,
-                    "label_source": "HUMAN_ANNOTATED",
-                    "human_action_id": annotation.get("human_action_id"),
-                    "annotation_id": ann_id
-                }
+                if expert_scope_val in {"IN_CATEGORY", "OUT_OF_CATEGORY", "UNCERTAIN"}:
+                    targets["category_scope"] = {
+                        "value": expert_scope_val,
+                        "label_source": "HUMAN_ANNOTATED",
+                        "human_action_id": annotation.get("human_action_id"),
+                        "annotation_id": ann_id
+                    }
+                else:
+                    targets["category_scope_legacy_provenance"] = {
+                        "value": expert_scope_val,
+                        "label_source": "HUMAN_ANNOTATED",
+                        "human_action_id": annotation.get("human_action_id"),
+                        "annotation_id": ann_id
+                    }
 
             # Compile Medal
             if expert_medal:
-                targets["medal"] = {
-                    "value": expert_medal,
-                    "label_source": "HUMAN_ANNOTATED",
-                    "human_action_id": annotation.get("human_action_id"),
-                    "annotation_id": ann_id
-                }
+                if expert_medal in {"GOLD", "SILVER", "BRONZE", "WOOD"}:
+                    targets["medal"] = {
+                        "value": expert_medal,
+                        "label_source": "HUMAN_ANNOTATED",
+                        "human_action_id": annotation.get("human_action_id"),
+                        "annotation_id": ann_id
+                    }
+                else:
+                    targets["medal_legacy_provenance"] = {
+                        "value": expert_medal,
+                        "label_source": "HUMAN_ANNOTATED",
+                        "human_action_id": annotation.get("human_action_id"),
+                        "annotation_id": ann_id
+                    }
+
+        source_tbl = str(facts.get("source_table") or "").lower()
+        law_type = "44-FZ"
+        if "223" in source_tbl:
+            law_type = "223-FZ"
+        elif "615" in source_tbl:
+            law_type = "615-PP"
 
         # 5. Build full dataset entry
         entry = {
             "procurement_id": procurement_id,
             "registry_number": facts.get("contract_number"),
             "factual_source": {
-                "law_type": "44-FZ",
+                "law_type": law_type,
                 "title": facts.get("auction_name"),
                 "official_description": "",
                 "okpd_code": facts.get("okpd_code"),

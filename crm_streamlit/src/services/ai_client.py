@@ -301,6 +301,7 @@ def generate_v3_routing_with_bounded_retry(
         meta = dict(meta)
         meta.update(
             {
+                "raw_text": raw_text,
                 "model_format_retry_count": retries,
                 "attempt_count": attempt,
                 "attempt_history": history

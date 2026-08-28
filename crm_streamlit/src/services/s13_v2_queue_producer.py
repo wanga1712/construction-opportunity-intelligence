@@ -324,27 +324,16 @@ class S13V2QueueProducer:
         dbname = self._doc_dsn.get("dbname", "document_intelligence")
         user = self._doc_dsn.get("user", "doc_worker")
         
-        candidates = [
-            self._doc_dsn.get("password", ""),
-            "docS13v2!",
-            "S13_Sec_9901_Docs!"
-        ]
-        
-        last_exc = None
-        for pwd in candidates:
-            try:
-                conn = psycopg2.connect(
-                    host=host,
-                    port=port,
-                    dbname=dbname,
-                    user=user,
-                    password=pwd,
-                    connect_timeout=3
-                )
-                return conn
-            except Exception as exc:
-                last_exc = exc
-        raise last_exc
+        pwd = self._doc_dsn.get("password", "")
+        conn = psycopg2.connect(
+            host=host,
+            port=port,
+            dbname=dbname,
+            user=user,
+            password=pwd,
+            connect_timeout=3
+        )
+        return conn
 
     def _upsert_queue_task(self, task: Dict[str, Any]) -> Dict[str, Any]:
         """

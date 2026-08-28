@@ -84,20 +84,7 @@ class AutonomousWorker:
         
         try:
             # Load experience priors context
-            priors_text = ""
-            try:
-                # We can query some summaries or priors for this procurement
-                facts = self.orchestrator.fetch_procurement_facts(procurement_id)
-                okpd = facts.get("okpd_code") or ""
-                priors_rows = self.crm_db.execute_query(
-                    """
-                    SELECT category_code, machine_found, human_confirmed, human_rejected
-                    FROM crm_v3_reward_ledgerrl  -- Or we compute from experience memory
-                    LIMIT 0
-                    """
-                ) # Placeholder or empty priors if none yet
-            except Exception:
-                priors_text = "No historical priors."
+            priors_text = "EXPERIENCE_PRIORS_TO_HUNTER=DISABLED"
 
             # Run the Hunter-Auditor learning loop
             result = self.orchestrator.run_learning_loop(procurement_id, priors_text)

@@ -42,66 +42,75 @@ class CRMDBWrapper:
 
 
 def select_controls(crm_db) -> dict[str, list[int]]:
-    """Select 10 positive, 10 negative, and 10 partial control procurement IDs."""
-    # 1. Positive controls (lighting, waterproofing, curbstone, computer purchases)
+    """Select 5 positive, 3 negative, and 2 failure control procurement IDs."""
+    # 1. Positive controls (5)
     pos_rows = crm_db.execute_query(
         """
         SELECT id FROM crm_procurements
-        WHERE (auction_name ILIKE '%светильник%' OR auction_name ILIKE '%кабель%' OR auction_name ILIKE '%гидроизол%' OR auction_name ILIKE '%бордюр%')
+        WHERE (auction_name ILIKE '%светильник%' OR auction_name ILIKE '%кабель%' OR auction_name ILIKE '%бордюр%')
           AND initial_price > 500000
-        LIMIT 10
+        LIMIT 5
         """
     ) or []
     pos_ids = [r["id"] if isinstance(r, dict) else r[0] for r in pos_rows]
 
-    # 2. Negative controls (security, legal services, cleaning)
+    # 2. Negative controls (3)
     neg_rows = crm_db.execute_query(
         """
         SELECT id FROM crm_procurements
-        WHERE (auction_name ILIKE '%охрана%' OR auction_name ILIKE '%уборка%' OR auction_name ILIKE '%клининг%' OR auction_name ILIKE '%юридическ%')
+        WHERE (auction_name ILIKE '%охрана%' OR auction_name ILIKE '%уборка%' OR auction_name ILIKE '%юридическ%')
           AND initial_price > 100000
-        LIMIT 10
+        LIMIT 3
         """
     ) or []
     neg_ids = [r["id"] if isinstance(r, dict) else r[0] for r in neg_rows]
 
-    # 3. Partial controls (construction works, repair of buildings)
-    part_rows = crm_db.execute_query(
-        """
-        SELECT id FROM crm_procurements
-        WHERE (auction_name ILIKE '%ремонт%' OR auction_name ILIKE '%благоустрой%' OR auction_name ILIKE '%строитель%')
-          AND id NOT IN (SELECT id FROM crm_procurements WHERE auction_name ILIKE '%светильник%')
-          AND initial_price > 2000000
-        LIMIT 10
-        """
-    ) or []
-    part_ids = [r["id"] if isinstance(r, dict) else r[0] for r in part_rows]
+    # 3. Failure cases (2)
+    from src.services.commercial_routing_v3.autonomous_learning_loop import HunterAuditorOrchestrator
+    orchestrator = HunterAuditorOrchestrator(crm_db)
+    doc_conn = orchestrator._get_doc_conn()
+    fail_ids = []
+    try:
+        with doc_conn.cursor() as cur:
+            cur.execute(
+                """
+                SELECT DISTINCT f.procurement_id FROM document_files f
+                LEFT JOIN document_processing_results r ON r.file_id = f.id
+                WHERE f.download_status IN ('FAILED', 'ERROR', 'DOWNLOAD_FAILED') 
+                   OR r.status IN ('FAILED', 'ERROR', 'PARSE_FAILED')
+                LIMIT 2
+                """
+            )
+            rows = cur.fetchall()
+            fail_ids = [r[0] for r in rows]
+    finally:
+        doc_conn.close()
 
     # Fill up if short
     all_pids = crm_db.execute_query("SELECT id FROM crm_procurements LIMIT 30")
     backup_ids = [r["id"] if isinstance(r, dict) else r[0] for r in all_pids]
     
-    while len(pos_ids) < 10 and backup_ids:
+    while len(pos_ids) < 5 and backup_ids:
         bid = backup_ids.pop()
-        if bid not in pos_ids and bid not in neg_ids and bid not in part_ids:
+        if bid not in pos_ids and bid not in neg_ids and bid not in fail_ids:
             pos_ids.append(bid)
-    while len(neg_ids) < 10 and backup_ids:
+    while len(neg_ids) < 3 and backup_ids:
         bid = backup_ids.pop()
-        if bid not in pos_ids and bid not in neg_ids and bid not in part_ids:
+        if bid not in pos_ids and bid not in neg_ids and bid not in fail_ids:
             neg_ids.append(bid)
-    while len(part_ids) < 10 and backup_ids:
+    while len(fail_ids) < 2 and backup_ids:
         bid = backup_ids.pop()
-        if bid not in pos_ids and bid not in neg_ids and bid not in part_ids:
-            part_ids.append(bid)
+        if bid not in pos_ids and bid not in neg_ids and bid not in fail_ids:
+            fail_ids.append(bid)
 
     logger.info(f"Selected positive controls: {pos_ids}")
     logger.info(f"Selected negative controls: {neg_ids}")
-    logger.info(f"Selected partial controls: {part_ids}")
+    logger.info(f"Selected failure controls: {fail_ids}")
 
     return {
         "positive": pos_ids,
         "negative": neg_ids,
-        "partial": part_ids,
+        "failure": fail_ids,
     }
 
 
@@ -113,8 +122,8 @@ def main():
 
     # 1. Select controls
     controls = select_controls(crm_db)
-    all_ids = controls["positive"] + controls["negative"] + controls["partial"]
-    assert len(all_ids) == 30, f"Must have exactly 30 procurements, got {len(all_ids)}"
+    all_ids = controls["positive"] + controls["negative"] + controls["failure"]
+    assert len(all_ids) == 10, f"Must have exactly 10 procurements, got {len(all_ids)}"
 
     # 2. Set LEARNING_MODE env and run Queue Loader
     logger.info("Setting LEARNING_MODE=EXHAUSTIVE_EVIDENCE_BASELINE and running S13V2QueueProducer...")

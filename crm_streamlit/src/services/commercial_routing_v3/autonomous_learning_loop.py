@@ -55,21 +55,10 @@ class HunterAuditorOrchestrator:
         }
 
     def _get_doc_conn(self):
-        pwd_env = os.getenv("S13_DOCUMENT_DB_PASSWORD")
-        passwords = [pwd_env] if pwd_env else ["docS13v2!", "S13_Sec_9901_Docs!", ""]
-        
-        last_exc = None
-        for pwd in passwords:
-            dsn = dict(self._doc_dsn)
-            dsn["password"] = pwd
-            try:
-                return psycopg2.connect(**dsn)
-            except psycopg2.OperationalError as exc:
-                last_exc = exc
-                continue
-        if last_exc:
-            raise last_exc
-        raise RuntimeError("Failed to connect to document database")
+        pwd_env = os.getenv("S13_DOCUMENT_DB_PASSWORD", "")
+        dsn = dict(self._doc_dsn)
+        dsn["password"] = pwd_env
+        return psycopg2.connect(**dsn)
 
     def fetch_procurement_facts(self, procurement_id: int) -> Dict[str, Any]:
         """Fetch source facts from crm_procurements."""
@@ -303,12 +292,26 @@ JSON Schema to follow:
     def build_auditor_prompt(
         self,
         facts: Dict[str, Any],
+        registry: List[Dict[str, Any]],
         docs: List[Dict[str, Any]],
+        evidence: List[Dict[str, Any]],
         hunter_decision: Dict[str, Any],
     ) -> str:
         """Construct the prompt for Auditor role."""
         hunter_str = json.dumps(hunter_decision, ensure_ascii=False, indent=2, default=str)
         docs_str = json.dumps(docs, ensure_ascii=False, indent=2, default=str)
+        registry_str = json.dumps(registry, ensure_ascii=False, indent=2, default=str)
+        
+        # Format extracted evidence chunks
+        evidence_lines = []
+        for ev in evidence:
+            loc = ev.get("locator") or {}
+            evidence_lines.append(
+                f"- Doc: {ev.get('document_name')}, Page/Sheet: {loc.get('page') or loc.get('sheet') or 'N/A'}, "
+                f"Row: {loc.get('row') or 'N/A'}, Pos: {loc.get('position_number') or 'N/A'}, "
+                f"Text: {ev.get('text')}"
+            )
+        evidence_str = "\n".join(evidence_lines)
         
         return f"""You are the AUDITOR model in a procurement learning loop.
 Your job is NOT to repeat the Hunter model. Your job is to try to prove the Hunter decision WRONG.
@@ -328,12 +331,22 @@ OKPD: {facts.get("okpd_code")} - {facts.get("okpd_name")}
 Lifecycle: {facts.get("normalized_lifecycle")}
 
 ==================================================
-2. DOCUMENT RESEARCH SUMMARY:
+2. ACTIVE CATEGORY REGISTRY:
+==================================================
+{registry_str}
+
+==================================================
+3. DOCUMENT RESEARCH SUMMARY:
 ==================================================
 {docs_str}
 
 ==================================================
-3. HUNTER MODEL DECISION:
+4. EXTRACTED SOURCE EVIDENCE (CHUNKS/ROWS):
+==================================================
+{evidence_str}
+
+==================================================
+5. HUNTER MODEL DECISION:
 ==================================================
 {hunter_str}
 
@@ -454,6 +467,12 @@ JSON Schema:
         role: str,
     ) -> None:
         """Persist product findings into crm_v3_product_findings."""
+        # Load active category codes for validation
+        cats = self.crm_db.execute_query(
+            "SELECT category_code FROM crm_product_categories WHERE is_active = TRUE"
+        ) or []
+        active_codes = {c["category_code"] for c in cats}
+
         for p in products:
             loc = p.get("locator") or {}
             
@@ -482,6 +501,26 @@ JSON Schema:
             }
             source_loc_json = json.dumps(structured_loc, default=str)
             
+            # Enforce Category Registry validation
+            raw_cat = p.get("category_code")
+            validation_status = "VALID"
+            resolved_cat = raw_cat
+            
+            if raw_cat not in active_codes:
+                validation_status = "INVALID_NOT_IN_REGISTRY"
+                resolved_cat = None
+                
+                # Attempt deterministic resolution from category name/keywords (no OKPD string coincidence)
+                prod_type_lower = str(p.get("product_type") or "").lower()
+                prod_name_lower = str(p.get("product_name_normalized") or "").lower()
+                
+                # Simple keyword lookup logic from active registry
+                for code in active_codes:
+                    if code in prod_type_lower or code in prod_name_lower:
+                        resolved_cat = code
+                        validation_status = "RESOLVED"
+                        break
+            
             self.crm_db.execute_update(
                 """
                 INSERT INTO crm_v3_product_findings (
@@ -490,13 +529,13 @@ JSON Schema:
                     quantity, unit, raw_description, evidence_text,
                     document_name, page, sheet, row_num, position_number,
                     source_locator_json, extractor_role, extraction_confidence,
-                    model_run_id
-                ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                    model_run_id, raw_model_category_code, category_validation_status
+                ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
                 """,
                 (
                     procurement_id,
                     procurement_number,
-                    p.get("category_code"),
+                    resolved_cat,
                     p.get("product_type"),
                     p.get("product_name_normalized"),
                     p.get("brand"),
@@ -514,6 +553,8 @@ JSON Schema:
                     role,
                     1.0 if role == "HUNTER" else 0.8,
                     model_run_id,
+                    raw_cat,
+                    validation_status,
                 ),
             )
 
@@ -556,7 +597,7 @@ JSON Schema:
     def run_learning_loop(self, procurement_id: int, priors_text: str = "") -> Dict[str, Any]:
         """Runs the entire Hunter-Auditor loop sequentially for one procurement."""
         facts = self.fetch_procurement_facts(procurement_id)
-        procurement_number = facts.get("registry_number")
+        procurement_number = facts.get("contract_number")
         
         # Load registry
         registry = self.load_active_categories()
@@ -582,7 +623,7 @@ JSON Schema:
             procurement_id=procurement_id,
             run_kind="SHADOW",
             prompt=hunter_prompt,
-            raw_text=hunter_raw.get("raw_text") if isinstance(hunter_raw, dict) else str(hunter_raw),
+            raw_text=hunter_meta.get("raw_text") or "",
             parsed_json=hunter_raw,
             prompt_version=HUNTER_PROMPT_VERSION,
             ollama_meta=hunter_meta,
@@ -595,7 +636,7 @@ JSON Schema:
         self.save_product_findings(procurement_id, procurement_number, detected_products, hunter_run_id, "HUNTER")
 
         # 2. Build & Run Auditor
-        auditor_prompt = self.build_auditor_prompt(facts, docs, hunter_raw)
+        auditor_prompt = self.build_auditor_prompt(facts, registry, docs, evidence, hunter_raw)
         
         logger.info(f"Acquiring GPU lock for Auditor on procurement {procurement_id}...")
         with acquire_gpu_inference(WORKLOAD_DOCUMENT) as arb:
@@ -610,7 +651,7 @@ JSON Schema:
             procurement_id=procurement_id,
             run_kind="SHADOW",
             prompt=auditor_prompt,
-            raw_text=auditor_raw.get("raw_text") if isinstance(auditor_raw, dict) else str(auditor_raw),
+            raw_text=auditor_meta.get("raw_text") or "",
             parsed_json=auditor_raw,
             prompt_version=AUDITOR_PROMPT_VERSION,
             ollama_meta=auditor_meta,
@@ -626,6 +667,12 @@ JSON Schema:
         consensus_state = self.evaluate_consensus(hunter_raw, auditor_raw)
         logger.info(f"Consensus state: {consensus_state}")
 
+        completeness = "COMPLETE"
+        for d in docs:
+            if d.get("research_state") in ("DOWNLOAD_FAILED", "PARSE_FAILED", "UNREADABLE", "PARTIALLY_SEARCHED", "UNSUPPORTED_FORMAT"):
+                completeness = "PARTIAL"
+                break
+
         source_snapshot_hash = compute_md5(facts)
         
         # Save trace
@@ -634,8 +681,8 @@ JSON Schema:
             INSERT INTO crm_v3_autonomous_analysis_traces (
                 procurement_id, source_snapshot_hash, document_set_hash,
                 extracted_evidence_hash, hunter_run_id, auditor_run_id,
-                consensus_state
-            ) VALUES (%s, %s, %s, %s, %s, %s, %s)
+                consensus_state, research_completeness
+            ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
             """,
             (
                 procurement_id,
@@ -645,6 +692,7 @@ JSON Schema:
                 hunter_run_id,
                 auditor_run_id,
                 consensus_state,
+                completeness,
             ),
         )
 

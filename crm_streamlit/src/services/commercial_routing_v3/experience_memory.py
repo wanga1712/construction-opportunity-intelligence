@@ -120,18 +120,33 @@ class ExperienceMemory:
             """
             auditor_confirmed = self.crm_db.execute_scalar(q_auditor, params + [f'[{{"category_code": "{cat_code}", "verdict": "AGREE"}}]']) or 0
 
-            # 6. Not found after complete research (traces with 0 product findings for this category)
+            # 6. Not found after complete research (traces with 0 product findings for this category AND research is COMPLETE)
             q_not_found = f"""
                 SELECT COUNT(DISTINCT t.procurement_id)
                 FROM crm_v3_autonomous_analysis_traces t
                 JOIN crm_procurements p ON p.id = t.procurement_id
                 WHERE {where_sql}
+                  AND COALESCE(t.research_completeness, 'COMPLETE') = 'COMPLETE'
                   AND NOT EXISTS (
                       SELECT 1 FROM crm_v3_product_findings f 
                       WHERE f.procurement_id = t.procurement_id AND f.category_code = %s
                   )
             """
             not_found_complete = self.crm_db.execute_scalar(q_not_found, params + [cat_code]) or 0
+
+            # 7. Unknown due to incomplete research (traces with 0 product findings for this category AND research is PARTIAL)
+            q_partial = f"""
+                SELECT COUNT(DISTINCT t.procurement_id)
+                FROM crm_v3_autonomous_analysis_traces t
+                JOIN crm_procurements p ON p.id = t.procurement_id
+                WHERE {where_sql}
+                  AND COALESCE(t.research_completeness, 'COMPLETE') = 'PARTIAL'
+                  AND NOT EXISTS (
+                      SELECT 1 FROM crm_v3_product_findings f 
+                      WHERE f.procurement_id = t.procurement_id AND f.category_code = %s
+                  )
+            """
+            unknown_partial = self.crm_db.execute_scalar(q_partial, params + [cat_code]) or 0
 
             stats_list.append({
                 "category_code": cat_code,
@@ -142,7 +157,7 @@ class ExperienceMemory:
                 "human_confirmed": human_confirmed,
                 "human_rejected": human_rejected,
                 "not_found_complete": not_found_complete,
-                "unknown_partial": max(0, obs_count - machine_count),
+                "unknown_partial": unknown_partial,
             })
             
         return stats_list
