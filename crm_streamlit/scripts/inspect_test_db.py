@@ -15,8 +15,8 @@ def main():
     load_dotenv()
     _, _, crm_db, _ = connect_databases()
     if crm_db:
-        print("TRACES:")
-        traces = crm_db.execute_query("SELECT id, attempt_count, consensus_state, research_completeness, document_set_hash, extracted_evidence_hash FROM crm_v3_autonomous_analysis_traces WHERE procurement_id = 900000700")
+        print("TRACES FOR 900000800:")
+        traces = crm_db.execute_query("SELECT id, attempt_count, consensus_state, research_completeness, document_set_hash, extracted_evidence_hash FROM crm_v3_autonomous_analysis_traces WHERE procurement_id = 900000800")
         for tr in traces:
             print(tr)
 
@@ -30,14 +30,10 @@ def main():
     try:
         conn = psycopg2.connect(host=host, port=port, user=user, password=pwd, database=dbname)
         with conn.cursor() as cur:
-            print("QUEUE:")
-            cur.execute("SELECT id, procurement_id, pipeline_generation, status FROM document_processing_queue WHERE procurement_id = 900000700")
+            print("QUEUE FOR 900000800:")
+            cur.execute("SELECT id, procurement_id, pipeline_generation, status FROM document_processing_queue WHERE procurement_id = 900000800")
             for q in cur.fetchall():
                 print(q)
-            print("FILES:")
-            cur.execute("SELECT id, file_name, download_status, url, url_hash FROM document_files WHERE procurement_id = 900000700")
-            for f in cur.fetchall():
-                print(f)
         conn.close()
     except Exception as e:
         print("Error connecting/querying document DB:", e)
