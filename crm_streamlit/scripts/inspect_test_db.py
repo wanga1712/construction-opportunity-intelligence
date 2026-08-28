@@ -1,30 +1,25 @@
 import sys
+from config.settings import Settings
 from src.services.db_bootstrap import connect_databases
 
 def main():
-    radar_db, tender_db, crm_db, warning = connect_databases()
-    print("WARNING:", warning)
-    if crm_db:
-        print("CRM_DB object:", crm_db)
+    config = Settings()
+    print("CRM DB Config:")
+    print("Host:", getattr(config.crm_database, "host", None))
+    print("Port:", getattr(config.crm_database, "port", None))
+    print("Database:", getattr(config.crm_database, "database", None))
+    print("User:", getattr(config.crm_database, "user", None))
+    
+    # Check if tables exist in doc_conn as well
+    _, t, c, _ = connect_databases()
+    if t:
+        print("Tender DB tables:")
         try:
-            print("SEARCH_PATH:", crm_db.execute_query("SHOW search_path"))
+            tables = t.execute_query("SELECT table_name FROM information_schema.tables WHERE table_schema = 'public'")
+            for tbl in tables[:15]:
+                print(tbl)
         except Exception as e:
-            print("Error SHOW search_path:", e)
-        try:
-            tables = crm_db.execute_query("SELECT table_name FROM information_schema.tables WHERE table_schema = 'public'")
-            print("Public tables:")
-            for t in tables:
-                print(t)
-        except Exception as e:
-            print("Error listing tables:", e)
-            
-        try:
-            schemas = crm_db.execute_query("SELECT schema_name FROM information_schema.schemata")
-            print("Schemas:")
-            for s in schemas:
-                print(s)
-        except Exception as e:
-            print("Error listing schemas:", e)
+            print("Error Tender tables:", e)
 
 if __name__ == '__main__':
     main()
