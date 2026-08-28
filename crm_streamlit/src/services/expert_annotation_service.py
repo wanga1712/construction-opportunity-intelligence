@@ -480,16 +480,36 @@ def load_subcategories(category_code: str, crm_db: Any) -> list[dict]:
         return []
 
 
-def load_subcategories_for_categories(
-    category_codes: list[str], crm_db: Any
-) -> dict[str, list[dict]]:
-    """Batch subcategory lookup for selected category codes (no per-widget N+1 invent)."""
-    out: dict[str, list[dict]] = {}
-    for code in category_codes or []:
-        text = str(code or "").strip()
-        if text:
-            out[text] = load_subcategories(text, crm_db)
-    return out
+    # Batch load subcategories for all requested category codes in one DB call
+    if not category_codes:
+        return {}
+    try:
+        # Use PostgreSQL ANY array to fetch rows for all codes at once
+        rows = crm_db.execute_query(
+            """
+            SELECT category_code, subcategory_code, subcategory_name
+            FROM crm_product_subcategories
+            WHERE category_code = ANY(%s)
+            ORDER BY category_code, subcategory_name
+            """,
+            (category_codes,)
+        )
+        out: dict[str, list[dict]] = {}
+        for r in rows or []:
+            code = r["category_code"]
+            sub = {"code": r["subcategory_code"], "name": r["subcategory_name"]}
+            out.setdefault(code, []).append(sub)
+        # Ensure empty lists for any codes that had no subcategories
+        for code in category_codes:
+            out.setdefault(code, [])
+        return out
+    except Exception as exc:
+        logger.warning("load_subcategories_for_categories batch failed: %s", exc)
+        # Fallback to original per-code loading to preserve behavior
+        out: dict[str, list[dict]] = {}
+        for code in category_codes:
+            out[code] = load_subcategories(str(code), crm_db)
+        return out
 
 
 def collect_expert_object_types(crm_db: Any) -> list[str]:
