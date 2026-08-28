@@ -359,13 +359,16 @@ def _render_primary_scope_decision(
             type="primary",
         )
         if save or save_next:
+            reason_val = st.session_state.get(reason_key) or "NOT_OUR_PRODUCT_OR_WORK"
+            reason_label = dict(reasons).get(reason_val, reason_val)
+            full_comment = f"[{reason_label}] {comment}".strip() if comment else reason_label
             payload = build_out_of_category_payload(
                 assessment=assessment,
                 created_by=created_by,
-                reason=st.session_state.get(reason_key) or "NOT_OUR_PRODUCT_OR_WORK",
-                comment=comment,
-                is_uncertain=(decision == "UNCERTAIN"),
+                comment=full_comment,
             )
+            if decision == "UNCERTAIN":
+                payload["expert_category_scope"] = UNCERTAIN
             _persist_deep(payload, save_and_next=save_next)
         return
 
