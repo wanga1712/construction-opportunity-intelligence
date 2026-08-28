@@ -503,6 +503,8 @@ def main():
             doc_conn.close()
 
         # Write traces for the latest 100 procurements (900000051 to 900000150)
+        registry = orchestrator.load_active_categories()
+        reg_hash = orchestrator.compute_registry_hash(registry)
         for offset in range(51, 151):
             pid = 900000000 + offset
             facts = orchestrator.fetch_procurement_facts(pid)
