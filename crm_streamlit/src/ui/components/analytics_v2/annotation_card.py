@@ -15,6 +15,7 @@ from src.services.expert_annotation_service import (
     collect_expert_object_types,
     collect_expert_work_stages,
     collect_expert_object_subtypes,
+    save_taxonomy_proposal,
     save_expert_annotation,
     write_audit_row,
 )
@@ -40,6 +41,15 @@ from src.ui.components.analytics_v2.annotation_queue import GO_NEXT_FROM_KEY, GO
 from src.ui.components.analytics_v2.learning_results import render_learning_results
 
 _CREATED_BY_FALLBACK = "SuperUser"
+SCOPE_DECISIONS = ("YES", "NO", "UNCERTAIN")
+REJECTION_REASONS = {
+    "NOT_OUR_PRODUCT_OR_WORK": "Не наша продукция / работы",
+    "NOT_OUR_OBJECT": "Не наш объект",
+    "NOT_OUR_STAGE": "Не наша стадия",
+    "OTHER": "Другое",
+}
+MEDAL_OPTIONS = (None, "GOLD", "SILVER", "BRONZE", "WOOD")
+MEDAL_LABELS = {None: "Не выбрано", "GOLD": "🥇 GOLD", "SILVER": "🥈 SILVER", "BRONZE": "🥉 BRONZE", "WOOD": "🪵 WOOD"}
 
 
 def _training_evidence_quality(assessment: dict | None) -> str:
@@ -133,6 +143,8 @@ def _init_fast_draft(
         )
         st.session_state[_sk(procurement_id, "obj_type")] = p.get("expert_object_type") or ""
         st.session_state[_sk(procurement_id, "obj_subtype")] = p.get("expert_object_subtype") or ""
+        st.session_state[_sk(procurement_id, "obj_sector")] = p.get("expert_object_sector") or ""
+        st.session_state[_sk(procurement_id, "proc_mode")] = p.get("expert_procurement_mode") or ""
         st.session_state[_sk(procurement_id, "work_stage")] = p.get("expert_work_stage") or ""
         st.session_state[_sk(procurement_id, "absence_confirmed")] = bool(
             p.get("expert_category_absence_confirmed")
@@ -140,6 +152,8 @@ def _init_fast_draft(
         st.session_state[_sk(procurement_id, "review_scope")] = p.get("annotation_review_scope") or "CATEGORY_ONLY"
         st.session_state[_sk(procurement_id, "completeness")] = p.get("annotation_completeness") or "PARTIAL"
         st.session_state[_sk(procurement_id, "evidence_state")] = p.get("evidence_state") or "SUFFICIENT"
+        st.session_state[_sk(procurement_id, "proposals")] = list(p.get("taxonomy_proposals") or [])
+        st.session_state[_sk(procurement_id, "medal")] = p.get("expert_medal")
         st.session_state[_sk(procurement_id, "document_priorities")] = {
             item.get("document_key"): item.get("priority")
             for item in (p.get("document_review_priorities") or [])
@@ -165,11 +179,15 @@ def _init_fast_draft(
         st.session_state[_sk(procurement_id, "rejected")] = []
         st.session_state[_sk(procurement_id, "obj_type")] = ""
         st.session_state[_sk(procurement_id, "obj_subtype")] = ""
+        st.session_state[_sk(procurement_id, "obj_sector")] = ""
+        st.session_state[_sk(procurement_id, "proc_mode")] = ""
         st.session_state[_sk(procurement_id, "work_stage")] = ""
         st.session_state[_sk(procurement_id, "absence_confirmed")] = False
         st.session_state[_sk(procurement_id, "review_scope")] = "CATEGORY_ONLY"
         st.session_state[_sk(procurement_id, "completeness")] = "PARTIAL"
         st.session_state[_sk(procurement_id, "evidence_state")] = "SUFFICIENT"
+        st.session_state[_sk(procurement_id, "proposals")] = []
+        st.session_state[_sk(procurement_id, "medal")] = None
         st.session_state[_sk(procurement_id, "document_priorities")] = {}
     st.session_state[sk_init] = True
 
@@ -246,6 +264,164 @@ def _build_out_of_profile_payload(assessment: dict | None, created_by: str) -> d
     }
 
 
+def _render_primary_scope_decision(
+    procurement_id: int,
+    assessment: dict | None,
+    created_by: str,
+    crm_db: Any,
+    categories: list[dict],
+    obj_types: list[str],
+    subtypes: list[str],
+    stages: list[str],
+    *,
+    existing_annotation: dict | None = None,
+) -> None:
+    """Inline triage before deep annotation."""
+    from src.services.annotation_category_gate import (
+        IN_CATEGORY,
+        OUT_OF_CATEGORY,
+        UNCERTAIN,
+        build_in_category_payload,
+        build_out_of_category_payload,
+    )
+    from src.services.expert_annotation_service import load_subcategories_by_category
+    from src.ui.components.analytics_v2.staged_annotation_ui import (
+        init_staged_draft_from_payload,
+        read_staged_draft,
+        render_commercial_and_medal_controls,
+        render_object_stage_controls,
+        render_procurement_mode_controls,
+        render_product_category_controls,
+        render_source_contour_banner,
+        validate_staged_minimum,
+    )
+
+    st.markdown("#### Первое решение")
+    scope_key = _sk(procurement_id, "first_stage_scope_decision")
+    default_scope = "YES"
+    if existing_annotation:
+        init_staged_draft_from_payload(procurement_id, existing_annotation.get("annotation_payload"))
+        scope = existing_annotation.get("expert_category_scope")
+        if scope == OUT_OF_CATEGORY:
+            default_scope = "NO"
+        elif scope == UNCERTAIN:
+            default_scope = "UNCERTAIN"
+        elif scope == IN_CATEGORY:
+            default_scope = "YES"
+    if scope_key not in st.session_state:
+        st.session_state[scope_key] = default_scope
+
+    decision = st.radio(
+        "Относится ли закупка к одной из наших товарных категорий?",
+        options=["YES", "NO", "UNCERTAIN"],
+        key=scope_key,
+        format_func=lambda v: {
+            "YES": "✅ Да — входит в товарные категории",
+            "NO": "⛔ Нет — вне товарных категорий",
+            "UNCERTAIN": "❓ Не уверен / требует уточнения",
+        }.get(v, v),
+        horizontal=True,
+    )
+
+    def _persist_deep(payload: dict[str, Any], *, save_and_next: bool = False) -> None:
+        _persist(
+            procurement_id=procurement_id,
+            payload=payload,
+            assessment=assessment,
+            created_by=created_by,
+            crm_db=crm_db,
+            save_and_next=save_and_next,
+        )
+
+    if decision in ("NO", "UNCERTAIN"):
+        scope_val = OUT_OF_CATEGORY if decision == "NO" else UNCERTAIN
+        reasons = [
+            ("NOT_OUR_PRODUCT_OR_WORK", "Не наша продукция / работы"),
+            ("NOT_OUR_OBJECT", "Не наш объект"),
+            ("NOT_OUR_STAGE", "Не наша стадия"),
+            ("OTHER", "Другое"),
+        ]
+        reason_key = _sk(procurement_id, "out_of_scope_reason")
+        if reason_key not in st.session_state:
+            st.session_state[reason_key] = reasons[0][0]
+        st.radio(
+            "Причина:",
+            options=[r[0] for r in reasons],
+            format_func=lambda r: dict(reasons).get(r, r),
+            key=reason_key,
+        )
+        comment = st.text_input("Комментарий (необязательно)", key=_sk(procurement_id, "out_of_scope_comment"))
+        left, right = st.columns(2)
+        save = left.button("💾 Сохранить", key=_sk(procurement_id, "scope_no_save"))
+        save_next = right.button(
+            "Сохранить и следующая →",
+            key=_sk(procurement_id, "scope_no_save_next"),
+            type="primary",
+        )
+        if save or save_next:
+            payload = build_out_of_category_payload(
+                assessment=assessment,
+                created_by=created_by,
+                reason=st.session_state.get(reason_key) or "NOT_OUR_PRODUCT_OR_WORK",
+                comment=comment,
+                is_uncertain=(decision == "UNCERTAIN"),
+            )
+            _persist_deep(payload, save_and_next=save_next)
+        return
+
+    # decision == "YES" (IN_CATEGORY): full inline staged workflow
+    header = load_annotation_card_view(procurement_id, None, crm_db).get("header") or {}
+    render_source_contour_banner(header.get("source_table"))
+    subcats = load_subcategories_by_category(crm_db)
+    name_by_code = {c["code"]: c.get("name") or c["code"] for c in categories}
+    selected_codes = render_product_category_controls(
+        procurement_id,
+        categories=categories,
+        subcategories_by_category=subcats,
+        assessment=assessment,
+    )
+    render_object_stage_controls(
+        procurement_id,
+        assessment=assessment,
+        human_type_suggestions=obj_types,
+    )
+    render_procurement_mode_controls(procurement_id, assessment=assessment)
+    render_commercial_and_medal_controls(procurement_id, assessment=assessment)
+
+    left, right = st.columns(2)
+    save = left.button("💾 Сохранить (полная разметка)", key=_sk(procurement_id, "scope_yes_save"))
+    save_next = right.button(
+        "Сохранить и следующая →",
+        key=_sk(procurement_id, "scope_yes_save_next"),
+        type="primary",
+    )
+    if save or save_next:
+        draft = read_staged_draft(procurement_id)
+        codes = draft.get("category_codes") or selected_codes
+        if not codes:
+            st.error("Выберите хотя бы одну товарную категорию.")
+            return
+        base = build_in_category_payload(
+            assessment=assessment,
+            created_by=created_by,
+            category_codes=codes,
+            category_names=name_by_code,
+        )
+        # Merge staged fields into the payload
+        base["expert_object_sector"] = draft.get("object_sector")
+        base["expert_object_type"] = draft.get("object_type")
+        base["expert_object_subtype"] = draft.get("object_subtype")
+        base["expert_procurement_mode"] = draft.get("procurement_mode")
+        base["expert_commercial_entry"] = draft.get("commercial_entry")
+        base["expert_medal"] = draft.get("expert_medal")
+        base["taxonomy_proposals"] = draft.get("taxonomy_proposals") or []
+        base["subcategory_by_category"] = draft.get("subcategory_by_category") or {}
+        missing = validate_staged_minimum(draft, require_in_category_extras=True)
+        if missing:
+            st.warning("Не заполнено: " + ", ".join(missing))
+        _persist_deep(base, save_and_next=save_next)
+
+
 def render_annotation_card(
     *,
     crm_db: Any,
@@ -319,6 +495,14 @@ def render_annotation_section(
     categories = load_categories_for_selector(crm_db)
     cat_codes = [c["code"] for c in categories]
     cat_labels = [f"{c['code']} ({c['name']})" for c in categories]
+    if section == "Первое решение":
+        _render_primary_scope_decision(
+            procurement_id, assessment, created_by, crm_db, categories,
+            collect_expert_object_types(crm_db), collect_expert_object_subtypes(crm_db),
+            collect_expert_work_stages(crm_db),
+            existing_annotation=existing_annotation,
+        )
+        return
     if section == "Модель / Категории":
         _render_ai_block(assessment)
         _render_business_block(assessment)
@@ -545,9 +729,12 @@ def _render_ranked_expert_categories(
 def _render_review_contract(procurement_id: int, documents: list[dict]) -> None:
     st.markdown("---")
     st.markdown("##### Объём и полнота экспертной проверки")
-    st.selectbox("annotation_review_scope", REVIEW_SCOPES, key=_sk(procurement_id, "review_scope"))
-    st.selectbox("annotation_completeness", COMPLETENESS_STATES, key=_sk(procurement_id, "completeness"))
-    st.selectbox("evidence_state", EVIDENCE_STATES, key=_sk(procurement_id, "evidence_state"))
+    review_labels = {"CATEGORY_ONLY": "Проверена категория", "FULL": "Полная проверка", "OUT_OF_PROFILE": "Вне нашего профиля"}
+    completeness_labels = {"PARTIAL": "Частичная проверка", "COMPLETE": "Проверка завершена"}
+    evidence_labels = {"SUFFICIENT": "Данных достаточно", "INSUFFICIENT": "Нужно больше данных", "NEEDS_DOCUMENT_RESEARCH": "Нужно проверить документы"}
+    st.selectbox("Объём проверки", REVIEW_SCOPES, key=_sk(procurement_id, "review_scope"), format_func=lambda value: review_labels.get(value, value))
+    st.selectbox("Полнота проверки", COMPLETENESS_STATES, key=_sk(procurement_id, "completeness"), format_func=lambda value: completeness_labels.get(value, value))
+    st.selectbox("Достаточность данных", EVIDENCE_STATES, key=_sk(procurement_id, "evidence_state"), format_func=lambda value: evidence_labels.get(value, value))
     findings = [
         observation
         for document in documents
@@ -611,14 +798,14 @@ def _build_workbench_payload(procurement_id: int, assessment: dict | None, creat
         expert_obj_subtype=st.session_state.get(_sk(procurement_id, "obj_subtype"), "").strip(),
         expert_work_stage=st.session_state.get(_sk(procurement_id, "work_stage"), "").strip(),
         expert_commercial_verdict="ACTIONABLE",
-        expert_medal=None,
+        expert_medal=st.session_state.get(_sk(procurement_id, "medal")),
         medal_reason=None,
         medal_comment="",
         error_reasons=["MISSING_CATEGORY"] if has_adds else (["EXTRA_CATEGORY"] if has_rejects else []),
         expert_comment="",
         opps=opps,
         rejected=rejected,
-        proposals=[],
+        proposals=list(st.session_state.get(_sk(procurement_id, "proposals"), [])),
         created_by=created_by,
     )
     payload["training_evidence_quality"] = _training_evidence_quality(assessment)
@@ -678,6 +865,8 @@ def _persist(
             annotation_payload=payload,
             crm_db=crm_db,
         )
+        for proposal in payload.get("taxonomy_proposals") or []:
+            save_taxonomy_proposal(procurement_id, new_id, proposal, created_by, crm_db)
         st.session_state.pop(_sk(procurement_id, "fast_init"), None)
         st.success(f"✅ Разметка сохранена (id={new_id})")
         if save_and_next:

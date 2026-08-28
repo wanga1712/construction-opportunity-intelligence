@@ -106,40 +106,44 @@ def render_compact_card(
     window   = dl["window_label"]
     dl_score = dl["deadline_score"]
 
-    # ── Effective values (single source of truth) ──────────────────────────
-    eff_route     = (effective.route_profile if effective else None) or "—"
-    eff_obj       = (effective.object_type   if effective else None) or "—"
-    eff_proc      = (effective.procurement_type if effective else None) or "—"
-    eff_relevance = (effective.business_relevance if effective else "UNKNOWN")
-    eff_medal     = (effective.best_candidate_level if effective else None)
-    eff_score     = (effective.best_candidate_score if effective else None)
-    eff_opps      = (effective.category_opportunities if effective else [])
-    eff_confidence= (effective.confidence if effective else None)
-    eff_reasons   = (effective.reasons if effective else "—") or "—"
-    eff_research  = (effective.overall_research_action if effective else None) or "METADATA_ONLY"
+    # ── Human annotation state (primary truth) ───────────────────────────
+    from src.services.expert_annotation_service import load_expert_annotation
+    _expert = load_expert_annotation(crm_id, crm_db)
+    _expert_payload = (_expert.get("annotation_payload") or _expert.get("payload") or {}) if _expert else {}
+    _expert_scope = _expert_payload.get("expert_category_scope") if _expert_payload else None
+    _expert_medal_val = _expert_payload.get("expert_medal") if _expert_payload else None
+    _expert_cats = [
+        o.get("category_code") for o in (_expert_payload.get("opportunities") or [])
+        if isinstance(o, dict) and o.get("category_code")
+    ] if _expert_payload else []
 
     # ── Badge in topbar ────────────────────────────────────────────────────
-    if ai_status == "UNASSESSED":
-        badge_emoji, badge_label = "🔘 ", "AI НЕ ОЦЕНЕН"
-        badge_color, badge_bg    = "#64748b", "#f1f5f9"
-    elif ai_status == "INCOMPLETE":
-        badge_emoji, badge_label = "⚠️ ", "AI НЕПОЛНЫЙ"
+    if _expert_scope == "OUT_OF_CATEGORY":
+        badge_emoji, badge_label = "⛔ ", "ВНЕ КАТЕГОРИЙ"
+        badge_color, badge_bg    = "#dc2626", "#fee2e2"
+    elif _expert_scope == "UNCERTAIN":
+        badge_emoji, badge_label = "❓ ", "НЕ УВЕРЕН"
         badge_color, badge_bg    = "#d97706", "#fef3c7"
-    elif ai_status == "FAILED":
-        badge_emoji, badge_label = "❌ ", "AI ОШИБКА"
-        badge_color, badge_bg    = "#dc2626", "#fee2e2"
-    elif eff_relevance == "OUT_OF_PROFILE":
-        badge_emoji, badge_label = "⛔ ", "НЕ НАШ ПРОФИЛЬ"
-        badge_color, badge_bg    = "#dc2626", "#fee2e2"
-    elif eff_medal:
-        badge_emoji  = _MEDAL_EMOJI.get(eff_medal, "")
-        badge_label  = eff_medal
-        badge_color  = _MEDAL_COLOR.get(eff_medal, "#8c6b4f")
+    elif _expert_scope == "IN_CATEGORY" and _expert_medal_val:
+        badge_emoji  = _MEDAL_EMOJI.get(_expert_medal_val, "")
+        badge_label  = _expert_medal_val
+        badge_color  = _MEDAL_COLOR.get(_expert_medal_val, "#8c6b4f")
         badge_bg     = badge_color + "22"
+    elif _expert_scope == "IN_CATEGORY":
+        badge_emoji, badge_label = "✅ ", "В КАТЕГОРИИ"
+        badge_color, badge_bg    = "#16a34a", "#dcfce7"
+    elif _expert is not None:
+        # Has annotation but no scope — legacy
+        badge_emoji, badge_label = "📝 ", "РАЗМЕЧЕНО"
+        badge_color, badge_bg    = "#2563eb", "#dbeafe"
     else:
-        # ASSESSED but no category opportunities
-        badge_emoji, badge_label = "—  ", "БЕЗ МЕДАЛИ"
-        badge_color, badge_bg    = "#94a3b8", "#f1f5f9"
+        badge_emoji, badge_label = "🔘 ", "НЕ РАЗМЕЧЕНО"
+        badge_color, badge_bg    = "#64748b", "#f1f5f9"
+
+    # Source law label for topbar
+    from src.services.source_contour import resolve_source_contour
+    _source_contour = resolve_source_contour(card.get("source_table"))
+    _law_label = _source_contour.get("law_label", "")
 
     # ── Render ─────────────────────────────────────────────────────────────
     with st.container(border=True):
@@ -147,8 +151,8 @@ def render_compact_card(
         st.markdown(
             f'<div class="cc-card-topbar">'
             f'<span class="cc-badge" style="background:{badge_bg};color:{badge_color};">'
-            f'{badge_emoji}{badge_label} · {eff_route}</span>'
-            f'<span class="cc-status-chip">{status_icon} {status_label}</span>'
+            f'{badge_emoji}{badge_label}</span>'
+            f'<span class="cc-status-chip">{_law_label} · {status_icon} {status_label}</span>'
             f'</div>',
             unsafe_allow_html=True,
         )
@@ -161,24 +165,23 @@ def render_compact_card(
             unsafe_allow_html=True,
         )
 
-        # Краткая AI-строка
-        ai_parts = [f"AI: <b>{ai_status}</b>"]
+        # Human state summary line
+        human_parts = []
+        if _expert_scope == "IN_CATEGORY" and _expert_cats:
+            human_parts.append(f"В категории: <b>{', '.join(_expert_cats)}</b>")
+        elif _expert_scope == "OUT_OF_CATEGORY":
+            human_parts.append("Вне товарных категорий")
+        elif _expert_scope == "UNCERTAIN":
+            human_parts.append("Не уверен")
+        elif _expert is None:
+            human_parts.append("Не размечено")
+        if _expert_medal_val and _expert_scope == "IN_CATEGORY":
+            human_parts.append(f"Медаль: <b>{_expert_medal_val}</b>")
         if is_assessed:
-            if eff_route != "—":
-                ai_parts.append(f"Route: <b>{eff_route}</b>")
-            if eff_obj != "—":
-                ai_parts.append(f"Object: <b>{eff_obj}</b>")
-            ai_parts.append(f"Scope: <b>{eff_relevance}</b>")
-            if eff_medal:
-                scr = f"{eff_score:.0f}" if eff_score is not None else "—"
-                ai_parts.append(f"Medal: <b>{eff_medal}</b> ({scr})")
-            if eff_confidence is not None:
-                ai_parts.append(f"Conf: <b>{float(eff_confidence):.0%}</b>")
-        else:
-            ai_parts.append("Scope: <b>UNKNOWN</b>")
+            human_parts.append(f"<span style='color:#94a3b8'>ИИ предложил: {ai_status}</span>")
 
         st.markdown(
-            '<div class="cc-ai-meta">' + " · ".join(ai_parts) + "</div>",
+            '<div class="cc-ai-meta">' + " · ".join(human_parts) + "</div>",
             unsafe_allow_html=True,
         )
 
@@ -189,41 +192,33 @@ def render_compact_card(
 
         # TAB: ОБЗОР ──────────────────────────────────────────────────────
         with t_overview:
-            if ai_status in ("UNASSESSED", "INCOMPLETE", "FAILED"):
-                if ai_status == "UNASSESSED":
-                    st.info("🔘 AI-классификация ещё не выполнена.")
-                elif ai_status == "INCOMPLETE":
-                    st.warning("⚠️ AI-оценка неполная / результат не сохранён.")
-                else:
-                    st.error("❌ Ошибка выполнения AI-оценки.")
+            # Human annotation summary
+            st.markdown('<div class="cc-section">Статус разметки</div>', unsafe_allow_html=True)
+            if _expert_scope == "IN_CATEGORY":
+                cats_display = ", ".join(_expert_cats) if _expert_cats else "—"
+                st.markdown(f"✅ **В категории:** `{cats_display}`")
+                if _expert_medal_val:
+                    st.markdown(f"**Медаль:** {_MEDAL_EMOJI.get(_expert_medal_val, '')}`{_expert_medal_val}`")
+                comm_entry = _expert_payload.get("expert_commercial_entry")
+                if comm_entry:
+                    st.caption(f"Коммерческая оценка: `{comm_entry}`")
+            elif _expert_scope == "OUT_OF_CATEGORY":
+                st.markdown("⛔ **Вне товарных категорий**")
+                reason = _expert_payload.get("expert_rejection_reason") or _expert_payload.get("out_of_category_reason")
+                if reason:
+                    st.caption(f"Причина: `{reason}`")
+            elif _expert_scope == "UNCERTAIN":
+                st.markdown("❓ **Не уверен** — требует уточнения")
+            elif _expert is not None:
+                st.markdown("📝 Размечено (legacy)")
             else:
-                # Classification block
-                st.markdown('<div class="cc-section">Классификация объекта</div>', unsafe_allow_html=True)
-                rows = []
-                if eff_route != "—":
-                    rows.append(f"**Route:** `{eff_route}`")
-                if eff_obj != "—":
-                    rows.append(f"**Object type:** `{eff_obj}`")
-                if eff_proc != "—":
-                    rows.append(f"**Procurement type:** `{eff_proc}`")
-                st.markdown("  \n".join(rows) if rows else "—")
+                st.info("🔘 Закупка ещё не размечена экспертом.")
 
-                # Commercial assessment
-                st.markdown('<div class="cc-section">Коммерческая оценка</div>', unsafe_allow_html=True)
-                best_cat   = (effective.best_opportunity_category if effective else None) or "—"
-                score_disp = f"{eff_score:.0f}/100" if eff_score is not None else "—"
-                conf_disp  = f"{float(eff_confidence):.0%}" if eff_confidence is not None else "—"
-                st.markdown(
-                    f"**Scope:** `{eff_relevance}`  \n"
-                    f"**Best category:** `{best_cat}`  \n"
-                    f"**Medal:** `{eff_medal or '—'}`  \n"
-                    f"**Score:** `{score_disp}`  \n"
-                    f"**Confidence:** `{conf_disp}`"
-                )
-
-                if eff_reasons and eff_reasons != "—":
-                    st.markdown('<div class="cc-section">Причины AI</div>', unsafe_allow_html=True)
-                    st.caption(eff_reasons[:400])
+            if is_assessed:
+                st.markdown('<div class="cc-section">ИИ предложил (только чтение)</div>', unsafe_allow_html=True)
+                _eff_obj = (effective.object_type if effective else None) or "—"
+                _eff_proc = (effective.procurement_type if effective else None) or "—"
+                st.caption(f"Object: `{_eff_obj}` · Procurement: `{_eff_proc}` · AI status: `{ai_status}`")
 
             # Участники — always shown
             st.markdown('<div class="cc-section">Участники</div>', unsafe_allow_html=True)
@@ -269,6 +264,11 @@ def render_compact_card(
 
         # TAB: AI / КАТЕГОРИИ ─────────────────────────────────────────────
         with t_ai:
+            eff_route = (effective.route_profile if effective else None) or "—"
+            eff_obj   = (effective.object_type   if effective else None) or "—"
+            eff_proc  = (effective.procurement_type if effective else None) or "—"
+            eff_reasons = (effective.reasons if effective else "—") or "—"
+            eff_opps  = (effective.category_opportunities if effective else [])
             render_ai_tab(
                 crm_db, crm_id,
                 eff_route, eff_obj, eff_proc,
@@ -278,11 +278,15 @@ def render_compact_card(
 
         # TAB: МЕДАЛИ ─────────────────────────────────────────────────────
         with t_medals:
+            eff_medal = (effective.best_candidate_level if effective else None)
+            eff_score = (effective.best_candidate_score if effective else None)
+            eff_reasons_m = (effective.reasons if effective else "—") or "—"
+            eff_opps_m = (effective.category_opportunities if effective else [])
             render_medals_tab(
-                crm_db, crm_id, eff_opps,
+                crm_db, crm_id, eff_opps_m,
                 ai_cand_medal=eff_medal,
                 ai_cand_score=eff_score,
-                ai_reasons=eff_reasons,
+                ai_reasons=eff_reasons_m,
                 ai_status=ai_status,
             )
 
@@ -298,14 +302,16 @@ def render_compact_card(
             col_d2.metric("Matches", match_count)
             col_d3.metric("Evidence", ev_count)
 
+            eff_research = (effective.overall_research_action if effective else None) or "METADATA_ONLY"
             st.markdown(
                 f"**Статус:** `{stage}`  \n"
                 f"**Research action:** `{eff_research}`"
             )
 
-            if eff_opps:
+            eff_opps_d = (effective.category_opportunities if effective else [])
+            if eff_opps_d:
                 st.markdown("#### Действия по категориям:")
-                for opp in eff_opps:
+                for opp in eff_opps_d:
                     cat = opp.get("category_code") or "—"
                     act = opp.get("research_action") or "—"
                     st.markdown(f"- **{cat}** → `{act}`")
@@ -321,17 +327,16 @@ def render_compact_card(
 
         # TAB: РАЗМЕТКА ───────────────────────────────────────────────────
         with t_annotation:
-            from src.services.expert_annotation_service import load_expert_annotation, load_model_assessment_for_annotation
+            from src.services.expert_annotation_service import load_model_assessment_for_annotation
             from src.ui.components.analytics_v2.annotation_card import render_annotation_section
-            
+
             assessment_data = load_model_assessment_for_annotation(crm_id, crm_db)
-            existing_data = load_expert_annotation(crm_id, crm_db)
-            
+
             render_annotation_section(
                 crm_db=crm_db,
                 procurement_id=crm_id,
                 header=card,
                 assessment=assessment_data,
-                existing_annotation=existing_data,
-                section="Экспертная разметка"
+                existing_annotation=_expert,
+                section="Первое решение"
             )
