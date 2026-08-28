@@ -1,7 +1,8 @@
 """Experience memory layer for autonomous procurement analysis.
 
 Tracks historical outcomes of categories based on:
-- Machine found
+- Observations (total enqueued/processed runs)
+- Machine found (extracted products in findings)
 - Auditor confirmed
 - Human confirmed
 - Human rejected
@@ -31,9 +32,6 @@ class ExperienceMemory:
         okpd_prefix: Optional[str] = None,
     ) -> List[Dict[str, Any]]:
         """Return statistics for each category matching the filters."""
-        # For simplicity and flexibility, we query the trace and observation records
-        # and aggregate on the fly.
-        
         # Build filter clause
         where_clauses = []
         params = []
@@ -64,52 +62,54 @@ class ExperienceMemory:
         for cat in categories:
             cat_code = cat["category_code"]
             
-            # 1. Machine found count
-            # Count how many times the category was matched in document observations or product findings
-            q_machine = f"""
-                SELECT COUNT(DISTINCT o.procurement_id)
-                FROM crm_v3_document_observations o
-                JOIN crm_procurements p ON p.id = o.procurement_id
+            # 1. Total Observations
+            q_obs = f"""
+                SELECT COUNT(DISTINCT t.procurement_id)
+                FROM crm_v3_autonomous_analysis_traces t
+                JOIN crm_procurements p ON p.id = t.procurement_id
                 WHERE {where_sql}
-                  AND (o.matched_categories @> %s::jsonb OR EXISTS (
-                      SELECT 1 FROM crm_v3_product_findings f 
-                      WHERE f.procurement_id = o.procurement_id AND f.category_code = %s
-                  ))
             """
-            machine_count = self.crm_db.execute_scalar(q_machine, params + [f'["{cat_code}"]', cat_code]) or 0
+            obs_count = self.crm_db.execute_scalar(q_obs, params) or 0
+            
+            # 2. Machine Present (machine_found)
+            q_machine = f"""
+                SELECT COUNT(DISTINCT f.procurement_id)
+                FROM crm_v3_product_findings f
+                JOIN crm_procurements p ON p.id = f.procurement_id
+                WHERE {where_sql}
+                  AND f.category_code = %s
+            """
+            machine_count = self.crm_db.execute_scalar(q_machine, params + [cat_code]) or 0
 
-            # 2. Human confirmed count
-            # Count how many times the category was present in current expert annotations
+            # 3. Human confirmed count
             q_human = f"""
                 SELECT COUNT(DISTINCT a.procurement_id)
                 FROM crm_v3_expert_annotations a
                 JOIN crm_procurements p ON p.id = a.procurement_id
                 WHERE {where_sql}
                   AND a.is_current = TRUE
-                  AND a.payload->'expert_category_scope'->>'verdict' = 'IN_CATEGORY'
-                  AND a.payload->'expert_category_scope'->'categories' @> %s::jsonb
+                  AND (a.payload->'expert_category_scope'->>'verdict' = 'IN_CATEGORY' OR a.payload->>'expert_verdict' = 'CORRECT')
+                  AND (a.payload->'expert_category_scope'->'categories' @> %s::jsonb OR a.payload->>'expert_medal' != 'NCE')
             """
             human_confirmed = self.crm_db.execute_scalar(q_human, params + [f'["{cat_code}"]']) or 0
 
-            # 3. Human rejected count
-            # Found by model but rejected by human (scope OUT_OF_CATEGORY or category not in selected)
+            # 4. Human rejected count
             q_rejected = f"""
                 SELECT COUNT(DISTINCT a.procurement_id)
                 FROM crm_v3_expert_annotations a
                 JOIN crm_procurements p ON p.id = a.procurement_id
-                JOIN crm_v3_document_observations o ON o.procurement_id = a.procurement_id
+                JOIN crm_v3_product_findings f ON f.procurement_id = a.procurement_id
                 WHERE {where_sql}
                   AND a.is_current = TRUE
-                  AND (o.matched_categories @> %s::jsonb)
+                  AND f.category_code = %s
                   AND (
                       a.payload->'expert_category_scope'->>'verdict' = 'OUT_OF_CATEGORY'
-                      OR NOT (a.payload->'expert_category_scope'->'categories' @> %s::jsonb)
+                      OR a.payload->>'expert_verdict' = 'WRONG'
                   )
             """
-            human_rejected = self.crm_db.execute_scalar(q_rejected, params + [f'["{cat_code}"]', f'["{cat_code}"]']) or 0
+            human_rejected = self.crm_db.execute_scalar(q_rejected, params + [cat_code]) or 0
 
-            # 4. Auditor confirmed count
-            # Consensus AGREEMENT or PARTIAL and auditor agreed
+            # 5. Auditor confirmed count
             q_auditor = f"""
                 SELECT COUNT(DISTINCT t.procurement_id)
                 FROM crm_v3_autonomous_analysis_traces t
@@ -120,27 +120,29 @@ class ExperienceMemory:
             """
             auditor_confirmed = self.crm_db.execute_scalar(q_auditor, params + [f'[{{"category_code": "{cat_code}", "verdict": "AGREE"}}]']) or 0
 
-            # 5. Not found after complete research
-            # Count procurements where all resolved docs are searched and no evidence of category found
+            # 6. Not found after complete research (traces with 0 product findings for this category)
             q_not_found = f"""
-                SELECT COUNT(DISTINCT o.procurement_id)
-                FROM crm_v3_document_observations o
-                JOIN crm_procurements p ON p.id = o.procurement_id
+                SELECT COUNT(DISTINCT t.procurement_id)
+                FROM crm_v3_autonomous_analysis_traces t
+                JOIN crm_procurements p ON p.id = t.procurement_id
                 WHERE {where_sql}
-                  AND NOT (o.matched_categories @> %s::jsonb)
-                  AND o.usefulness_label = 'PARSED_NO_COMMERCIAL_EVIDENCE'
+                  AND NOT EXISTS (
+                      SELECT 1 FROM crm_v3_product_findings f 
+                      WHERE f.procurement_id = t.procurement_id AND f.category_code = %s
+                  )
             """
-            not_found_complete = self.crm_db.execute_scalar(q_not_found, params + [f'["{cat_code}"]']) or 0
+            not_found_complete = self.crm_db.execute_scalar(q_not_found, params + [cat_code]) or 0
 
             stats_list.append({
                 "category_code": cat_code,
                 "category_name": cat["category_name"],
+                "observations": obs_count,
                 "machine_found": machine_count,
                 "auditor_confirmed": auditor_confirmed,
                 "human_confirmed": human_confirmed,
                 "human_rejected": human_rejected,
                 "not_found_complete": not_found_complete,
-                "unknown_partial": max(0, machine_count - human_confirmed - human_rejected),
+                "unknown_partial": max(0, obs_count - machine_count),
             })
             
         return stats_list

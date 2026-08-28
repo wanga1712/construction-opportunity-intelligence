@@ -28,7 +28,7 @@ class SparseDatasetCompiler:
         # 1. Load procurement facts
         facts_rows = self.crm_db.execute_query(
             """
-            SELECT id, law_type, registry_number, title, official_description, okpd_code, okpd_name
+            SELECT id, contract_number, auction_name, okpd_code, okpd_name, initial_price
             FROM crm_procurements
             WHERE id = %s
             """,
@@ -49,9 +49,11 @@ class SparseDatasetCompiler:
             (procurement_id,),
         )
         
+        ann_id = None
         annotation = None
         if ann_rows:
             row = ann_rows[0]
+            ann_id = row["id"]
             payload = row["payload"]
             if isinstance(payload, str):
                 try:
@@ -81,62 +83,56 @@ class SparseDatasetCompiler:
             # We map human confirmations and corrections.
             # E.g. expert_object_type, expert_procurement_mode, expert_category_scope, expert_commercial_medal
             expert_obj = annotation.get("expert_object_type")
-            expert_mode = annotation.get("expert_procurement_mode")
-            expert_scope = annotation.get("expert_category_scope") or {}
-            expert_medal = annotation.get("expert_commercial_medal")
-
-            # We fetch model values to determine if confirmed or corrected
-            hunter_run_id = trace.get("hunter_run_id")
-            hunter_result = {}
-            if hunter_run_id:
-                hr_rows = self.crm_db.execute_query(
-                    "SELECT validated_model_result FROM crm_v3_model_inference_runs WHERE id = %s",
-                    (hunter_run_id,),
-                )
-                if hr_rows:
-                    hunter_result = hr_rows[0].get("validated_model_result") or {}
+            expert_mode = annotation.get("expert_procurement_mode") or annotation.get("expert_procurement_form")
+            expert_scope_val = annotation.get("expert_scope_verdict")
+            if not expert_scope_val and isinstance(annotation.get("expert_category_scope"), dict):
+                expert_scope_val = annotation.get("expert_category_scope", {}).get("verdict")
+            expert_medal = annotation.get("expert_commercial_medal") or annotation.get("expert_medal")
 
             # Compile Object classification
             if expert_obj:
-                model_obj = hunter_result.get("object_type")
                 targets["object_type"] = {
                     "value": expert_obj,
-                    "label_source": "HUMAN_CONFIRMED" if expert_obj == model_obj else "HUMAN_CORRECTED"
+                    "label_source": "HUMAN_ANNOTATED",
+                    "human_action_id": annotation.get("human_action_id"),
+                    "annotation_id": ann_id
                 }
 
             # Compile Procurement Mode
             if expert_mode:
-                model_mode = hunter_result.get("procurement_mode")
                 targets["procurement_mode"] = {
                     "value": expert_mode,
-                    "label_source": "HUMAN_CONFIRMED" if expert_mode == model_mode else "HUMAN_CORRECTED"
+                    "label_source": "HUMAN_ANNOTATED",
+                    "human_action_id": annotation.get("human_action_id"),
+                    "annotation_id": ann_id
                 }
 
             # Compile Category Scope
-            if expert_scope.get("verdict"):
-                val = expert_scope.get("verdict")
-                model_val = hunter_result.get("category_scope")
+            if expert_scope_val:
                 targets["category_scope"] = {
-                    "value": val,
-                    "label_source": "HUMAN_CONFIRMED" if val == model_val else "HUMAN_CORRECTED"
+                    "value": expert_scope_val,
+                    "label_source": "HUMAN_ANNOTATED",
+                    "human_action_id": annotation.get("human_action_id"),
+                    "annotation_id": ann_id
                 }
 
             # Compile Medal
             if expert_medal:
-                model_medal = hunter_result.get("medal_hypothesis")
                 targets["medal"] = {
                     "value": expert_medal,
-                    "label_source": "HUMAN_CONFIRMED" if expert_medal == model_medal else "HUMAN_CORRECTED"
+                    "label_source": "HUMAN_ANNOTATED",
+                    "human_action_id": annotation.get("human_action_id"),
+                    "annotation_id": ann_id
                 }
 
         # 5. Build full dataset entry
         entry = {
             "procurement_id": procurement_id,
-            "registry_number": facts.get("registry_number"),
+            "registry_number": facts.get("contract_number"),
             "factual_source": {
-                "law_type": facts.get("law_type"),
-                "title": facts.get("title"),
-                "official_description": facts.get("official_description"),
+                "law_type": "44-FZ",
+                "title": facts.get("auction_name"),
+                "official_description": "",
                 "okpd_code": facts.get("okpd_code"),
                 "okpd_name": facts.get("okpd_name"),
             },

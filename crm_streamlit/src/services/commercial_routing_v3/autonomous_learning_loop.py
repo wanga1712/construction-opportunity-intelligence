@@ -412,21 +412,38 @@ JSON Schema:
 """
 
     def evaluate_consensus(self, hunter: Dict[str, Any], auditor: Dict[str, Any]) -> str:
-        """Determine consensus level between Hunter and Auditor."""
-        obj_verdict = auditor.get("object", {}).get("verdict")
-        mode_verdict = auditor.get("procurement_mode", {}).get("verdict")
-        scope_verdict = auditor.get("category_scope", {}).get("verdict")
-        medal_verdict = auditor.get("medal", {}).get("verdict")
-
-        verdicts = [obj_verdict, mode_verdict, scope_verdict, medal_verdict]
-        
-        if all(v == "AGREE" for v in verdicts):
-            return CONSENSUS_AGREEMENT
-        if any(v == "DISAGREE" for v in verdicts):
-            return CONSENSUS_DISAGREEMENT
-        if any(v == "PARTIAL" for v in verdicts):
+        """Determine consensus level between Hunter and Auditor based on material decisions."""
+        try:
+            obj_verdict = auditor.get("object", {}).get("verdict")
+            mode_verdict = auditor.get("procurement_mode", {}).get("verdict")
+            scope_verdict = auditor.get("category_scope", {}).get("verdict")
+            comm_verdict = auditor.get("commercial_entry", {}).get("verdict")
+            medal_verdict = auditor.get("medal", {}).get("verdict")
+            
+            cats = auditor.get("categories", [])
+            prods = auditor.get("products", [])
+            
+            if not all(isinstance(v, str) for v in (obj_verdict, mode_verdict, scope_verdict, comm_verdict, medal_verdict)):
+                return CONSENSUS_UNRESOLVED
+                
+            core_verdicts = [obj_verdict, mode_verdict, scope_verdict, comm_verdict, medal_verdict]
+            
+            # 1. DISAGREEMENT: At least one material/core decision conflicts
+            if any(v == "DISAGREE" for v in core_verdicts):
+                return CONSENSUS_DISAGREEMENT
+                
+            # 2. AGREEMENT: All core decisions agree, and no category/product disagreements exist
+            all_core_agree = all(v == "AGREE" for v in core_verdicts)
+            no_cat_disagree = all(c.get("verdict") == "AGREE" for c in cats) if isinstance(cats, list) else True
+            no_prod_disagree = all(p.get("verdict") == "AGREE" for p in prods) if isinstance(prods, list) else True
+            
+            if all_core_agree and no_cat_disagree and no_prod_disagree:
+                return CONSENSUS_AGREEMENT
+                
+            # 3. PARTIAL_AGREEMENT: Core decision matches, but secondary/detail differences exist (PARTIAL verdicts, or category/product list mismatches)
             return CONSENSUS_PARTIAL
-        return CONSENSUS_UNRESOLVED
+        except Exception:
+            return CONSENSUS_UNRESOLVED
 
     def save_product_findings(
         self,
@@ -439,7 +456,32 @@ JSON Schema:
         """Persist product findings into crm_v3_product_findings."""
         for p in products:
             loc = p.get("locator") or {}
-            source_loc_json = json.dumps(loc, default=str)
+            
+            # Sanitize coordinates: e.g. "A4" -> row="4", column="A", cell="A4"
+            row_raw = str(loc.get("row") or "").strip()
+            row_val = row_raw
+            col_val = None
+            cell_val = None
+            
+            import re
+            m = re.match(r"^([A-Za-z]+)([0-9]+)$", row_raw)
+            if m:
+                col_val = m.group(1).upper()
+                row_val = m.group(2)
+                cell_val = row_raw.upper()
+            elif row_raw.isdigit():
+                row_val = row_raw
+                
+            structured_loc = {
+                "sheet": loc.get("sheet"),
+                "row": row_val,
+                "column": col_val,
+                "cell": cell_val,
+                "page": loc.get("page"),
+                "position_number": loc.get("position_number")
+            }
+            source_loc_json = json.dumps(structured_loc, default=str)
+            
             self.crm_db.execute_update(
                 """
                 INSERT INTO crm_v3_product_findings (
@@ -464,10 +506,10 @@ JSON Schema:
                     p.get("raw_description"),
                     p.get("evidence_text"),
                     p.get("document_name"),
-                    loc.get("page"),
-                    loc.get("sheet"),
-                    loc.get("row"),
-                    loc.get("position_number"),
+                    structured_loc.get("page"),
+                    structured_loc.get("sheet"),
+                    row_val,
+                    structured_loc.get("position_number"),
                     source_loc_json,
                     role,
                     1.0 if role == "HUNTER" else 0.8,
