@@ -25,10 +25,11 @@ logger = logging.getLogger("autonomous_worker")
 class AutonomousWorker:
     """Daemon worker that polls completed document tasks and runs Hunter-Auditor loop."""
 
-    def __init__(self, crm_db: Any) -> None:
+    def __init__(self, crm_db: Any, procurement_id_filter: Optional[str] = None) -> None:
         self.crm_db = crm_db
         self.orchestrator = HunterAuditorOrchestrator(crm_db)
         self.running = True
+        self.procurement_id_filter = procurement_id_filter
 
     def stop(self) -> None:
         logger.info("Stopping autonomous worker...")
@@ -57,25 +58,26 @@ class AutonomousWorker:
         while self.running:
             tasks = []
             try:
+                filter_sql = f" AND {self.procurement_id_filter}" if self.procurement_id_filter else ""
                 with doc_conn.cursor() as cur:
                     if last_id is None:
                         cur.execute(
-                            """
+                            f"""
                             SELECT id, procurement_id, status 
                             FROM document_processing_queue
                             WHERE status IN ('COMPLETED', 'FAILED', 'NO_LINKS')
-                              AND pipeline_generation = 'S13_V2'
+                              AND pipeline_generation = 'S13_V2'{filter_sql}
                             ORDER BY id DESC
                             LIMIT 100
                             """
                         )
                     else:
                         cur.execute(
-                            """
+                            f"""
                             SELECT id, procurement_id, status 
                             FROM document_processing_queue
                             WHERE status IN ('COMPLETED', 'FAILED', 'NO_LINKS')
-                              AND pipeline_generation = 'S13_V2'
+                              AND pipeline_generation = 'S13_V2'{filter_sql}
                               AND id < %s
                             ORDER BY id DESC
                             LIMIT 100

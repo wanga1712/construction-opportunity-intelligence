@@ -47,7 +47,7 @@ def main():
     _, _, crm_db_orig, _ = connect_databases()
     crm_db = CRMDBWrapper(crm_db_orig)
     orchestrator = HunterAuditorOrchestrator(crm_db)
-    worker = AutonomousWorker(crm_db_orig)
+    worker = AutonomousWorker(crm_db_orig, procurement_id_filter="procurement_id BETWEEN 900000000 AND 900000999")
 
     # 1. Clean/Dirty and commit checks
     git_status = subprocess.check_output(["git", "status", "--porcelain", "-uno"], text=True).strip()

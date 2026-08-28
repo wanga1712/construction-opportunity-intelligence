@@ -665,7 +665,7 @@ JSON Schema:
         evidence_hash = compute_md5(evidence)
         
         # Determine actual LLM attempt number
-        existing_trace = self.crm_db.execute_query_one(
+        existing_traces = self.crm_db.execute_query(
             """
             SELECT MAX(attempt_count) as max_attempts
             FROM crm_v3_autonomous_analysis_traces
@@ -674,6 +674,7 @@ JSON Schema:
             """,
             (procurement_id,)
         )
+        existing_trace = existing_traces[0] if existing_traces else None
         existing_llm_attempts = (existing_trace["max_attempts"] or 0) if existing_trace else 0
         attempt = existing_llm_attempts + 1
 
