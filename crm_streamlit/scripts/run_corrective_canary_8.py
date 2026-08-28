@@ -50,7 +50,7 @@ def main():
     worker = AutonomousWorker(crm_db_orig)
 
     # 1. Clean/Dirty and commit checks
-    git_status = subprocess.check_output(["git", "status", "--porcelain"], text=True).strip()
+    git_status = subprocess.check_output(["git", "status", "--porcelain", "-uno"], text=True).strip()
     canary_runtime_dirty = "NO" if not git_status else "YES"
     canary_runtime_sha_matches_commit = "YES" if git_status == "" else "NO"
     
@@ -229,10 +229,10 @@ def main():
             with doc_conn.cursor() as cur:
                 # One completed, one pending!
                 cur.execute(
-                    "INSERT INTO document_processing_queue (procurement_id, status, pipeline_generation, is_locked) VALUES (%s, 'COMPLETED', 'S13_V2', FALSE)", (pid,)
+                    "INSERT INTO document_processing_queue (procurement_id, status, pipeline_generation) VALUES (%s, 'COMPLETED', 'S13_V2')", (pid,)
                 )
                 cur.execute(
-                    "INSERT INTO document_processing_queue (procurement_id, status, pipeline_generation, is_locked) VALUES (%s, 'PENDING', 'S13_V2', FALSE)", (pid,)
+                    "INSERT INTO document_processing_queue (procurement_id, status, pipeline_generation) VALUES (%s, 'PENDING', 'S13_V2')", (pid,)
                 )
         finally:
             doc_conn.close()
