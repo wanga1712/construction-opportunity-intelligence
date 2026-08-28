@@ -82,9 +82,9 @@ def test_tabs_names_order_payload_and_return_without_database(monkeypatch):
 def test_tabs_empty_data_uses_existing_messages_without_database(monkeypatch):
     fake_st = FakeStreamlit()
     monkeypatch.setattr(tabs, "st", fake_st)
-    monkeypatch.setattr(tabs, "_load_sync_info", lambda: {})
-    monkeypatch.setattr(tabs, "_load_torgi", lambda: [])
-    monkeypatch.setattr(tabs, "_load_razygranye", lambda: [])
+    monkeypatch.setattr(tabs, "_load_sync_info", lambda *args, **kwargs: {})
+    monkeypatch.setattr(tabs, "_load_torgi", lambda *args, **kwargs: [])
+    monkeypatch.setattr(tabs, "_load_razygranye", lambda *args, **kwargs: [])
 
     tabs._render_torgi_tab()
     tabs._render_razygranye_tab()
