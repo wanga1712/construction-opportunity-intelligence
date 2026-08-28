@@ -664,6 +664,15 @@ JSON Schema:
         evidence = self.fetch_document_evidence(procurement_id)
         evidence_hash = compute_md5(evidence)
         
+        completeness = "COMPLETE"
+        if not docs:
+            completeness = "NO_DOCUMENTS"
+        else:
+            for d in docs:
+                if d.get("research_state") in ("DOWNLOAD_FAILED", "PARSE_FAILED", "UNREADABLE", "PARTIALLY_SEARCHED", "UNSUPPORTED_FORMAT"):
+                    completeness = "PARTIAL"
+                    break
+        
         # Determine actual LLM attempt number
         existing_traces = self.crm_db.execute_query(
             """
@@ -741,14 +750,7 @@ JSON Schema:
             consensus_state = self.evaluate_consensus(hunter_raw, auditor_raw)
             logger.info(f"Consensus state: {consensus_state}")
 
-            completeness = "COMPLETE"
-            if not docs:
-                completeness = "NO_DOCUMENTS"
-            else:
-                for d in docs:
-                    if d.get("research_state") in ("DOWNLOAD_FAILED", "PARSE_FAILED", "UNREADABLE", "PARTIALLY_SEARCHED", "UNSUPPORTED_FORMAT"):
-                        completeness = "PARTIAL"
-                        break
+
 
             # Save trace
             self.crm_db.execute_update(
@@ -795,13 +797,14 @@ JSON Schema:
                     extracted_evidence_hash, consensus_state, research_completeness,
                     registry_hash, hunter_prompt_version, auditor_prompt_version,
                     model_version, attempt_count, last_error
-                ) VALUES (%s, %s, %s, %s, 'FAILED_PROCESSING', 'FAILED', %s, %s, %s, %s, %s, %s)
+                ) VALUES (%s, %s, %s, %s, 'FAILED_PROCESSING', %s, %s, %s, %s, %s, %s, %s)
                 """,
                 (
                     procurement_id,
                     source_snapshot_hash,
                     doc_set_hash,
                     evidence_hash,
+                    completeness,
                     reg_hash,
                     HUNTER_PROMPT_VERSION,
                     AUDITOR_PROMPT_VERSION,
