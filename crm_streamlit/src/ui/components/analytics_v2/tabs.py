@@ -530,13 +530,7 @@ def _render_torgi_tab() -> None:
     from src.services.db_bootstrap import connect_databases
     from src.ui.components.analytics_v2.card_compact import render_compact_card
 
-    # ── Fresh session defaults / migration
-    if "analytics_law_filter" not in st.session_state:
-        st.session_state["analytics_law_filter"] = "Все"
-    if "analytics_expert_filter" not in st.session_state:
-        st.session_state["analytics_expert_filter"] = "Все"
-    if "analytics_ai_filter" not in st.session_state:
-        st.session_state["analytics_ai_filter"] = "Все"
+
 
     col_hdr, col_sync = st.columns([3, 1])
     with col_sync:
