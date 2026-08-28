@@ -286,7 +286,7 @@ def main():
         doc_conn = orchestrator._get_doc_conn()
         try:
             with doc_conn.cursor() as cur:
-                cur.execute("INSERT INTO document_files (id, procurement_id, file_name, download_status) VALUES (900000710, %s, 'doc1.pdf', 'FAILED')", (pid,))
+                cur.execute("INSERT INTO document_files (id, procurement_id, file_name, download_status, url) VALUES (900000710, %s, 'doc1.pdf', 'FAILED', 'http://example.com/doc1.pdf')", (pid,))
         finally:
             doc_conn.close()
 
@@ -325,7 +325,7 @@ def main():
                     """, 
                     (pid_llm, pid_llm, f"CN-{pid_llm}")
                 )
-                cur.execute("INSERT INTO document_files (id, procurement_id, file_name, download_status) VALUES (900000810, %s, 'doc1.pdf', 'COMPLETED')", (pid_llm,))
+                cur.execute("INSERT INTO document_files (id, procurement_id, file_name, download_status, url) VALUES (900000810, %s, 'doc1.pdf', 'COMPLETED', 'http://example.com/doc1.pdf')", (pid_llm,))
                 cur.execute("INSERT INTO document_processing_results (file_id, status, pages_processed, rows_extracted) VALUES (900000810, 'COMPLETED', 1, 100)")
         finally:
             doc_conn.close()
