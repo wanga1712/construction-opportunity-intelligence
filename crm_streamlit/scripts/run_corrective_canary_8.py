@@ -330,7 +330,7 @@ def main():
                     """, 
                     (pid_llm, pid_llm, f"CN-{pid_llm}")
                 )
-                cur.execute("INSERT INTO document_files (id, procurement_id, file_name, download_status, url, url_hash) VALUES (900000810, %s, 'doc1.pdf', 'COMPLETED', 'http://example.com/doc1.pdf', '82218080f089679f225d3b3cf89d020d')", (pid_llm,))
+                cur.execute("INSERT INTO document_files (id, procurement_id, file_name, download_status, url, url_hash) VALUES (900000810, %s, 'doc2.pdf', 'COMPLETED', 'http://example.com/doc2.pdf', '92218080f089679f225d3b3cf89d020d')", (pid_llm,))
                 cur.execute("INSERT INTO document_processing_results (file_id, status, pages_processed, rows_extracted) VALUES (900000810, 'COMPLETED', 1, 100)")
         finally:
             doc_conn.close()
