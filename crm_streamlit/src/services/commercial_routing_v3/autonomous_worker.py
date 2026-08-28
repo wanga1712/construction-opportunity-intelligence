@@ -155,7 +155,7 @@ class AutonomousWorker:
                         effective_status = "COMPLETED"
 
                 # 4. Check versioned trace status using full identity
-                trace = self.crm_db.execute_query_one(
+                traces = self.crm_db.execute_query(
                     """
                     SELECT id, attempt_count, consensus_state, research_completeness
                     FROM crm_v3_autonomous_analysis_traces
@@ -180,11 +180,12 @@ class AutonomousWorker:
                         model_version,
                     )
                 )
+                trace = traces[0] if traces else None
 
                 if not trace:
                     if effective_status == "COMPLETED":
                         # Check actual LLM attempts limit
-                        existing_trace = self.crm_db.execute_query_one(
+                        existing_traces = self.crm_db.execute_query(
                             """
                             SELECT MAX(attempt_count) as max_attempts
                             FROM crm_v3_autonomous_analysis_traces
@@ -193,6 +194,7 @@ class AutonomousWorker:
                             """,
                             (pid,)
                         )
+                        existing_trace = existing_traces[0] if existing_traces else None
                         attempts = (existing_trace["max_attempts"] or 0) if existing_trace else 0
                         if attempts >= 3:
                             logger.debug(f"Procurement {pid} exceeded maximum actual LLM attempts ({attempts}). Skipping.")
@@ -205,7 +207,7 @@ class AutonomousWorker:
                             # Document failure terminal, do NOT retry if hashes match
                             continue
                         # LLM failure, check actual LLM attempts count
-                        existing_trace = self.crm_db.execute_query_one(
+                        existing_traces = self.crm_db.execute_query(
                             """
                             SELECT MAX(attempt_count) as max_attempts
                             FROM crm_v3_autonomous_analysis_traces
@@ -214,6 +216,7 @@ class AutonomousWorker:
                             """,
                             (pid,)
                         )
+                        existing_trace = existing_traces[0] if existing_traces else None
                         attempts = (existing_trace["max_attempts"] or 0) if existing_trace else 0
                         if attempts < 3:
                             picked_task = (pid, effective_status)
