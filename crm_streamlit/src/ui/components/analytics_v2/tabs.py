@@ -492,6 +492,31 @@ def _filter_by_annotation(workset_ids: list[int], annotation_states: dict[int, d
     return filtered_ids
 
 
+def _filter_by_ai(selected_ids: list[int], eff_map: dict, raw_filter: str) -> list[int]:
+    if raw_filter == "Все":
+        return selected_ids
+        
+    filtered_ids = []
+    for pid in selected_ids:
+        eff = eff_map.get(pid)
+        ai_s = eff.ai_status if eff else "UNASSESSED"
+        
+        is_match = False
+        if raw_filter == "Оценено":
+            is_match = ai_s == "ASSESSED"
+        elif raw_filter == "Не оценено":
+            is_match = ai_s == "UNASSESSED"
+        elif raw_filter == "Неполная оценка":
+            is_match = ai_s == "INCOMPLETE"
+        elif raw_filter == "Ошибка":
+            is_match = ai_s in ("FAILED", "ERROR")
+            
+        if is_match:
+            filtered_ids.append(pid)
+            
+    return filtered_ids
+
+
 # ─── Торги-таб ────────────────────────────────────────────────────────────────
 
 def _render_torgi_tab() -> None:
