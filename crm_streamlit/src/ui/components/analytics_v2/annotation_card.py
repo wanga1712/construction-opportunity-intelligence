@@ -373,8 +373,10 @@ def _render_primary_scope_decision(
         return
 
     # decision == "YES" (IN_CATEGORY): full inline staged workflow
-    header = load_annotation_card_view(procurement_id, None, crm_db).get("header") or {}
+    view_data = load_annotation_card_view(procurement_id, None, crm_db) or {}
+    header = view_data.get("header", {})
     render_source_contour_banner(header.get("source_table"))
+
     all_codes = [c["code"] for c in categories]
     subcats = load_subcategories_for_categories(all_codes, crm_db)
     name_by_code = {c["code"]: c.get("name") or c["code"] for c in categories}
