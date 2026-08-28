@@ -268,15 +268,42 @@ def _torgi_sort_key(card: dict, eff_map: dict) -> tuple:
 # Keep legacy name for backward compatibility with non-torgi tabs
 def _torgi_priority_score(card: dict) -> int:
     """Legacy fallback (no effective map). Used by komissia / razygranye."""
+    if card.get("award_status") != "submission_open":
+        return 0
+        
+    stage = card.get("processing_stage", "matches_found")
+    comm_score = card.get("commercial_score")
+    
     from src.ui.components.analytics_v2.card_trust import workdays_left
     wdays = workdays_left(card.get("end_date")) or 0
     price = card.get("initial_price") or 0
     signal = card.get("signal_score") or card.get("match_score") or 0
+    
     if wdays <= 1:
-        return int(signal)
-    time_score = 400 if wdays >= 14 else 300 if wdays >= 7 else 200 if wdays >= 4 else 100 if wdays >= 2 else 20
+        time_score = 0
+    else:
+        time_score = 400 if wdays >= 14 else 300 if wdays >= 7 else 200 if wdays >= 4 else 100 if wdays >= 2 else 20
+        
     price_bonus = 150 if price >= 10_000_000 else 100 if price >= 3_000_000 else 50 if price >= 1_000_000 else 20 if price >= 500_000 else 0
-    return time_score + price_bonus + min(int(signal), 100)
+    base_score = time_score + price_bonus + min(int(signal), 100)
+    
+    # Check stage tiers
+    if stage in ("ranked", "manager_confirmed") and comm_score is not None:
+        if comm_score >= 75:
+            return 80000 + int(comm_score)
+        elif comm_score >= 50:
+            return 60000 + int(comm_score)
+        elif comm_score >= 25:
+            return 40000 + int(comm_score)
+        else:
+            return 20000 + int(comm_score)
+    elif stage == "ai_verified":
+        proc = card.get("_proc") or {}
+        ev_cnt = proc.get("evidence_count") or 0
+        if ev_cnt > 0:
+            return 5000 + ev_cnt * 10
+            
+    return base_score
 
 
 def _load_effective_map(cards: list[dict]) -> dict:
