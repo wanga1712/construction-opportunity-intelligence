@@ -225,6 +225,7 @@ def main():
         )
         
         doc_conn = orchestrator._get_doc_conn()
+        doc_conn.autocommit = True
         try:
             with doc_conn.cursor() as cur:
                 # One completed, one pending!
@@ -284,6 +285,7 @@ def main():
         logger.info("Running Scenario 3: Factual document failure trace...")
         # Now insert the failed file record to document_files
         doc_conn = orchestrator._get_doc_conn()
+        doc_conn.autocommit = True
         try:
             with doc_conn.cursor() as cur:
                 cur.execute("INSERT INTO document_files (id, procurement_id, file_name, download_status, url, url_hash) VALUES (900000710, %s, 'doc1.pdf', 'FAILED', 'http://example.com/doc1.pdf', '82218080f089679f225d3b3cf89d020d')", (pid,))
@@ -315,6 +317,7 @@ def main():
         )
         
         doc_conn = orchestrator._get_doc_conn()
+        doc_conn.autocommit = True
         try:
             with doc_conn.cursor() as cur:
                 cur.execute(
@@ -469,6 +472,7 @@ def main():
         
         # Insert 150 queue rows in document DB
         doc_conn = orchestrator._get_doc_conn()
+        doc_conn.autocommit = True
         try:
             with doc_conn.cursor() as cur:
                 for offset in range(1, 151):
