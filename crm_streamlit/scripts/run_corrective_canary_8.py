@@ -47,7 +47,7 @@ def main():
     _, _, crm_db_orig, _ = connect_databases()
     crm_db = CRMDBWrapper(crm_db_orig)
     orchestrator = HunterAuditorOrchestrator(crm_db)
-    worker = AutonomousWorker(orchestrator, crm_db)
+    worker = AutonomousWorker(crm_db_orig)
 
     # 1. Clean/Dirty and commit checks
     git_status = subprocess.check_output(["git", "status", "--porcelain"], text=True).strip()
