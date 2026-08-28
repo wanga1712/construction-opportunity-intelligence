@@ -227,10 +227,9 @@ def sync_torgi(tender_db, crm_db, since_days: int = 180) -> dict:
             for m in cache_by_sid.get(sid, []):
                 end_date = row.get("end_date")
                 today = date.today()
-                if end_date is None or today <= end_date:
-                    award_status = "submission_open"
-                else:
-                    award_status = "submission_closed_waiting_award"
+                from src.services.effective_lifecycle import open_row_award_status
+
+                award_status = open_row_award_status(end_date, today=today)
 
                 profile_id = m.get("crm_profile_id")
                 try:
@@ -302,7 +301,8 @@ def sync_awarded(tender_db, crm_db) -> dict:
             FROM crm_procurements
             WHERE crm_stage = 'torgi'
               AND award_status != 'awarded'
-              AND end_date < current_date
+              AND contract_number IS NOT NULL
+              AND btrim(contract_number) <> ''
         """)
     except Exception as exc:
         logger.error(f"sync_awarded fetch pending: {exc}")
@@ -377,11 +377,19 @@ def sync_awarded(tender_db, crm_db) -> dict:
                     logger.warning(f"update awarded {proc['id']}: {exc}")
             else:
                 today = date.today()
-                new_status = (
-                    "award_not_found"
-                    if end_date and today > end_date + timedelta(days=grace)
-                    else "submission_closed_waiting_award"
-                )
+                # Still-open factual deadlines must remain submission_open when
+                # no awarded row exists yet (AWARDED existence precedence only
+                # upgrades when awarded is found).
+                if end_date is not None and today <= end_date:
+                    continue
+                if end_date is None:
+                    new_status = "award_not_found"
+                else:
+                    new_status = (
+                        "award_not_found"
+                        if today > end_date + timedelta(days=grace)
+                        else "submission_closed_waiting_award"
+                    )
                 try:
                     crm_db.execute_update("""
                         UPDATE crm_procurements SET
@@ -593,13 +601,11 @@ def _sync_source(
     for row in rows:
         try:
             end_date = row.get("end_date")
-            today = date.today()
             if crm_stage == "torgi":
-                award_status = (
-                    "submission_open"
-                    if end_date is None or today <= end_date
-                    else "submission_closed_waiting_award"
-                )
+                from src.services.effective_lifecycle import open_row_award_status
+
+                # NULL end_date → award_not_found (UNKNOWN), never submission_open.
+                award_status = open_row_award_status(end_date)
             elif crm_stage == "razygranye":
                 award_status = "awarded"
             else:

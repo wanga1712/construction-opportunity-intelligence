@@ -7,12 +7,10 @@ from urllib.parse import urlparse
 
 
 def source_law(source_table: str | None) -> str:
-    source = (source_table or "").lower()
-    if "223" in source:
-        return "223-ФЗ"
-    if "44" in source:
-        return "44-ФЗ"
-    return "Не определён"
+    """Short factual law label from source_table (pre-AI). Prefer source_contour for cards."""
+    from src.services.source_contour import source_law_label
+
+    return source_law_label(source_table)
 
 
 def document_key(row: dict) -> str:
