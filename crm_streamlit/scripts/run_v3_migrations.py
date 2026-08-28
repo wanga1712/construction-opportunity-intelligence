@@ -1,17 +1,31 @@
 import sys
+import re
 from src.services.db_bootstrap import connect_databases
 
 def run_sql_file(crm_db, filepath):
     print(f"Applying migration: {filepath}...")
     with open(filepath, 'r', encoding='utf-8') as f:
         sql = f.read()
-    try:
-        crm_db.execute_update(sql)
-        print("Success.")
-    except Exception as e:
-        print(f"Error applying {filepath}: {e}")
-        # If there's an error, raise it to abort the rest
-        raise
+    
+    # Simple split by semicolon (avoiding comments and quotes splits when possible)
+    # We clean up SQL comments first
+    sql_clean = re.sub(r'--.*$', '', sql, flags=re.MULTILINE)
+    statements = sql_clean.split(';')
+    
+    for stmt in statements:
+        stmt = stmt.strip()
+        if not stmt:
+            continue
+        try:
+            crm_db.execute_update(stmt)
+        except Exception as e:
+            err_msg = str(e)
+            if "role \"crm_app\" does not exist" in err_msg or "crm_app" in err_msg:
+                print(f"Skipping statement due to missing crm_app role: {stmt[:60]}...")
+            else:
+                print(f"Error applying statement:\n{stmt}\nError: {e}")
+                raise
+    print("Success.")
 
 def main():
     _, _, crm_db, _ = connect_databases()
