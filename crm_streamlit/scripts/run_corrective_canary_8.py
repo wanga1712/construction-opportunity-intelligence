@@ -240,7 +240,7 @@ def main():
                     """
                     INSERT INTO document_processing_queue 
                     (procurement_id, source_table, source_id, contract_number, status, pipeline_generation, research_action, research_depth) 
-                    VALUES (%s, 'crm_tenders_44fz', %s, %s, 'PENDING', 'S13_V2', 'RESEARCH', 'DEEP')
+                    VALUES (%s, 'crm_tenders_44fz', %s, %s, 'PENDING', 'S13_V1', 'RESEARCH', 'DEEP')
                     """, 
                     (pid, pid, f"CN-{pid}")
                 )
