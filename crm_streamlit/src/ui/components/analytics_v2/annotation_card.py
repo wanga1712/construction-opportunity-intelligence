@@ -284,7 +284,7 @@ def _render_primary_scope_decision(
         build_in_category_payload,
         build_out_of_category_payload,
     )
-    from src.services.expert_annotation_service import load_subcategories_by_category
+    from src.services.expert_annotation_service import load_subcategories_for_categories
     from src.ui.components.analytics_v2.staged_annotation_ui import (
         init_staged_draft_from_payload,
         read_staged_draft,
@@ -372,7 +372,8 @@ def _render_primary_scope_decision(
     # decision == "YES" (IN_CATEGORY): full inline staged workflow
     header = load_annotation_card_view(procurement_id, None, crm_db).get("header") or {}
     render_source_contour_banner(header.get("source_table"))
-    subcats = load_subcategories_by_category(crm_db)
+    all_codes = [c["code"] for c in categories]
+    subcats = load_subcategories_for_categories(all_codes, crm_db)
     name_by_code = {c["code"]: c.get("name") or c["code"] for c in categories}
     selected_codes = render_product_category_controls(
         procurement_id,
