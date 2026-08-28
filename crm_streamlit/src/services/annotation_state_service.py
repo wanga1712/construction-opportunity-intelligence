@@ -190,6 +190,9 @@ def annotation_state_counts(states: dict[int, dict]) -> dict[str, int]:
     silver = sum(1 for value in states.values() if value.get("expert_medal") == "SILVER")
     bronze = sum(1 for value in states.values() if value.get("expert_medal") == "BRONZE")
     wood = sum(1 for value in states.values() if value.get("expert_medal") == "WOOD")
+    unannotated_cnt = sum(1 for value in states.values() if value.get("annotation_state") == UNANNOTATED)
+    annotated_cnt = sum(1 for value in states.values() if value.get("annotation_state") == ANNOTATED)
+    not_interesting_cnt = sum(1 for value in states.values() if value.get("annotation_state") in (NOT_INTERESTING, OUT_OF_CATEGORY))
     return {
         "ALL": total,
         UNREVIEWED: total - triaged,
@@ -206,8 +209,8 @@ def annotation_state_counts(states: dict[int, dict]) -> dict[str, int]:
         "BRONZE": bronze,
         "WOOD": wood,
         LEGACY_NOT_INTERESTING: legacy,
-        NOT_INTERESTING: not_interesting,
+        NOT_INTERESTING: not_interesting_cnt,
         PROFILED: max(0, triaged - out_of_category),
-        UNANNOTATED: total - triaged,
-        ANNOTATED: triaged,
+        UNANNOTATED: unannotated_cnt,
+        ANNOTATED: annotated_cnt,
     }
