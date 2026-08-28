@@ -81,6 +81,7 @@ def main():
     doc_conn.autocommit = True
     try:
         with doc_conn.cursor() as cur:
+            cur.execute("DELETE FROM document_processing_results WHERE procurement_id BETWEEN 900000000 AND 900000999")
             cur.execute("DELETE FROM document_processing_queue WHERE procurement_id BETWEEN 900000000 AND 900000999")
             cur.execute("DELETE FROM document_files WHERE procurement_id BETWEEN 900000000 AND 900000999")
             cur.execute("DELETE FROM document_matches WHERE procurement_id BETWEEN 900000000 AND 900000999")
