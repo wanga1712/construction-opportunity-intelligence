@@ -40,27 +40,100 @@ def _get_category_filter(stage: str) -> tuple[str, dict]:
     return build_category_sql_filter(selected_cats, set())
 
 
-def _load_torgi() -> list[dict]:
-    """Open torgi procurements that pass V3 publication contract (fail-closed)."""
+_PAGE_SIZE = 25
+FARTHEST_DEADLINE_FIRST = "FARTHEST_DEADLINE_FIRST"
+NEAREST_DEADLINE_FIRST = "NEAREST_DEADLINE_FIRST"
+DEADLINE_SORT_LABELS = {
+    FARTHEST_DEADLINE_FIRST: "Сначала дальние",
+    NEAREST_DEADLINE_FIRST: "Сначала ближайшие",
+}
+
+def torgi_deadline_order_by(sort_mode: str) -> str:
+    direction = "ASC" if sort_mode == NEAREST_DEADLINE_FIRST else "DESC"
+    return f"cp.end_date {direction} NULLS LAST, cp.match_score DESC"
+
+def _selected_law_filter() -> str:
+    val = st.session_state.get("analytics_law_filter", "Все")
+    mapping = {"Все": "ALL", "44-ФЗ": "44-FZ", "223-ФЗ": "223-FZ", "615-ПП": "615-PP"}
+    return mapping.get(val, "ALL")
+
+def _stage_workset_ids(stage: str, *, law: str | None = None) -> list[int]:
+    """Return factual filtered workset IDs for true counts (one bounded-column query)."""
+    import psycopg2
+    from src.services.effective_lifecycle import (
+        factual_awarded_sql,
+        factual_commission_sql,
+        factual_open_torgi_sql,
+    )
+    law = law if law is not None else _selected_law_filter()
+    if stage == "torgi":
+        where = factual_open_torgi_sql("cp", law=law)
+        cat_stage = "torgi"
+    elif stage == "commission":
+        where = factual_commission_sql("cp", law=law)
+        cat_stage = "commission"
+    else:
+        where = factual_awarded_sql("cp", law=law)
+        cat_stage = "razygranye"
+    cat_sql, params = _get_category_filter(cat_stage)
+    
+    # Profile filter
+    profile_id = st.session_state.get("analytics_v2_profile_filter")
+    profile_sql = "TRUE"
+    if profile_id is not None:
+        profile_sql = "cp.crm_profile_id = %(profile_id)s"
+        params["profile_id"] = profile_id
+        
+    # Region filter
+    region = st.session_state.get("analytics_v2_region_filter")
+    region_sql = "TRUE"
+    if region and region != "Все регионы":
+        region_sql = "cp.delivery_region = %(region)s"
+        params["region"] = region
+        
+    # Level (Medal) filter
+    level = st.session_state.get("analytics_v2_level_filter")
+    level_sql = "TRUE"
+    if level and level != "Все":
+        level_sql = "(cc.best_candidate_level = %(level)s OR ai.normalized_result->>'candidate_level' = %(level)s)"
+        params["level"] = level.upper()
+
+    conn = psycopg2.connect(**_pg())
+    try:
+        with conn.cursor() as cur:
+            cur.execute(
+                f"""SELECT DISTINCT cp.id
+                    FROM crm_procurements cp
+                    LEFT JOIN crm_category_candidates cc ON cc.procurement_id = cp.id
+                    LEFT JOIN procurement_ai_assessments ai ON ai.procurement_id = cp.id AND ai.is_current = TRUE
+                    WHERE {where} AND ({cat_sql})
+                      AND ({profile_sql}) AND ({region_sql}) AND ({level_sql})
+                    ORDER BY cp.id""",
+                params,
+            )
+            return [row[0] for row in cur.fetchall()]
+    finally:
+        conn.close()
+
+def _load_torgi(limit: int = 25, offset: int = 0,
+                sort_mode: str = FARTHEST_DEADLINE_FIRST,
+                allowed_ids: list[int] | None = None,
+                law: str | None = None) -> list[dict]:
+    """Lifecycle-valid expert workset; manager publication is not an admission gate."""
     try:
         import psycopg2
         from psycopg2.extras import RealDictCursor
-
-        from src.services.db_bootstrap import connect_databases
-        from src.services.torgi_publication import (
-            publication_schema_ready,
-            torgi_publication_sql_filters,
-        )
-
-        _, _, crm_db, _ = connect_databases()
-        if not publication_schema_ready(crm_db):
-            log = __import__("logging").getLogger(__name__)
-            log.warning("torgi publication schema not ready — fail-closed empty feed")
-            return []
+        from src.services.effective_lifecycle import factual_open_torgi_sql
 
         cat_sql, cat_params = _get_category_filter("torgi")
-        pub_sql = torgi_publication_sql_filters()
+        params = dict(cat_params); params.update({"limit": limit, "offset": offset})
+        review_sql = "TRUE"
+        if allowed_ids is not None:
+            review_sql = "cp.id = ANY(%(allowed_ids)s)"
+            params["allowed_ids"] = allowed_ids or [-1]
 
+        order_by = torgi_deadline_order_by(sort_mode)
+        where = factual_open_torgi_sql("cp", law=law if law is not None else _selected_law_filter())
         conn = psycopg2.connect(**_pg())
         with conn.cursor(cursor_factory=RealDictCursor) as cur:
             cur.execute(f"""
@@ -90,14 +163,12 @@ def _load_torgi() -> list[dict]:
                 FROM crm_procurements cp
                 LEFT JOIN crm_category_candidates cc ON cc.procurement_id = cp.id
                 LEFT JOIN procurement_ai_assessments ai ON ai.procurement_id = cp.id AND ai.is_current = TRUE
-                WHERE cp.crm_stage = 'torgi'
-                  AND cp.award_status = 'submission_open'
-                  AND cp.end_date >= CURRENT_DATE
-                  {pub_sql}
+                WHERE {where}
                   AND ({cat_sql})
-                ORDER BY cp.end_date ASC, cp.match_score DESC
-                LIMIT 500
-            """, cat_params)
+                  AND ({review_sql})
+                ORDER BY {order_by}
+                LIMIT %(limit)s OFFSET %(offset)s
+            """, params)
             rows = [dict(r) for r in cur.fetchall()]
         conn.close()
         return rows
@@ -223,14 +294,23 @@ def _load_effective_map(cards: list[dict]) -> dict:
 
 
 
-def _load_komissia() -> list[dict]:
+def _load_komissia(limit: int = 25, offset: int = 0,
+                  allowed_ids: list[int] | None = None,
+                  law: str | None = None) -> list[dict]:
     """Подача закрыта — ждём решения комиссии."""
     try:
         import psycopg2
         from psycopg2.extras import RealDictCursor
+        from src.services.effective_lifecycle import factual_commission_sql
 
         cat_sql, cat_params = _get_category_filter("commission")
+        params = dict(cat_params); params.update({"limit": limit, "offset": offset})
+        review_sql = "TRUE"
+        if allowed_ids is not None:
+            review_sql = "cp.id = ANY(%(allowed_ids)s)"
+            params["allowed_ids"] = allowed_ids or [-1]
 
+        where = factual_commission_sql("cp", law=law if law is not None else _selected_law_filter())
         conn = psycopg2.connect(**_pg())
         with conn.cursor(cursor_factory=RealDictCursor) as cur:
             cur.execute(f"""
@@ -253,12 +333,12 @@ def _load_komissia() -> list[dict]:
                 FROM crm_procurements cp
                 LEFT JOIN crm_category_candidates cc ON cc.procurement_id = cp.id
                 LEFT JOIN procurement_ai_assessments ai ON ai.procurement_id = cp.id AND ai.is_current = TRUE
-                WHERE cp.crm_stage = 'torgi'
-                  AND cp.award_status IN ('submission_closed_waiting_award', 'award_not_found')
+                WHERE {where}
                   AND ({cat_sql})
+                  AND ({review_sql})
                 ORDER BY cp.end_date DESC, cp.match_score DESC
-                LIMIT 500
-            """, cat_params)
+                LIMIT %(limit)s OFFSET %(offset)s
+            """, params)
             rows = [dict(r) for r in cur.fetchall()]
         conn.close()
         return rows
@@ -267,13 +347,22 @@ def _load_komissia() -> list[dict]:
         return []
 
 
-def _load_razygranye() -> list[dict]:
+def _load_razygranye(limit: int = 25, offset: int = 0,
+                    allowed_ids: list[int] | None = None,
+                    law: str | None = None) -> list[dict]:
     try:
         import psycopg2
         from psycopg2.extras import RealDictCursor
+        from src.services.effective_lifecycle import factual_awarded_sql
 
         cat_sql, cat_params = _get_category_filter("razygranye")
+        params = dict(cat_params); params.update({"limit": limit, "offset": offset})
+        review_sql = "TRUE"
+        if allowed_ids is not None:
+            review_sql = "cp.id = ANY(%(allowed_ids)s)"
+            params["allowed_ids"] = allowed_ids or [-1]
 
+        where = factual_awarded_sql("cp", law=law if law is not None else _selected_law_filter())
         conn = psycopg2.connect(**_pg())
         with conn.cursor(cursor_factory=RealDictCursor) as cur:
             cur.execute(f"""
@@ -307,11 +396,12 @@ def _load_razygranye() -> list[dict]:
                 FROM crm_procurements cp
                 LEFT JOIN crm_category_candidates cc ON cc.procurement_id = cp.id
                 LEFT JOIN procurement_ai_assessments ai ON ai.procurement_id = cp.id AND ai.is_current = TRUE
-                WHERE cp.crm_stage = 'razygranye'
+                WHERE {where}
                   AND ({cat_sql})
+                  AND ({review_sql})
                 ORDER BY cp.contract_signed_at DESC NULLS LAST
-                LIMIT 500
-            """, cat_params)
+                LIMIT %(limit)s OFFSET %(offset)s
+            """, params)
             rows = [dict(r) for r in cur.fetchall()]
         conn.close()
         return rows
@@ -344,148 +434,269 @@ def _fmt_date(val) -> str:
 
 # ─── Торги-таб ────────────────────────────────────────────────────────────────
 
-_TORGI_AI_FILTERS = ["Все", "Неоцененные", "Неполные оценки", "Ошибки AI", "IN_PROFILE", "OUT_OF_PROFILE"]
-
-
 def _render_torgi_tab() -> None:
+    from src.services.annotation_state_service import load_current_annotation_states, annotation_state_counts
+    from src.services.db_bootstrap import connect_databases
+    from src.ui.components.analytics_v2.card_compact import render_compact_card
+
+    # ── Fresh session defaults / migration
+    if "analytics_law_filter" not in st.session_state:
+        st.session_state["analytics_law_filter"] = "Все"
+    if "analytics_expert_filter" not in st.session_state:
+        st.session_state["analytics_expert_filter"] = "Все"
+    if "analytics_ai_filter" not in st.session_state:
+        st.session_state["analytics_ai_filter"] = "Все"
+
     col_hdr, col_sync = st.columns([3, 1])
     with col_sync:
         info = _load_sync_info()
         if info:
             st.caption(f"Обновлено: {_fmt_date(info.get('finished_at'))}")
-        if st.button("↻", key="torgi_sync_btn"):
+        if st.button("↻ Обновить", key="torgi_sync_btn"):
             st.cache_data.clear()
             st.rerun()
 
-    cards = _load_torgi()
+    law = _selected_law_filter()
+    workset_ids = _stage_workset_ids("torgi", law=law)
+    
+    # ── Load all annotation states and AI assessments in batch
+    _, _, crm_db, _ = connect_databases()
+    annotation_states = load_current_annotation_states(workset_ids, crm_db)
+    
+    # ── Render review/expert filter with pre-calculated counts
+    counts = annotation_state_counts(annotation_states)
+    expert_options = [
+        f"Все ({len(workset_ids)})",
+        f"Не размеченные ({counts.get('UNREVIEWED', 0)})",
+        f"Размеченные ({counts.get('REVIEWED', 0)})",
+        f"В категории ({counts.get('IN_CATEGORY', 0)})",
+        f"Вне товарных категорий ({counts.get('OUT_OF_CATEGORY', 0)})",
+        f"Не уверен ({counts.get('UNCERTAIN', 0)})",
+        f"GOLD ({counts.get('GOLD', 0)})",
+        f"SILVER ({counts.get('SILVER', 0)})",
+        f"BRONZE ({counts.get('BRONZE', 0)})",
+        f"WOOD ({counts.get('WOOD', 0)})",
+        f"Коммерчески не подходит ({counts.get('NON_COMMERCIAL', 0)})"
+    ]
+    
+    st.markdown("### 📋 Идут торги")
+    
+    fcol1, fcol2 = st.columns(2)
+    with fcol1:
+        selected_expert_opt = st.selectbox("Экспертная разметка", expert_options, index=0, key="torgi_expert_filter_select")
+        raw_expert_filter = [
+            "Все",
+            "Не размеченные",
+            "Размеченные",
+            "В категории",
+            "Вне товарных категорий",
+            "Не уверен",
+            "GOLD",
+            "SILVER",
+            "BRONZE",
+            "WOOD",
+            "Коммерчески не подходит"
+        ][expert_options.index(selected_expert_opt)]
+    
+    # Apply expert filter
+    selected_ids = _filter_by_annotation(workset_ids, annotation_states, raw_expert_filter)
+    
+    # ── AI state filter
+    ai_status_counts = {"Все": len(selected_ids), "Оценено": 0, "Не оценено": 0, "Неполная оценка": 0, "Ошибка": 0}
+    cards_dummy = [{"id": pid} for pid in selected_ids]
+    eff_map_all = _load_effective_map(cards_dummy)
+    for pid in selected_ids:
+        eff = eff_map_all.get(pid)
+        ai_s = eff.ai_status if eff else "UNASSESSED"
+        if ai_s == "ASSESSED":
+            ai_status_counts["Оценено"] += 1
+        elif ai_s == "UNASSESSED":
+            ai_status_counts["Не оценено"] += 1
+        elif ai_s == "INCOMPLETE":
+            ai_status_counts["Неполная оценка"] += 1
+        elif ai_s in ("FAILED", "ERROR"):
+            ai_status_counts["Ошибка"] += 1
+            
+    ai_options = [
+        f"Все ({ai_status_counts['Все']})",
+        f"Оценено ({ai_status_counts['Оценено']})",
+        f"Не оценено ({ai_status_counts['Не оценено']})",
+        f"Неполная оценка ({ai_status_counts['Неполная оценка']})",
+        f"Ошибка ({ai_status_counts['Ошибка']})"
+    ]
+    with fcol2:
+        selected_ai_opt = st.selectbox("Фильтр AI-оценки", ai_options, index=0, key="torgi_ai_filter_select")
+        raw_ai_filter = [
+            "Все",
+            "Оценено",
+            "Не оценено",
+            "Неполная оценка",
+            "Ошибка"
+        ][ai_options.index(selected_ai_opt)]
+        
+    # Apply AI filter
+    selected_ids = _filter_by_ai(selected_ids, eff_map_all, raw_ai_filter)
+
+    sort_mode = st.radio(
+        "Сортировка по сроку",
+        list(DEADLINE_SORT_LABELS),
+        format_func=lambda value: DEADLINE_SORT_LABELS[value],
+        horizontal=True,
+        key="torgi_deadline_sort",
+    )
+
+    page, offset = _page_offset("torgi", len(selected_ids))
+    cards = _load_torgi(_PAGE_SIZE, offset, sort_mode, selected_ids, law=law)
 
     if not cards:
-        st.info("Нет тендеров в стадии торгов.")
+        st.info("Нет тендеров по выбранным фильтрам.")
         return
 
-    # ── Batch-load processing results (no N+1) ─────────────────────────────
+    # Enrichment
     from src.ui.components.analytics_v2 import card_processing
     proc_results = card_processing.load_batch(cards)
     for card in cards:
         card_processing.enrich_card(card, proc_results.get(card["id"], {}))
 
-    # ── Bulk-load effective assessments (single contract, no N+1) ──────────
     eff_map = _load_effective_map(cards)
-
-    cards_layer = cards
-
-    # ── AI state filter ────────────────────────────────────────────────────
-    with st.expander("Дополнительные AI-фильтры"):
-        ai_filter = st.selectbox("Фильтр AI-состояния:", _TORGI_AI_FILTERS, key="torgi_ai_filter")
-
-    def _matches_filter(card: dict) -> bool:
-        eff = eff_map.get(card["id"])
-        ai_s = eff.ai_status if eff else "UNASSESSED"
-        scope = eff.business_relevance if eff else "UNKNOWN"
-        if ai_filter == "Неоцененные":
-            return ai_s == "UNASSESSED"
-        if ai_filter == "Неполные оценки":
-            return ai_s == "INCOMPLETE"
-        if ai_filter == "Ошибки AI":
-            return ai_s == "FAILED"
-        if ai_filter == "IN_PROFILE":
-            return ai_s == "ASSESSED" and scope == "IN_PROFILE"
-        if ai_filter == "OUT_OF_PROFILE":
-            return scope == "OUT_OF_PROFILE"
-        return True  # "Все"
-
-    filtered = [c for c in cards_layer if _matches_filter(c)]
-
-    # ── Sort by effective assessment (explicit rank tuple) ──────────────────
-    filtered = sorted(
-        filtered,
+    
+    # Sorting page cards
+    cards = sorted(
+        cards,
         key=lambda c: _torgi_sort_key(c, eff_map),
         reverse=True,
     )
-    filtered = bind_and_advance(filtered, _SESSION_TORGI, st.session_state)
+    
+    cards = bind_and_advance(cards, _SESSION_TORGI, st.session_state)
 
-    selected_id = st.session_state.get(_SESSION_TORGI)
-    caption = f"Активных торгов: {len(cards)}"
-    if ai_filter != "Все":
-        caption += f" · фильтр: {ai_filter} ({len(filtered)})"
-    if selected_id:
-        caption += f" · выбрана #{selected_id}"
-    st.caption(caption)
-
-    render_stage_workspace(
-        filtered,
-        session_key=_SESSION_TORGI,
-        stage="OPEN",
-        stage_label="Идут торги",
-        effective_map=eff_map,
-    )
-
-
-
-# ─── Комиссия-таб ─────────────────────────────────────────────────────────────
+    for idx, card in enumerate(cards):
+        pid = card["id"]
+        render_compact_card(
+            card=card,
+            idx=idx,
+            session_key=_SESSION_TORGI,
+            effective=eff_map.get(pid)
+        )
 
 def _render_komissia_tab() -> None:
-    col_hdr, col_sync = st.columns([3, 2])
+    from src.services.annotation_state_service import load_current_annotation_states, annotation_state_counts
+    from src.services.db_bootstrap import connect_databases
+    from src.ui.components.analytics_v2.card_compact import render_compact_card
+
+    col_hdr, col_sync = st.columns([3, 1])
     with col_sync:
         if st.button("↻ Обновить", key="komissia_sync_btn"):
             st.cache_data.clear()
             st.rerun()
 
-    cards = _load_komissia()
+    law = _selected_law_filter()
+    workset_ids = _stage_workset_ids("commission", law=law)
+    
+    _, _, crm_db, _ = connect_databases()
+    annotation_states = load_current_annotation_states(workset_ids, crm_db)
+    
+    st.markdown("### 🏛️ Комиссия")
+    
+    # Expert filter
+    counts = annotation_state_counts(annotation_states)
+    expert_options = [
+        f"Все ({len(workset_ids)})",
+        f"Не размеченные ({counts.get('UNREVIEWED', 0)})",
+        f"Размеченные ({counts.get('REVIEWED', 0)})",
+        f"В категории ({counts.get('IN_CATEGORY', 0)})",
+        f"Вне товарных категорий ({counts.get('OUT_OF_CATEGORY', 0)})",
+        f"Не уверен ({counts.get('UNCERTAIN', 0)})"
+    ]
+    selected_expert_opt = st.selectbox("Экспертная разметка", expert_options, index=0, key="commission_expert_filter_select")
+    raw_expert_filter = [
+        "Все",
+        "Не размеченные",
+        "Размеченные",
+        "В категории",
+        "Вне товарных категорий",
+        "Не уверен"
+    ][expert_options.index(selected_expert_opt)]
+    
+    selected_ids = _filter_by_annotation(workset_ids, annotation_states, raw_expert_filter)
+    
+    page, offset = _page_offset("commission", len(selected_ids))
+    cards = _load_komissia(_PAGE_SIZE, offset, selected_ids, law=law)
 
     if not cards:
-        st.info("Нет тендеров на стадии работы комиссии.")
+        st.info("Нет тендеров по выбранным фильтрам.")
         return
 
-    waiting   = [c for c in cards if c["award_status"] == "submission_closed_waiting_award"]
-    not_found = [c for c in cards if c["award_status"] == "award_not_found"]
-    filtered = waiting + not_found
-    filtered = bind_and_advance(filtered, _SESSION_KOMISSIA, st.session_state)
-    selected_id = st.session_state.get(_SESSION_KOMISSIA)
+    eff_map = _load_effective_map(cards)
+    cards = bind_and_advance(cards, _SESSION_KOMISSIA, st.session_state)
 
-    st.caption(
-        f"Ждём решения: {len(waiting)} · результат не найден: {len(not_found)}"
-        + (f" · выбрана #{selected_id}" if selected_id else "")
-    )
-
-    render_stage_workspace(
-        filtered,
-        session_key=_SESSION_KOMISSIA,
-        stage="COMMISSION",
-        stage_label="Комиссия",
-        effective_map=_load_effective_map(filtered),
-    )
-
-
-# ─── Разыгранные-таб ──────────────────────────────────────────────────────────
+    for idx, card in enumerate(cards):
+        pid = card["id"]
+        render_compact_card(
+            card=card,
+            idx=idx,
+            session_key=_SESSION_KOMISSIA,
+            effective=eff_map.get(pid)
+        )
 
 def _render_razygranye_tab() -> None:
-    col_hdr, col_sync = st.columns([3, 2])
+    from src.services.annotation_state_service import load_current_annotation_states, annotation_state_counts
+    from src.services.db_bootstrap import connect_databases
+    from src.ui.components.analytics_v2.card_compact import render_compact_card
+
+    col_hdr, col_sync = st.columns([3, 1])
     with col_sync:
         if st.button("↻ Обновить данные", key="razygr_sync_btn"):
             st.cache_data.clear()
             st.rerun()
 
-    cards = _load_razygranye()
+    law = _selected_law_filter()
+    workset_ids = _stage_workset_ids("razygranye", law=law)
+    
+    _, _, crm_db, _ = connect_databases()
+    annotation_states = load_current_annotation_states(workset_ids, crm_db)
+    
+    st.markdown("### 🏅 Разыгранные")
+    
+    # Expert filter
+    counts = annotation_state_counts(annotation_states)
+    expert_options = [
+        f"Все ({len(workset_ids)})",
+        f"Не размеченные ({counts.get('UNREVIEWED', 0)})",
+        f"Размеченные ({counts.get('REVIEWED', 0)})",
+        f"В категории ({counts.get('IN_CATEGORY', 0)})",
+        f"Вне товарных категорий ({counts.get('OUT_OF_CATEGORY', 0)})",
+        f"Не уверен ({counts.get('UNCERTAIN', 0)})"
+    ]
+    selected_expert_opt = st.selectbox("Экспертная разметка", expert_options, index=0, key="razygranye_expert_filter_select")
+    raw_expert_filter = [
+        "Все",
+        "Не размеченные",
+        "Размеченные",
+        "В категории",
+        "Вне товарных категорий",
+        "Не уверен"
+    ][expert_options.index(selected_expert_opt)]
+    
+    selected_ids = _filter_by_annotation(workset_ids, annotation_states, raw_expert_filter)
+
+    page, offset = _page_offset("razygranye", len(selected_ids))
+    cards = _load_razygranye(_PAGE_SIZE, offset, selected_ids, law=law)
+
     if not cards:
-        st.info("Нет разыгранных закупок.")
+        st.info("Нет тендеров по выбранным фильтрам.")
         return
 
-    cards_layer = cards
-    cards_layer = bind_and_advance(cards_layer, _SESSION_RAZYGR, st.session_state)
+    eff_map = _load_effective_map(cards)
+    cards = bind_and_advance(cards, _SESSION_RAZYGR, st.session_state)
 
-    st.caption(
-        f"Найдено: {len(cards)} записей"
-        f" · текущий рабочий набор: {len(cards_layer)}"
-    )
-
-    render_stage_workspace(
-        cards_layer,
-        session_key=_SESSION_RAZYGR,
-        stage="AWARDED",
-        stage_label="Разыгранные",
-        effective_map=_load_effective_map(cards_layer),
-    )
+    for idx, card in enumerate(cards):
+        pid = card["id"]
+        render_compact_card(
+            card=card,
+            idx=idx,
+            session_key=_SESSION_RAZYGR,
+            effective=eff_map.get(pid)
+        )
 
 
 # ─── На рассмотрении-таб (CRM-SYNC-1) ───────────────────────────────────────

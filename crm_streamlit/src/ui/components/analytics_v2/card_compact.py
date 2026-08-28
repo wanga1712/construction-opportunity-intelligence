@@ -183,8 +183,8 @@ def render_compact_card(
         )
 
         # ── ALWAYS-VISIBLE TABS ────────────────────────────────────────────
-        t_overview, t_ai, t_medals, t_docs, t_history = st.tabs([
-            "📋 ОБЗОР", "🤖 AI / КАТЕГОРИИ", "🏅 МЕДАЛИ", "📁 ДОКУМЕНТЫ", "📜 ИСТОРИЯ"
+        t_overview, t_ai, t_medals, t_docs, t_history, t_annotation = st.tabs([
+            "📋 ОБЗОР", "🤖 AI / КАТЕГОРИИ", "🏅 МЕДАЛИ", "📁 ДОКУМЕНТЫ", "📜 ИСТОРИЯ", "✍️ РАЗМЕТКА"
         ])
 
         # TAB: ОБЗОР ──────────────────────────────────────────────────────
@@ -318,3 +318,20 @@ def render_compact_card(
         # TAB: ИСТОРИЯ ────────────────────────────────────────────────────
         with t_history:
             render_history_tab(crm_db, crm_id)
+
+        # TAB: РАЗМЕТКА ───────────────────────────────────────────────────
+        with t_annotation:
+            from src.services.expert_annotation_service import load_expert_annotation, load_model_assessment_for_annotation
+            from src.ui.components.analytics_v2.annotation_card import render_annotation_section
+            
+            assessment_data = load_model_assessment_for_annotation(crm_id, crm_db)
+            existing_data = load_expert_annotation(crm_id, crm_db)
+            
+            render_annotation_section(
+                crm_db=crm_db,
+                procurement_id=crm_id,
+                header=card,
+                assessment=assessment_data,
+                existing_annotation=existing_data,
+                section="Экспертная разметка"
+            )

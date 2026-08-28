@@ -106,6 +106,14 @@ def _render_filters() -> None:
         key="analytics_v2_region_filter",
     )
 
+    # --- Закон / источник ---
+    st.selectbox(
+        "Закон / источник",
+        ["Все", "44-ФЗ", "223-ФЗ", "615-ПП"],
+        index=0,
+        key="analytics_law_filter",
+    )
+
     # --- Иерархический фильтр категорий ---
     filters_for_counts: dict = {}
     if selected_profile:
