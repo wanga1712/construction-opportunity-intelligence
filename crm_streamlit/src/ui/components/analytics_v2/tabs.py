@@ -115,6 +115,12 @@ def _stage_workset_ids(stage: str, *, law: str | None = None) -> list[int]:
     finally:
         conn.close()
 
+def _page_offset(stage: str, total: int) -> tuple[int, int]:
+    pages = max(1, (total + _PAGE_SIZE - 1) // _PAGE_SIZE)
+    page = st.number_input("Страница", 1, pages, 1, key=f"{stage}_workset_page")
+    return int(page), (int(page) - 1) * _PAGE_SIZE
+
+
 def _load_torgi(limit: int = 25, offset: int = 0,
                 sort_mode: str = FARTHEST_DEADLINE_FIRST,
                 allowed_ids: list[int] | None = None,
