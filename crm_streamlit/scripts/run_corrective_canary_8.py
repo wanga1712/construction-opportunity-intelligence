@@ -76,6 +76,9 @@ def main():
     crm_db.execute_update(
         "DELETE FROM crm_procurements WHERE id BETWEEN 900000000 AND 900000999"
     )
+    crm_db.execute_update(
+        "DELETE FROM crm_product_categories WHERE category_code IN ('43.21.10', '43.21.20')"
+    )
     
     doc_conn = orchestrator._get_doc_conn()
     doc_conn.autocommit = True
@@ -367,6 +370,14 @@ def main():
         # Scenario 5: Latest-Run Authority for Experience and Card (E)
         # =========================================================================
         logger.info("Running Scenario 5: Latest-Run Authority...")
+        crm_db.execute_update(
+            """
+            INSERT INTO crm_product_categories (contour_code, category_code, category_name, is_active)
+            VALUES ('procurement', '43.21.10', 'Mock Category 10', TRUE),
+                   ('procurement', '43.21.20', 'Mock Category 20', TRUE)
+            ON CONFLICT (contour_code, category_code) DO UPDATE SET is_active = TRUE
+            """
+        )
         pid_auth = 900000900
         crm_db.execute_update(
             """
