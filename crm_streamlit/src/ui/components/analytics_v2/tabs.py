@@ -459,6 +459,39 @@ def _fmt_date(val) -> str:
     except Exception: return str(val)
 
 
+def _filter_by_annotation(workset_ids: list[int], annotation_states: dict[int, dict], raw_filter: str) -> list[int]:
+    if raw_filter == "Все":
+        return workset_ids
+        
+    from src.services.annotation_category_gate import IN_CATEGORY, OUT_OF_CATEGORY, UNCERTAIN
+    from src.services.expert_commercial_entry import NON_COMMERCIAL
+
+    filtered_ids = []
+    for pid in workset_ids:
+        state = annotation_states.get(pid, {})
+        is_match = False
+        
+        if raw_filter == "Не размеченные":
+            is_match = not state.get("is_category_reviewed", False)
+        elif raw_filter == "Размеченные":
+            is_match = state.get("is_category_reviewed", False)
+        elif raw_filter == "В категории":
+            is_match = state.get("expert_category_scope") == IN_CATEGORY
+        elif raw_filter == "Вне товарных категорий":
+            is_match = state.get("expert_category_scope") == OUT_OF_CATEGORY
+        elif raw_filter == "Не уверен":
+            is_match = state.get("expert_category_scope") == UNCERTAIN
+        elif raw_filter in ("GOLD", "SILVER", "BRONZE", "WOOD"):
+            is_match = state.get("expert_medal") == raw_filter
+        elif raw_filter == "Коммерчески не подходит":
+            is_match = state.get("expert_commercial_entry") == NON_COMMERCIAL
+            
+        if is_match:
+            filtered_ids.append(pid)
+            
+    return filtered_ids
+
+
 # ─── Торги-таб ────────────────────────────────────────────────────────────────
 
 def _render_torgi_tab() -> None:
