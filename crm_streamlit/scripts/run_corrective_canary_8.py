@@ -392,7 +392,7 @@ def main():
         # Insert finding for V1
         crm_db.execute_update(
             """
-            INSERT INTO crm_v3_product_findings (procurement_id, run_id, category_code, product_type, product_name_normalized, extractor_role)
+            INSERT INTO crm_v3_product_findings (procurement_id, model_run_id, category_code, product_type, product_name_normalized, extractor_role)
             VALUES (%s, 999901, '43.21.10', 'Mock Cable', 'Mock Cable V1', 'HUNTER')
             """,
             (pid_auth,)
@@ -414,7 +414,7 @@ def main():
         # Insert finding for V2: different category code ('43.21.20')
         crm_db.execute_update(
             """
-            INSERT INTO crm_v3_product_findings (procurement_id, run_id, category_code, product_type, product_name_normalized, extractor_role)
+            INSERT INTO crm_v3_product_findings (procurement_id, model_run_id, category_code, product_type, product_name_normalized, extractor_role)
             VALUES (%s, 999903, '43.21.20', 'Mock Plug', 'Mock Plug V2', 'HUNTER')
             """,
             (pid_auth,)
@@ -450,7 +450,7 @@ def main():
         assert hunter_run_id == 999903
         
         ui_products = crm_db.execute_query(
-            "SELECT product_name_normalized FROM crm_v3_product_findings WHERE procurement_id = %s AND run_id = %s",
+            "SELECT product_name_normalized FROM crm_v3_product_findings WHERE procurement_id = %s AND model_run_id = %s",
             (pid_auth, hunter_run_id)
         ) or []
         assert len(ui_products) == 1
