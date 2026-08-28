@@ -1,3 +1,6 @@
+from src.bootstrap import setup_source_path
+setup_source_path()
+
 from src.services.db_bootstrap import connect_databases
 
 def main():
