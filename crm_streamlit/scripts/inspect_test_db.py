@@ -2,7 +2,17 @@ import os
 import psycopg2
 from src.services.db_bootstrap import connect_databases
 
+def load_dotenv(path="/opt/CRM_Streamlit/.env"):
+    if os.path.exists(path):
+        with open(path, 'r', encoding='utf-8') as f:
+            for line in f:
+                line = line.strip()
+                if line and not line.startswith('#') and '=' in line:
+                    k, v = line.split('=', 1)
+                    os.environ[k.strip()] = v.strip()
+
 def main():
+    load_dotenv()
     _, _, crm_db, _ = connect_databases()
     if crm_db:
         print("TRACES:")
