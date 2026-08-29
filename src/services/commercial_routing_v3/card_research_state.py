@@ -1,5 +1,6 @@
 from typing import Any, Dict, List, Optional, Tuple
 import psycopg2, psycopg2.extras
+from src.services.commercial_routing_v3.document_links import resolve_document_links
 from src.services.commercial_routing_v3.factual_feeder import _get_doc_db_conn, PIPELINE_GENERATION
 
 STATE_WAITING_RESEARCH = "WAITING_RESEARCH"
@@ -22,21 +23,33 @@ def derive_procurement_research_state(
     procurement_id: int,
     crm_db,
     pipeline_generation: str = PIPELINE_GENERATION,
+    source_table: Optional[str] = None,
+    source_id: Optional[int] = None,
+    contract_number: Optional[str] = None,
 ) -> Dict[str, Any]:
+    doc_res = resolve_document_links(
+        source_table=source_table or "",
+        source_id=source_id,
+        contract_number=contract_number or "",
+    )
+    links = doc_res.get("links") or []
+    canonical_doc_count = len(links)
+
     raw_ev_rows = crm_db.execute_query("SELECT COUNT(*) as cnt FROM crm_v3_raw_source_evidence WHERE procurement_id = %s", (procurement_id,))
     raw_evidence_count = int(raw_ev_rows[0]["cnt"]) if raw_ev_rows else 0
 
-    find_rows = crm_db.execute_query("SELECT COUNT(*) as cnt FROM crm_v3_product_findings WHERE procurement_id = %s", (procurement_id,))
-    normalized_findings_count = int(find_rows[0]["cnt"]) if find_rows else 0
-
-    accepted_ev_rows = crm_db.execute_query("SELECT COUNT(*) as cnt FROM crm_v3_raw_source_evidence WHERE procurement_id = %s AND suggested_category_code IS NOT NULL", (procurement_id,))
-    accepted_evidence_count = int(accepted_ev_rows[0]["cnt"]) if accepted_ev_rows else raw_evidence_count
+    find_rows = crm_db.execute_query(
+        "SELECT COUNT(*) as total_cnt, COUNT(*) FILTER (WHERE category_validation_status != 'REJECTED_IRRELEVANT') as accepted_cnt FROM crm_v3_product_findings WHERE procurement_id = %s",
+        (procurement_id,),
+    )
+    normalized_findings_count = int(find_rows[0]["total_cnt"]) if find_rows else 0
+    accepted_evidence_count = int(find_rows[0]["accepted_cnt"]) if find_rows else 0
 
     doc_ev_rows = crm_db.execute_query("SELECT COUNT(DISTINCT source_document_id) as cnt FROM crm_v3_raw_source_evidence WHERE procurement_id = %s", (procurement_id,))
     documents_with_evidence = int(doc_ev_rows[0]["cnt"]) if doc_ev_rows else 0
 
     conn = _get_doc_db_conn()
-    doc_count = 0
+    doc_files_count = 0
     doc_supported = 0
     doc_researched = 0
     doc_failed = 0
@@ -57,7 +70,8 @@ def derive_procurement_research_state(
 
             cur.execute("SELECT f.id, f.download_status, r.status AS parse_status FROM document_files f LEFT JOIN document_processing_results r ON r.file_id = f.id WHERE f.procurement_id = %s", (procurement_id,))
             f_rows = cur.fetchall() or []
-            doc_count = len(f_rows)
+            doc_files_count = len(f_rows)
+
             for fr in f_rows:
                 dl = fr.get("download_status")
                 prs = fr.get("parse_status")
@@ -68,29 +82,33 @@ def derive_procurement_research_state(
                     doc_no_content += 1
                     doc_researched += 1
                     doc_supported += 1
-                else:
+                elif prs in ("COMPLETED", "PARSED_OK", "SUCCESS"):
                     doc_supported += 1
                     doc_researched += 1
     finally:
         conn.close()
 
-    if raw_evidence_count > 0 or normalized_findings_count > 0:
+    documents_discovered = max(canonical_doc_count, doc_files_count)
+
+    if accepted_evidence_count > 0:
         state = STATE_EVIDENCE_FOUND
     elif queue_status in ("PENDING", "RUNNING", "RETRY"):
         state = STATE_RESEARCHING
-    elif queue_status == "FAILED" or (doc_count > 0 and doc_failed == doc_count):
+    elif queue_status == "FAILED" or (documents_discovered > 0 and doc_failed == documents_discovered):
         state = STATE_FAILED
-    elif doc_count > 0 and (doc_failed > 0 or doc_unsupported > 0) and doc_researched < doc_count:
+    elif documents_discovered > 0 and (doc_failed > 0 or doc_unsupported > 0) and doc_researched < documents_discovered:
         state = STATE_PARTIAL
-    elif queue_status == "COMPLETED" or (doc_count > 0 and doc_researched >= doc_count):
+    elif queue_status == "COMPLETED" and documents_discovered > 0 and doc_researched >= documents_discovered and doc_failed == 0:
         state = STATE_NO_EVIDENCE
+    elif queue_status in ("COMPLETED", "SKIPPED"):
+        state = STATE_PARTIAL if (doc_failed > 0 or doc_unsupported > 0) else STATE_NO_EVIDENCE
     else:
         state = STATE_WAITING_RESEARCH
 
     return {
         "procurement_id": procurement_id,
         "research_state": state,
-        "documents_discovered": doc_count,
+        "documents_discovered": documents_discovered,
         "documents_supported": doc_supported,
         "documents_researched": doc_researched,
         "documents_failed": doc_failed,

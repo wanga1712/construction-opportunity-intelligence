@@ -12,9 +12,16 @@ from src.services.commercial_routing_v3.card_research_state import (
 )
 
 def sync_procurement_card_projection(procurement_id: int, crm_db) -> Dict[str, Any]:
-    metrics = derive_procurement_research_state(procurement_id, crm_db)
     p_rows = crm_db.execute_query("SELECT id, source_table, source_id, contract_number FROM crm_procurements WHERE id = %s", (procurement_id,))
     p_fact = p_rows[0] if p_rows else {}
+
+    metrics = derive_procurement_research_state(
+        procurement_id,
+        crm_db,
+        source_table=p_fact.get("source_table"),
+        source_id=p_fact.get("source_id"),
+        contract_number=p_fact.get("contract_number"),
+    )
 
     card_json = {
         "procurement_id": procurement_id,
@@ -97,34 +104,52 @@ def get_master_procurement_list_filtered(
         st = research_state_filter.upper()
         if st in VALID_RESEARCH_STATES:
             sql = """
-                SELECT c.procurement_id, c.research_state, c.documents_discovered,
-                       c.documents_researched, c.documents_failed, c.raw_evidence_count,
-                       c.normalized_findings_count, c.preliminary_research_priority,
-                       c.updated_at, p.source_table, p.contract_number
-                FROM crm_v3_canonical_procurement_cards c
-                JOIN crm_procurements p ON p.id = c.procurement_id
-                WHERE c.research_state = %s
-                ORDER BY c.procurement_id DESC
+                SELECT p.id AS procurement_id, p.source_table, p.contract_number,
+                       COALESCE(c.research_state, 'WAITING_RESEARCH') AS research_state,
+                       COALESCE(c.documents_discovered, 0) AS documents_discovered,
+                       COALESCE(c.documents_researched, 0) AS documents_researched,
+                       COALESCE(c.documents_failed, 0) AS documents_failed,
+                       COALESCE(c.raw_evidence_count, 0) AS raw_evidence_count,
+                       COALESCE(c.normalized_findings_count, 0) AS normalized_findings_count,
+                       COALESCE(c.preliminary_research_priority, 'UNSCORED') AS preliminary_research_priority,
+                       c.updated_at
+                FROM crm_procurements p
+                LEFT JOIN crm_v3_canonical_procurement_cards c ON c.procurement_id = p.id
+                WHERE p.source_table IN ('reestr_contract_44_fz', 'reestr_contract_223_fz')
+                  AND COALESCE(c.research_state, 'WAITING_RESEARCH') = %s
+                ORDER BY p.id DESC
                 LIMIT %s OFFSET %s
             """
             rows = crm_db.execute_query(sql, (st, limit, offset)) or []
             return [dict(r) for r in rows]
 
     sql = """
-        SELECT c.procurement_id, c.research_state, c.documents_discovered,
-               c.documents_researched, c.documents_failed, c.raw_evidence_count,
-               c.normalized_findings_count, c.preliminary_research_priority,
-               c.updated_at, p.source_table, p.contract_number
-        FROM crm_v3_canonical_procurement_cards c
-        JOIN crm_procurements p ON p.id = c.procurement_id
-        ORDER BY c.procurement_id DESC
+        SELECT p.id AS procurement_id, p.source_table, p.contract_number,
+               COALESCE(c.research_state, 'WAITING_RESEARCH') AS research_state,
+               COALESCE(c.documents_discovered, 0) AS documents_discovered,
+               COALESCE(c.documents_researched, 0) AS documents_researched,
+               COALESCE(c.documents_failed, 0) AS documents_failed,
+               COALESCE(c.raw_evidence_count, 0) AS raw_evidence_count,
+               COALESCE(c.normalized_findings_count, 0) AS normalized_findings_count,
+               COALESCE(c.preliminary_research_priority, 'UNSCORED') AS preliminary_research_priority,
+               c.updated_at
+        FROM crm_procurements p
+        LEFT JOIN crm_v3_canonical_procurement_cards c ON c.procurement_id = p.id
+        WHERE p.source_table IN ('reestr_contract_44_fz', 'reestr_contract_223_fz')
+        ORDER BY p.id DESC
         LIMIT %s OFFSET %s
     """
     rows = crm_db.execute_query(sql, (limit, offset)) or []
     return [dict(r) for r in rows]
 
 def get_research_state_counts(crm_db) -> Dict[str, Any]:
-    sql = "SELECT research_state, COUNT(*) as cnt FROM crm_v3_canonical_procurement_cards GROUP BY research_state"
+    sql = """
+        SELECT COALESCE(c.research_state, 'WAITING_RESEARCH') AS research_state, COUNT(*) as cnt
+        FROM crm_procurements p
+        LEFT JOIN crm_v3_canonical_procurement_cards c ON c.procurement_id = p.id
+        WHERE p.source_table IN ('reestr_contract_44_fz', 'reestr_contract_223_fz')
+        GROUP BY COALESCE(c.research_state, 'WAITING_RESEARCH')
+    """
     rows = crm_db.execute_query(sql) or []
     counts_map = {r["research_state"]: int(r["cnt"]) for r in rows}
 
@@ -135,11 +160,12 @@ def get_research_state_counts(crm_db) -> Dict[str, Any]:
     partial = counts_map.get(STATE_PARTIAL, 0)
     failed = counts_map.get(STATE_FAILED, 0)
 
-    total_all = crm_db.execute_query("SELECT COUNT(*) as cnt FROM crm_v3_canonical_procurement_cards")[0]["cnt"]
+    master_total = crm_db.execute_query("SELECT COUNT(*) as cnt FROM crm_procurements WHERE source_table IN ('reestr_contract_44_fz', 'reestr_contract_223_fz')")[0]["cnt"]
     sum_parts = waiting + researching + evidence_found + no_evidence + partial + failed
 
     return {
-        "RESEARCH_ALL": total_all,
+        "MASTER_WORKSET_TOTAL": master_total,
+        "RESEARCH_ALL": master_total,
         "RESEARCH_WAITING": waiting,
         "RESEARCH_RESEARCHING": researching,
         "RESEARCH_EVIDENCE_FOUND": evidence_found,
@@ -147,5 +173,5 @@ def get_research_state_counts(crm_db) -> Dict[str, Any]:
         "RESEARCH_PARTIAL": partial,
         "RESEARCH_FAILED": failed,
         "ONE_EFFECTIVE_RESEARCH_STATE_PER_PROCUREMENT": True,
-        "RESEARCH_STATE_COUNTS_RECONCILE": (total_all == sum_parts),
+        "RESEARCH_STATE_COUNTS_RECONCILE": (master_total == sum_parts),
     }
