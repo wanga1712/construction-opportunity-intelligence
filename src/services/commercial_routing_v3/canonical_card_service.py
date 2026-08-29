@@ -11,6 +11,8 @@ from src.services.commercial_routing_v3.card_research_state import (
     derive_procurement_research_state,
 )
 
+TORGI_WORKSET_SQL_PREDICATE = "p.crm_stage = 'torgi' AND p.qualification_state IN ('unassessed', 'candidate', 'manual_review')"
+
 def sync_procurement_card_projection(procurement_id: int, crm_db) -> Dict[str, Any]:
     p_rows = crm_db.execute_query("SELECT id, source_table, source_id, contract_number FROM crm_procurements WHERE id = %s", (procurement_id,))
     p_fact = p_rows[0] if p_rows else {}
@@ -115,7 +117,7 @@ def get_master_procurement_list_filtered(
                        c.updated_at
                 FROM crm_procurements p
                 LEFT JOIN crm_v3_canonical_procurement_cards c ON c.procurement_id = p.id
-                WHERE p.crm_stage = 'torgi'
+                WHERE p.crm_stage = 'torgi' AND p.qualification_state IN ('unassessed', 'candidate', 'manual_review')
                   AND COALESCE(c.research_state, 'WAITING_RESEARCH') = %s
                 ORDER BY p.id DESC
                 LIMIT %s OFFSET %s
@@ -135,7 +137,7 @@ def get_master_procurement_list_filtered(
                c.updated_at
         FROM crm_procurements p
         LEFT JOIN crm_v3_canonical_procurement_cards c ON c.procurement_id = p.id
-        WHERE p.crm_stage = 'torgi'
+        WHERE p.crm_stage = 'torgi' AND p.qualification_state IN ('unassessed', 'candidate', 'manual_review')
         ORDER BY p.id DESC
         LIMIT %s OFFSET %s
     """
@@ -147,7 +149,7 @@ def get_research_state_counts(crm_db) -> Dict[str, Any]:
         SELECT COALESCE(c.research_state, 'WAITING_RESEARCH') AS research_state, COUNT(*) as cnt
         FROM crm_procurements p
         LEFT JOIN crm_v3_canonical_procurement_cards c ON c.procurement_id = p.id
-        WHERE p.crm_stage = 'torgi'
+        WHERE p.crm_stage = 'torgi' AND p.qualification_state IN ('unassessed', 'candidate', 'manual_review')
         GROUP BY COALESCE(c.research_state, 'WAITING_RESEARCH')
     """
     rows = crm_db.execute_query(sql) or []
@@ -160,7 +162,9 @@ def get_research_state_counts(crm_db) -> Dict[str, Any]:
     partial = counts_map.get(STATE_PARTIAL, 0)
     failed = counts_map.get(STATE_FAILED, 0)
 
-    torgi_db_total = crm_db.execute_query("SELECT COUNT(*) as cnt FROM crm_procurements WHERE crm_stage = 'torgi'")[0]["cnt"]
+    torgi_db_total = crm_db.execute_query(
+        "SELECT COUNT(*) as cnt FROM crm_procurements WHERE crm_stage = 'torgi' AND qualification_state IN ('unassessed', 'candidate', 'manual_review')"
+    )[0]["cnt"]
     sum_parts = waiting + researching + evidence_found + no_evidence + partial + failed
 
     return {
