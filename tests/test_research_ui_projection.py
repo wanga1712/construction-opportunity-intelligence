@@ -1,5 +1,7 @@
 """Unit tests for research UI projection, evidence formatting, and semantics."""
 import pytest
+from unittest.mock import patch, MagicMock
+
 from src.services.commercial_routing_v3.research_ui_projection import (
     ResearchUiProjection,
     format_friendly_locator,
@@ -120,15 +122,10 @@ def test_document_sorting_and_evidence_attachment():
 
 
 def test_generation_isolation():
-    # Evidence from another generation is NOT attached if research_generation_hash does not match
     raw_ev_current_gen = [
         {"source_document_id": 201, "matched_term": "прожектор", "research_generation_hash": "gen_new"}
     ]
-    raw_ev_old_gen = [
-        {"source_document_id": 201, "matched_term": "старый термин", "research_generation_hash": "gen_old"}
-    ]
 
-    # Only current generation evidence passed to view composition
     view = compose_annotation_card_view(
         header={"id": 200},
         resolved={"links": [{"source_document_id": 201, "document_name": "Spec.pdf"}]},
@@ -139,3 +136,37 @@ def test_generation_isolation():
     doc = view["documents"][0]
     assert len(doc["research_evidence"]) == 1
     assert doc["research_evidence"][0]["matched_term"] == "прожектор"
+
+
+def test_tender_db_never_used_as_doc_db_authority():
+    """Ensure TenderDatabaseManager passed as doc_db is rejected for document queue loading."""
+    class TenderDatabaseManager:
+        def execute_query(self, query, params=None):
+            raise RuntimeError("Tender/source DB must NEVER be queried for document_processing_queue!")
+
+    mock_crm_db = MagicMock()
+    mock_crm_db.execute_query.return_value = []
+
+    mock_doc_conn = MagicMock()
+    mock_cursor = MagicMock()
+    mock_cursor.fetchall.return_value = []
+    mock_doc_conn.cursor.return_value.__enter__.return_value = mock_cursor
+
+    tender_db = TenderDatabaseManager()
+
+    with patch("src.services.commercial_routing_v3.research_ui_projection._get_doc_db_conn", return_value=mock_doc_conn) as mock_get_conn:
+        projs = load_research_ui_projection([100], mock_crm_db, doc_db=tender_db)
+        # Must have called _get_doc_db_conn to connect to document_intelligence!
+        mock_get_conn.assert_called_once()
+        assert 100 in projs
+
+
+def test_document_intelligence_failure_not_silent_waiting():
+    """Ensure DB authority connection failure sets error_detail rather than silent WAITING_RESEARCH."""
+    mock_crm_db = MagicMock()
+
+    with patch("src.services.commercial_routing_v3.research_ui_projection._get_doc_db_conn", side_effect=RuntimeError("DB Connection Refused")):
+        projs = load_research_ui_projection([100], mock_crm_db, doc_db=None)
+        assert 100 in projs
+        assert projs[100].error_detail is not None
+        assert "DB_AUTHORITY_FAILURE" in projs[100].error_detail

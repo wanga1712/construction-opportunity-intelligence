@@ -83,16 +83,19 @@ def load_current_generation_raw_evidence(
             (procurement_id, PIPELINE_GENERATION, research_generation_hash),
         )
     else:
-        # If gen hash not provided, get current gen hash from queue
-        q_rows = crm_db.execute_query(
-            """
-            SELECT research_generation_hash FROM document_processing_queue
-            WHERE procurement_id = %s AND pipeline_generation = %s
-            ORDER BY id DESC LIMIT 1
-            """,
-            (procurement_id, PIPELINE_GENERATION),
-        )
-        gh = q_rows[0].get("research_generation_hash") if q_rows else None
+        from src.services.commercial_routing_v3.card_research_state import _get_doc_db_conn
+        try:
+            doc_conn = _get_doc_db_conn()
+            with doc_conn.cursor() as cur:
+                cur.execute(
+                    "SELECT research_generation_hash FROM document_processing_queue WHERE procurement_id = %s AND pipeline_generation = %s ORDER BY id DESC LIMIT 1",
+                    (procurement_id, PIPELINE_GENERATION),
+                )
+                row = cur.fetchone()
+                gh = row[0] if row else None
+            doc_conn.close()
+        except Exception:
+            gh = None
         if not gh:
             return []
         rows = crm_db.execute_query(
