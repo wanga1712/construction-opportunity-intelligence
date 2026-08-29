@@ -79,82 +79,84 @@ class LearningObserver:
                 """, (PIPELINE_GENERATION,))
                 queue_items = cur.fetchall()
 
-            for item in queue_items:
-                pid = item["procurement_id"]
-                gen_hash = item["research_generation_hash"] or compute_sha256(pid)
-                qid = item["id"]
+                for item in queue_items:
+                    pid = item["procurement_id"]
+                    gen_hash = item["research_generation_hash"] or compute_sha256(pid)
+                    qid = item["id"]
 
-                with crm_conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as c_cur:
-                    c_cur.execute("""
-                        SELECT id FROM crm_v3_pre_research_snapshots
-                        WHERE procurement_id = %s AND research_generation_hash = %s AND producer_version = %s
-                    """, (pid, gen_hash, PRODUCER_VERSION))
-                    if c_cur.fetchone():
-                        continue
+                    with crm_conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as c_cur:
+                        c_cur.execute("""
+                            SELECT id FROM crm_v3_pre_research_snapshots
+                            WHERE procurement_id = %s AND research_generation_hash = %s AND producer_version = %s
+                        """, (pid, gen_hash, PRODUCER_VERSION))
+                        if c_cur.fetchone():
+                            continue
 
-                    c_cur.execute("""
-                        SELECT id, source_table, source_id, contract_number, auction_name,
-                               initial_price, customer, delivery_region, okpd_code, okpd_name,
-                               start_date, end_date, crm_stage, award_status
-                        FROM crm_procurements
-                        WHERE id = %s
-                    """, (pid,))
-                    p_fact = c_cur.fetchone()
-                    if not p_fact:
-                        continue
+                        c_cur.execute("""
+                            SELECT id, source_table, source_id, contract_number, auction_name,
+                                   initial_price, customer, delivery_region, okpd_code, okpd_name,
+                                   start_date, end_date, crm_stage, award_status
+                            FROM crm_procurements
+                            WHERE id = %s
+                        """, (pid,))
+                        p_fact = c_cur.fetchone()
+                        if not p_fact:
+                            continue
 
-                    source_snapshot = {
-                        "procurement_id": pid,
-                        "law_source": p_fact.get("source_table"),
-                        "title": p_fact.get("auction_name"),
-                        "initial_price": float(p_fact["initial_price"]) if p_fact.get("initial_price") is not None else None,
-                        "customer": p_fact.get("customer"),
-                        "delivery_region": p_fact.get("delivery_region"),
-                        "okpd_code": p_fact.get("okpd_code"),
-                        "okpd_name": p_fact.get("okpd_name"),
-                        "crm_stage": p_fact.get("crm_stage"),
-                        "award_status": p_fact.get("award_status")
-                    }
+                        source_snapshot = {
+                            "procurement_id": pid,
+                            "law_source": p_fact.get("source_table"),
+                            "title": p_fact.get("auction_name"),
+                            "initial_price": float(p_fact["initial_price"]) if p_fact.get("initial_price") is not None else None,
+                            "customer": p_fact.get("customer"),
+                            "delivery_region": p_fact.get("delivery_region"),
+                            "okpd_code": p_fact.get("okpd_code"),
+                            "okpd_name": p_fact.get("okpd_name"),
+                            "crm_stage": p_fact.get("crm_stage"),
+                            "award_status": p_fact.get("award_status")
+                        }
 
-                    # Fetch real canonical document links (NO fabricated specification_<pid>.pdf)
-                    c_cur.execute("""
-                        SELECT id, document_name, source_url, extension
-                        FROM crm_procurement_documents
-                        WHERE procurement_id = %s
-                    """, (pid,))
-                    doc_rows = c_cur.fetchall()
+                        # Fetch real canonical document metadata from document_files in document_intelligence DB
+                        cur.execute("""
+                            SELECT id, url, file_name, content_type
+                            FROM document_files
+                            WHERE procurement_id = %s
+                        """, (pid,))
+                        doc_rows = cur.fetchall()
 
-                    document_manifest = []
-                    for idx, d in enumerate(doc_rows, start=1):
-                        document_manifest.append({
-                            "source_document_id": d["id"],
-                            "document_key": f"doc_{pid}_{d['id']}",
-                            "document_name": d.get("document_name") or f"document_{d['id']}",
-                            "source_url": d.get("source_url"),
-                            "extension": d.get("extension") or "pdf"
-                        })
+                        document_manifest = []
+                        for d in doc_rows:
+                            fn = d.get("file_name") or ""
+                            ext = fn.split(".")[-1] if "." in fn else "pdf"
+                            document_manifest.append({
+                                "source_document_id": d["id"],
+                                "document_key": f"doc_{pid}_{d['id']}",
+                                "document_name": fn or f"document_{d['id']}",
+                                "source_url": d.get("url"),
+                                "extension": ext
+                            })
 
-                    snap_payload = {
-                        "source": source_snapshot,
-                        "manifest": document_manifest
-                    }
-                    snap_sha = compute_sha256(snap_payload)
+                        snap_payload = {
+                            "source": source_snapshot,
+                            "manifest": document_manifest
+                        }
+                        snap_sha = compute_sha256(snap_payload)
 
-                    c_cur.execute("""
-                        INSERT INTO crm_v3_pre_research_snapshots (
-                            procurement_id, queue_id, pipeline_generation, research_generation_hash,
-                            source_snapshot_json, document_manifest_json, snapshot_sha256, snapshot_schema_version,
-                            producer_version, created_at
-                        ) VALUES (%s, %s, %s, %s, %s, %s, %s, 'v2_canonical_manifest', %s, NOW())
-                        ON CONFLICT (procurement_id, research_generation_hash) DO NOTHING
-                        RETURNING id
-                    """, (
-                        pid, qid, PIPELINE_GENERATION, gen_hash,
-                        json.dumps(source_snapshot), json.dumps(document_manifest), snap_sha, PRODUCER_VERSION
-                    ))
-                    res = c_cur.fetchone()
-                    if res:
-                        created_count += 1
+                        c_cur.execute("""
+                            INSERT INTO crm_v3_pre_research_snapshots (
+                                procurement_id, queue_id, pipeline_generation, research_generation_hash,
+                                source_snapshot_json, document_manifest_json, snapshot_sha256, snapshot_schema_version,
+                                producer_version, created_at
+                            ) VALUES (%s, %s, %s, %s, %s, %s, %s, 'v2_canonical_manifest', %s, NOW())
+                            ON CONFLICT (procurement_id, research_generation_hash) DO NOTHING
+                            RETURNING id
+                        """, (
+                            pid, qid, PIPELINE_GENERATION, gen_hash,
+                            json.dumps(source_snapshot), json.dumps(document_manifest), snap_sha, PRODUCER_VERSION
+                        ))
+                        res = c_cur.fetchone()
+                        if res:
+                            created_count += 1
             crm_conn.commit()
         finally:
             doc_conn.close()
@@ -167,7 +169,6 @@ class LearningObserver:
         created_count = 0
         try:
             with doc_conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
-                # TRUTH ONLY FOR TERMINAL EXHAUSTIVE RESEARCH ITEMS
                 cur.execute("""
                     SELECT id, procurement_id, queue_lane, priority_score, status, research_generation_hash
                     FROM document_processing_queue
@@ -189,7 +190,6 @@ class LearningObserver:
                     if c_cur.fetchone():
                         continue
 
-                    # Query generation-scoped raw evidence
                     c_cur.execute("""
                         SELECT COUNT(1) as cnt FROM crm_v3_raw_source_evidence
                         WHERE procurement_id = %s AND pipeline_generation = %s AND research_generation_hash = %s
@@ -198,7 +198,6 @@ class LearningObserver:
                     ev_cnt = ev_res["cnt"] if ev_res else 0
 
                     if ev_cnt == 0:
-                        # Fallback for current S13_V2 rows
                         c_cur.execute("SELECT COUNT(1) as cnt FROM crm_v3_raw_source_evidence WHERE procurement_id = %s", (pid,))
                         ev_cnt = c_cur.fetchone()["cnt"]
 
@@ -260,7 +259,6 @@ class LearningObserver:
                     fact_target = pair["has_target_evidence"] == "YES"
                     false_neg = (not pred_target) and fact_target
 
-                    # Real evaluation metrics: NULL if 0 useful docs
                     doc_recall_1 = None
                     doc_recall_3 = None
                     doc_recall_5 = None
