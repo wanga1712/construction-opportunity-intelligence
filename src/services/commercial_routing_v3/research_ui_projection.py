@@ -99,7 +99,7 @@ def _get_crm_db_conn():
         load_dotenv("/etc/crm_v3.env")
     except Exception:
         pass
-    host = os.getenv("CRM_DB_HOST") or "127.0.0.1"
+    host = "127.0.0.1"
     port = int(os.getenv("CRM_DB_PORT") or "5432")
     user = "crm_app"
     password = os.getenv("CRM_DB_PASSWORD") or "X17B3n5hbANQSRt6i7WIyy0lJudX"
@@ -150,7 +150,9 @@ def load_research_ui_projection(
             raw_crm_conn = _get_crm_db_conn()
             real_crm_db = _SimpleDbWrapper(raw_crm_conn)
             crm_conn_closeable = real_crm_db
-        except Exception:
+        except Exception as conn_err:
+            logger.error(f"Failed _get_crm_db_conn: {conn_err}")
+            print(f"CRITICAL: Failed _get_crm_db_conn: {conn_err}")
             real_crm_db = crm_db
 
     # 1. Fetch active category names from crm_product_categories (CRM DB Roundtrip 1)
