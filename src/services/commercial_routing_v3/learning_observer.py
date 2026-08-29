@@ -148,7 +148,7 @@ class LearningObserver:
                                 source_snapshot_json, document_manifest_json, snapshot_sha256, snapshot_schema_version,
                                 producer_version, created_at
                             ) VALUES (%s, %s, %s, %s, %s, %s, %s, 'v2_canonical_manifest', %s, NOW())
-                            ON CONFLICT (procurement_id, research_generation_hash) DO NOTHING
+                            ON CONFLICT (procurement_id, research_generation_hash, producer_version) DO NOTHING
                             RETURNING id
                         """, (
                             pid, qid, PIPELINE_GENERATION, gen_hash,
@@ -216,7 +216,7 @@ class LearningObserver:
                             unknown_documents_json, evidence_count, truth_completeness, truth_source,
                             producer_version, created_at
                         ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, 'AUTO_FACT', %s, NOW())
-                        ON CONFLICT (procurement_id, research_generation_hash) DO NOTHING
+                        ON CONFLICT (procurement_id, research_generation_hash, producer_version) DO NOTHING
                         RETURNING id
                     """, (
                         pid, qid, PIPELINE_GENERATION, gen_hash,
