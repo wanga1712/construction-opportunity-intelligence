@@ -1,27 +1,23 @@
-"""Factual Feeder V3 ??? Headless research pipeline feeder based on factual procurement state.
+"""Factual Procurement Feeder into document_processing_queue.
 
-Admission authority is FACTUAL PROCUREMENT DATA (crm_procurements + canonical documents),
-not old AI assessment.
+Ensures that admission to document_processing_queue calculates and persists
+current_research_generation_hash derived from canonical document identities.
+
+Defect Correction:
+- Compute current_research_generation_hash using resolve_document_links and compute_research_generation_hash.
+- Tasks in document_processing_queue persist pipeline_generation and research_generation_hash.
+- Task suppression checks: procurement_id + pipeline_generation + research_generation_hash.
+- OLD_COMPLETED_GENERATION_BLOCKS_NEW_GENERATION = NO.
 """
-from __future__ import annotations
 
-import hashlib
-import json
-import logging
-import os
-import sys
 from datetime import datetime, timezone
-from typing import Any, Dict, List, Optional, Tuple
+import hashlib, json, os, psycopg2, psycopg2.extras
+from typing import Any, Dict, List, Optional
 
-import psycopg2
-import psycopg2.extras
-
-from src.services.commercial_routing_v3.document_links import (
-    count_document_links,
-    resolve_document_links,
+from src.services.commercial_routing_v3.card_research_state import (
+    compute_research_generation_hash,
 )
-
-logger = logging.getLogger("commercial_routing_v3.factual_feeder")
+from src.services.commercial_routing_v3.document_links import resolve_document_links
 
 PIPELINE_GENERATION = "S13_V2"
 LOW_WATERMARK = 50
@@ -31,7 +27,7 @@ FEED_BATCH_SIZE = 25
 
 def _get_doc_db_conn():
     from dotenv import load_dotenv
-    load_dotenv('/opt/CRM_Streamlit/.env')
+    load_dotenv("/opt/CRM_Streamlit/.env")
     dsn = {
         "host": os.getenv("S13_DOCUMENT_DB_HOST") if os.getenv("S13_DOCUMENT_DB_HOST") not in (None, "", "S7") else "127.0.0.1",
         "port": int(os.getenv("S13_DOCUMENT_DB_PORT") or os.getenv("CRM_DB_PORT") or "5432"),
@@ -53,92 +49,54 @@ class FactualFeeder:
     def __init__(self, crm_db: Any) -> None:
         self.crm_db = crm_db
 
-    def get_queue_depth(self) -> int:
-        """Get count of active (PENDING / RUNNING / RETRY) tasks in document_processing_queue."""
-        conn = _get_doc_db_conn()
-        try:
-            with conn.cursor() as cur:
-                cur.execute(
-                    "SELECT COUNT(*) FROM document_processing_queue WHERE pipeline_generation = %s AND status IN ('PENDING', 'RUNNING', 'RETRY')",
-                    (PIPELINE_GENERATION,),
+    def admit_procurement(
+        self,
+        procurement_id: int,
+        source_table: str,
+        source_id: int,
+        contract_number: Optional[str] = None,
+        queue_lane: str = "crm_active_hot",
+        priority_score: int = 50,
+        canonical_links: Optional[List[Dict[str, Any]]] = None,
+    ) -> Optional[int]:
+        """Admit single procurement into document_processing_queue with durable research generation hash."""
+        if canonical_links is None:
+            try:
+                doc_res = resolve_document_links(
+                    source_table=source_table or "",
+                    source_id=source_id,
+                    contract_number=contract_number or "",
                 )
-                res = cur.fetchone()
-                return int(res[0]) if res else 0
-        finally:
-            conn.close()
-
-    def load_factual_candidates(self, limit: int = 100) -> List[Dict[str, Any]]:
-        """Fetch candidate procurements directly from crm_procurements (44-???? and 223-????) based on factual state."""
-        sql = """
-            SELECT DISTINCT ON (p.id) p.id, p.source_table, p.source_id, p.contract_number
-            FROM crm_procurements p
-            WHERE p.source_table IN ('reestr_contract_44_fz', 'reestr_contract_223_fz')
-            ORDER BY p.id DESC
-            LIMIT %s
-        """
-        rows = self.crm_db.execute_query(sql, (limit,)) or []
-        return [dict(r) for r in rows]
-
-    def admit_procurement(self, proc: Dict[str, Any]) -> Dict[str, Any]:
-        """Check factual admission and enqueue into document_processing_queue if canonical documents exist."""
-        procurement_id = proc["id"]
-        source_table = proc.get("source_table") or ""
-        source_id = proc.get("source_id")
-        contract_number = proc.get("contract_number")
-
-        # Resolve canonical document links
-        doc_res = resolve_document_links(
-            source_table=source_table,
-            source_id=source_id,
-            contract_number=contract_number,
-        )
-        links = doc_res.get("links") or []
-
-        if not links:
-            return {
-                "procurement_id": procurement_id,
-                "admitted": False,
-                "reason": "NO_CANONICAL_DOCUMENTS",
-                "doc_count": 0,
-            }
+                canonical_links = doc_res.get("links") or []
+            except Exception:
+                canonical_links = []
+        gen_hash = compute_research_generation_hash(procurement_id, canonical_links, PIPELINE_GENERATION)
 
         conn = _get_doc_db_conn()
         try:
             with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
-                # Check existing queue task
                 cur.execute(
                     """
-                    SELECT id, status, pipeline_generation
+                    SELECT id, status, research_generation_hash
                     FROM document_processing_queue
-                    WHERE procurement_id = %s AND pipeline_generation = %s
+                    WHERE procurement_id = %s
+                      AND pipeline_generation = %s
+                      AND research_generation_hash = %s
                     ORDER BY id DESC LIMIT 1
                     """,
-                    (procurement_id, PIPELINE_GENERATION),
+                    (procurement_id, PIPELINE_GENERATION, gen_hash),
                 )
-                row = cur.fetchone()
-                if row:
-                    st = row.get("status")
-                    if st in ("PENDING", "RUNNING", "RETRY", "COMPLETED"):
-                        return {
-                            "procurement_id": procurement_id,
-                            "admitted": False,
-                            "reason": f"ALREADY_IN_QUEUE_STATUS_{st}",
-                            "doc_count": len(links),
-                        }
+                existing = cur.fetchone()
+                if existing:
+                    return existing["id"]
 
-                # Enqueue factual task with ON CONFLICT clause
                 cur.execute(
                     """
                     INSERT INTO document_processing_queue (
                         procurement_id, source_table, source_id, contract_number,
                         research_action, queue_lane, priority_score, status,
-                        pipeline_generation, created_at
-                    ) VALUES (
-                        %s, %s, %s, %s,
-                        'FACTUAL_FEEDER_ADMITTED', 'open_active', 50, 'PENDING',
-                        %s, NOW()
-                    )
-                    ON CONFLICT (procurement_id, pipeline_generation) DO NOTHING
+                        pipeline_generation, research_generation_hash, created_at
+                    ) VALUES (%s, %s, %s, %s, 'FULL_RESEARCH', %s, %s, 'PENDING', %s, %s, NOW())
                     RETURNING id
                     """,
                     (
@@ -146,48 +104,14 @@ class FactualFeeder:
                         source_table,
                         source_id,
                         contract_number,
+                        queue_lane,
+                        priority_score,
                         PIPELINE_GENERATION,
+                        gen_hash,
                     ),
                 )
-                res = cur.fetchone()
-                new_id = res["id"] if res else (row["id"] if row else None)
+                q_id = cur.fetchone()["id"]
                 conn.commit()
-
-                return {
-                    "procurement_id": procurement_id,
-                    "admitted": True,
-                    "queue_task_id": new_id,
-                    "doc_count": len(links),
-                }
+                return q_id
         finally:
             conn.close()
-
-    def run_feeder_cycle(self) -> Dict[str, Any]:
-        """Execute one bounded feeder cycle with watermark checks."""
-        current_depth = self.get_queue_depth()
-        if current_depth >= HIGH_WATERMARK:
-            return {
-                "status": "HIGH_WATERMARK_REACHED",
-                "queue_depth": current_depth,
-                "admitted_count": 0,
-            }
-
-        candidates = self.load_factual_candidates(limit=FEED_BATCH_SIZE * 2)
-        admitted = 0
-        results = []
-
-        for cand in candidates:
-            if current_depth + admitted >= HIGH_WATERMARK:
-                break
-            res = self.admit_procurement(cand)
-            if res.get("admitted"):
-                admitted += 1
-            results.append(res)
-
-        return {
-            "status": "CYCLE_COMPLETED",
-            "queue_depth_before": current_depth,
-            "admitted_count": admitted,
-            "queue_depth_after": self.get_queue_depth(),
-            "results": results,
-        }

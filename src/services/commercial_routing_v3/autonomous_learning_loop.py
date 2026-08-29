@@ -528,6 +528,9 @@ JSON Schema:
         products: List[Dict[str, Any]],
         model_run_id: Optional[int],
         role: str,
+        raw_evidence_id: Optional[int] = None,
+        relevance: str = 'RELEVANT',
+        research_generation_hash: Optional[str] = None,
     ) -> None:
         """Persist product findings into crm_v3_product_findings."""
         # Load active category codes for validation
@@ -584,6 +587,16 @@ JSON Schema:
                         validation_status = "RESOLVED"
                         break
             
+            # Fetch matching raw_evidence_id if not explicitly provided
+            eff_raw_id = raw_evidence_id or p.get("raw_evidence_id")
+            if not eff_raw_id and research_generation_hash:
+                raw_rows = self.crm_db.execute_query(
+                    "SELECT id FROM crm_v3_raw_source_evidence WHERE procurement_id = %s AND research_generation_hash = %s LIMIT 1",
+                    (procurement_id, research_generation_hash)
+                )
+                if raw_rows:
+                    eff_raw_id = raw_rows[0]["id"]
+
             self.crm_db.execute_update(
                 """
                 INSERT INTO crm_v3_product_findings (
@@ -592,8 +605,9 @@ JSON Schema:
                     quantity, unit, raw_description, evidence_text,
                     document_name, page, sheet, row_num, position_number,
                     source_locator_json, extractor_role, extraction_confidence,
-                    model_run_id, raw_model_category_code, category_validation_status
-                ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                    model_run_id, raw_model_category_code, category_validation_status,
+                    raw_evidence_id, relevance, research_generation_hash
+                ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
                 """,
                 (
                     procurement_id,
@@ -618,6 +632,9 @@ JSON Schema:
                     model_run_id,
                     raw_cat,
                     validation_status,
+                    eff_raw_id,
+                    relevance,
+                    research_generation_hash,
                 ),
             )
 

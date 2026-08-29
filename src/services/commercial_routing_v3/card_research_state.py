@@ -1,7 +1,20 @@
 import hashlib, psycopg2, psycopg2.extras
 from typing import Any, Dict, List, Optional
 from src.services.commercial_routing_v3.document_links import resolve_document_links
-from src.services.commercial_routing_v3.factual_feeder import _get_doc_db_conn, PIPELINE_GENERATION
+PIPELINE_GENERATION = 'S13_V2'
+
+def _get_doc_db_conn():
+    import os, psycopg2
+    from dotenv import load_dotenv
+    load_dotenv('/opt/CRM_Streamlit/.env')
+    dsn = {
+        'host': os.getenv('S13_DOCUMENT_DB_HOST') if os.getenv('S13_DOCUMENT_DB_HOST') not in (None, '', 'S7') else '127.0.0.1',
+        'port': int(os.getenv('S13_DOCUMENT_DB_PORT') or os.getenv('CRM_DB_PORT') or '5432'),
+        'dbname': 'document_intelligence',
+        'user': os.getenv('CRM_DB_USER') or 'crm_app',
+        'password': os.getenv('CRM_DB_PASSWORD') or '',
+    }
+    return psycopg2.connect(**dsn)
 
 STATE_WAITING_RESEARCH = "WAITING_RESEARCH"
 STATE_RESEARCHING = "RESEARCHING"

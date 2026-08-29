@@ -1,3 +1,5 @@
+from typing import Any, Dict, List, Optional
+PIPELINE_GENERATION = 'S13_V2'
 import json
 from typing import Any, Dict, List, Optional
 from src.services.commercial_routing_v3.card_research_state import (
@@ -15,7 +17,12 @@ from src.services.commercial_routing_v3.submission_window import actionable_subm
 def get_torgi_workset_predicate(alias: str = "p") -> str:
     return f"{alias}.crm_stage = 'torgi' AND {alias}.award_status = 'submission_open' AND {actionable_submission_sql(alias)}"
 
-def sync_procurement_card_projection(procurement_id: int, crm_db) -> Dict[str, Any]:
+def sync_procurement_card_projection(
+    procurement_id: int,
+    crm_db: Any,
+    pipeline_generation: str = PIPELINE_GENERATION,
+    canonical_links: Optional[List[Dict[str, Any]]] = None,
+) -> Dict[str, Any]:
     p_rows = crm_db.execute_query("SELECT id, source_table, source_id, contract_number FROM crm_procurements WHERE id = %s", (procurement_id,))
     p_fact = p_rows[0] if p_rows else {}
 
