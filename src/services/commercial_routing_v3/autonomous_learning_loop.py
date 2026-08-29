@@ -832,7 +832,7 @@ JSON Schema:
 
             # Save Hunter product findings
             detected_products = hunter_raw.get("detected_products") or []
-            self.save_product_findings(procurement_id, procurement_number, detected_products, hunter_run_id, "HUNTER")
+            self.save_product_findings(procurement_id, procurement_number, detected_products, hunter_run_id, "HUNTER", research_generation_hash=research_generation_hash)
 
             # 2. Build & Run Auditor
             auditor_prompt = self.build_auditor_prompt(facts, registry, docs, evidence, hunter_raw)
@@ -860,7 +860,7 @@ JSON Schema:
 
             # Save Auditor discovered candidates (missed products)
             missed_products = auditor_raw.get("auditor_discovered_candidate") or []
-            self.save_product_findings(procurement_id, procurement_number, missed_products, auditor_run_id, "AUDITOR")
+            self.save_product_findings(procurement_id, procurement_number, missed_products, auditor_run_id, "AUDITOR", research_generation_hash=research_generation_hash)
 
             # 3. Consensus & Trace
             consensus_state = self.evaluate_consensus(hunter_raw, auditor_raw)
