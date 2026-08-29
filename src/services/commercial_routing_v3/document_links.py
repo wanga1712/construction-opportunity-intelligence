@@ -31,11 +31,11 @@ ZERO_LINK_ROOT_CAUSE = (
 
 def _s7_dsn() -> Dict[str, Any]:
     return {
-        "host": os.getenv("DB_HOST") or os.getenv("TENDER_DB_HOST") or "S7",
-        "port": int(os.getenv("DB_PORT") or os.getenv("TENDER_DB_PORT") or 5432),
-        "dbname": os.getenv("DB_NAME") or os.getenv("TENDER_DB_DATABASE") or "tender_monitor",
-        "user": os.getenv("DB_USER") or os.getenv("TENDER_DB_USER"),
-        "password": os.getenv("DB_PASSWORD") or os.getenv("TENDER_DB_PASSWORD") or "",
+        "host": os.getenv("DB_HOST") or os.getenv("TENDER_DB_HOST") or os.getenv("TENDER_MONITOR_DB_HOST") or "10.8.0.7",
+        "port": int(os.getenv("DB_PORT") or os.getenv("TENDER_DB_PORT") or os.getenv("TENDER_MONITOR_DB_PORT") or 5432),
+        "dbname": os.getenv("DB_NAME") or os.getenv("TENDER_DB_DATABASE") or os.getenv("TENDER_MONITOR_DB_DATABASE") or "tender_monitor",
+        "user": os.getenv("DB_USER") or os.getenv("TENDER_DB_USER") or os.getenv("TENDER_MONITOR_DB_USER") or "postgres",
+        "password": os.getenv("DB_PASSWORD") or os.getenv("TENDER_DB_PASSWORD") or os.getenv("TENDER_MONITOR_DB_PASSWORD") or "oTIg3EqK85pux8SfZTuCbS-bEcObXiGfV3P2hU2m5uJ_pYMbRtRmP8jnMA-hvyhR",
         "connect_timeout": int(os.getenv("S7_LINK_CONNECT_TIMEOUT", "8")),
     }
 

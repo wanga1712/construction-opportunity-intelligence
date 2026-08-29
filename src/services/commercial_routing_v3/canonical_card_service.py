@@ -115,7 +115,7 @@ def get_master_procurement_list_filtered(
                        c.updated_at
                 FROM crm_procurements p
                 LEFT JOIN crm_v3_canonical_procurement_cards c ON c.procurement_id = p.id
-                WHERE p.source_table IN ('reestr_contract_44_fz', 'reestr_contract_223_fz')
+                WHERE p.crm_stage = 'torgi'
                   AND COALESCE(c.research_state, 'WAITING_RESEARCH') = %s
                 ORDER BY p.id DESC
                 LIMIT %s OFFSET %s
@@ -135,7 +135,7 @@ def get_master_procurement_list_filtered(
                c.updated_at
         FROM crm_procurements p
         LEFT JOIN crm_v3_canonical_procurement_cards c ON c.procurement_id = p.id
-        WHERE p.source_table IN ('reestr_contract_44_fz', 'reestr_contract_223_fz')
+        WHERE p.crm_stage = 'torgi'
         ORDER BY p.id DESC
         LIMIT %s OFFSET %s
     """
@@ -147,7 +147,7 @@ def get_research_state_counts(crm_db) -> Dict[str, Any]:
         SELECT COALESCE(c.research_state, 'WAITING_RESEARCH') AS research_state, COUNT(*) as cnt
         FROM crm_procurements p
         LEFT JOIN crm_v3_canonical_procurement_cards c ON c.procurement_id = p.id
-        WHERE p.source_table IN ('reestr_contract_44_fz', 'reestr_contract_223_fz')
+        WHERE p.crm_stage = 'torgi'
         GROUP BY COALESCE(c.research_state, 'WAITING_RESEARCH')
     """
     rows = crm_db.execute_query(sql) or []
@@ -160,12 +160,12 @@ def get_research_state_counts(crm_db) -> Dict[str, Any]:
     partial = counts_map.get(STATE_PARTIAL, 0)
     failed = counts_map.get(STATE_FAILED, 0)
 
-    master_total = crm_db.execute_query("SELECT COUNT(*) as cnt FROM crm_procurements WHERE source_table IN ('reestr_contract_44_fz', 'reestr_contract_223_fz')")[0]["cnt"]
+    torgi_db_total = crm_db.execute_query("SELECT COUNT(*) as cnt FROM crm_procurements WHERE crm_stage = 'torgi'")[0]["cnt"]
     sum_parts = waiting + researching + evidence_found + no_evidence + partial + failed
 
     return {
-        "MASTER_WORKSET_TOTAL": master_total,
-        "RESEARCH_ALL": master_total,
+        "TORGI_DB_TOTAL": torgi_db_total,
+        "RESEARCH_ALL": torgi_db_total,
         "RESEARCH_WAITING": waiting,
         "RESEARCH_RESEARCHING": researching,
         "RESEARCH_EVIDENCE_FOUND": evidence_found,
@@ -173,5 +173,5 @@ def get_research_state_counts(crm_db) -> Dict[str, Any]:
         "RESEARCH_PARTIAL": partial,
         "RESEARCH_FAILED": failed,
         "ONE_EFFECTIVE_RESEARCH_STATE_PER_PROCUREMENT": True,
-        "RESEARCH_STATE_COUNTS_RECONCILE": (master_total == sum_parts),
+        "RESEARCH_STATE_COUNTS_RECONCILE": (torgi_db_total == sum_parts),
     }
