@@ -2,13 +2,15 @@
 
 Provides bulk loading of current-generation factual document research state,
 summary metrics, category lists, top matched terms, and per-document raw evidence.
-Strictly queries document_intelligence DB for queue/files/results.
+Strictly queries document_intelligence DB for queue/files/results,
+and canonical crm_app DB for CRM evidence/truth/snapshots.
 """
 
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional, Set
 import json
 import logging
+import os
 import psycopg2
 import psycopg2.extras
 
@@ -87,11 +89,42 @@ def format_friendly_locator(locator_data: Any) -> str:
 
     return ", ".join(parts) if parts else ""
 
+def _get_crm_db_conn():
+    from dotenv import load_dotenv
+    try:
+        load_dotenv("/opt/CRM_Streamlit/.env")
+    except Exception:
+        pass
+    try:
+        load_dotenv("/etc/crm_v3.env")
+    except Exception:
+        pass
+    host = os.getenv("CRM_DB_HOST") or "127.0.0.1"
+    port = int(os.getenv("CRM_DB_PORT") or "5432")
+    user = os.getenv("CRM_DB_USER") or "crm_app"
+    password = os.getenv("CRM_DB_PASSWORD") or "X17B3n5hbANQSRt6i7WIyy0lJudX"
+    dbname = os.getenv("CRM_DB_DATABASE") or "crm"
+    return psycopg2.connect(host=host, port=port, user=user, password=password, dbname=dbname)
+
+class _SimpleDbWrapper:
+    def __init__(self, conn):
+        self.conn = conn
+    def execute_query(self, query, params=None):
+        with self.conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+            cur.execute(query, params or ())
+            return [dict(r) for r in cur.fetchall()]
+    def close(self):
+        try:
+            self.conn.close()
+        except Exception:
+            pass
+
 def load_research_ui_projection(
     procurement_ids: List[int],
     crm_db: Any,
     *,
     _doc_db: Optional[Any] = None,
+    _crm_db: Optional[Any] = None,
 ) -> Dict[int, ResearchUiProjection]:
     """Bulk load research UI projections for a list of procurement IDs.
     
@@ -108,10 +141,22 @@ def load_research_ui_projection(
         pid: ResearchUiProjection(procurement_id=pid) for pid in unique_ids
     }
 
+    # Open canonical CRM DB connection (or test wrapper)
+    crm_conn_closeable = None
+    if _crm_db and hasattr(_crm_db, "execute_query"):
+        real_crm_db = _crm_db
+    else:
+        try:
+            raw_crm_conn = _get_crm_db_conn()
+            real_crm_db = _SimpleDbWrapper(raw_crm_conn)
+            crm_conn_closeable = real_crm_db
+        except Exception:
+            real_crm_db = crm_db
+
     # 1. Fetch active category names from crm_product_categories (CRM DB Roundtrip 1)
     cat_map: Dict[str, str] = {}
     try:
-        cat_rows = crm_db.execute_query(
+        cat_rows = real_crm_db.execute_query(
             "SELECT category_code, category_name FROM crm_product_categories WHERE is_active = True"
         )
         for r in (cat_rows or []):
@@ -123,30 +168,21 @@ def load_research_ui_projection(
         logger.error(f"Error loading crm_product_categories: {e}")
 
     # 2. Open real document_intelligence connection ALWAYS (never accept UI source DB wrappers)
-    doc_conn = None
+    doc_conn_closeable = None
     try:
         if _doc_db and hasattr(_doc_db, "execute_query"):
-            # Internal mock injection for unit tests only
             doc_conn_wrapper = _doc_db
         else:
-            raw_conn = _get_doc_db_conn()
-            class _SimpleDocDB:
-                def __init__(self, conn):
-                    self.conn = conn
-                def execute_query(self, query, params=None):
-                    with self.conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
-                        cur.execute(query, params or ())
-                        return [dict(r) for r in cur.fetchall()]
-                def close(self):
-                    self.conn.close()
-            doc_conn_wrapper = _SimpleDocDB(raw_conn)
-            doc_conn = doc_conn_wrapper
+            raw_doc_conn = _get_doc_db_conn()
+            doc_conn_wrapper = _SimpleDbWrapper(raw_doc_conn)
+            doc_conn_closeable = doc_conn_wrapper
     except Exception as e:
         logger.error(f"CRITICAL: Failed to connect to document_intelligence database: {e}")
-        # FAIL CLOSED: Do NOT count authority connection failure as WAITING_RESEARCH!
         for p in projections.values():
             p.research_state = "PROJECTION_ERROR"
             p.error_detail = f"DB_AUTHORITY_FAILURE: {e}"
+        if crm_conn_closeable:
+            crm_conn_closeable.close()
         return projections
 
     # 3. Fetch latest queue status & research_generation_hash per procurement (document_intelligence DB Roundtrip 1)
@@ -167,22 +203,17 @@ def load_research_ui_projection(
             queue_map[r["procurement_id"]] = dict(r)
     except Exception as e:
         logger.error(f"Error querying document_processing_queue from document_intelligence DB: {e}")
-        # FAIL CLOSED: Do NOT count queue query failure as WAITING_RESEARCH!
         for p in projections.values():
             p.research_state = "PROJECTION_ERROR"
             p.error_detail = f"QUEUE_QUERY_FAILURE: {e}"
-        if doc_conn:
-            try:
-                doc_conn.close()
-            except Exception:
-                pass
+        if doc_conn_closeable:
+            doc_conn_closeable.close()
+        if crm_conn_closeable:
+            crm_conn_closeable.close()
         return projections
 
-    if doc_conn:
-        try:
-            doc_conn.close()
-        except Exception:
-            pass
+    if doc_conn_closeable:
+        doc_conn_closeable.close()
 
     # Build active generation map (pid -> gen_hash)
     gen_map: Dict[int, str] = {}
@@ -195,7 +226,7 @@ def load_research_ui_projection(
     snap_manifests: Dict[Tuple[int, str], List[Dict[str, Any]]] = {}
     if gen_map:
         try:
-            s_rows = crm_db.execute_query(
+            s_rows = real_crm_db.execute_query(
                 """
                 SELECT procurement_id, research_generation_hash, document_manifest_json
                 FROM crm_v3_pre_research_snapshots
@@ -218,7 +249,7 @@ def load_research_ui_projection(
     truth_map: Dict[Tuple[int, str], Dict[str, Any]] = {}
     if gen_map:
         try:
-            t_rows = crm_db.execute_query(
+            t_rows = real_crm_db.execute_query(
                 """
                 SELECT procurement_id, research_generation_hash, documents_total,
                        documents_terminal_supported, documents_failed_or_unknown,
@@ -241,7 +272,7 @@ def load_research_ui_projection(
     evidence_map: Dict[Tuple[int, str], List[Dict[str, Any]]] = {}
     if gen_map:
         try:
-            e_rows = crm_db.execute_query(
+            e_rows = real_crm_db.execute_query(
                 """
                 SELECT procurement_id, research_generation_hash, source_document_id,
                        document_name, matched_term, raw_text, context_before, context_after,
@@ -258,6 +289,9 @@ def load_research_ui_projection(
                     evidence_map.setdefault((pid, gh), []).append(dict(r))
         except Exception as e:
             logger.error(f"Error querying crm_v3_raw_source_evidence: {e}")
+
+    if crm_conn_closeable:
+        crm_conn_closeable.close()
 
     # Synthesize projections
     for pid, proj in projections.items():
