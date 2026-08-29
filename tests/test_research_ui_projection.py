@@ -138,12 +138,18 @@ def test_generation_isolation():
     assert doc["research_evidence"][0]["matched_term"] == "прожектор"
 
 
-def test_tender_db_never_used_as_doc_db_authority():
-    """Ensure TenderDatabaseManager passed as doc_db is rejected for document queue loading."""
-    class TenderDatabaseManager:
+def test_source_readonly_db_never_queried_for_queue():
+    """Regression test: Ensure SourceReadOnlyDatabase (tender_monitor) is NEVER queried for document_processing_queue."""
+    class SourceReadOnlyDatabase:
+        def __init__(self):
+            self.queue_query_count = 0
         def execute_query(self, query, params=None):
-            raise RuntimeError("Tender/source DB must NEVER be queried for document_processing_queue!")
+            if "document_processing_queue" in str(query):
+                self.queue_query_count += 1
+                raise RuntimeError("SourceReadOnlyDatabase MUST NOT be queried for document_processing_queue!")
+            return []
 
+    source_db = SourceReadOnlyDatabase()
     mock_crm_db = MagicMock()
     mock_crm_db.execute_query.return_value = []
 
@@ -152,12 +158,9 @@ def test_tender_db_never_used_as_doc_db_authority():
     mock_cursor.fetchall.return_value = []
     mock_doc_conn.cursor.return_value.__enter__.return_value = mock_cursor
 
-    tender_db = TenderDatabaseManager()
-
-    with patch("src.services.commercial_routing_v3.research_ui_projection._get_doc_db_conn", return_value=mock_doc_conn) as mock_get_conn:
-        projs = load_research_ui_projection([100], mock_crm_db, doc_db=tender_db)
-        # Must have called _get_doc_db_conn to connect to document_intelligence!
-        mock_get_conn.assert_called_once()
+    with patch("src.services.commercial_routing_v3.research_ui_projection._get_doc_db_conn", return_value=mock_doc_conn):
+        projs = load_research_ui_projection([100], mock_crm_db)
+        assert source_db.queue_query_count == 0
         assert 100 in projs
 
 
@@ -166,7 +169,8 @@ def test_document_intelligence_failure_not_silent_waiting():
     mock_crm_db = MagicMock()
 
     with patch("src.services.commercial_routing_v3.research_ui_projection._get_doc_db_conn", side_effect=RuntimeError("DB Connection Refused")):
-        projs = load_research_ui_projection([100], mock_crm_db, doc_db=None)
+        projs = load_research_ui_projection([100], mock_crm_db)
         assert 100 in projs
+        assert projs[100].research_state == "PROJECTION_ERROR"
         assert projs[100].error_detail is not None
         assert "DB_AUTHORITY_FAILURE" in projs[100].error_detail

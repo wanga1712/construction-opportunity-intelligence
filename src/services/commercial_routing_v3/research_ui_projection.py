@@ -22,7 +22,7 @@ PIPELINE_GENERATION = "S13_V2"
 class ResearchUiProjection:
     procurement_id: int
     research_generation_hash: Optional[str] = None
-    research_state: str = "WAITING_RESEARCH"  # WAITING_RESEARCH, RESEARCHING, EVIDENCE_FOUND, NO_EVIDENCE, PARTIAL, FAILED
+    research_state: str = "WAITING_RESEARCH"  # WAITING_RESEARCH, RESEARCHING, EVIDENCE_FOUND, NO_EVIDENCE, PARTIAL, FAILED, PROJECTION_ERROR
 
     documents_total: int = 0
     documents_researched: int = 0
@@ -90,12 +90,14 @@ def format_friendly_locator(locator_data: Any) -> str:
 def load_research_ui_projection(
     procurement_ids: List[int],
     crm_db: Any,
-    doc_db: Optional[Any] = None,
+    *,
+    _doc_db: Optional[Any] = None,
 ) -> Dict[int, ResearchUiProjection]:
     """Bulk load research UI projections for a list of procurement IDs.
     
     Executes max 6 bulk roundtrips per page (0 N+1 queries).
     Strictly queries document_intelligence DB for document queue identity.
+    Production API accepts ONLY (procurement_ids, crm_db) - never UI-supplied doc_db wrappers.
     Strictly generation-scoped (CROSS_GENERATION_UI_EVIDENCE = 0).
     """
     if not procurement_ids:
@@ -120,14 +122,13 @@ def load_research_ui_projection(
     except Exception as e:
         logger.error(f"Error loading crm_product_categories: {e}")
 
-    # 2. Open real document_intelligence connection (DO NOT use TenderDatabaseManager / source DB)
+    # 2. Open real document_intelligence connection ALWAYS (never accept UI source DB wrappers)
     doc_conn = None
     try:
-        if doc_db and hasattr(doc_db, "execute_query") and type(doc_db).__name__ != "TenderDatabaseManager":
-            # Real doc_db wrapper passed in tests
-            doc_conn_wrapper = doc_db
+        if _doc_db and hasattr(_doc_db, "execute_query"):
+            # Internal mock injection for unit tests only
+            doc_conn_wrapper = _doc_db
         else:
-            # Connect directly to canonical document_intelligence DB
             raw_conn = _get_doc_db_conn()
             class _SimpleDocDB:
                 def __init__(self, conn):
@@ -142,8 +143,9 @@ def load_research_ui_projection(
             doc_conn = doc_conn_wrapper
     except Exception as e:
         logger.error(f"CRITICAL: Failed to connect to document_intelligence database: {e}")
-        # DO NOT silently swallow DB authority failure as WAITING_RESEARCH!
+        # FAIL CLOSED: Do NOT count authority connection failure as WAITING_RESEARCH!
         for p in projections.values():
+            p.research_state = "PROJECTION_ERROR"
             p.error_detail = f"DB_AUTHORITY_FAILURE: {e}"
         return projections
 
@@ -165,8 +167,9 @@ def load_research_ui_projection(
             queue_map[r["procurement_id"]] = dict(r)
     except Exception as e:
         logger.error(f"Error querying document_processing_queue from document_intelligence DB: {e}")
-        # DO NOT silently swallow DB authority failure as WAITING_RESEARCH!
+        # FAIL CLOSED: Do NOT count queue query failure as WAITING_RESEARCH!
         for p in projections.values():
+            p.research_state = "PROJECTION_ERROR"
             p.error_detail = f"QUEUE_QUERY_FAILURE: {e}"
         if doc_conn:
             try:

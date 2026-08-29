@@ -231,6 +231,8 @@ def _render_research_result_block(
 
     elif st_val == "FAILED":
         st.error("❌ Ошибка при проведении исследования закупки")
+    elif st_val == "PROJECTION_ERROR":
+        st.error(f"⚠ **Не удалось получить состояние исследования**  \n`{escape(str(proj.error_detail or 'DB authority failure'))}`")
 
 
 def _summary(
@@ -365,14 +367,14 @@ def render_stage_workspace(
     from src.services.annotation_queue_service import batch_publication_visibility
     from src.services.db_bootstrap import connect_databases
 
-    _, doc_db, crm_db, _ = connect_databases()
+    _, _, crm_db, _ = connect_databases()
     all_ids = workset_ids or [card["id"] for card in cards]
     all_states = annotation_states or load_current_annotation_states(all_ids, crm_db)
     page_states = {card["id"]: all_states[card["id"]] for card in cards}
     publication = batch_publication_visibility(crm_db, [card["id"] for card in cards])
 
-    # Bulk load research projections (MAX 5 roundtrips per page, NO N+1)
-    projections = load_research_ui_projection(all_ids, crm_db, doc_db)
+    # Bulk load research projections directly from document_intelligence DB (MAX 5 roundtrips per page, NO N+1)
+    projections = load_research_ui_projection(all_ids, crm_db)
 
     selected_state = selected_annotation_filter or render_review_filter(all_states, session_key)
     selected_research, selected_category = render_research_filters(projections, session_key)
