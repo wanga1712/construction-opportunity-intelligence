@@ -101,7 +101,7 @@ def _get_crm_db_conn():
         pass
     host = os.getenv("CRM_DB_HOST") or "127.0.0.1"
     port = int(os.getenv("CRM_DB_PORT") or "5432")
-    user = os.getenv("CRM_DB_USER") or "crm_app"
+    user = "crm_app"
     password = os.getenv("CRM_DB_PASSWORD") or "X17B3n5hbANQSRt6i7WIyy0lJudX"
     dbname = os.getenv("CRM_DB_DATABASE") or "crm"
     return psycopg2.connect(host=host, port=port, user=user, password=password, dbname=dbname)
