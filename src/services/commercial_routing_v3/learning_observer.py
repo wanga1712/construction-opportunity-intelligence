@@ -3,7 +3,8 @@
 Responsibilities:
 - Enrich queue identity and generation hash
 - Build immutable pre-research blind snapshots (STRICT allowlist: source metadata + real canonical document manifest)
-- Create exhaustive ground truth ONLY when terminal document processing status is reached
+- Create exhaustive ground truth ONLY when ALL manifest documents are in REAL terminal research state
+- Enforce temporal order: PREDICTION_CREATED_AT < TRUTH_CREATED_AT and TRUTH_CREATED_AT >= LAST_DOCUMENT_TERMINAL_AT
 - Calculate real document-level ground truth (useful_documents_json, non_useful_documents_json, unknown_documents_json)
 - Evaluate blind predictions against exhaustive truth with mathematically derived ranking metrics (recall@1,3,5, MRR, first_useful_rank)
 - Materialize dataset learning examples for PROCUREMENT_RELEVANCE and DOCUMENT_RANKING with stable TRAIN/VALIDATION/HOLDOUT splits
@@ -21,6 +22,12 @@ from typing import Dict, Any, List, Optional, Tuple
 
 PRODUCER_VERSION = "v3_real_truth"
 PIPELINE_GENERATION = "S13_V2"
+
+TERMINAL_DOC_STATUSES = {
+    "COMPLETED", "DOWNLOAD_FAILED", "PARSE_FAILED", "UNSUPPORTED",
+    "EMPTY", "OTHER_TERMINAL", "SEARCHED_SUCCESSFULLY", "UNREADABLE",
+    "PARTIALLY_SEARCHED", "UNSUPPORTED_FORMAT", "FAILED"
+}
 
 def get_doc_db():
     user = os.environ.get("S13_DOCUMENT_DB_USER", "doc_worker")
@@ -171,7 +178,7 @@ class LearningObserver:
         try:
             with doc_conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
                 cur.execute("""
-                    SELECT id, procurement_id, queue_lane, priority_score, status, research_generation_hash, created_at
+                    SELECT id, procurement_id, queue_lane, priority_score, status, research_generation_hash, completed_at
                     FROM document_processing_queue
                     WHERE pipeline_generation = %s AND status IN ('COMPLETED', 'FAILED', 'NO_LINKS')
                     ORDER BY id DESC LIMIT 500
@@ -202,6 +209,35 @@ class LearningObserver:
                     manifest = snap_row["document_manifest_json"]
                     if isinstance(manifest, str):
                         manifest = json.loads(manifest)
+
+                    # Check real per-document terminal status from document_files in document_intelligence DB
+                    with doc_conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as d_cur:
+                        d_cur.execute("""
+                            SELECT id, download_status, downloaded_at, created_at
+                            FROM document_files
+                            WHERE procurement_id = %s
+                        """, (pid,))
+                        doc_files = d_cur.fetchall()
+
+                    if manifest and not doc_files and item["status"] != "NO_LINKS":
+                        # Documents exist in manifest but document_files has not populated terminal state yet
+                        continue
+
+                    is_all_terminal = True
+                    max_doc_at = item["completed_at"]
+
+                    for df in doc_files:
+                        st_val = str(df.get("download_status") or "").upper()
+                        if st_val not in TERMINAL_DOC_STATUSES:
+                            is_all_terminal = False
+                            break
+                        dt_at = df.get("downloaded_at") or df.get("created_at")
+                        if dt_at and (max_doc_at is None or dt_at > max_doc_at):
+                            max_doc_at = dt_at
+
+                    if not is_all_terminal:
+                        # Skip truth creation if any document is still processing!
+                        continue
 
                     # STRICT generation-scoped raw evidence query using source_document_id
                     c_cur.execute("""
@@ -276,16 +312,19 @@ class LearningObserver:
         eval_count = 0
         try:
             with crm_conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+                # Require PREDICTION_CREATED_AT < TRUTH_CREATED_AT (strict temporal order)
                 cur.execute("""
                     SELECT p.id as prediction_id, t.id as truth_id, p.procurement_id, p.research_generation_hash,
                            p.has_target_decision, p.document_ranking_json, t.has_target_evidence, t.evidence_count,
-                           t.truth_completeness, t.useful_documents_json, t.non_useful_documents_json
+                           t.truth_completeness, t.useful_documents_json, t.non_useful_documents_json,
+                           p.created_at as pred_at, t.created_at as truth_at
                     FROM crm_v3_shadow_predictions p
                     JOIN crm_v3_exhaustive_truth t 
                       ON p.procurement_id = t.procurement_id 
                      AND p.research_generation_hash = t.research_generation_hash
                     LEFT JOIN crm_v3_shadow_evaluations e ON p.id = e.prediction_id
                     WHERE e.id IS NULL AND p.producer_version = %s AND t.producer_version = %s
+                      AND p.created_at < t.created_at
                     LIMIT 500
                 """, (PRODUCER_VERSION, PRODUCER_VERSION))
                 pairs = cur.fetchall()

@@ -4,9 +4,10 @@ Responsibilities:
 - Select unpredicted blind pre-research snapshot
 - Run Qwen2.5:7b with v3_pre_research_shadow_v1 prompt schema
 - Include BOTH source_snapshot_json AND document_manifest_json in prompt (no parsed text/evidence)
-- Respect GPU arbitration (yields if production Hunter/Auditor jobs need inference)
-- Perform structured validation of model response (JSON keys, active categories, manifest keys)
+- Respect shared GPU lock (acquire_gpu_inference) and yield to Hunter/Auditor foreground tasks
+- Perform STRICT schema validation of model response (JSON keys, active categories, manifest keys, rank uniqueness)
 - Record parse/validation status truthfully in crm_v3_model_inference_runs
+- DO NOT insert shadow prediction on invalid model output (NO fabricated fallbacks)
 - Producer version: v3_real_truth
 """
 
@@ -17,12 +18,21 @@ import time
 import requests
 import psycopg2
 import psycopg2.extras
-from typing import Dict, Any, List, Optional
+from typing import Dict, Any, List, Optional, Set
+
+from src.services.commercial_routing_v3.gpu_arbiter import (
+    acquire_gpu_inference,
+    should_defer_document,
+    WORKLOAD_DOCUMENT,
+)
 
 PRODUCER_VERSION = "v3_real_truth"
 OLLAMA_URL = os.getenv("OLLAMA_URL", "http://127.0.0.1:11434/api/generate")
 BASE_MODEL = "qwen2.5:7b"
 PROMPT_VERSION = "v3_pre_research_shadow_v1"
+
+VALID_DECISIONS = {"YES", "NO", "UNCERTAIN"}
+VALID_PRIORITIES = {"GOLD_CANDIDATE", "SILVER_CANDIDATE", "BRONZE_CANDIDATE", "LOW_PRIORITY", "UNSCORED"}
 
 def get_crm_db():
     user = os.environ.get("CRM_DB_USER", "crm_app")
@@ -33,44 +43,111 @@ def get_crm_db():
     port = os.environ.get("CRM_DB_PORT", "5432")
     return psycopg2.connect(dbname="crm", user=user, password=password, host=host, port=port)
 
-def get_doc_db():
-    user = os.environ.get("S13_DOCUMENT_DB_USER", "doc_worker")
-    password = os.environ.get("S13_DOCUMENT_DB_PASSWORD")
-    if not password:
-        raise RuntimeError("Missing required environment variable S13_DOCUMENT_DB_PASSWORD")
-    host = os.environ.get("S13_DOCUMENT_DB_HOST", "127.0.0.1")
-    port = os.environ.get("S13_DOCUMENT_DB_PORT", "5432")
-    return psycopg2.connect(dbname="document_intelligence", user=user, password=password, host=host, port=port)
+def fetch_active_categories(crm_conn) -> Set[str]:
+    try:
+        with crm_conn.cursor() as cur:
+            cur.execute("SELECT code FROM crm_v3_canonical_categories WHERE is_active = True")
+            return {r[0] for r in cur.fetchall()}
+    except Exception:
+        return set()
+
+def validate_shadow_output(parsed: Any, manifest: List[Dict[str, Any]], active_cats: Set[str]) -> bool:
+    if not isinstance(parsed, dict):
+        return False
+
+    # Check top-level required fields
+    if "has_target_probability" not in parsed or "has_target_decision" not in parsed:
+        return False
+    if "priority_candidate" not in parsed or "overall_confidence" not in parsed:
+        return False
+
+    try:
+        prob = float(parsed["has_target_probability"])
+        if not (0.0 <= prob <= 1.0):
+            return False
+        
+        conf = float(parsed["overall_confidence"])
+        if not (0.0 <= conf <= 1.0):
+            return False
+    except (ValueError, TypeError):
+        return False
+
+    decision = str(parsed["has_target_decision"]).upper()
+    if decision not in VALID_DECISIONS:
+        return False
+
+    priority = str(parsed["priority_candidate"]).upper()
+    if priority not in VALID_PRIORITIES:
+        return False
+
+    # Validate predicted_categories
+    cats = parsed.get("predicted_categories")
+    if not isinstance(cats, list):
+        return False
+
+    for c in cats:
+        if not isinstance(c, dict) or "category_code" not in c or "confidence" not in c:
+            return False
+        code = str(c["category_code"])
+        if active_cats and code not in active_cats:
+            return False
+        try:
+            c_conf = float(c["confidence"])
+            if not (0.0 <= c_conf <= 1.0):
+                return False
+        except (ValueError, TypeError):
+            return False
+
+    # Validate document_ranking against exact snapshot manifest keys
+    ranking = parsed.get("document_ranking")
+    if not isinstance(ranking, list):
+        return False
+
+    manifest_keys = {d["document_key"] for d in manifest if "document_key" in d}
+    seen_keys = set()
+    seen_ranks = set()
+
+    for item in ranking:
+        if not isinstance(item, dict) or "document_key" not in item or "rank" not in item or "useful_evidence_probability" not in item:
+            return False
+        
+        d_key = str(item["document_key"])
+        if manifest_keys and d_key not in manifest_keys:
+            return False
+        if d_key in seen_keys:
+            return False
+        seen_keys.add(d_key)
+
+        try:
+            r_num = int(item["rank"])
+            if r_num < 1:
+                return False
+            if r_num in seen_ranks:
+                return False
+            seen_ranks.add(r_num)
+
+            p_val = float(item["useful_evidence_probability"])
+            if not (0.0 <= p_val <= 1.0):
+                return False
+        except (ValueError, TypeError):
+            return False
+
+    return True
 
 class ShadowPredictor:
     def __init__(self):
         pass
 
-    def check_gpu_arbitration(self) -> bool:
-        """Check if production Hunter/Auditor jobs are actively using GPU. Back off if so."""
-        doc_conn = get_doc_db()
-        try:
-            with doc_conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
-                cur.execute("""
-                    SELECT COUNT(1) as cnt FROM document_processing_queue
-                    WHERE pipeline_generation = 'S13_V2' AND status = 'PROCESSING'
-                """)
-                proc_cnt = cur.fetchone()["cnt"]
-            if proc_cnt > 3:
-                return False
-            return True
-        except Exception:
-            return True
-        finally:
-            doc_conn.close()
-
     def run_cycle(self) -> bool:
-        if not self.check_gpu_arbitration():
+        if should_defer_document():
+            # Yield GPU inference slot when Hunter/Auditor foreground tasks are active
             time.sleep(2)
             return False
 
         crm_conn = get_crm_db()
         try:
+            active_cats = fetch_active_categories(crm_conn)
+
             with crm_conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
                 cur.execute("""
                     SELECT s.id as snapshot_id, s.procurement_id, s.research_generation_hash,
@@ -115,15 +192,17 @@ class ShadowPredictor:
 
                 full_prompt = f"{system_prompt}\n\n{user_prompt}"
 
+                # Acquire exclusive GPU lock for heavy Ollama inference
                 try:
-                    resp = requests.post(OLLAMA_URL, json={
-                        "model": BASE_MODEL,
-                        "prompt": full_prompt,
-                        "stream": False,
-                        "options": {"temperature": 0.1}
-                    }, timeout=60)
-                    resp_data = resp.json()
-                    raw_text = resp_data.get("response", "{}")
+                    with acquire_gpu_inference(WORKLOAD_DOCUMENT, poll_sec=0.5, max_wait_sec=60.0):
+                        resp = requests.post(OLLAMA_URL, json={
+                            "model": BASE_MODEL,
+                            "prompt": full_prompt,
+                            "stream": False,
+                            "options": {"temperature": 0.1}
+                        }, timeout=60)
+                        resp_data = resp.json()
+                        raw_text = resp_data.get("response", "{}")
                 except Exception as e:
                     raw_text = f'{{"error": "{str(e)}"}}'
 
@@ -142,7 +221,7 @@ class ShadowPredictor:
                     parsed_json = json.loads(clean_text)
                     parse_status = "PARSED_OK"
 
-                    if isinstance(parsed_json, dict) and "has_target_decision" in parsed_json and "has_target_probability" in parsed_json:
+                    if validate_shadow_output(parsed_json, manifest_json, active_cats):
                         val_status = "VALIDATED_SUCCESS"
                 except Exception:
                     pass
@@ -156,6 +235,7 @@ class ShadowPredictor:
                 """, (pid, BASE_MODEL, BASE_MODEL, PROMPT_VERSION, raw_text, parse_status, val_status))
                 run_id = cur.fetchone()["id"]
 
+                # Insert into crm_v3_shadow_predictions ONLY IF validation succeeded!
                 if val_status == "VALIDATED_SUCCESS" and parsed_json:
                     prob = float(parsed_json.get("has_target_probability", 0.5))
                     decision = str(parsed_json.get("has_target_decision", "UNCERTAIN")).upper()
@@ -177,30 +257,7 @@ class ShadowPredictor:
                     ))
                     print(f"Shadow prediction created for procurement {pid} (decision={decision}, prob={prob})")
                 else:
-                    decision = "NO"
-                    prob = 0.2
-                    prio = "LOW_PRIORITY"
-                    
-                    doc_rank = []
-                    for idx, d in enumerate(manifest_json, start=1):
-                        doc_rank.append({
-                            "document_key": d.get("document_key"),
-                            "rank": idx,
-                            "useful_evidence_probability": 0.5
-                        })
-
-                    cur.execute("""
-                        INSERT INTO crm_v3_shadow_predictions (
-                            snapshot_id, model_run_id, procurement_id, research_generation_hash,
-                            has_target_probability, has_target_decision, priority_candidate,
-                            predicted_categories_json, document_ranking_json, overall_confidence,
-                            producer_version, created_at
-                        ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, NOW())
-                    """, (
-                        snap["snapshot_id"], run_id, pid, gen_hash,
-                        prob, decision, prio, json.dumps([]), json.dumps(doc_rank), prob, PRODUCER_VERSION
-                    ))
-                    print(f"Shadow prediction fallback created for procurement {pid}")
+                    print(f"Shadow model output invalid for procurement {pid} (val_status={val_status}). Prediction omitted.")
 
             crm_conn.commit()
             return True
