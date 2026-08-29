@@ -70,10 +70,10 @@ class FactualFeeder:
     def load_factual_candidates(self, limit: int = 100) -> List[Dict[str, Any]]:
         """Fetch candidate procurements directly from crm_procurements (44-???? and 223-????) based on factual state."""
         sql = """
-            SELECT DISTINCT ON (p.id) p.id, p.source_table, p.source_id, p.contract_number, p.updated_at
+            SELECT DISTINCT ON (p.id) p.id, p.source_table, p.source_id, p.contract_number
             FROM crm_procurements p
             WHERE p.source_table IN ('reestr_contract_44_fz', 'reestr_contract_223_fz')
-            ORDER BY p.id DESC, p.updated_at DESC NULLS LAST
+            ORDER BY p.id DESC
             LIMIT %s
         """
         rows = self.crm_db.execute_query(sql, (limit,)) or []
