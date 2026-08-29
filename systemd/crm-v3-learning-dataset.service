@@ -1,0 +1,12 @@
+[Unit]
+Description=CRM V3 Daily Dataset Builder Service
+After=network.target postgresql.service
+
+[Service]
+Type=oneshot
+User=sergey
+WorkingDirectory=/opt/CRM_Streamlit_rescue
+ExecStart=/opt/CRM_Streamlit/.venv313/bin/python /opt/CRM_Streamlit_rescue/src/services/commercial_routing_v3/dataset_builder.py
+Environment=PYTHONUNBUFFERED=1
+Environment=CRM_DB_PASSWORD=X17B3n5hbANQSRt6i7WIyy0lJudX
+Environment=S13_DOCUMENT_DB_PASSWORD=F6VaPWQIIYgDF3I8_kBTyDJhYpzWw1bT

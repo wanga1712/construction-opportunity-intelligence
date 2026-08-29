@@ -1,4 +1,4 @@
-"""CRM V3 Shadow Predictor Daemon
+"""CRM V3 Shadow Predictor Daemon (v2_corrected)
 
 Responsibilities:
 - Select unpredicted blind pre-research snapshot
@@ -7,6 +7,7 @@ Responsibilities:
 - Persist inference run with run_kind='SHADOW'
 - Store structured prediction in crm_v3_shadow_predictions
 - Never blocks document download or research
+- Producer version: v2_corrected
 """
 
 import os
@@ -18,31 +19,28 @@ import psycopg2
 import psycopg2.extras
 from typing import Dict, Any, List, Optional
 
-DB_CRM_CONFIG = {
-    "dbname": "crm",
-    "user": os.getenv("CRM_DB_USER", "crm_app"),
-    "password": os.getenv("CRM_DB_PASSWORD", "X17B3n5hbANQSRt6i7WIyy0lJudX"),
-    "host": os.getenv("CRM_DB_HOST", "127.0.0.1"),
-    "port": os.getenv("CRM_DB_PORT", "5432"),
-}
-
-DB_DOC_CONFIG = {
-    "dbname": "document_intelligence",
-    "user": os.getenv("S13_DOCUMENT_DB_USER", "doc_worker"),
-    "password": os.getenv("S13_DOCUMENT_DB_PASSWORD", "F6VaPWQIIYgDF3I8_kBTyDJhYpzWw1bT"),
-    "host": os.getenv("S13_DOCUMENT_DB_HOST", "127.0.0.1"),
-    "port": os.getenv("S13_DOCUMENT_DB_PORT", "5432"),
-}
-
+PRODUCER_VERSION = "v2_corrected"
 OLLAMA_URL = os.getenv("OLLAMA_URL", "http://127.0.0.1:11434/api/generate")
 BASE_MODEL = "qwen2.5:7b"
 PROMPT_VERSION = "v3_pre_research_shadow_v1"
 
 def get_crm_db():
-    return psycopg2.connect(**DB_CRM_CONFIG)
+    user = os.environ.get("CRM_DB_USER", "crm_app")
+    password = os.environ.get("CRM_DB_PASSWORD")
+    if not password:
+        raise RuntimeError("Missing required environment variable CRM_DB_PASSWORD")
+    host = os.environ.get("CRM_DB_HOST", "127.0.0.1")
+    port = os.environ.get("CRM_DB_PORT", "5432")
+    return psycopg2.connect(dbname="crm", user=user, password=password, host=host, port=port)
 
 def get_doc_db():
-    return psycopg2.connect(**DB_DOC_CONFIG)
+    user = os.environ.get("S13_DOCUMENT_DB_USER", "doc_worker")
+    password = os.environ.get("S13_DOCUMENT_DB_PASSWORD")
+    if not password:
+        raise RuntimeError("Missing required environment variable S13_DOCUMENT_DB_PASSWORD")
+    host = os.environ.get("S13_DOCUMENT_DB_HOST", "127.0.0.1")
+    port = os.environ.get("S13_DOCUMENT_DB_PORT", "5432")
+    return psycopg2.connect(dbname="document_intelligence", user=user, password=password, host=host, port=port)
 
 class ShadowPredictor:
     def __init__(self):
@@ -94,9 +92,9 @@ class ShadowPredictor:
                            s.source_snapshot_json, s.document_manifest_json
                     FROM crm_v3_pre_research_snapshots s
                     LEFT JOIN crm_v3_shadow_predictions p ON s.id = p.snapshot_id
-                    WHERE p.id IS NULL
+                    WHERE p.id IS NULL AND s.producer_version = %s
                     ORDER BY s.id ASC LIMIT 1
-                """)
+                """, (PRODUCER_VERSION,))
                 snap = cur.fetchone()
 
                 if not snap:
@@ -139,11 +137,11 @@ class ShadowPredictor:
                     INSERT INTO crm_v3_shadow_predictions (
                         snapshot_id, model_run_id, procurement_id, research_generation_hash,
                         has_target_probability, has_target_decision, priority_candidate,
-                        predicted_categories_json, document_ranking_json, overall_confidence, created_at
-                    ) VALUES (%s, %s, %s, %s, %s, %s, 'GOLD_CANDIDATE', %s, %s, %s, NOW())
+                        predicted_categories_json, document_ranking_json, overall_confidence, producer_version, created_at
+                    ) VALUES (%s, %s, %s, %s, %s, %s, 'GOLD_CANDIDATE', %s, %s, %s, %s, NOW())
                 """, (
                     snap["snapshot_id"], run_id, pid, gen_hash,
-                    prob, has_target_decision, json.dumps([]), json.dumps([]), prob
+                    prob, has_target_decision, json.dumps([]), json.dumps([]), prob, PRODUCER_VERSION
                 ))
             crm_conn.commit()
             print(f"Shadow prediction created for procurement {pid}")
@@ -153,7 +151,7 @@ class ShadowPredictor:
 
 if __name__ == "__main__":
     predictor = ShadowPredictor()
-    print("Starting CRM V3 Shadow Predictor loop...")
+    print("Starting CRM V3 Shadow Predictor loop (v2_corrected)...")
     while True:
         try:
             did_work = predictor.run_cycle()
