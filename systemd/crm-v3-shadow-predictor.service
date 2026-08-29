@@ -9,9 +9,8 @@ WorkingDirectory=/opt/CRM_Streamlit_rescue
 ExecStart=/opt/CRM_Streamlit/.venv313/bin/python /opt/CRM_Streamlit_rescue/src/services/commercial_routing_v3/shadow_predictor.py
 Restart=always
 RestartSec=5
+EnvironmentFile=/etc/crm_v3.env
 Environment=PYTHONUNBUFFERED=1
-Environment=CRM_DB_PASSWORD=X17B3n5hbANQSRt6i7WIyy0lJudX
-Environment=S13_DOCUMENT_DB_PASSWORD=F6VaPWQIIYgDF3I8_kBTyDJhYpzWw1bT
 
 [Install]
 WantedBy=multi-user.target
