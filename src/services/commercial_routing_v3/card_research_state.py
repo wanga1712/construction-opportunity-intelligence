@@ -46,15 +46,21 @@ def derive_procurement_research_state(
     source_table: Optional[str] = None,
     source_id: Optional[int] = None,
     contract_number: Optional[str] = None,
+    canonical_links: Optional[List[Dict[str, Any]]] = None,
 ) -> Dict[str, Any]:
-    doc_res = resolve_document_links(
-        source_table=source_table or "",
-        source_id=source_id,
-        contract_number=contract_number or "",
-    )
-    links = doc_res.get("links") or []
-    canonical_doc_count = len(links)
-    gen_hash = compute_research_generation_hash(procurement_id, links, pipeline_generation)
+    if canonical_links is None:
+        try:
+            doc_res = resolve_document_links(
+                source_table=source_table or "",
+                source_id=source_id,
+                contract_number=contract_number or "",
+            )
+            canonical_links = doc_res.get("links") or []
+        except Exception:
+            canonical_links = []
+
+    canonical_doc_count = len(canonical_links)
+    gen_hash = compute_research_generation_hash(procurement_id, canonical_links, pipeline_generation)
 
     conn = _get_doc_db_conn()
     doc_files_count = 0
@@ -73,10 +79,10 @@ def derive_procurement_research_state(
                 """
                 SELECT status, created_at, completed_at
                 FROM document_processing_queue
-                WHERE procurement_id = %s AND pipeline_generation = %s
+                WHERE procurement_id = %s AND (research_generation_hash = %s OR pipeline_generation = %s)
                 ORDER BY id DESC LIMIT 1
                 """,
-                (procurement_id, pipeline_generation),
+                (procurement_id, gen_hash, pipeline_generation),
             )
             q_row = cur.fetchone()
             if q_row:
@@ -152,14 +158,15 @@ def derive_procurement_research_state(
         state = STATE_RESEARCHING
     elif queue_status == "FAILED" or (documents_discovered > 0 and doc_failed == documents_discovered):
         state = STATE_FAILED
-    elif documents_discovered > 0 and (doc_failed > 0 or doc_unsupported > 0 or uncertain_findings_count > 0) and doc_researched < documents_discovered:
-        state = STATE_PARTIAL
-    elif queue_status == "COMPLETED" and documents_discovered > 0 and doc_researched >= documents_discovered and doc_failed == 0 and uncertain_findings_count == 0:
+    elif documents_discovered > 0 and doc_researched < documents_discovered:
+        if doc_failed > 0 or doc_unsupported > 0 or uncertain_findings_count > 0:
+            state = STATE_PARTIAL
+        else:
+            state = STATE_WAITING_RESEARCH
+    elif documents_discovered > 0 and doc_researched >= documents_discovered and doc_failed == 0 and doc_unsupported == 0 and uncertain_findings_count == 0:
         state = STATE_NO_EVIDENCE
-    elif queue_status in ("COMPLETED", "SKIPPED"):
-        state = STATE_PARTIAL if (doc_failed > 0 or doc_unsupported > 0 or uncertain_findings_count > 0) else STATE_NO_EVIDENCE
     else:
-        state = STATE_WAITING_RESEARCH
+        state = STATE_PARTIAL if (doc_failed > 0 or doc_unsupported > 0 or uncertain_findings_count > 0) else STATE_WAITING_RESEARCH
 
     return {
         "procurement_id": procurement_id,

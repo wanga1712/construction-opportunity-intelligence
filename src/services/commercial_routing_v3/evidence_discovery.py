@@ -9,9 +9,7 @@ def compute_evidence_hash(matched_term: str, raw_text: str, source_locator_json:
 def load_discovery_vocabulary(crm_db) -> List[Dict[str, Any]]:
     vocab: List[Dict[str, Any]] = []
     try:
-        cats = crm_db.execute_query(
-            "SELECT category_code, category_name, is_active FROM crm_product_categories WHERE is_active = TRUE"
-        ) or []
+        cats = crm_db.execute_query("SELECT category_code, category_name, is_active FROM crm_product_categories WHERE is_active = TRUE") or []
         for c in cats:
             code = c["category_code"]
             name = c.get("category_name") or ""
@@ -24,14 +22,12 @@ def load_discovery_vocabulary(crm_db) -> List[Dict[str, Any]]:
         pass
 
     try:
-        subs = crm_db.execute_query(
-            """
+        subs = crm_db.execute_query("""
             SELECT s.subcategory_code, s.subcategory_name, c.category_code
             FROM crm_product_subcategories s
             JOIN crm_product_categories c ON c.id = s.category_id
             WHERE c.is_active = TRUE AND s.is_active = TRUE
-            """
-        ) or []
+        """) or []
         for s in subs:
             sname = s.get("subcategory_name") or ""
             if sname and not sname.startswith("?"):
@@ -58,6 +54,7 @@ def discover_and_persist_raw_evidence(
     source_id: Optional[int] = None,
     contract_number: Optional[str] = None,
     pipeline_generation: str = "S13_V2",
+    research_generation_hash: Optional[str] = None,
 ) -> List[Dict[str, Any]]:
     vocab = load_discovery_vocabulary(crm_db)
     raw_hits: List[Dict[str, Any]] = []
@@ -99,6 +96,7 @@ def discover_and_persist_raw_evidence(
                 "suggested_category_code": matched_entry["category_code"],
                 "evidence_hash": ev_hash,
                 "pipeline_generation": pipeline_generation,
+                "research_generation_hash": research_generation_hash,
             })
 
     persisted_rows: List[Dict[str, Any]] = []
@@ -109,10 +107,10 @@ def discover_and_persist_raw_evidence(
                 procurement_id, source_document_id, document_name,
                 matched_term, raw_text, context_before, context_after,
                 source_locator_json, discovery_method, suggested_category_code,
-                evidence_hash
-            ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
-            ON CONFLICT (procurement_id, source_document_id, evidence_hash) DO NOTHING
-            RETURNING id, procurement_id, source_document_id, document_name, matched_term, raw_text, source_locator_json, evidence_hash, created_at
+                evidence_hash, pipeline_generation, research_generation_hash
+            ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+            ON CONFLICT DO NOTHING
+            RETURNING id, procurement_id, source_document_id, document_name, matched_term, raw_text, source_locator_json, evidence_hash, pipeline_generation, research_generation_hash, created_at
             """,
             (
                 hit["procurement_id"],
@@ -126,6 +124,8 @@ def discover_and_persist_raw_evidence(
                 hit["discovery_method"],
                 hit["suggested_category_code"],
                 hit["evidence_hash"],
+                hit["pipeline_generation"],
+                hit["research_generation_hash"],
             )
         )
         if res:
@@ -133,11 +133,11 @@ def discover_and_persist_raw_evidence(
         else:
             existing = crm_db.execute_query(
                 """
-                SELECT id, procurement_id, source_document_id, document_name, matched_term, raw_text, source_locator_json, evidence_hash, created_at
+                SELECT id, procurement_id, source_document_id, document_name, matched_term, raw_text, source_locator_json, evidence_hash, pipeline_generation, research_generation_hash, created_at
                 FROM crm_v3_raw_source_evidence
-                WHERE procurement_id = %s AND source_document_id = %s AND evidence_hash = %s
+                WHERE procurement_id = %s AND source_document_id = %s AND evidence_hash = %s AND research_generation_hash IS NOT DISTINCT FROM %s
                 """,
-                (hit["procurement_id"], hit["source_document_id"], hit["evidence_hash"])
+                (hit["procurement_id"], hit["source_document_id"], hit["evidence_hash"], hit["research_generation_hash"])
             )
             if existing:
                 persisted_rows.append(dict(existing[0]))
