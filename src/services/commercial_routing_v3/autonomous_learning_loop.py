@@ -690,7 +690,7 @@ JSON Schema:
         facts = self.fetch_procurement_facts(procurement_id) or {}
         source_snapshot_hash = compute_md5(facts)
         docs, doc_set_hash = self.fetch_document_research_summary(procurement_id)
-        evidence = self.fetch_document_evidence(procurement_id)
+        evidence = self.fetch_document_evidence(procurement_id, PIPELINE_GENERATION, research_generation_hash)
         evidence_hash = compute_md5(evidence)
         registry = self.load_active_categories()
         reg_hash = self.compute_registry_hash(registry)
@@ -723,7 +723,7 @@ JSON Schema:
             ),
         )
 
-    def run_learning_loop(self, procurement_id: int, priors_text: str = "") -> Dict[str, Any]:
+    def run_learning_loop(self, procurement_id: int, priors_text: str = "", research_generation_hash: Optional[str] = None, canonical_links: Optional[List[Dict[str, Any]]] = None) -> Dict[str, Any]:
         """Runs the entire Hunter-Auditor loop sequentially for one procurement."""
         registry = self.load_active_categories()
         reg_hash = self.compute_registry_hash(registry)
@@ -733,7 +733,7 @@ JSON Schema:
         facts = self.fetch_procurement_facts(procurement_id)
         source_snapshot_hash = compute_md5(facts)
         docs, doc_set_hash = self.fetch_document_research_summary(procurement_id)
-        evidence = self.fetch_document_evidence(procurement_id)
+        evidence = self.fetch_document_evidence(procurement_id, PIPELINE_GENERATION, research_generation_hash)
         evidence_hash = compute_md5(evidence)
         
         completeness = "COMPLETE"

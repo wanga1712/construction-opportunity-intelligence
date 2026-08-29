@@ -1,20 +1,8 @@
-import hashlib, psycopg2, psycopg2.extras
+import hashlib, os, psycopg2, psycopg2.extras
 from typing import Any, Dict, List, Optional
 from src.services.commercial_routing_v3.document_links import resolve_document_links
-PIPELINE_GENERATION = 'S13_V2'
 
-def _get_doc_db_conn():
-    import os, psycopg2
-    from dotenv import load_dotenv
-    load_dotenv('/opt/CRM_Streamlit/.env')
-    dsn = {
-        'host': os.getenv('S13_DOCUMENT_DB_HOST') if os.getenv('S13_DOCUMENT_DB_HOST') not in (None, '', 'S7') else '127.0.0.1',
-        'port': int(os.getenv('S13_DOCUMENT_DB_PORT') or os.getenv('CRM_DB_PORT') or '5432'),
-        'dbname': 'document_intelligence',
-        'user': os.getenv('CRM_DB_USER') or 'crm_app',
-        'password': os.getenv('CRM_DB_PASSWORD') or '',
-    }
-    return psycopg2.connect(**dsn)
+PIPELINE_GENERATION = "S13_V2"
 
 STATE_WAITING_RESEARCH = "WAITING_RESEARCH"
 STATE_RESEARCHING = "RESEARCHING"
@@ -31,6 +19,18 @@ VALID_RESEARCH_STATES = {
     STATE_PARTIAL,
     STATE_FAILED,
 }
+
+def _get_doc_db_conn():
+    from dotenv import load_dotenv
+    load_dotenv("/opt/CRM_Streamlit/.env")
+    dsn = {
+        "host": os.getenv("S13_DOCUMENT_DB_HOST") if os.getenv("S13_DOCUMENT_DB_HOST") not in (None, "", "S7") else "127.0.0.1",
+        "port": int(os.getenv("S13_DOCUMENT_DB_PORT") or os.getenv("CRM_DB_PORT") or "5432"),
+        "dbname": "document_intelligence",
+        "user": os.getenv("CRM_DB_USER") or "crm_app",
+        "password": os.getenv("CRM_DB_PASSWORD") or "",
+    }
+    return psycopg2.connect(**dsn)
 
 def compute_document_set_hash(canonical_links: List[Dict[str, Any]]) -> str:
     identities = []
@@ -88,14 +88,17 @@ def derive_procurement_research_state(
 
     try:
         with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+            # PIPELINE_ONLY_QUEUE_ROW_COUNTS_AS_CURRENT = NO
             cur.execute(
                 """
                 SELECT status, created_at, completed_at
                 FROM document_processing_queue
-                WHERE procurement_id = %s AND (research_generation_hash = %s OR pipeline_generation = %s)
+                WHERE procurement_id = %s
+                  AND pipeline_generation = %s
+                  AND research_generation_hash = %s
                 ORDER BY id DESC LIMIT 1
                 """,
-                (procurement_id, gen_hash, pipeline_generation),
+                (procurement_id, pipeline_generation, gen_hash),
             )
             q_row = cur.fetchone()
             if q_row:

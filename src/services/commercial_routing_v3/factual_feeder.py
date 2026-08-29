@@ -1,13 +1,6 @@
 """Factual Procurement Feeder into document_processing_queue.
 
-Ensures that admission to document_processing_queue calculates and persists
-current_research_generation_hash derived from canonical document identities.
-
-Defect Correction:
-- Compute current_research_generation_hash using resolve_document_links and compute_research_generation_hash.
-- Tasks in document_processing_queue persist pipeline_generation and research_generation_hash.
-- Task suppression checks: procurement_id + pipeline_generation + research_generation_hash.
-- OLD_COMPLETED_GENERATION_BLOCKS_NEW_GENERATION = NO.
+Ensures continuous feeder capability with watermark control and generation-aware admission.
 """
 
 from datetime import datetime, timezone
@@ -18,6 +11,7 @@ from src.services.commercial_routing_v3.card_research_state import (
     compute_research_generation_hash,
 )
 from src.services.commercial_routing_v3.document_links import resolve_document_links
+from src.services.commercial_routing_v3.submission_window import actionable_submission_sql
 
 PIPELINE_GENERATION = "S13_V2"
 LOW_WATERMARK = 50
@@ -70,6 +64,7 @@ class FactualFeeder:
                 canonical_links = doc_res.get("links") or []
             except Exception:
                 canonical_links = []
+
         gen_hash = compute_research_generation_hash(procurement_id, canonical_links, PIPELINE_GENERATION)
 
         conn = _get_doc_db_conn()
@@ -115,3 +110,49 @@ class FactualFeeder:
                 return q_id
         finally:
             conn.close()
+
+    def get_pending_queue_depth(self) -> int:
+        """Get current count of pending/running tasks in document_processing_queue."""
+        conn = _get_doc_db_conn()
+        try:
+            with conn.cursor() as cur:
+                cur.execute(
+                    "SELECT COUNT(*) FROM document_processing_queue WHERE status IN ('PENDING', 'RUNNING', 'RETRY') AND pipeline_generation = %s",
+                    (PIPELINE_GENERATION,),
+                )
+                return cur.fetchone()[0]
+        finally:
+            conn.close()
+
+    def run_feeder_cycle(self) -> int:
+        """Continuous watermark refill cycle."""
+        depth = self.get_pending_queue_depth()
+        if depth >= LOW_WATERMARK:
+            return 0
+
+        needed = min(HIGH_WATERMARK - depth, FEED_BATCH_SIZE)
+        pred = f"crm_stage = 'torgi' AND award_status = 'submission_open' AND {actionable_submission_sql('p')}"
+
+        rows = self.crm_db.execute_query(
+            f"""
+            SELECT p.id, p.source_table, p.source_id, p.contract_number
+            FROM crm_procurements p
+            WHERE {pred}
+            ORDER BY p.id DESC
+            LIMIT %s
+            """,
+            (needed,),
+        ) or []
+
+        admitted = 0
+        for r in rows:
+            qid = self.admit_procurement(
+                procurement_id=r["id"],
+                source_table=r["source_table"],
+                source_id=r["source_id"],
+                contract_number=r.get("contract_number"),
+            )
+            if qid:
+                admitted += 1
+
+        return admitted

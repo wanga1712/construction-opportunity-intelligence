@@ -1,7 +1,5 @@
 from typing import Any, Dict, List, Optional
-PIPELINE_GENERATION = 'S13_V2'
 import json
-from typing import Any, Dict, List, Optional
 from src.services.commercial_routing_v3.card_research_state import (
     STATE_EVIDENCE_FOUND,
     STATE_FAILED,
@@ -11,11 +9,12 @@ from src.services.commercial_routing_v3.card_research_state import (
     STATE_WAITING_RESEARCH,
     VALID_RESEARCH_STATES,
     derive_procurement_research_state,
+    PIPELINE_GENERATION,
 )
 from src.services.commercial_routing_v3.submission_window import actionable_submission_sql
 
-def get_torgi_workset_predicate(alias: str = "p") -> str:
-    return f"{alias}.crm_stage = 'torgi' AND {alias}.award_status = 'submission_open' AND {actionable_submission_sql(alias)}"
+def get_torgi_workset_predicate(prefix: str = "p") -> str:
+    return f"{prefix}.crm_stage = 'torgi' AND {prefix}.award_status = 'submission_open' AND {actionable_submission_sql(prefix)}"
 
 def sync_procurement_card_projection(
     procurement_id: int,
@@ -23,43 +22,23 @@ def sync_procurement_card_projection(
     pipeline_generation: str = PIPELINE_GENERATION,
     canonical_links: Optional[List[Dict[str, Any]]] = None,
 ) -> Dict[str, Any]:
-    p_rows = crm_db.execute_query("SELECT id, source_table, source_id, contract_number FROM crm_procurements WHERE id = %s", (procurement_id,))
-    p_fact = p_rows[0] if p_rows else {}
-
-    metrics = derive_procurement_research_state(
+    state_info = derive_procurement_research_state(
         procurement_id,
         crm_db,
-        source_table=p_fact.get("source_table"),
-        source_id=p_fact.get("source_id"),
-        contract_number=p_fact.get("contract_number"),
+        pipeline_generation=pipeline_generation,
+        canonical_links=canonical_links,
     )
-
-    card_json = {
-        "procurement_id": procurement_id,
-        "source_table": p_fact.get("source_table"),
-        "source_id": p_fact.get("source_id"),
-        "contract_number": p_fact.get("contract_number"),
-        "research_metrics": metrics,
-    }
-
-    sql = """
+    card_json_str = json.dumps(state_info, default=str, ensure_ascii=False)
+    
+    crm_db.execute_update(
+        """
         INSERT INTO crm_v3_canonical_procurement_cards (
-            procurement_id, card_json, card_version, research_state,
-            documents_discovered, documents_supported, documents_researched,
-            documents_failed, documents_unsupported, documents_no_content,
+            procurement_id, card_json, research_state, documents_discovered, documents_supported,
+            documents_researched, documents_failed, documents_unsupported, documents_no_content,
             raw_evidence_count, accepted_evidence_count, normalized_findings_count,
-            documents_with_evidence, preliminary_research_priority,
-            research_started_at, research_completed_at, research_generation,
-            updated_at
-        ) VALUES (
-            %s, %s, 'V3_RESEARCH', %s,
-            %s, %s, %s,
-            %s, %s, %s,
-            %s, %s, %s,
-            %s, %s,
-            %s, %s, %s,
-            NOW()
-        )
+            documents_with_evidence, preliminary_research_priority, research_started_at,
+            research_completed_at, research_generation, updated_at
+        ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, NOW())
         ON CONFLICT (procurement_id) DO UPDATE SET
             card_json = EXCLUDED.card_json,
             research_state = EXCLUDED.research_state,
@@ -78,115 +57,115 @@ def sync_procurement_card_projection(
             research_completed_at = EXCLUDED.research_completed_at,
             research_generation = EXCLUDED.research_generation,
             updated_at = NOW()
-        RETURNING procurement_id, research_state
-    """
-
-    crm_db.execute_query(
-        sql,
+        """,
         (
-            procurement_id,
-            json.dumps(card_json, ensure_ascii=False, default=str),
-            metrics["research_state"],
-            metrics["documents_discovered"],
-            metrics["documents_supported"],
-            metrics["documents_researched"],
-            metrics["documents_failed"],
-            metrics["documents_unsupported"],
-            metrics["documents_no_content"],
-            metrics["raw_evidence_count"],
-            metrics["accepted_evidence_count"],
-            metrics["normalized_findings_count"],
-            metrics["documents_with_evidence"],
-            metrics["preliminary_research_priority"],
-            metrics["research_started_at"],
-            metrics["research_completed_at"],
-            metrics["research_generation"],
+            state_info["procurement_id"],
+            card_json_str,
+            state_info["research_state"],
+            state_info["documents_discovered"],
+            state_info["documents_supported"],
+            state_info["documents_researched"],
+            state_info["documents_failed"],
+            state_info["documents_unsupported"],
+            state_info["documents_no_content"],
+            state_info["raw_evidence_count"],
+            state_info["accepted_evidence_count"],
+            state_info["normalized_findings_count"],
+            state_info["documents_with_evidence"],
+            state_info["preliminary_research_priority"],
+            state_info["research_started_at"],
+            state_info["research_completed_at"],
+            state_info["research_generation"],
         ),
     )
-    return metrics
+    return state_info
 
-def get_master_procurement_list_filtered(
-    crm_db,
-    research_state_filter: Optional[str] = None,
-    limit: int = 50,
-    offset: int = 0,
-) -> List[Dict[str, Any]]:
+def get_master_procurement_list_filtered(crm_db, research_state_filter: Optional[str] = None, page: int = 1, page_size: int = 25) -> Dict[str, Any]:
     pred = get_torgi_workset_predicate("p")
-    if research_state_filter and research_state_filter.upper() != "ALL":
-        st = research_state_filter.upper()
-        if st in VALID_RESEARCH_STATES:
-            sql = f"""
-                SELECT p.id AS procurement_id, p.source_table, p.contract_number,
-                       COALESCE(c.research_state, 'WAITING_RESEARCH') AS research_state,
-                       COALESCE(c.documents_discovered, 0) AS documents_discovered,
-                       COALESCE(c.documents_researched, 0) AS documents_researched,
-                       COALESCE(c.documents_failed, 0) AS documents_failed,
-                       COALESCE(c.raw_evidence_count, 0) AS raw_evidence_count,
-                       COALESCE(c.normalized_findings_count, 0) AS normalized_findings_count,
-                       COALESCE(c.preliminary_research_priority, 'UNSCORED') AS preliminary_research_priority,
-                       c.updated_at
-                FROM crm_procurements p
-                LEFT JOIN crm_v3_canonical_procurement_cards c ON c.procurement_id = p.id
-                WHERE {pred}
-                  AND COALESCE(c.research_state, 'WAITING_RESEARCH') = %s
-                ORDER BY p.id DESC
-                LIMIT %s OFFSET %s
-            """
-            rows = crm_db.execute_query(sql, (st, limit, offset)) or []
-            return [dict(r) for r in rows]
+    where_clauses = [pred]
+    params = []
 
-    sql = f"""
-        SELECT p.id AS procurement_id, p.source_table, p.contract_number,
-               COALESCE(c.research_state, 'WAITING_RESEARCH') AS research_state,
-               COALESCE(c.documents_discovered, 0) AS documents_discovered,
-               COALESCE(c.documents_researched, 0) AS documents_researched,
-               COALESCE(c.documents_failed, 0) AS documents_failed,
-               COALESCE(c.raw_evidence_count, 0) AS raw_evidence_count,
-               COALESCE(c.normalized_findings_count, 0) AS normalized_findings_count,
-               COALESCE(c.preliminary_research_priority, 'UNSCORED') AS preliminary_research_priority,
-               c.updated_at
+    if research_state_filter and research_state_filter != "ALL":
+        if research_state_filter in VALID_RESEARCH_STATES:
+            where_clauses.append("COALESCE(prj.research_state, 'WAITING_RESEARCH') = %s")
+            params.append(research_state_filter)
+
+    where_sql = " AND ".join(where_clauses)
+    offset = (page - 1) * page_size
+
+    cnt_rows = crm_db.execute_query(
+        f"""
+        SELECT COUNT(*) as total
         FROM crm_procurements p
-        LEFT JOIN crm_v3_canonical_procurement_cards c ON c.procurement_id = p.id
-        WHERE {pred}
+        LEFT JOIN crm_v3_canonical_procurement_cards prj ON prj.procurement_id = p.id
+        WHERE {where_sql}
+        """,
+        params
+    )
+    total_count = int(cnt_rows[0]["total"]) if cnt_rows else 0
+
+    query_params = list(params) + [page_size, offset]
+    items = crm_db.execute_query(
+        f"""
+        SELECT
+            p.id, p.source_table, p.source_id, p.contract_number, p.object_info,
+            p.price, p.customer_name, p.end_date, p.crm_stage, p.award_status,
+            COALESCE(prj.research_state, 'WAITING_RESEARCH') as research_state,
+            prj.accepted_evidence_count, prj.documents_discovered, prj.documents_researched,
+            prj.research_generation
+        FROM crm_procurements p
+        LEFT JOIN crm_v3_canonical_procurement_cards prj ON prj.procurement_id = p.id
+        WHERE {where_sql}
         ORDER BY p.id DESC
         LIMIT %s OFFSET %s
-    """
-    rows = crm_db.execute_query(sql, (limit, offset)) or []
-    return [dict(r) for r in rows]
+        """,
+        query_params
+    ) or []
+
+    return {
+        "total_count": total_count,
+        "items": items,
+        "page": page,
+        "page_size": page_size,
+    }
 
 def get_research_state_counts(crm_db) -> Dict[str, Any]:
     pred = get_torgi_workset_predicate("p")
-    sql = f"""
-        SELECT COALESCE(c.research_state, 'WAITING_RESEARCH') AS research_state, COUNT(*) as cnt
+    rows = crm_db.execute_query(
+        f"""
+        SELECT
+            COUNT(*) as total_workset,
+            COUNT(*) FILTER (WHERE COALESCE(prj.research_state, 'WAITING_RESEARCH') = 'WAITING_RESEARCH') as cnt_waiting,
+            COUNT(*) FILTER (WHERE prj.research_state = 'RESEARCHING') as cnt_researching,
+            COUNT(*) FILTER (WHERE prj.research_state = 'EVIDENCE_FOUND') as cnt_evidence_found,
+            COUNT(*) FILTER (WHERE prj.research_state = 'NO_EVIDENCE') as cnt_no_evidence,
+            COUNT(*) FILTER (WHERE prj.research_state = 'PARTIAL') as cnt_partial,
+            COUNT(*) FILTER (WHERE prj.research_state = 'FAILED') as cnt_failed
         FROM crm_procurements p
-        LEFT JOIN crm_v3_canonical_procurement_cards c ON c.procurement_id = p.id
+        LEFT JOIN crm_v3_canonical_procurement_cards prj ON prj.procurement_id = p.id
         WHERE {pred}
-        GROUP BY COALESCE(c.research_state, 'WAITING_RESEARCH')
-    """
-    rows = crm_db.execute_query(sql) or []
-    counts_map = {r["research_state"]: int(r["cnt"]) for r in rows}
+        """
+    )
+    r = rows[0] if rows else {}
+    tot = int(r.get("total_workset") or 0)
+    w = int(r.get("cnt_waiting") or 0)
+    res = int(r.get("cnt_researching") or 0)
+    ef = int(r.get("cnt_evidence_found") or 0)
+    ne = int(r.get("cnt_no_evidence") or 0)
+    part = int(r.get("cnt_partial") or 0)
+    fa = int(r.get("cnt_failed") or 0)
 
-    waiting = counts_map.get(STATE_WAITING_RESEARCH, 0)
-    researching = counts_map.get(STATE_RESEARCHING, 0)
-    evidence_found = counts_map.get(STATE_EVIDENCE_FOUND, 0)
-    no_evidence = counts_map.get(STATE_NO_EVIDENCE, 0)
-    partial = counts_map.get(STATE_PARTIAL, 0)
-    failed = counts_map.get(STATE_FAILED, 0)
-
-    accepted_torgi_query_total = crm_db.execute_query(
-        f"SELECT COUNT(*) as cnt FROM crm_procurements p WHERE {pred}"
-    )[0]["cnt"]
-    sum_parts = waiting + researching + evidence_found + no_evidence + partial + failed
+    reconciles = (tot == (w + res + ef + ne + part + fa))
 
     return {
-        "ACCEPTED_TORGI_QUERY_TOTAL": accepted_torgi_query_total,
-        "RESEARCH_ALL": accepted_torgi_query_total,
-        "RESEARCH_WAITING": waiting,
-        "RESEARCH_RESEARCHING": researching,
-        "RESEARCH_EVIDENCE_FOUND": evidence_found,
-        "RESEARCH_NO_EVIDENCE": no_evidence,
-        "RESEARCH_PARTIAL": partial,
-        "RESEARCH_FAILED": failed,
+        "ACCEPTED_TORGI_QUERY_TOTAL": tot,
+        "RESEARCH_ALL": tot,
+        "RESEARCH_WAITING": w,
+        "RESEARCH_RESEARCHING": res,
+        "RESEARCH_EVIDENCE_FOUND": ef,
+        "RESEARCH_NO_EVIDENCE": ne,
+        "RESEARCH_PARTIAL": part,
+        "RESEARCH_FAILED": fa,
         "ONE_EFFECTIVE_RESEARCH_STATE_PER_PROCUREMENT": True,
-        "RESEARCH_STATE_COUNTS_RECONCILE": (accepted_torgi_query_total == sum_parts),
+        "RESEARCH_STATE_COUNTS_RECONCILE": reconciles,
     }
