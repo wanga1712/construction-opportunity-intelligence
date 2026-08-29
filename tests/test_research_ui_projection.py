@@ -1,4 +1,4 @@
-"""Unit tests for research UI projection, evidence formatting, and semantics."""
+"""Unit tests for research UI projection, evidence formatting, semantics, and pre-pagination filtering."""
 import pytest
 from unittest.mock import patch, MagicMock
 
@@ -6,11 +6,13 @@ from src.services.commercial_routing_v3.research_ui_projection import (
     ResearchUiProjection,
     format_friendly_locator,
     load_research_ui_projection,
+    filter_research_workset_ids,
 )
 from src.services.annotation_card_view import (
     compose_annotation_card_view,
     _observation_state,
 )
+from src.ui.components.analytics_v2.tabs import _reset_torgi_page
 
 def test_friendly_locator_formatting():
     loc1 = {"sheet_name": "Оборудование", "row_number": 42, "page_number": 17}
@@ -174,3 +176,65 @@ def test_document_intelligence_failure_not_silent_waiting():
         assert projs[100].research_state == "PROJECTION_ERROR"
         assert projs[100].error_detail is not None
         assert "DB_AUTHORITY_FAILURE" in projs[100].error_detail
+
+
+def test_filter_research_workset_ids_before_pagination():
+    """Regression test: Ensure research filtering is applied BEFORE pagination."""
+    all_ids = list(range(1, 101))
+    evidence_ids = [80, 81, 82, 83, 84, 85, 86]
+
+    projections = {}
+    for pid in all_ids:
+        if pid in evidence_ids:
+            projections[pid] = ResearchUiProjection(
+                procurement_id=pid,
+                research_state="EVIDENCE_FOUND",
+                documents_total=10,
+                documents_with_evidence=1,
+                evidence_count=2,
+                category_names=["Гидроизоляция"],
+            )
+        else:
+            projections[pid] = ResearchUiProjection(
+                procurement_id=pid,
+                research_state="NO_EVIDENCE",
+                documents_total=10,
+            )
+
+    # 1. Without research filter: 100 IDs
+    filtered_all = filter_research_workset_ids(all_ids, projections, selected_research="ALL")
+    assert len(filtered_all) == 100
+
+    # 2. With EVIDENCE_FOUND filter: exactly 7 IDs (80..86)
+    filtered_ev = filter_research_workset_ids(all_ids, projections, selected_research="EVIDENCE_FOUND")
+    assert filtered_ev == [80, 81, 82, 83, 84, 85, 86]
+    assert len(filtered_ev) == 7
+
+    # Page 1 (limit 25, offset 0) on filtered_ev returns all 7 cards!
+    page1_cards = filtered_ev[0:25]
+    assert len(page1_cards) == 7
+    assert page1_cards == [80, 81, 82, 83, 84, 85, 86]
+
+
+def test_research_filter_change_resets_page():
+    """Ensure page resets to 1 when filter changes."""
+    with patch("streamlit.session_state", {"torgi_workset_page": 5, "torgi_workset_page_ALL": 5}) as mock_state:
+        _reset_torgi_page()
+        assert mock_state["torgi_workset_page"] == 1
+        assert mock_state["torgi_workset_page_ALL"] == 1
+
+
+def test_filter_composition_category_and_research_state():
+    """Ensure category filter and research state filter compose using AND logic."""
+    all_ids = [1, 2, 3]
+    projections = {
+        1: ResearchUiProjection(procurement_id=1, research_state="EVIDENCE_FOUND", category_names=["Светотехника"]),
+        2: ResearchUiProjection(procurement_id=2, research_state="EVIDENCE_FOUND", category_names=["Гидроизоляция"]),
+        3: ResearchUiProjection(procurement_id=3, research_state="NO_EVIDENCE", category_names=[]),
+    }
+
+    # EVIDENCE_FOUND + Гидроизоляция -> only PID 2
+    res = filter_research_workset_ids(
+        all_ids, projections, selected_research="EVIDENCE_FOUND", selected_category="Гидроизоляция"
+    )
+    assert res == [2]

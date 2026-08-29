@@ -147,6 +147,8 @@ def _research_chips(proj: ResearchUiProjection | None, file_count: int) -> list[
         ]
     elif st_val == "FAILED":
         return ["❌ Ошибка исследования"]
+    elif st_val == "PROJECTION_ERROR":
+        return ["⚠ Ошибка базы исследования"]
     else:
         return ["○ Исследование не начато"]
 
@@ -347,7 +349,8 @@ def _filter_matches(
     # 3. Category filter match
     if selected_category != "ALL":
         c_names = proj.category_names if proj else []
-        if selected_category not in c_names:
+        c_codes = proj.category_codes if proj else []
+        if selected_category not in c_names and selected_category not in c_codes:
             return False
 
     return True
@@ -363,6 +366,8 @@ def render_stage_workspace(
     workset_ids: list[int] | None = None,
     annotation_states: dict[int, dict] | None = None,
     selected_annotation_filter: str | None = None,
+    projections: dict[int, ResearchUiProjection] | None = None,
+    render_research_controls: bool = True,
 ) -> str:
     from src.services.annotation_queue_service import batch_publication_visibility
     from src.services.db_bootstrap import connect_databases
@@ -373,22 +378,24 @@ def render_stage_workspace(
     page_states = {card["id"]: all_states[card["id"]] for card in cards}
     publication = batch_publication_visibility(crm_db, [card["id"] for card in cards])
 
-    # Bulk load research projections directly from document_intelligence DB (MAX 5 roundtrips per page, NO N+1)
-    projections = load_research_ui_projection(all_ids, crm_db)
+    if projections is None:
+        projections = load_research_ui_projection([card["id"] for card in cards], crm_db)
 
-    selected_state = selected_annotation_filter or render_review_filter(all_states, session_key)
-    selected_research, selected_category = render_research_filters(projections, session_key)
-
-    visible = [
-        card for card in cards
-        if _filter_matches(
-            page_states[card["id"]],
-            selected_state,
-            projections.get(card["id"]),
-            selected_research,
-            selected_category,
-        )
-    ]
+    if render_research_controls:
+        selected_state = selected_annotation_filter or render_review_filter(all_states, session_key)
+        selected_research, selected_category = render_research_filters(projections, session_key)
+        visible = [
+            card for card in cards
+            if _filter_matches(
+                page_states[card["id"]],
+                selected_state,
+                projections.get(card["id"]),
+                selected_research,
+                selected_category,
+            )
+        ]
+    else:
+        visible = cards
 
     active_key = f"active_inline_{session_key}"
     focused = st.session_state.get(session_key)
@@ -438,6 +445,8 @@ def render_review_filter(states: dict[int, dict], session_key: str, *, on_change
 def render_research_filters(
     projections: dict[int, ResearchUiProjection],
     session_key: str,
+    *,
+    on_change: Any = None,
 ) -> tuple[str, str]:
     """Render research state and category filters with dynamic counts."""
     # Count research states across projections
@@ -456,22 +465,38 @@ def render_research_filters(
             cat_counts[c_name] = cat_counts.get(c_name, 0) + 1
 
     r_labels = [f"{label} · {r_counts[key]}" for key, label in RESEARCH_FILTERS]
+    key_r = f"research_state_filter_{session_key}"
+    prev_key_r = f"prev_{key_r}"
+
     selected_r_label = st.pills(
         "Исследование",
         r_labels,
         default=r_labels[0],
-        key=f"research_state_filter_{session_key}",
+        key=key_r,
+        on_change=on_change,
     )
+    if st.session_state.get(prev_key_r) != selected_r_label:
+        st.session_state[prev_key_r] = selected_r_label
+        if callable(on_change):
+            on_change()
+
     selected_research = RESEARCH_FILTERS[r_labels.index(selected_r_label)][0]
 
     # Category filter dropdown
     cat_options = ["Все"] + [f"{c_name} · {count}" for c_name, count in sorted(cat_counts.items())]
     if len(cat_options) > 1:
+        key_c = f"research_category_filter_{session_key}"
+        prev_key_c = f"prev_{key_c}"
         selected_cat_opt = st.selectbox(
             "Найденная категория",
             cat_options,
-            key=f"research_category_filter_{session_key}",
+            key=key_c,
+            on_change=on_change,
         )
+        if st.session_state.get(prev_key_c) != selected_cat_opt:
+            st.session_state[prev_key_c] = selected_cat_opt
+            if callable(on_change):
+                on_change()
         selected_category = selected_cat_opt.split(" · ")[0] if selected_cat_opt != "Все" else "ALL"
     else:
         selected_category = "ALL"

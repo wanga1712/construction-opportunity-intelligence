@@ -371,3 +371,34 @@ def load_research_ui_projection(
                 proj.research_state = "WAITING_RESEARCH"
 
     return projections
+
+def filter_research_workset_ids(
+    procurement_ids: List[int],
+    projections: Dict[int, ResearchUiProjection],
+    selected_research: str = "ALL",
+    selected_category: str = "ALL",
+) -> List[int]:
+    """Filter workset procurement IDs by research state and found category BEFORE pagination.
+    
+    Preserves input ID ordering and identity.
+    """
+    if selected_research == "ALL" and selected_category == "ALL":
+        return procurement_ids
+
+    filtered: List[int] = []
+    for pid in procurement_ids:
+        proj = projections.get(pid)
+        r_state = proj.research_state if proj else "WAITING_RESEARCH"
+
+        if selected_research != "ALL" and r_state != selected_research:
+            continue
+
+        if selected_category != "ALL":
+            c_names = proj.category_names if proj else []
+            c_codes = proj.category_codes if proj else []
+            if selected_category not in c_names and selected_category not in c_codes:
+                continue
+
+        filtered.append(pid)
+
+    return filtered
