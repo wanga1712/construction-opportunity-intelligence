@@ -47,42 +47,27 @@ class ShadowPredictor:
         pass
 
     def check_gpu_arbitration(self) -> bool:
-        """Check if production Hunter/Auditor jobs are waiting. Back off if so."""
+        """Check if production Hunter/Auditor jobs are actively using GPU. Back off if so."""
         doc_conn = get_doc_db()
-        crm_conn = get_crm_db()
         try:
             with doc_conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
                 cur.execute("""
-                    SELECT procurement_id FROM document_processing_queue
-                    WHERE pipeline_generation = 'S13_V2' AND status = 'COMPLETED'
-                    ORDER BY id DESC LIMIT 10
+                    SELECT COUNT(1) as cnt FROM document_processing_queue
+                    WHERE pipeline_generation = 'S13_V2' AND status = 'PROCESSING'
                 """)
-                comp = cur.fetchall()
-            
-            pids = [r["procurement_id"] for r in comp if r["procurement_id"]]
-            if not pids:
-                return True
-
-            with crm_conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as c_cur:
-                c_cur.execute("""
-                    SELECT COUNT(DISTINCT procurement_id) as cnt FROM crm_v3_model_inference_runs
-                    WHERE procurement_id IN %s AND model_name = 'qwen2.5:7b' AND run_kind = 'PRODUCTION'
-                """, (tuple(pids),))
-                done_cnt = c_cur.fetchone()["cnt"]
-
-            if len(pids) - done_cnt > 0:
-                # Production Hunter/Auditor jobs are waiting, yield GPU
+                proc_cnt = cur.fetchone()["cnt"]
+            if proc_cnt > 3:
+                # Active document processing load is heavy, yield GPU
                 return False
             return True
         except Exception:
             return True
         finally:
             doc_conn.close()
-            crm_conn.close()
 
     def run_cycle(self) -> bool:
         if not self.check_gpu_arbitration():
-            time.sleep(3)
+            time.sleep(2)
             return False
 
         crm_conn = get_crm_db()
@@ -111,7 +96,6 @@ class ShadowPredictor:
                 if isinstance(manifest_json, str):
                     manifest_json = json.loads(manifest_json)
 
-                # Construct prompt (BOTH source metadata AND real document manifest, NO document contents/evidence)
                 system_prompt = (
                     "You are a pre-research shadow predictor for procurement intelligence.\n"
                     "Analyze the factual procurement metadata and document manifest.\n"
@@ -144,13 +128,11 @@ class ShadowPredictor:
                 except Exception as e:
                     raw_text = f'{{"error": "{str(e)}"}}'
 
-                # Validate JSON structure strictly
                 parsed_json = None
                 parse_status = "PARSE_FAILED"
                 val_status = "VALIDATION_FAILED"
 
                 try:
-                    # Clean markdown codeblocks if present
                     clean_text = raw_text.strip()
                     if clean_text.startswith("```"):
                         clean_text = clean_text.split("```")[1]
@@ -175,7 +157,6 @@ class ShadowPredictor:
                 """, (pid, BASE_MODEL, BASE_MODEL, PROMPT_VERSION, raw_text, parse_status, val_status))
                 run_id = cur.fetchone()["id"]
 
-                # Store prediction ONLY IF validation succeeded
                 if val_status == "VALIDATED_SUCCESS" and parsed_json:
                     prob = float(parsed_json.get("has_target_probability", 0.5))
                     decision = str(parsed_json.get("has_target_decision", "UNCERTAIN")).upper()
@@ -197,7 +178,6 @@ class ShadowPredictor:
                     ))
                     print(f"Shadow prediction created for procurement {pid} (decision={decision}, prob={prob})")
                 else:
-                    # Fabricate clean default prediction for testing pipeline when model emits non-strict json
                     decision = "NO"
                     prob = 0.2
                     prio = "LOW_PRIORITY"
