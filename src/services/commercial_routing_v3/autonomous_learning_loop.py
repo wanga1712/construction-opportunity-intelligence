@@ -29,6 +29,12 @@ from src.services.commercial_routing_v3.model_inference_runs import (
     prompt_sha256,
 )
 
+
+from src.services.commercial_routing_v3.evidence_discovery import discover_and_persist_raw_evidence
+from src.services.commercial_routing_v3.document_links import resolve_document_links
+from src.services.commercial_routing_v3.card_research_state import compute_research_generation_hash
+from src.services.commercial_routing_v3.canonical_card_service import sync_procurement_card_projection
+
 logger = logging.getLogger("commercial_routing_v3.autonomous_learning_loop")
 
 HUNTER_PROMPT_VERSION = "v3_learning_hunter_v1"
