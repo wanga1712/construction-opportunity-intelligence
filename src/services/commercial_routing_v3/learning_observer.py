@@ -3,11 +3,17 @@
 Responsibilities:
 - Enrich queue identity and generation hash
 - Build immutable pre-research blind snapshots (STRICT allowlist: source metadata + real canonical document manifest)
-- Create exhaustive ground truth ONLY when ALL manifest documents reach REAL per-document parse terminal state (document_files LEFT JOIN document_processing_results)
+- Create exhaustive ground truth ONLY when per-document terminal states are evaluated from document_files LEFT JOIN document_processing_results by source_document_id
 - Enforce temporal order: PREDICTION_CREATED_AT < TRUTH_CREATED_AT and TRUTH_CREATED_AT >= LAST_PARSE_TERMINAL_AT
-- Calculate real document-level ground truth (useful_documents_json, non_useful_documents_json, unknown_documents_json)
-- Evaluate blind predictions against exhaustive truth with mathematically derived ranking metrics (recall@1,3,5, MRR, first_useful_rank)
-- Materialize dataset learning examples for PROCUREMENT_RELEVANCE and DOCUMENT_RANKING with stable TRAIN/VALIDATION/HOLDOUT splits
+- Exact document classification:
+  - USEFUL: download successful AND parse successful AND current-generation evidence linked.
+  - NO_TARGET_EVIDENCE: download successful AND parse successful AND zero current-generation evidence.
+  - UNKNOWN: download failure, parse failure, unsupported format, unreadable, missing row, missing parse result, incomplete.
+- Procurement truth:
+  - USEFUL > 0 and UNKNOWN == 0 -> has_target_evidence=YES, truth_completeness=COMPLETE
+  - USEFUL > 0 and UNKNOWN > 0 -> has_target_evidence=YES, truth_completeness=PARTIAL
+  - USEFUL == 0 and UNKNOWN == 0 -> has_target_evidence=NO, truth_completeness=COMPLETE
+  - USEFUL == 0 and UNKNOWN > 0 -> has_target_evidence=UNKNOWN, truth_completeness=PARTIAL
 - Producer version: v3_real_truth
 """
 
@@ -22,14 +28,6 @@ from typing import Dict, Any, List, Optional, Tuple
 
 PRODUCER_VERSION = "v3_real_truth"
 PIPELINE_GENERATION = "S13_V2"
-
-TERMINAL_DOWNLOAD_STATUSES = {
-    "COMPLETED", "DOWNLOAD_FAILED", "UNSUPPORTED", "FAILED"
-}
-TERMINAL_PARSE_STATUSES = {
-    "COMPLETED", "UNSUPPORTED", "FAILED", "PARSE_FAILED",
-    "EMPTY", "SEARCHED_SUCCESSFULLY", "UNREADABLE", "PARTIALLY_SEARCHED", "UNSUPPORTED_FORMAT"
-}
 
 def get_doc_db():
     user = os.environ.get("S13_DOCUMENT_DB_USER", "doc_worker")
@@ -212,10 +210,10 @@ class LearningObserver:
                     if isinstance(manifest, str):
                         manifest = json.loads(manifest)
 
-                    # Inspect document_files LEFT JOIN document_processing_results in document_intelligence DB
+                    # Inspect document_files LEFT JOIN document_processing_results by source_document_id
                     with doc_conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as d_cur:
                         d_cur.execute("""
-                            SELECT f.id, f.download_status, f.downloaded_at, f.created_at as file_created_at,
+                            SELECT f.id as source_document_id, f.download_status, f.downloaded_at, f.created_at as file_created_at,
                                    r.status as parse_status, r.completed_at as parse_completed_at
                             FROM document_files f
                             LEFT JOIN document_processing_results r ON f.id = r.file_id
@@ -223,36 +221,9 @@ class LearningObserver:
                         """, (pid,))
                         doc_results = d_cur.fetchall()
 
-                    if manifest and not doc_results and item["status"] != "NO_LINKS":
-                        # Manifest contains documents but document_files / results have not populated yet
-                        continue
+                    doc_map = {dr["source_document_id"]: dr for dr in doc_results}
 
-                    is_all_parse_terminal = True
-                    max_parse_at = item["completed_at"]
-
-                    for dr in doc_results:
-                        dl_st = str(dr.get("download_status") or "").upper()
-                        pr_st = str(dr.get("parse_status") or "").upper() if dr.get("parse_status") else None
-
-                        if dl_st not in TERMINAL_DOWNLOAD_STATUSES:
-                            is_all_parse_terminal = False
-                            break
-
-                        # Download complete is NOT parse complete! Require parse_status to be terminal if download succeeded
-                        if dl_st == "COMPLETED":
-                            if not pr_st or pr_st not in TERMINAL_PARSE_STATUSES:
-                                is_all_parse_terminal = False
-                                break
-
-                        p_at = dr.get("parse_completed_at") or dr.get("downloaded_at") or dr.get("file_created_at")
-                        if p_at and (max_parse_at is None or p_at > max_parse_at):
-                            max_parse_at = p_at
-
-                    if not is_all_parse_terminal:
-                        # Skip truth creation if any document parse is non-terminal!
-                        continue
-
-                    # STRICT generation-scoped raw evidence query using source_document_id
+                    # Query STRICT current-generation evidence
                     c_cur.execute("""
                         SELECT source_document_id FROM crm_v3_raw_source_evidence
                         WHERE procurement_id = %s AND pipeline_generation = %s AND research_generation_hash = %s
@@ -267,33 +238,52 @@ class LearningObserver:
                     useful_docs = []
                     non_useful_docs = []
                     unknown_docs = []
-
-                    if item["status"] in ("COMPLETED", "NO_LINKS"):
-                        truth_completeness = "COMPLETE"
-                    else:
-                        truth_completeness = "PARTIAL"
+                    max_parse_at = item["completed_at"]
 
                     for d in manifest:
                         d_id = d.get("source_document_id")
                         d_key = d.get("document_key")
                         d_item = {"document_key": d_key, "source_document_id": d_id, "document_name": d.get("document_name")}
-                        
-                        if truth_completeness == "COMPLETE":
+
+                        dr = doc_map.get(d_id)
+                        if not dr:
+                            # Missing document row -> UNKNOWN
+                            unknown_docs.append(d_item)
+                            continue
+
+                        dl_st = str(dr.get("download_status") or "").upper()
+                        pr_st = str(dr.get("parse_status") or "").upper() if dr.get("parse_status") else None
+                        p_at = dr.get("parse_completed_at") or dr.get("downloaded_at") or dr.get("file_created_at")
+
+                        if p_at and (max_parse_at is None or p_at > max_parse_at):
+                            max_parse_at = p_at
+
+                        if dl_st == "COMPLETED" and pr_st == "COMPLETED":
                             if d_id and d_id in ev_doc_ids:
                                 useful_docs.append(d_item)
                             else:
                                 non_useful_docs.append(d_item)
                         else:
+                            # Any failure/unsupported/unreadable/missing parse result -> UNKNOWN
                             unknown_docs.append(d_item)
 
                     docs_total = len(manifest)
-                    docs_supported = len(useful_docs) + len(non_useful_docs)
-                    docs_unknown = len(unknown_docs)
+                    useful_cnt = len(useful_docs)
+                    no_target_cnt = len(non_useful_docs)
+                    unknown_cnt = len(unknown_docs)
 
-                    if truth_completeness == "COMPLETE":
-                        has_target = "YES" if (len(useful_docs) > 0 or len(ev_rows) > 0) else "NO"
-                    else:
-                        has_target = "YES" if len(ev_rows) > 0 else "UNKNOWN"
+                    if useful_cnt > 0 and unknown_cnt == 0:
+                        has_target = "YES"
+                        truth_completeness = "COMPLETE"
+                    elif useful_cnt > 0 and unknown_cnt > 0:
+                        has_target = "YES"
+                        truth_completeness = "PARTIAL"
+                    elif useful_cnt == 0 and unknown_cnt == 0:
+                        has_target = "NO"
+                        truth_completeness = "COMPLETE"
+                    else:  # useful_cnt == 0 and unknown_cnt > 0
+                        has_target = "UNKNOWN"
+                        truth_completeness = "PARTIAL"
 
                     c_cur.execute("""
                         INSERT INTO crm_v3_exhaustive_truth (
@@ -307,7 +297,7 @@ class LearningObserver:
                         RETURNING id
                     """, (
                         pid, qid, PIPELINE_GENERATION, gen_hash,
-                        docs_total, docs_supported, docs_unknown,
+                        docs_total, useful_cnt + no_target_cnt, unknown_cnt,
                         has_target, json.dumps(useful_docs), json.dumps(non_useful_docs), json.dumps(unknown_docs),
                         len(ev_rows), truth_completeness, PRODUCER_VERSION
                     ))

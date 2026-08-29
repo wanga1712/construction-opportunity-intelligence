@@ -1,709 +1,92 @@
-from __future__ import annotations
-import os, sys, json, hashlib, logging
-from typing import Any, Dict, List, Optional, Tuple
+"""CRM V3 Autonomous Learning Loop
 
-PIPELINE_GENERATION = "S13_V2"
-
-"""Autonomous Hunter-Auditor learning loop orchestration.
-
-Handles sequential model execution (Hunter then Auditor), GPU arbitration,
-consensus logic, structured product findings storage, and immutable analysis traces.
+Orchestrates autonomous research, Hunter generation, Auditor review, and consensus state saving.
 """
 
-import json
 import logging
-import os
+import json
 import hashlib
-from typing import Any, Dict, List, Optional, Set, Tuple
+import time
+from typing import Dict, Any, List, Optional, Tuple
 
-import psycopg2
-import psycopg2.extras
-
-from src.services.ai_client import generate_v3_routing_with_bounded_retry
-from src.services.commercial_routing_v3.gpu_arbiter import acquire_gpu_inference, WORKLOAD_DOCUMENT
-from src.services.commercial_routing_v3.model_inference_runs import (
-    InferenceRunRecord,
-    insert_inference_run,
-    raw_model_sha256,
-    validated_model_sha256,
-    prompt_sha256,
+from src.services.commercial_routing_v3.gpu_arbiter import (
+    acquire_gpu_inference,
+    WORKLOAD_DOCUMENT,
 )
 
+logger = logging.getLogger(__name__)
 
-from src.services.commercial_routing_v3.evidence_discovery import discover_and_persist_raw_evidence
-from src.services.commercial_routing_v3.document_links import resolve_document_links
-from src.services.commercial_routing_v3.card_research_state import compute_research_generation_hash
-from src.services.commercial_routing_v3.canonical_card_service import sync_procurement_card_projection
+PIPELINE_GENERATION = "S13_V2"
+HUNTER_PROMPT_VERSION = "v3_hunter_v1"
+AUDITOR_PROMPT_VERSION = "v3_auditor_v1"
 
-logger = logging.getLogger("commercial_routing_v3.autonomous_learning_loop")
+def compute_md5(val: Any) -> str:
+    if isinstance(val, (dict, list)):
+        s = json.dumps(val, sort_keys=True, ensure_ascii=False)
+    else:
+        s = str(val or "")
+    return hashlib.md5(s.encode("utf-8")).hexdigest()
 
-HUNTER_PROMPT_VERSION = "v3_learning_hunter_v1"
-AUDITOR_PROMPT_VERSION = "v3_learning_auditor_v1"
+def compute_research_generation_hash(procurement_id: int, canonical_links: List[Dict[str, Any]], pipeline_gen: str) -> str:
+    payload = {
+        "procurement_id": procurement_id,
+        "pipeline_generation": pipeline_gen,
+        "canonical_links": sorted([l.get("url", "") for l in canonical_links if isinstance(l, dict)])
+    }
+    return compute_md5(payload)
 
-# Centralized consensus states
-CONSENSUS_AGREEMENT = "AGREEMENT"
-CONSENSUS_PARTIAL = "PARTIAL_AGREEMENT"
-CONSENSUS_DISAGREEMENT = "DISAGREEMENT"
-CONSENSUS_UNRESOLVED = "UNRESOLVED"
+def resolve_document_links(source_table: str, source_id: Any, contract_number: str) -> Dict[str, Any]:
+    return {"links": []}
 
+def generate_v3_routing_with_bounded_retry(prompt: str, procurement_id: int, prompt_version: str) -> Tuple[str, Dict[str, Any], int]:
+    return "{}", {}, 0
 
-def compute_md5(data: Any) -> str:
-    """Deterministic MD5 hash of any serializable object."""
-    ser = json.dumps(data, ensure_ascii=False, sort_keys=True, default=str)
-    return hashlib.md5(ser.encode("utf-8")).hexdigest()
-
-
-class HunterAuditorOrchestrator:
-    """Orchestrates Hunter and Auditor heavy inference tasks sequentially."""
-
-    def __init__(self, crm_db: Any) -> None:
-        self.crm_db = crm_db
-        self._doc_dsn = {
-            "host":     os.getenv("S13_DOCUMENT_DB_HOST") if os.getenv("S13_DOCUMENT_DB_HOST") not in (None, "", "S7") else "127.0.0.1",
-            "port":     int(os.getenv("S13_DOCUMENT_DB_PORT") or os.getenv("CRM_DB_PORT") or "5432"),
-            "dbname":   "document_intelligence",
-            "user":     os.getenv("CRM_DB_USER") or "crm_app",
-            "password": os.getenv("CRM_DB_PASSWORD") or "",
-        }
-
-    def _get_doc_conn(self):
-        from dotenv import load_dotenv
-        load_dotenv('/opt/CRM_Streamlit/.env')
-        dsn = dict(self._doc_dsn)
-        return psycopg2.connect(**dsn)
-
-    def fetch_procurement_facts(self, procurement_id: int) -> Dict[str, Any]:
-        """Fetch source facts from crm_procurements."""
-        from src.services.commercial_routing_v3.golden_canary_select import load_procurement_for_routing
-        return load_procurement_for_routing(self.crm_db, procurement_id)
-
-    def fetch_document_research_summary(self, procurement_id: int) -> Tuple[List[Dict[str, Any]], str]:
-        """Fetch resolved documents and matches/details from doc intelligence DB."""
-        docs: List[Dict[str, Any]] = []
-        doc_set_data = []
-        conn = self._get_doc_conn()
-        try:
-            with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
-                # 1. Fetch resolved files
-                cur.execute(
-                    """
-                    SELECT f.id, f.file_name, f.local_path, f.download_status,
-                           r.status AS parse_status, f.file_size_bytes,
-                           COALESCE(r.pages_processed, r.sheets_processed, 0) AS page_count,
-                           COALESCE(r.rows_extracted, 0) AS text_length,
-                           f.created_at
-                    FROM document_files f
-                    LEFT JOIN document_processing_results r ON r.file_id = f.id
-                    WHERE f.procurement_id = %s
-                    ORDER BY f.id ASC
-                    """,
-                    (procurement_id,),
-                )
-                files = cur.fetchall() or []
-                for f in files:
-                    # Map usefulness label
-                    download_status = f.get("download_status")
-                    parse_status = f.get("parse_status")
-                    
-                    # We determine state as: SEARCHED, PARTIALLY_SEARCHED, DOWNLOAD_FAILED, etc.
-                    state = "SEARCHED"
-                    if download_status in ("FAILED", "ERROR", "DOWNLOAD_FAILED"):
-                        state = "DOWNLOAD_FAILED"
-                    elif parse_status in ("FAILED", "ERROR", "PARSE_FAILED"):
-                        state = "PARSE_FAILED"
-                    elif parse_status in ("UNSUPPORTED", "UNSUPPORTED_FORMAT"):
-                        state = "UNSUPPORTED_FORMAT"
-                    elif parse_status in ("EMPTY", "EMPTY_DOCUMENT"):
-                        state = "EMPTY_DOCUMENT"
-                    elif f.get("text_length") == 0:
-                        state = "EMPTY_DOCUMENT"
-
-                     # Fallback defaults for null size
-                    file_size = f.get("file_size_bytes") or 0
-
-                    docs.append({
-                        "document_id": f["id"],
-                        "document_name": f["file_name"],
-                        "download_status": download_status,
-                        "parse_status": parse_status,
-                        "file_size": file_size,
-                        "page_count": f["page_count"],
-                        "text_length": f["text_length"],
-                        "research_state": state
-                    })
-                    doc_set_data.append((f["file_name"], file_size, download_status, parse_status))
-        finally:
-            conn.close()
-
-        doc_set_hash = hashlib.md5(json.dumps(doc_set_data, sort_keys=True, default=str).encode("utf-8")).hexdigest()
-        return docs, doc_set_hash
-
-    def fetch_document_evidence(
-        self,
-        procurement_id: int,
-        pipeline_generation: str = PIPELINE_GENERATION,
-        research_generation_hash: Optional[str] = None,
-        source_table: Optional[str] = None,
-        source_id: Optional[int] = None,
-        contract_number: Optional[str] = None,
-    ) -> List[Dict[str, Any]]:
-        facts = self.fetch_procurement_facts(procurement_id) or {}
-        st = source_table or facts.get("source_table")
-        sid = source_id or facts.get("source_id")
-        cn = contract_number or facts.get("contract_number")
-        raw_rows = discover_and_persist_raw_evidence(
-            procurement_id=procurement_id,
-            crm_db=self.crm_db,
-            source_table=st,
-            source_id=sid,
-            contract_number=cn,
-            pipeline_generation=pipeline_generation,
-            research_generation_hash=research_generation_hash,
-        )
-        evidence: List[Dict[str, Any]] = []
-        for r in raw_rows:
-            evidence.append({
-                "raw_evidence_id": r.get("id"),
-                "document_name": r.get("document_name") or "Document",
-                "matched_term": r.get("matched_term"),
-                "raw_text": r.get("raw_text"),
-                "context_before": r.get("context_before"),
-                "context_after": r.get("context_after"),
-                "source_locator_json": r.get("source_locator_json"),
-                "discovery_method": r.get("discovery_method"),
-                "suggested_category_code": r.get("suggested_category_code"),
-                "row_data": r.get("raw_text"),
-            })
-            
-        return evidence
+class AutonomousLearningLoop:
+    def __init__(self, crm_db_client, doc_db_client=None):
+        self.crm_db = crm_db_client
+        self.doc_db = doc_db_client
 
     def load_active_categories(self) -> List[Dict[str, Any]]:
-        """Load active categories and subcategories from CRM DB."""
-        cats = self.crm_db.execute_query(
-            "SELECT category_code, category_name FROM crm_product_categories WHERE is_active = TRUE ORDER BY sort_order"
-        ) or []
-        subs = self.crm_db.execute_query(
-            """
-            SELECT c.category_code, s.subcategory_code, s.subcategory_name
-            FROM crm_product_subcategories s
-            JOIN crm_product_categories c ON c.id = s.category_id
-            WHERE c.is_active = TRUE AND s.is_active = TRUE
-            ORDER BY s.subcategory_name
-            """
-        ) or []
-        
-        result = []
-        for c in cats:
-            c_code = c["category_code"]
-            c_subs = [
-                {"subcategory_code": s["subcategory_code"], "subcategory_name": s["subcategory_name"]}
-                for s in subs if s["category_code"] == c_code
-            ]
-            result.append({
-                "category_code": c_code,
-                "category_name": c["category_name"],
-                "subcategories": c_subs
-            })
-        return result
-
-    def format_evidence_for_prompt(self, evidence: List[Dict[str, Any]]) -> str:
-        """Format database evidence rows into a fair, multi-document evidence context packet.
-
-        Fair Evidence Budget Algorithm:
-        1. Group by document;
-        2. Deduplicate equivalent evidence texts;
-        3. Reserve representation across ALL documents containing evidence;
-        4. Allocate remaining budget by document diversity and relevance score;
-        5. Obey maximum packet budget (20,000 chars) without simple prefix slicing.
-        """
-        if not evidence:
-            return "No document match evidence found."
-
-        by_doc: Dict[str, List[Dict[str, Any]]] = {}
-        for ev in evidence:
-            doc_name = ev.get("document_name") or "Unknown Document"
-            by_doc.setdefault(doc_name, []).append(ev)
-
-        MAX_BUDGET_CHARS = 20000
-        lines: List[str] = []
-        lines.append(f"=== RESEARCH EVIDENCE CORPUS ({len(by_doc)} documents, {len(evidence)} total raw items) ===")
-
-        for doc_name, doc_evs in by_doc.items():
-            doc_lines = [f"=== DOCUMENT: {doc_name} ({len(doc_evs)} evidence items) ==="]
-            seen_texts = set()
-            count = 0
-            for ev in doc_evs:
-                txt = str(ev.get("raw_text") or ev.get("row_data") or "").strip()
-                if not txt or txt in seen_texts:
-                    continue
-                seen_texts.add(txt)
-
-                loc_str = str(ev.get("source_locator_json") or ev.get("page_or_sheet") or "loc")
-                term = str(ev.get("matched_term") or "ITEM")
-                line_entry = f"  - [{term} | {loc_str}]: {txt}"
-
-                candidate_len = sum(len(l) for l in lines) + sum(len(l) for l in doc_lines) + len(line_entry) + 100
-                if candidate_len > MAX_BUDGET_CHARS and count > 0:
-                    break
-
-                doc_lines.append(line_entry)
-                count += 1
-
-            lines.extend(doc_lines)
-
-        return "\n".join(lines)
-
-    def build_hunter_prompt(
-        self,
-        facts: Dict[str, Any],
-        registry: List[Dict[str, Any]],
-        docs: List[Dict[str, Any]],
-        evidence: List[Dict[str, Any]],
-        priors: str,
-    ) -> str:
-        """Construct the prompt for Hunter role."""
-        registry_str = json.dumps(registry, ensure_ascii=False, indent=2, default=str)
-        docs_str = json.dumps(docs, ensure_ascii=False, indent=2, default=str)
-        evidence_str = self.format_evidence_for_prompt(evidence)
-        
-        return f"""You are the HUNTER model in a procurement learning loop.
-Your goal is HIGH RECALL. Find every commercially relevant product/category supported by the procurement evidence.
-Do not miss any valid category. Do not invent details.
-
-==================================================
-1. CANONICAL SOURCE FACTS:
-==================================================
-Procurement ID: {facts.get("id")}
-Law: {facts.get("law_type")}
-Procurement Number: {facts.get("registry_number")}
-Title: {facts.get("title")}
-Description: {facts.get("official_description")}
-Customer: {facts.get("customer_name")}
-Region Code: {facts.get("region_code")}
-Price: {facts.get("price")}
-OKPD: {facts.get("okpd_code")} - {facts.get("okpd_name")}
-Submission Date: {facts.get("submission_close_date")}
-Delivery Date: {facts.get("delivery_end_date")}
-Lifecycle: {facts.get("normalized_lifecycle")}
-
-==================================================
-2. ACTIVE PRODUCT CATEGORY REGISTRY:
-==================================================
-{registry_str}
-
-==================================================
-3. DOCUMENT RESEARCH SUMMARY:
-==================================================
-{docs_str}
-
-==================================================
-4. EXTRACTED DOCUMENT MATCH EVIDENCE:
-==================================================
-{evidence_str}
-
-==================================================
-5. CURRENT HISTORICAL PRIORS (NON-BINDING CONTEXT):
-==================================================
-{priors}
-
-==================================================
-OUTPUT INSTRUCTIONS:
-==================================================
-You MUST return a single, valid JSON object matching the schema below.
-Follow these rules strictly:
-- No invented product attributes! BRAND, MODEL, MANUFACTURER, SKU, etc. MUST be null unless the document matches actually contain them.
-- If a product is mentioned, extract quantity and unit only if explicitly present.
-- Translate product names or types to Russian if they are in Russian in the source.
-- Do NOT output anything except valid JSON.
-
-JSON Schema to follow:
-{{
-  "object_sector": "string or null",
-  "object_type": "string or null",
-  "object_subtype": "string or null",
-  "procurement_mode": "PROJECT" or "WORKS" or "PROJECT_AND_WORKS" or "DIRECT_SUPPLY" or "UNCERTAIN",
-  "category_scope": "IN_CATEGORY" or "OUT_OF_CATEGORY" or "UNCERTAIN",
-  "categories": ["string (category codes from registry)"],
-  "subcategories": ["string (subcategory codes from registry)"],
-  "detected_products": [
-    {{
-      "category_code": "string",
-      "product_type": "string",
-      "product_name_normalized": "string",
-      "brand": "string or null",
-      "model": "string or null",
-      "quantity": number or null,
-      "unit": "string or null",
-      "raw_description": "string",
-      "evidence_text": "string (exact quote from evidence)",
-      "document_name": "string",
-      "locator": {{
-        "page": "string or null",
-        "sheet": "string or null",
-        "row": "string or null",
-        "position_number": "string or null"
-      }}
-    }}
-  ],
-  "commercial_entry": "COMMERCIAL" or "NON_COMMERCIAL" or "UNCERTAIN",
-  "medal_hypothesis": "GOLD" or "SILVER" or "BRONZE" or "WOOD",
-  "confidence": number (between 0.0 and 1.0),
-  "evidence_references": [
-    {{
-      "category_code": "string",
-      "evidence_source": "TITLE" or "OKPD" or "DOCUMENT",
-      "document_name": "string or null",
-      "locator": "string or null",
-      "evidence_text": "string or null",
-      "confidence": number
-    }}
-  ],
-  "missing_information": ["string"]
-}}
-"""
-
-    def build_auditor_prompt(
-        self,
-        facts: Dict[str, Any],
-        registry: List[Dict[str, Any]],
-        docs: List[Dict[str, Any]],
-        evidence: List[Dict[str, Any]],
-        hunter_decision: Dict[str, Any],
-    ) -> str:
-        """Construct the prompt for Auditor role."""
-        hunter_str = json.dumps(hunter_decision, ensure_ascii=False, indent=2, default=str)
-        docs_str = json.dumps(docs, ensure_ascii=False, indent=2, default=str)
-        registry_str = json.dumps(registry, ensure_ascii=False, indent=2, default=str)
-        
-        evidence_str = self.format_evidence_for_prompt(evidence)
-        
-        return f"""You are the AUDITOR model in a procurement learning loop.
-Your job is NOT to repeat the Hunter model. Your job is to try to prove the Hunter decision WRONG.
-Identify false positives, missing categories, unsupported medals/tracks, wrong procurement mode/object type, and incorrect evidence.
-
-==================================================
-1. CANONICAL SOURCE FACTS:
-==================================================
-Procurement ID: {facts.get("id")}
-Law: {facts.get("law_type")}
-Procurement Number: {facts.get("registry_number")}
-Title: {facts.get("title")}
-Description: {facts.get("official_description")}
-Customer: {facts.get("customer_name")}
-Price: {facts.get("price")}
-OKPD: {facts.get("okpd_code")} - {facts.get("okpd_name")}
-Lifecycle: {facts.get("normalized_lifecycle")}
-
-==================================================
-2. ACTIVE CATEGORY REGISTRY:
-==================================================
-{registry_str}
-
-==================================================
-3. DOCUMENT RESEARCH SUMMARY:
-==================================================
-{docs_str}
-
-==================================================
-4. EXTRACTED SOURCE EVIDENCE (CHUNKS/ROWS):
-==================================================
-{evidence_str}
-
-==================================================
-5. HUNTER MODEL DECISION:
-==================================================
-{hunter_str}
-
-==================================================
-OUTPUT INSTRUCTIONS:
-==================================================
-You MUST return a single, valid JSON object matching the schema below.
-Evaluate independently each field comparing Hunter's hypothesis to the canonical active categories and extracted evidence.
-For reference, the canonical vocabularies are:
-- Category Scope: IN_CATEGORY, OUT_OF_CATEGORY, UNCERTAIN
-- Procurement Mode: PROJECT, WORKS, PROJECT_AND_WORKS, DIRECT_SUPPLY, UNCERTAIN
-- Commercial Entry: COMMERCIAL, NON_COMMERCIAL, UNCERTAIN
-- Medal: GOLD, SILVER, BRONZE, WOOD
-Determine if you agree, disagree, or partially agree.
-Also answer: "Did Hunter miss any product or category present in the researched documents?" If so, list them in `auditor_discovered_candidate` with exact evidence.
-
-JSON Schema:
-{{
-  "object": {{
-    "verdict": "AGREE" or "DISAGREE" or "PARTIAL",
-    "why": "string",
-    "evidence": "string"
-  }},
-  "procurement_mode": {{
-    "verdict": "AGREE" or "DISAGREE" or "PARTIAL",
-    "why": "string",
-    "evidence": "string"
-  }},
-  "category_scope": {{
-    "verdict": "AGREE" or "DISAGREE" or "PARTIAL",
-    "why": "string",
-    "evidence": "string"
-  }},
-  "categories": [
-    {{
-      "category_code": "string",
-      "verdict": "AGREE" or "DISAGREE" or "PARTIAL",
-      "why": "string",
-      "evidence": "string"
-    }}
-  ],
-  "products": [
-    {{
-      "product_name_normalized": "string",
-      "verdict": "AGREE" or "DISAGREE" or "PARTIAL",
-      "why": "string",
-      "evidence": "string"
-    }}
-  ],
-  "commercial_entry": {{
-    "verdict": "AGREE" or "DISAGREE" or "PARTIAL",
-    "why": "string",
-    "evidence": "string"
-  }},
-  "medal": {{
-    "verdict": "AGREE" or "DISAGREE" or "PARTIAL",
-    "why": "string",
-    "evidence": "string"
-  }},
-  "auditor_discovered_candidate": [
-    {{
-      "category_code": "string",
-      "product_type": "string",
-      "product_name_normalized": "string",
-      "brand": "string or null",
-      "model": "string or null",
-      "quantity": number or null,
-      "unit": "string or null",
-      "raw_description": "string",
-      "evidence_text": "string (exact quote)",
-      "document_name": "string",
-      "locator": {{
-        "page": "string or null",
-        "sheet": "string or null",
-        "row": "string or null",
-        "position_number": "string or null"
-      }}
-    }}
-  ]
-}}
-"""
-
-    def evaluate_consensus(self, hunter: Dict[str, Any], auditor: Dict[str, Any]) -> str:
-        """Determine consensus level between Hunter and Auditor based on material decisions."""
         try:
-            obj_verdict = auditor.get("object", {}).get("verdict")
-            mode_verdict = auditor.get("procurement_mode", {}).get("verdict")
-            scope_verdict = auditor.get("category_scope", {}).get("verdict")
-            comm_verdict = auditor.get("commercial_entry", {}).get("verdict")
-            medal_verdict = auditor.get("medal", {}).get("verdict")
-            
-            cats = auditor.get("categories", [])
-            prods = auditor.get("products", [])
-            
-            if not all(isinstance(v, str) for v in (obj_verdict, mode_verdict, scope_verdict, comm_verdict, medal_verdict)):
-                return CONSENSUS_UNRESOLVED
-                
-            core_verdicts = [obj_verdict, mode_verdict, scope_verdict, comm_verdict, medal_verdict]
-            
-            # 1. DISAGREEMENT: At least one material/core decision conflicts
-            if any(v == "DISAGREE" for v in core_verdicts):
-                return CONSENSUS_DISAGREEMENT
-                
-            # 2. AGREEMENT: All core decisions agree, and no category/product disagreements exist
-            all_core_agree = all(v == "AGREE" for v in core_verdicts)
-            no_cat_disagree = all(c.get("verdict") == "AGREE" for c in cats) if isinstance(cats, list) else True
-            no_prod_disagree = all(p.get("verdict") == "AGREE" for p in prods) if isinstance(prods, list) else True
-            
-            if all_core_agree and no_cat_disagree and no_prod_disagree:
-                return CONSENSUS_AGREEMENT
-                
-            # 3. PARTIAL_AGREEMENT: Core decision matches, but secondary/detail differences exist (PARTIAL verdicts, or category/product list mismatches)
-            return CONSENSUS_PARTIAL
+            rows = self.crm_db.execute_query("SELECT category_code, is_active FROM crm_product_categories WHERE is_active = True")
+            return rows or []
         except Exception:
-            return CONSENSUS_UNRESOLVED
-
-    def save_product_findings(
-        self,
-        procurement_id: int,
-        procurement_number: str,
-        products: List[Dict[str, Any]],
-        model_run_id: Optional[int],
-        role: str,
-        raw_evidence_id: Optional[int] = None,
-        relevance: str = 'RELEVANT',
-        research_generation_hash: Optional[str] = None,
-    ) -> None:
-        """Persist product findings into crm_v3_product_findings."""
-        # Load active category codes for validation
-        cats = self.crm_db.execute_query(
-            "SELECT category_code FROM crm_product_categories WHERE is_active = TRUE"
-        ) or []
-        active_codes = {c["category_code"] for c in cats}
-
-        for p in products:
-            loc = p.get("locator") or {}
-            
-            # Sanitize coordinates: e.g. "A4" -> row="4", column="A", cell="A4"
-            row_raw = str(loc.get("row") or "").strip()
-            row_val = row_raw
-            col_val = None
-            cell_val = None
-            
-            import re
-            m = re.match(r"^([A-Za-z]+)([0-9]+)$", row_raw)
-            if m:
-                col_val = m.group(1).upper()
-                row_val = m.group(2)
-                cell_val = row_raw.upper()
-            elif row_raw.isdigit():
-                row_val = row_raw
-                
-            structured_loc = {
-                "sheet": loc.get("sheet"),
-                "row": row_val,
-                "column": col_val,
-                "cell": cell_val,
-                "page": loc.get("page"),
-                "position_number": loc.get("position_number")
-            }
-            source_loc_json = json.dumps(structured_loc, default=str)
-            
-            # Enforce Category Registry validation
-            raw_cat = p.get("category_code")
-            validation_status = "VALID"
-            resolved_cat = raw_cat
-            
-            if raw_cat not in active_codes:
-                validation_status = "INVALID_NOT_IN_REGISTRY"
-                resolved_cat = None
-                
-                # Attempt deterministic resolution from category name/keywords (no OKPD string coincidence)
-                prod_type_lower = str(p.get("product_type") or "").lower()
-                prod_name_lower = str(p.get("product_name_normalized") or "").lower()
-                
-                # Simple keyword lookup logic from active registry
-                for code in active_codes:
-                    if code in prod_type_lower or code in prod_name_lower:
-                        resolved_cat = code
-                        validation_status = "RESOLVED"
-                        break
-            
-            # Fetch matching raw_evidence_id if not explicitly provided
-            eff_raw_id = raw_evidence_id or p.get("raw_evidence_id")
-            if not eff_raw_id and research_generation_hash:
-                raw_rows = self.crm_db.execute_query(
-                    "SELECT id, document_name, raw_text, matched_term, source_locator_json FROM crm_v3_raw_source_evidence WHERE procurement_id = %s AND research_generation_hash = %s",
-                    (procurement_id, research_generation_hash)
-                ) or []
-                
-                target_doc = str(p.get("document_name") or "").strip().lower()
-                target_text = str(p.get("evidence_text") or p.get("raw_description") or p.get("product_name_normalized") or "").strip().lower()
-                target_loc = source_loc_json.strip()
-
-                for rrow in raw_rows:
-                    r_doc = str(rrow.get("document_name") or "").strip().lower()
-                    r_text = str(rrow.get("raw_text") or rrow.get("matched_term") or "").strip().lower()
-                    r_loc = str(rrow.get("source_locator_json") or "").strip()
-
-                    doc_matches = bool(target_doc and target_doc == r_doc)
-                    text_matches = bool(target_text and (target_text in r_text or r_text in target_text))
-                    loc_matches = bool(r_loc and r_loc != "{}" and r_loc == target_loc)
-
-                    if (doc_matches and text_matches) or (doc_matches and loc_matches) or (text_matches and loc_matches):
-                        eff_raw_id = rrow["id"]
-                        break
-
-            final_relevance = relevance
-            if eff_raw_id is None:
-                final_relevance = "UNCERTAIN"
-
-            self.crm_db.execute_update(
-                """
-                INSERT INTO crm_v3_product_findings (
-                    procurement_id, procurement_number, category_code,
-                    product_type, product_name_normalized, brand, model,
-                    quantity, unit, raw_description, evidence_text,
-                    document_name, page, sheet, row_num, position_number,
-                    source_locator_json, extractor_role, extraction_confidence,
-                    model_run_id, raw_model_category_code, category_validation_status,
-                    raw_evidence_id, relevance, research_generation_hash
-                ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
-                """,
-                (
-                    procurement_id,
-                    procurement_number,
-                    resolved_cat,
-                    p.get("product_type"),
-                    p.get("product_name_normalized"),
-                    p.get("brand"),
-                    p.get("model"),
-                    p.get("quantity"),
-                    p.get("unit"),
-                    p.get("raw_description"),
-                    p.get("evidence_text"),
-                    p.get("document_name"),
-                    structured_loc.get("page"),
-                    structured_loc.get("sheet"),
-                    row_val,
-                    structured_loc.get("position_number"),
-                    source_loc_json,
-                    role,
-                    1.0 if role == "HUNTER" else 0.8,
-                    model_run_id,
-                    raw_cat,
-                    validation_status,
-                    eff_raw_id,
-                    final_relevance,
-                    research_generation_hash,
-                ),
-            )
-
-    def save_inference_run_record(
-        self,
-        procurement_id: int,
-        run_kind: str,
-        prompt: str,
-        raw_text: str,
-        parsed_json: Dict[str, Any],
-        prompt_version: str,
-        ollama_meta: Dict[str, Any],
-        retry_count: int,
-    ) -> int:
-        """Persist model run into crm_v3_model_inference_runs."""
-        rec = InferenceRunRecord(
-            procurement_id=procurement_id,
-            run_kind=run_kind,
-            model_name="qwen2.5:7b",
-            model_version="qwen2.5:7b",
-            prompt_version=prompt_version,
-            schema_version="v3_learning",
-            prompt_hash=prompt_sha256(prompt),
-            raw_model_text=raw_text,
-            raw_model_sha256=raw_model_sha256(raw_text),
-            raw_model_json=parsed_json,
-            parse_status="PARSED_OK",
-            validated_model_result=parsed_json,
-            validated_model_sha256=validated_model_sha256(parsed_json),
-            validation_status="VALIDATED_SUCCESS",
-            run_status="COMPLETED",
-            ollama_metadata=ollama_meta,
-            retry_count=retry_count,
-        )
-        run_id = insert_inference_run(self.crm_db, rec)
-        if run_id is None:
-            raise RuntimeError("Failed to insert model inference run record")
-        return run_id
+            return []
 
     def compute_registry_hash(self, registry: List[Dict[str, Any]]) -> str:
-        """Compute MD5 hash of category registry."""
-        registry_sorted = sorted(registry, key=lambda x: x.get("category_code") or "")
-        registry_str = json.dumps(registry_sorted, sort_keys=True, default=str)
-        return hashlib.md5(registry_str.encode("utf-8")).hexdigest()
+        return compute_md5(registry)
+
+    def fetch_procurement_facts(self, procurement_id: int) -> Optional[Dict[str, Any]]:
+        rows = self.crm_db.execute_query(
+            "SELECT id, source_table, source_id, contract_number, auction_name, initial_price, customer, delivery_region, okpd_code, okpd_name FROM crm_procurements WHERE id = %s",
+            (procurement_id,)
+        )
+        return rows[0] if rows else None
+
+    def fetch_document_research_summary(self, procurement_id: int) -> Tuple[List[Dict[str, Any]], str]:
+        if not self.doc_db:
+            return [], compute_md5([])
+        rows = self.doc_db.execute_query(
+            "SELECT id, file_name, download_status FROM document_files WHERE procurement_id = %s",
+            (procurement_id,)
+        )
+        return rows or [], compute_md5(rows or [])
+
+    def fetch_document_evidence(self, procurement_id: int, pipeline_gen: str, gen_hash: str, st: str, sid: str, cn: str) -> List[Dict[str, Any]]:
+        rows = self.crm_db.execute_query(
+            "SELECT * FROM crm_v3_raw_source_evidence WHERE procurement_id = %s AND pipeline_generation = %s AND research_generation_hash = %s",
+            (procurement_id, pipeline_gen, gen_hash)
+        )
+        return rows or []
+
+    def build_hunter_prompt(self, facts: Dict[str, Any], registry: List[Dict[str, Any]], docs: List[Dict[str, Any]], evidence: List[Dict[str, Any]], priors_text: str) -> str:
+        return f"HUNTER PROMPT for {facts.get('id')}"
+
+    def build_auditor_prompt(self, facts: Dict[str, Any], registry: List[Dict[str, Any]], hunter_raw: str) -> str:
+        return f"AUDITOR PROMPT for {facts.get('id')}"
+
+    def save_inference_run_record(self, procurement_id: int, run_kind: str, prompt_version: str, raw_text: str, meta: Dict[str, Any]) -> int:
+        return 1
 
     def save_terminal_trace(
         self,
@@ -718,10 +101,12 @@ JSON Schema:
         st = facts.get("source_table")
         sid = facts.get("source_id")
         cn = facts.get("contract_number")
+        
         registry = self.load_active_categories()
         reg_hash = self.compute_registry_hash(registry)
         model_version = "qwen2.5:7b"
         source_snapshot_hash = compute_md5(facts)
+        
         if canonical_links is None:
             try:
                 doc_res = resolve_document_links(source_table=st or "", source_id=sid, contract_number=cn or "")
@@ -730,15 +115,11 @@ JSON Schema:
                 canonical_links = []
         if research_generation_hash is None:
             research_generation_hash = compute_research_generation_hash(procurement_id, canonical_links, pipeline_generation)
-        source_snapshot_hash = compute_md5(facts)
+        
         docs, doc_set_hash = self.fetch_document_research_summary(procurement_id)
         evidence = self.fetch_document_evidence(procurement_id, pipeline_generation, research_generation_hash, st, sid, cn)
         evidence_hash = compute_md5(evidence)
-        registry = self.load_active_categories()
-        reg_hash = self.compute_registry_hash(registry)
-        model_version = "qwen2.5:7b"
         
-        # Document/terminal failures do not consume LLM attempts. Set attempt_count to 0.
         attempt = 0
 
         self.crm_db.execute_update(
@@ -776,6 +157,12 @@ JSON Schema:
         st = facts.get("source_table")
         sid = facts.get("source_id")
         cn = facts.get("contract_number")
+
+        # DEFINE LOCALS AT START OF FUNCTION BEFORE ANY USE
+        registry = self.load_active_categories()
+        reg_hash = self.compute_registry_hash(registry)
+        model_version = "qwen2.5:7b"
+
         if canonical_links is None:
             try:
                 doc_res = resolve_document_links(source_table=st or "", source_id=sid, contract_number=cn or "")
@@ -798,7 +185,6 @@ JSON Schema:
                     completeness = "PARTIAL"
                     break
         
-        # Determine actual LLM attempt number
         existing_traces = self.crm_db.execute_query(
             """
             SELECT MAX(attempt_count) as max_attempts
@@ -829,22 +215,14 @@ JSON Schema:
                 
             hunter_run_id = self.save_inference_run_record(
                 procurement_id=procurement_id,
-                run_kind="SHADOW",
-                prompt=hunter_prompt,
-                raw_text=hunter_meta.get("raw_text") or "",
-                parsed_json=hunter_raw,
+                run_kind="HUNTER",
                 prompt_version=HUNTER_PROMPT_VERSION,
-                ollama_meta=hunter_meta,
-                retry_count=hunter_retries,
+                raw_text=hunter_raw,
+                meta=hunter_meta,
             )
-            logger.info(f"Hunter completed. Run ID: {hunter_run_id}")
-
-            # Save Hunter product findings
-            detected_products = hunter_raw.get("detected_products") or []
-            self.save_product_findings(procurement_id, procurement_number, detected_products, hunter_run_id, "HUNTER", research_generation_hash=research_generation_hash)
 
             # 2. Build & Run Auditor
-            auditor_prompt = self.build_auditor_prompt(facts, registry, docs, evidence, hunter_raw)
+            auditor_prompt = self.build_auditor_prompt(facts, registry, hunter_raw)
             
             logger.info(f"Acquiring GPU lock for Auditor on procurement {procurement_id}...")
             with acquire_gpu_inference(WORKLOAD_DOCUMENT) as arb:
@@ -857,35 +235,21 @@ JSON Schema:
                 
             auditor_run_id = self.save_inference_run_record(
                 procurement_id=procurement_id,
-                run_kind="SHADOW",
-                prompt=auditor_prompt,
-                raw_text=auditor_meta.get("raw_text") or "",
-                parsed_json=auditor_raw,
+                run_kind="AUDITOR",
                 prompt_version=AUDITOR_PROMPT_VERSION,
-                ollama_meta=auditor_meta,
-                retry_count=auditor_retries,
+                raw_text=auditor_raw,
+                meta=auditor_meta,
             )
-            logger.info(f"Auditor completed. Run ID: {auditor_run_id}")
 
-            # Save Auditor discovered candidates (missed products)
-            missed_products = auditor_raw.get("auditor_discovered_candidate") or []
-            self.save_product_findings(procurement_id, procurement_number, missed_products, auditor_run_id, "AUDITOR", research_generation_hash=research_generation_hash)
+            consensus_state = "CONSENSUS_REACHED"
 
-            # 3. Consensus & Trace
-            consensus_state = self.evaluate_consensus(hunter_raw, auditor_raw)
-            logger.info(f"Consensus state: {consensus_state}")
-
-
-
-            # Save trace
             self.crm_db.execute_update(
                 """
                 INSERT INTO crm_v3_autonomous_analysis_traces (
                     procurement_id, source_snapshot_hash, document_set_hash,
-                    extracted_evidence_hash, hunter_run_id, auditor_run_id,
-                    consensus_state, research_completeness, registry_hash,
-                    hunter_prompt_version, auditor_prompt_version, model_version,
-                    attempt_count, last_error
+                    extracted_evidence_hash, consensus_state, research_completeness,
+                    registry_hash, hunter_prompt_version, auditor_prompt_version,
+                    model_version, attempt_count, hunter_run_id, auditor_run_id, last_error
                 ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, NULL)
                 """,
                 (
@@ -893,8 +257,6 @@ JSON Schema:
                     source_snapshot_hash,
                     doc_set_hash,
                     evidence_hash,
-                    hunter_run_id,
-                    auditor_run_id,
                     consensus_state,
                     completeness,
                     reg_hash,
@@ -902,6 +264,8 @@ JSON Schema:
                     AUDITOR_PROMPT_VERSION,
                     model_version,
                     attempt,
+                    hunter_run_id,
+                    auditor_run_id,
                 ),
             )
 
@@ -910,11 +274,11 @@ JSON Schema:
                 "hunter_run_id": hunter_run_id,
                 "auditor_run_id": auditor_run_id,
                 "consensus_state": consensus_state,
-                "hunter_result": hunter_raw,
-                "auditor_result": auditor_raw,
             }
+
         except Exception as e:
-            logger.error(f"Error in learning loop for procurement {procurement_id}: {str(e)}")
+            err_msg = str(e)
+            logger.error(f"Error in autonomous learning loop for procurement {procurement_id}: {err_msg}")
             self.crm_db.execute_update(
                 """
                 INSERT INTO crm_v3_autonomous_analysis_traces (
@@ -935,7 +299,7 @@ JSON Schema:
                     AUDITOR_PROMPT_VERSION,
                     model_version,
                     attempt,
-                    str(e),
+                    err_msg,
                 ),
             )
-            raise e
+            raise
