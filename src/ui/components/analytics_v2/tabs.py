@@ -619,12 +619,14 @@ def _render_torgi_tab() -> None:
     render_stage_workspace(
         filtered,
         session_key=_SESSION_TORGI,
-        stage="OPEN",
+        stage="torgi",
         stage_label="Идут торги",
         effective_map=eff_map,
-        workset_ids=workset_ids,
+        workset_ids=research_filtered_ids,
         annotation_states=annotation_states,
         selected_annotation_filter=selected_review,
+        projections=projections,
+        render_research_controls=False,
     )
 
 
