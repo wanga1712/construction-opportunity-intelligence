@@ -5,8 +5,9 @@ Responsibilities:
 - Run Qwen2.5:7b with v3_pre_research_shadow_v1 prompt schema
 - Include BOTH source_snapshot_json AND document_manifest_json in prompt (no parsed text/evidence)
 - Respect shared GPU lock (acquire_gpu_inference) and yield to Hunter/Auditor foreground tasks
+- Query active canonical categories from crm_product_categories (category_code, is_active=True). FAIL validation if empty.
 - Perform STRICT schema validation of model response (JSON keys, active categories, manifest keys, rank uniqueness)
-- Record parse/validation status truthfully in crm_v3_model_inference_runs
+- Record parse/validation status truthfully in crm_v3_model_inference_runs (run_status = PARSED_SCHEMA_INVALID on invalid output)
 - DO NOT insert shadow prediction on invalid model output (NO fabricated fallbacks)
 - Producer version: v3_real_truth
 """
@@ -43,19 +44,24 @@ def get_crm_db():
     port = os.environ.get("CRM_DB_PORT", "5432")
     return psycopg2.connect(dbname="crm", user=user, password=password, host=host, port=port)
 
-def fetch_active_categories(crm_conn) -> Set[str]:
+def fetch_active_categories(crm_conn) -> Optional[Set[str]]:
+    """Query active category codes from crm_product_categories. Return None on failure/empty."""
     try:
         with crm_conn.cursor() as cur:
-            cur.execute("SELECT code FROM crm_v3_canonical_categories WHERE is_active = True")
-            return {r[0] for r in cur.fetchall()}
+            cur.execute("SELECT category_code FROM crm_product_categories WHERE is_active = True")
+            cats = {r[0] for r in cur.fetchall() if r[0]}
+            return cats if cats else None
     except Exception:
-        return set()
+        return None
 
-def validate_shadow_output(parsed: Any, manifest: List[Dict[str, Any]], active_cats: Set[str]) -> bool:
+def validate_shadow_output(parsed: Any, manifest: List[Dict[str, Any]], active_cats: Optional[Set[str]]) -> bool:
+    if not active_cats:
+        # EMPTY_REGISTRY_BYPASSES_VALIDATION = NO: if registry cannot be loaded or is empty, validation FAILS!
+        return False
+
     if not isinstance(parsed, dict):
         return False
 
-    # Check top-level required fields
     if "has_target_probability" not in parsed or "has_target_decision" not in parsed:
         return False
     if "priority_candidate" not in parsed or "overall_confidence" not in parsed:
@@ -80,7 +86,6 @@ def validate_shadow_output(parsed: Any, manifest: List[Dict[str, Any]], active_c
     if priority not in VALID_PRIORITIES:
         return False
 
-    # Validate predicted_categories
     cats = parsed.get("predicted_categories")
     if not isinstance(cats, list):
         return False
@@ -89,7 +94,7 @@ def validate_shadow_output(parsed: Any, manifest: List[Dict[str, Any]], active_c
         if not isinstance(c, dict) or "category_code" not in c or "confidence" not in c:
             return False
         code = str(c["category_code"])
-        if active_cats and code not in active_cats:
+        if code not in active_cats:
             return False
         try:
             c_conf = float(c["confidence"])
@@ -98,7 +103,6 @@ def validate_shadow_output(parsed: Any, manifest: List[Dict[str, Any]], active_c
         except (ValueError, TypeError):
             return False
 
-    # Validate document_ranking against exact snapshot manifest keys
     ranking = parsed.get("document_ranking")
     if not isinstance(ranking, list):
         return False
@@ -140,7 +144,6 @@ class ShadowPredictor:
 
     def run_cycle(self) -> bool:
         if should_defer_document():
-            # Yield GPU inference slot when Hunter/Auditor foreground tasks are active
             time.sleep(2)
             return False
 
@@ -192,7 +195,6 @@ class ShadowPredictor:
 
                 full_prompt = f"{system_prompt}\n\n{user_prompt}"
 
-                # Acquire exclusive GPU lock for heavy Ollama inference
                 try:
                     with acquire_gpu_inference(WORKLOAD_DOCUMENT, poll_sec=0.5, max_wait_sec=60.0):
                         resp = requests.post(OLLAMA_URL, json={
@@ -226,13 +228,17 @@ class ShadowPredictor:
                 except Exception:
                     pass
 
+                run_status = val_status if val_status != "VALIDATED_SUCCESS" else "COMPLETED"
+                if parse_status == "RAW_RECEIVED_PARSE_FAILED":
+                    run_status = "RAW_RECEIVED_PARSE_FAILED"
+
                 cur.execute("""
                     INSERT INTO crm_v3_model_inference_runs (
                         procurement_id, run_kind, model_name, model_version, prompt_version,
                         schema_version, raw_model_text, parse_status, validation_status, run_status, created_at
-                    ) VALUES (%s, 'SHADOW', %s, %s, %s, 'v3_learning', %s, %s, %s, 'COMPLETED', NOW())
+                    ) VALUES (%s, 'SHADOW', %s, %s, %s, 'v3_learning', %s, %s, %s, %s, NOW())
                     RETURNING id
-                """, (pid, BASE_MODEL, BASE_MODEL, PROMPT_VERSION, raw_text, parse_status, val_status))
+                """, (pid, BASE_MODEL, BASE_MODEL, PROMPT_VERSION, raw_text, parse_status, val_status, run_status))
                 run_id = cur.fetchone()["id"]
 
                 # Insert into crm_v3_shadow_predictions ONLY IF validation succeeded!
@@ -257,7 +263,7 @@ class ShadowPredictor:
                     ))
                     print(f"Shadow prediction created for procurement {pid} (decision={decision}, prob={prob})")
                 else:
-                    print(f"Shadow model output invalid for procurement {pid} (val_status={val_status}). Prediction omitted.")
+                    print(f"Shadow model output invalid for procurement {pid} (val_status={val_status}, run_status={run_status}). Prediction omitted.")
 
             crm_conn.commit()
             return True

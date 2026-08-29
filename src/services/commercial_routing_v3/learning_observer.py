@@ -3,8 +3,8 @@
 Responsibilities:
 - Enrich queue identity and generation hash
 - Build immutable pre-research blind snapshots (STRICT allowlist: source metadata + real canonical document manifest)
-- Create exhaustive ground truth ONLY when ALL manifest documents are in REAL terminal research state
-- Enforce temporal order: PREDICTION_CREATED_AT < TRUTH_CREATED_AT and TRUTH_CREATED_AT >= LAST_DOCUMENT_TERMINAL_AT
+- Create exhaustive ground truth ONLY when ALL manifest documents reach REAL per-document parse terminal state (document_files LEFT JOIN document_processing_results)
+- Enforce temporal order: PREDICTION_CREATED_AT < TRUTH_CREATED_AT and TRUTH_CREATED_AT >= LAST_PARSE_TERMINAL_AT
 - Calculate real document-level ground truth (useful_documents_json, non_useful_documents_json, unknown_documents_json)
 - Evaluate blind predictions against exhaustive truth with mathematically derived ranking metrics (recall@1,3,5, MRR, first_useful_rank)
 - Materialize dataset learning examples for PROCUREMENT_RELEVANCE and DOCUMENT_RANKING with stable TRAIN/VALIDATION/HOLDOUT splits
@@ -23,10 +23,12 @@ from typing import Dict, Any, List, Optional, Tuple
 PRODUCER_VERSION = "v3_real_truth"
 PIPELINE_GENERATION = "S13_V2"
 
-TERMINAL_DOC_STATUSES = {
-    "COMPLETED", "DOWNLOAD_FAILED", "PARSE_FAILED", "UNSUPPORTED",
-    "EMPTY", "OTHER_TERMINAL", "SEARCHED_SUCCESSFULLY", "UNREADABLE",
-    "PARTIALLY_SEARCHED", "UNSUPPORTED_FORMAT", "FAILED"
+TERMINAL_DOWNLOAD_STATUSES = {
+    "COMPLETED", "DOWNLOAD_FAILED", "UNSUPPORTED", "FAILED"
+}
+TERMINAL_PARSE_STATUSES = {
+    "COMPLETED", "UNSUPPORTED", "FAILED", "PARSE_FAILED",
+    "EMPTY", "SEARCHED_SUCCESSFULLY", "UNREADABLE", "PARTIALLY_SEARCHED", "UNSUPPORTED_FORMAT"
 }
 
 def get_doc_db():
@@ -210,33 +212,44 @@ class LearningObserver:
                     if isinstance(manifest, str):
                         manifest = json.loads(manifest)
 
-                    # Check real per-document terminal status from document_files in document_intelligence DB
+                    # Inspect document_files LEFT JOIN document_processing_results in document_intelligence DB
                     with doc_conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as d_cur:
                         d_cur.execute("""
-                            SELECT id, download_status, downloaded_at, created_at
-                            FROM document_files
-                            WHERE procurement_id = %s
+                            SELECT f.id, f.download_status, f.downloaded_at, f.created_at as file_created_at,
+                                   r.status as parse_status, r.completed_at as parse_completed_at
+                            FROM document_files f
+                            LEFT JOIN document_processing_results r ON f.id = r.file_id
+                            WHERE f.procurement_id = %s
                         """, (pid,))
-                        doc_files = d_cur.fetchall()
+                        doc_results = d_cur.fetchall()
 
-                    if manifest and not doc_files and item["status"] != "NO_LINKS":
-                        # Documents exist in manifest but document_files has not populated terminal state yet
+                    if manifest and not doc_results and item["status"] != "NO_LINKS":
+                        # Manifest contains documents but document_files / results have not populated yet
                         continue
 
-                    is_all_terminal = True
-                    max_doc_at = item["completed_at"]
+                    is_all_parse_terminal = True
+                    max_parse_at = item["completed_at"]
 
-                    for df in doc_files:
-                        st_val = str(df.get("download_status") or "").upper()
-                        if st_val not in TERMINAL_DOC_STATUSES:
-                            is_all_terminal = False
+                    for dr in doc_results:
+                        dl_st = str(dr.get("download_status") or "").upper()
+                        pr_st = str(dr.get("parse_status") or "").upper() if dr.get("parse_status") else None
+
+                        if dl_st not in TERMINAL_DOWNLOAD_STATUSES:
+                            is_all_parse_terminal = False
                             break
-                        dt_at = df.get("downloaded_at") or df.get("created_at")
-                        if dt_at and (max_doc_at is None or dt_at > max_doc_at):
-                            max_doc_at = dt_at
 
-                    if not is_all_terminal:
-                        # Skip truth creation if any document is still processing!
+                        # Download complete is NOT parse complete! Require parse_status to be terminal if download succeeded
+                        if dl_st == "COMPLETED":
+                            if not pr_st or pr_st not in TERMINAL_PARSE_STATUSES:
+                                is_all_parse_terminal = False
+                                break
+
+                        p_at = dr.get("parse_completed_at") or dr.get("downloaded_at") or dr.get("file_created_at")
+                        if p_at and (max_parse_at is None or p_at > max_parse_at):
+                            max_parse_at = p_at
+
+                    if not is_all_parse_terminal:
+                        # Skip truth creation if any document parse is non-terminal!
                         continue
 
                     # STRICT generation-scoped raw evidence query using source_document_id
