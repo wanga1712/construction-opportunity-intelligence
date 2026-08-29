@@ -171,7 +171,6 @@ class LearningObserver:
         created_count = 0
         try:
             with doc_conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
-                # Query terminal exhaustive document processing items
                 cur.execute("""
                     SELECT id, procurement_id, queue_lane, priority_score, status, research_generation_hash, created_at
                     FROM document_processing_queue
@@ -193,7 +192,6 @@ class LearningObserver:
                     if c_cur.fetchone():
                         continue
 
-                    # Fetch exact pre-research snapshot for manifest matching
                     c_cur.execute("""
                         SELECT document_manifest_json FROM crm_v3_pre_research_snapshots
                         WHERE procurement_id = %s AND research_generation_hash = %s AND producer_version = %s
@@ -206,19 +204,18 @@ class LearningObserver:
                     if isinstance(manifest, str):
                         manifest = json.loads(manifest)
 
-                    # Query STRICT generation-scoped raw evidence
+                    # STRICT generation-scoped raw evidence query using source_document_id
                     c_cur.execute("""
-                        SELECT document_file_id, raw_evidence_json FROM crm_v3_raw_source_evidence
+                        SELECT source_document_id FROM crm_v3_raw_source_evidence
                         WHERE procurement_id = %s AND pipeline_generation = %s AND research_generation_hash = %s
                     """, (pid, PIPELINE_GENERATION, gen_hash))
                     ev_rows = c_cur.fetchall()
 
                     ev_doc_ids = set()
                     for ev in ev_rows:
-                        if ev.get("document_file_id"):
-                            ev_doc_ids.add(ev["document_file_id"])
+                        if ev.get("source_document_id"):
+                            ev_doc_ids.add(ev["source_document_id"])
 
-                    # Build real document arrays
                     useful_docs = []
                     non_useful_docs = []
                     unknown_docs = []
@@ -311,7 +308,6 @@ class LearningObserver:
                     if isinstance(ranking, str):
                         ranking = json.loads(ranking)
 
-                    # Calculate mathematically derived ranking metrics if useful docs exist
                     if len(useful_keys) > 0 and len(ranking) > 0:
                         ranks = []
                         for item in ranking:
@@ -402,7 +398,6 @@ class LearningObserver:
                     else:
                         split = "HOLDOUT"
 
-                    # 1. PROCUREMENT_RELEVANCE Example
                     input_json = r["source_snapshot_json"]
                     target_json = {"has_target_evidence": r["has_target_evidence"]}
 
@@ -420,7 +415,6 @@ class LearningObserver:
                     if cur.fetchone():
                         ex_count += 1
 
-                    # 2. DOCUMENT_RANKING Example (if manifest contains documents)
                     manifest = r["document_manifest_json"]
                     if isinstance(manifest, str):
                         manifest = json.loads(manifest)
