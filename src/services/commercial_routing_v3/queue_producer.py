@@ -45,6 +45,11 @@ _DOC_ENV_FILES = (
 )
 
 
+def _load_doc_env() -> None:
+    for f in _DOC_ENV_FILES:
+        if os.path.exists(f):
+            _load_env_file(f)
+
 def _load_env_file(path: str) -> None:
     """Load document-DB credentials into S13_DOCUMENT_* only (never clobber DB_*)."""
     text = None

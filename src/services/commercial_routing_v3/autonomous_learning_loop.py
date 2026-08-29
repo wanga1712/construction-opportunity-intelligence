@@ -48,16 +48,17 @@ class HunterAuditorOrchestrator:
     def __init__(self, crm_db: Any) -> None:
         self.crm_db = crm_db
         self._doc_dsn = {
-            "host":     os.getenv("S13_DOCUMENT_DB_HOST", "127.0.0.1"),
-            "port":     int(os.getenv("S13_DOCUMENT_DB_PORT", "5432")),
-            "dbname":   os.getenv("S13_DOCUMENT_DB_NAME", "document_intelligence"),
-            "user":     os.getenv("S13_DOCUMENT_DB_USER", "doc_worker"),
+            "host":     os.getenv("S13_DOCUMENT_DB_HOST") if os.getenv("S13_DOCUMENT_DB_HOST") not in (None, "", "S7") else "127.0.0.1",
+            "port":     int(os.getenv("S13_DOCUMENT_DB_PORT") or os.getenv("CRM_DB_PORT") or "5432"),
+            "dbname":   "document_intelligence",
+            "user":     os.getenv("CRM_DB_USER") or "crm_app",
+            "password": os.getenv("CRM_DB_PASSWORD") or "",
         }
 
     def _get_doc_conn(self):
-        pwd_env = os.getenv("S13_DOCUMENT_DB_PASSWORD", "")
+        from dotenv import load_dotenv
+        load_dotenv('/opt/CRM_Streamlit/.env')
         dsn = dict(self._doc_dsn)
-        dsn["password"] = pwd_env
         return psycopg2.connect(**dsn)
 
     def fetch_procurement_facts(self, procurement_id: int) -> Dict[str, Any]:
@@ -181,16 +182,35 @@ class HunterAuditorOrchestrator:
         return result
 
     def format_evidence_for_prompt(self, evidence: List[Dict[str, Any]]) -> str:
-        """Format database evidence rows into a canonical text structure for LLM prompts."""
-        evidence_lines = []
+        """Format database evidence rows into a grouped, deduplicated canonical text packet."""
+        if not evidence:
+            return "No document match evidence found."
+
+        # Group by document
+        by_doc: Dict[str, List[Dict[str, Any]]] = {}
         for ev in evidence:
-            evidence_lines.append(
-                f"- Doc: {ev.get('document_name')}, Page/Sheet: {ev.get('page_or_sheet') or 'N/A'}, "
-                f"Row: {ev.get('row_number') or 'N/A'}, Text: {ev.get('row_data') or 'N/A'}, "
-                f"Matched: {ev.get('matched_term') or 'N/A'}, "
-                f"Cat/Subcat: {ev.get('category_code')}/{ev.get('subcategory_code')}"
-            )
-        return "\n".join(evidence_lines)
+            doc_name = ev.get("document_name") or "Unknown Document"
+            by_doc.setdefault(doc_name, []).append(ev)
+
+        lines = []
+        for doc_name, doc_evs in by_doc.items():
+            lines.append(f"=== DOCUMENT: {doc_name} ({len(doc_evs)} matches) ===")
+            seen_texts = set()
+            for ev in doc_evs[:30]:  # up to 30 top matches per document
+                txt = str(ev.get("row_data") or "").strip()
+                matched = str(ev.get("matched_term") or "").strip()
+                key = (txt, matched)
+                if key in seen_texts:
+                    continue
+                seen_texts.add(key)
+                loc = f"Page/Sheet: {ev.get('page_or_sheet') or 'N/A'}, Row: {ev.get('row_number') or 'N/A'}"
+                cat_info = f"Cat/Subcat: {ev.get('category_code') or 'N/A'}/{ev.get('subcategory_code') or 'N/A'}"
+                lines.append(f"  - [{loc}] Matched: '{matched}' | {cat_info} | Text: {txt[:250]}")
+
+        res = "\n".join(lines)
+        if len(res) > 15000:
+            res = res[:15000] + "\n... [evidence context truncated to 15k budget]"
+        return res
 
     def build_hunter_prompt(
         self,
@@ -203,7 +223,7 @@ class HunterAuditorOrchestrator:
         """Construct the prompt for Hunter role."""
         registry_str = json.dumps(registry, ensure_ascii=False, indent=2, default=str)
         docs_str = json.dumps(docs, ensure_ascii=False, indent=2, default=str)
-        evidence_str = self.format_evidence_for_prompt(evidence[:100])
+        evidence_str = self.format_evidence_for_prompt(evidence)
         
         return f"""You are the HUNTER model in a procurement learning loop.
 Your goal is HIGH RECALL. Find every commercially relevant product/category supported by the procurement evidence.
@@ -314,7 +334,7 @@ JSON Schema to follow:
         docs_str = json.dumps(docs, ensure_ascii=False, indent=2, default=str)
         registry_str = json.dumps(registry, ensure_ascii=False, indent=2, default=str)
         
-        evidence_str = self.format_evidence_for_prompt(evidence[:100])
+        evidence_str = self.format_evidence_for_prompt(evidence)
         
         return f"""You are the AUDITOR model in a procurement learning loop.
 Your job is NOT to repeat the Hunter model. Your job is to try to prove the Hunter decision WRONG.
