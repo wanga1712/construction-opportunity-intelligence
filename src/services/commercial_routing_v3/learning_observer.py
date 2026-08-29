@@ -76,7 +76,7 @@ class LearningObserver:
                     SELECT id, procurement_id, queue_lane, priority_score, research_generation_hash, created_at
                     FROM document_processing_queue
                     WHERE pipeline_generation = %s
-                    ORDER BY id DESC LIMIT 50
+                    ORDER BY id DESC LIMIT 500
                 """, (PIPELINE_GENERATION,))
                 queue_items = q_cur.fetchall()
 
@@ -117,7 +117,6 @@ class LearningObserver:
                         "award_status": p_fact.get("award_status")
                     }
 
-                    # Fetch real canonical document metadata from document_files in document_intelligence DB
                     with doc_conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as d_cur:
                         d_cur.execute("""
                             SELECT id, url, file_name, content_type
@@ -175,7 +174,7 @@ class LearningObserver:
                     SELECT id, procurement_id, queue_lane, priority_score, status, research_generation_hash, created_at
                     FROM document_processing_queue
                     WHERE pipeline_generation = %s AND status IN ('COMPLETED', 'FAILED', 'NO_LINKS')
-                    ORDER BY id DESC LIMIT 50
+                    ORDER BY id DESC LIMIT 500
                 """, (PIPELINE_GENERATION,))
                 term_items = cur.fetchall()
 
@@ -287,7 +286,7 @@ class LearningObserver:
                      AND p.research_generation_hash = t.research_generation_hash
                     LEFT JOIN crm_v3_shadow_evaluations e ON p.id = e.prediction_id
                     WHERE e.id IS NULL AND p.producer_version = %s AND t.producer_version = %s
-                    LIMIT 50
+                    LIMIT 500
                 """, (PRODUCER_VERSION, PRODUCER_VERSION))
                 pairs = cur.fetchall()
 
@@ -384,7 +383,7 @@ class LearningObserver:
                     JOIN crm_v3_exhaustive_truth t ON e.truth_id = t.id
                     LEFT JOIN crm_v3_learning_examples l ON e.id = l.evaluation_id
                     WHERE l.id IS NULL AND e.producer_version = %s AND t.has_target_evidence IN ('YES', 'NO')
-                    LIMIT 50
+                    LIMIT 500
                 """, (PRODUCER_VERSION,))
                 rows = cur.fetchall()
 
