@@ -1,5 +1,5 @@
 import hashlib, psycopg2, psycopg2.extras
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional
 from src.services.commercial_routing_v3.document_links import resolve_document_links
 from src.services.commercial_routing_v3.factual_feeder import _get_doc_db_conn, PIPELINE_GENERATION
 
@@ -19,14 +19,25 @@ VALID_RESEARCH_STATES = {
     STATE_FAILED,
 }
 
+def compute_document_set_hash(canonical_links: List[Dict[str, Any]]) -> str:
+    identities = []
+    for link in canonical_links:
+        sid = str(link.get("source_document_id") or link.get("id") or "").strip()
+        url = str(link.get("canonical_url") or link.get("url") or link.get("document_url") or "").strip()
+        name = str(link.get("document_name") or link.get("name") or "").strip()
+        identities.append(f"{sid}|{url}|{name}")
+    identities.sort()
+    payload = "::".join(identities)
+    return hashlib.sha256(payload.encode("utf-8")).hexdigest()
+
 def compute_research_generation_hash(
     procurement_id: int,
-    canonical_doc_count: int,
-    doc_files_count: int,
+    canonical_links: List[Dict[str, Any]],
     pipeline_generation: str = PIPELINE_GENERATION,
 ) -> str:
-    payload = f"{procurement_id}||{canonical_doc_count}||{doc_files_count}||{pipeline_generation}"
-    return hashlib.md5(payload.encode("utf-8")).hexdigest()
+    doc_set_hash = compute_document_set_hash(canonical_links)
+    payload = f"{procurement_id}||{doc_set_hash}||{pipeline_generation}"
+    return hashlib.sha256(payload.encode("utf-8")).hexdigest()[:32]
 
 def derive_procurement_research_state(
     procurement_id: int,
@@ -43,6 +54,7 @@ def derive_procurement_research_state(
     )
     links = doc_res.get("links") or []
     canonical_doc_count = len(links)
+    gen_hash = compute_research_generation_hash(procurement_id, links, pipeline_generation)
 
     conn = _get_doc_db_conn()
     doc_files_count = 0
@@ -87,6 +99,7 @@ def derive_procurement_research_state(
             for fr in f_rows:
                 dl = fr.get("download_status")
                 prs = fr.get("parse_status")
+
                 if dl == "FAILED": doc_failed += 1
                 elif dl == "SKIPPED" or prs in ("UNSUPPORTED", "UNSUPPORTED_FORMAT"): doc_unsupported += 1
                 elif prs in ("FAILED", "PARSE_FAILED"): doc_failed += 1
@@ -101,15 +114,12 @@ def derive_procurement_research_state(
         conn.close()
 
     documents_discovered = max(canonical_doc_count, doc_files_count)
-    gen_hash = compute_research_generation_hash(
-        procurement_id, canonical_doc_count, doc_files_count, pipeline_generation
-    )
 
     raw_ev_rows = crm_db.execute_query(
         """
         SELECT COUNT(*) as cnt
         FROM crm_v3_raw_source_evidence
-        WHERE procurement_id = %s AND (research_generation_hash = %s OR research_generation_hash IS NULL)
+        WHERE procurement_id = %s AND research_generation_hash = %s
         """,
         (procurement_id, gen_hash),
     )
@@ -119,10 +129,10 @@ def derive_procurement_research_state(
         """
         SELECT
             COUNT(*) as total_cnt,
-            COUNT(*) FILTER (WHERE relevance = 'RELEVANT' OR category_validation_status != 'REJECTED_IRRELEVANT') as accepted_cnt,
+            COUNT(*) FILTER (WHERE relevance = 'RELEVANT' AND raw_evidence_id IS NOT NULL) as accepted_cnt,
             COUNT(*) FILTER (WHERE relevance = 'UNCERTAIN') as uncertain_cnt
         FROM crm_v3_product_findings
-        WHERE procurement_id = %s AND (research_generation_hash = %s OR research_generation_hash IS NULL)
+        WHERE procurement_id = %s AND research_generation_hash = %s
         """,
         (procurement_id, gen_hash),
     )
@@ -131,8 +141,8 @@ def derive_procurement_research_state(
     uncertain_findings_count = int(find_rows[0]["uncertain_cnt"]) if find_rows else 0
 
     doc_ev_rows = crm_db.execute_query(
-        "SELECT COUNT(DISTINCT source_document_id) as cnt FROM crm_v3_raw_source_evidence WHERE procurement_id = %s",
-        (procurement_id,),
+        "SELECT COUNT(DISTINCT source_document_id) as cnt FROM crm_v3_raw_source_evidence WHERE procurement_id = %s AND research_generation_hash = %s",
+        (procurement_id, gen_hash),
     )
     documents_with_evidence = int(doc_ev_rows[0]["cnt"]) if doc_ev_rows else 0
 
