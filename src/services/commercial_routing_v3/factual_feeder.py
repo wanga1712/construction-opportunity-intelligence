@@ -1,11 +1,12 @@
 """Factual Procurement Feeder into document_processing_queue.
 
-Ensures continuous feeder capability with watermark control and generation-aware admission.
+Ensures continuous feeder capability with watermark control, generation-aware admission,
+and candidate advancement truth.
 """
 
 from datetime import datetime, timezone
 import hashlib, json, os, psycopg2, psycopg2.extras
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 
 from src.services.commercial_routing_v3.card_research_state import (
     compute_research_generation_hash,
@@ -52,8 +53,11 @@ class FactualFeeder:
         queue_lane: str = "crm_active_hot",
         priority_score: int = 50,
         canonical_links: Optional[List[Dict[str, Any]]] = None,
-    ) -> Optional[int]:
-        """Admit single procurement into document_processing_queue with durable research generation hash."""
+    ) -> Tuple[Optional[int], bool]:
+        """Admit single procurement into document_processing_queue with durable research generation hash.
+
+        Returns tuple of (queue_id, is_newly_created).
+        """
         if canonical_links is None:
             try:
                 doc_res = resolve_document_links(
@@ -83,7 +87,7 @@ class FactualFeeder:
                 )
                 existing = cur.fetchone()
                 if existing:
-                    return existing["id"]
+                    return existing["id"], False
 
                 cur.execute(
                     """
@@ -107,7 +111,7 @@ class FactualFeeder:
                 )
                 q_id = cur.fetchone()["id"]
                 conn.commit()
-                return q_id
+                return q_id, True
         finally:
             conn.close()
 
@@ -125,13 +129,13 @@ class FactualFeeder:
             conn.close()
 
     def run_feeder_cycle(self) -> int:
-        """Continuous watermark refill cycle."""
+        """Continuous watermark refill cycle advancing past already enqueued procurements."""
         depth = self.get_pending_queue_depth()
         if depth >= LOW_WATERMARK:
             return 0
 
-        needed = min(HIGH_WATERMARK - depth, FEED_BATCH_SIZE)
-        pred = f"crm_stage = 'torgi' AND award_status = 'submission_open' AND {actionable_submission_sql('p')}"
+        target_refill = min(HIGH_WATERMARK - depth, FEED_BATCH_SIZE)
+        pred = f"p.crm_stage = 'torgi' AND p.award_status = 'submission_open' AND {actionable_submission_sql('p')}"
 
         rows = self.crm_db.execute_query(
             f"""
@@ -141,18 +145,20 @@ class FactualFeeder:
             ORDER BY p.id DESC
             LIMIT %s
             """,
-            (needed,),
+            (target_refill * 4,),
         ) or []
 
-        admitted = 0
+        admitted_new = 0
         for r in rows:
-            qid = self.admit_procurement(
+            if admitted_new >= target_refill:
+                break
+            qid, created_new = self.admit_procurement(
                 procurement_id=r["id"],
                 source_table=r["source_table"],
                 source_id=r["source_id"],
                 contract_number=r.get("contract_number"),
             )
-            if qid:
-                admitted += 1
+            if created_new:
+                admitted_new += 1
 
-        return admitted
+        return admitted_new
