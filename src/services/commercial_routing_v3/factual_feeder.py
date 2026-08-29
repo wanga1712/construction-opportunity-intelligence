@@ -121,7 +121,7 @@ class FactualFeeder:
         try:
             with conn.cursor() as cur:
                 cur.execute(
-                    "SELECT COUNT(*) FROM document_processing_queue WHERE status IN ('PENDING', 'RUNNING', 'RETRY') AND pipeline_generation = %s",
+                    "SELECT COUNT(*) FROM document_processing_queue WHERE status IN ('PENDING', 'PROCESSING', 'RUNNING', 'RETRY') AND pipeline_generation = %s",
                     (PIPELINE_GENERATION,),
                 )
                 return cur.fetchone()[0]

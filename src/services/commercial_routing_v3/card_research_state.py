@@ -170,7 +170,7 @@ def derive_procurement_research_state(
 
     if accepted_evidence_count > 0:
         state = STATE_EVIDENCE_FOUND
-    elif queue_status in ("PENDING", "RUNNING", "RETRY"):
+    elif queue_status in ("PENDING", "PROCESSING", "RUNNING", "RETRY"):
         state = STATE_RESEARCHING
     elif queue_status == "FAILED" or (documents_discovered > 0 and doc_failed == documents_discovered):
         state = STATE_FAILED

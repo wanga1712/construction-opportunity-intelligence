@@ -112,7 +112,7 @@ class AutonomousWorker:
 
                 is_terminal = True
                 for qs in q_statuses:
-                    if qs in ("PENDING", "RUNNING", "RETRY"):
+                    if qs in ("PENDING", "PROCESSING", "RUNNING", "RETRY"):
                         is_terminal = False
                         break
                 if not is_terminal:
