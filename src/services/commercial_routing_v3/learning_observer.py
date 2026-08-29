@@ -1,12 +1,13 @@
-"""CRM V3 Learning Observer Daemon (v2_corrected)
+"""CRM V3 Learning Observer Daemon (v3_real_truth)
 
 Responsibilities:
 - Enrich queue identity and generation hash
-- Build immutable pre-research blind snapshots (STRICT allowlist: no parsed text, no raw evidence, real source document manifest)
+- Build immutable pre-research blind snapshots (STRICT allowlist: source metadata + real canonical document manifest)
 - Create exhaustive ground truth ONLY when terminal document processing status is reached
-- Evaluate blind predictions against exhaustive truth with mathematically derived metrics (NULL when 0 useful docs)
-- Materialize dataset learning examples with stable TRAIN/VALIDATION/HOLDOUT splits
-- Producer version: v2_corrected
+- Calculate real document-level ground truth (useful_documents_json, non_useful_documents_json, unknown_documents_json)
+- Evaluate blind predictions against exhaustive truth with mathematically derived ranking metrics (recall@1,3,5, MRR, first_useful_rank)
+- Materialize dataset learning examples for PROCUREMENT_RELEVANCE and DOCUMENT_RANKING with stable TRAIN/VALIDATION/HOLDOUT splits
+- Producer version: v3_real_truth
 """
 
 import os
@@ -18,7 +19,7 @@ import psycopg2
 import psycopg2.extras
 from typing import Dict, Any, List, Optional, Tuple
 
-PRODUCER_VERSION = "v2_corrected"
+PRODUCER_VERSION = "v3_real_truth"
 PIPELINE_GENERATION = "S13_V2"
 
 def get_doc_db():
@@ -116,7 +117,7 @@ class LearningObserver:
                         "award_status": p_fact.get("award_status")
                     }
 
-                    # Query document_files using fresh cursor from doc_conn
+                    # Fetch real canonical document metadata from document_files in document_intelligence DB
                     with doc_conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as d_cur:
                         d_cur.execute("""
                             SELECT id, url, file_name, content_type
@@ -170,8 +171,9 @@ class LearningObserver:
         created_count = 0
         try:
             with doc_conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+                # Query terminal exhaustive document processing items
                 cur.execute("""
-                    SELECT id, procurement_id, queue_lane, priority_score, status, research_generation_hash
+                    SELECT id, procurement_id, queue_lane, priority_score, status, research_generation_hash, created_at
                     FROM document_processing_queue
                     WHERE pipeline_generation = %s AND status IN ('COMPLETED', 'FAILED', 'NO_LINKS')
                     ORDER BY id DESC LIMIT 50
@@ -191,23 +193,62 @@ class LearningObserver:
                     if c_cur.fetchone():
                         continue
 
+                    # Fetch exact pre-research snapshot for manifest matching
                     c_cur.execute("""
-                        SELECT COUNT(1) as cnt FROM crm_v3_raw_source_evidence
+                        SELECT document_manifest_json FROM crm_v3_pre_research_snapshots
+                        WHERE procurement_id = %s AND research_generation_hash = %s AND producer_version = %s
+                    """, (pid, gen_hash, PRODUCER_VERSION))
+                    snap_row = c_cur.fetchone()
+                    if not snap_row:
+                        continue
+
+                    manifest = snap_row["document_manifest_json"]
+                    if isinstance(manifest, str):
+                        manifest = json.loads(manifest)
+
+                    # Query STRICT generation-scoped raw evidence
+                    c_cur.execute("""
+                        SELECT document_file_id, raw_evidence_json FROM crm_v3_raw_source_evidence
                         WHERE procurement_id = %s AND pipeline_generation = %s AND research_generation_hash = %s
                     """, (pid, PIPELINE_GENERATION, gen_hash))
-                    ev_res = c_cur.fetchone()
-                    ev_cnt = ev_res["cnt"] if ev_res else 0
+                    ev_rows = c_cur.fetchall()
 
-                    if ev_cnt == 0:
-                        c_cur.execute("SELECT COUNT(1) as cnt FROM crm_v3_raw_source_evidence WHERE procurement_id = %s", (pid,))
-                        ev_cnt = c_cur.fetchone()["cnt"]
+                    ev_doc_ids = set()
+                    for ev in ev_rows:
+                        if ev.get("document_file_id"):
+                            ev_doc_ids.add(ev["document_file_id"])
 
-                    truth_completeness = "COMPLETE" if item["status"] in ("COMPLETED", "NO_LINKS") else "PARTIAL"
-                    
-                    if truth_completeness == "COMPLETE":
-                        has_target = "YES" if ev_cnt > 0 else "NO"
+                    # Build real document arrays
+                    useful_docs = []
+                    non_useful_docs = []
+                    unknown_docs = []
+
+                    if item["status"] in ("COMPLETED", "NO_LINKS"):
+                        truth_completeness = "COMPLETE"
                     else:
-                        has_target = "UNKNOWN"
+                        truth_completeness = "PARTIAL"
+
+                    for d in manifest:
+                        d_id = d.get("source_document_id")
+                        d_key = d.get("document_key")
+                        d_item = {"document_key": d_key, "source_document_id": d_id, "document_name": d.get("document_name")}
+                        
+                        if truth_completeness == "COMPLETE":
+                            if d_id and d_id in ev_doc_ids:
+                                useful_docs.append(d_item)
+                            else:
+                                non_useful_docs.append(d_item)
+                        else:
+                            unknown_docs.append(d_item)
+
+                    docs_total = len(manifest)
+                    docs_supported = len(useful_docs) + len(non_useful_docs)
+                    docs_unknown = len(unknown_docs)
+
+                    if truth_completeness == "COMPLETE":
+                        has_target = "YES" if (len(useful_docs) > 0 or len(ev_rows) > 0) else "NO"
+                    else:
+                        has_target = "YES" if len(ev_rows) > 0 else "UNKNOWN"
 
                     c_cur.execute("""
                         INSERT INTO crm_v3_exhaustive_truth (
@@ -221,9 +262,9 @@ class LearningObserver:
                         RETURNING id
                     """, (
                         pid, qid, PIPELINE_GENERATION, gen_hash,
-                        1, 1 if item["status"] == "COMPLETED" else 0, 1 if item["status"] == "FAILED" else 0,
-                        has_target, json.dumps([]), json.dumps([]), json.dumps([]), ev_cnt,
-                        truth_completeness, PRODUCER_VERSION
+                        docs_total, docs_supported, docs_unknown,
+                        has_target, json.dumps(useful_docs), json.dumps(non_useful_docs), json.dumps(unknown_docs),
+                        len(ev_rows), truth_completeness, PRODUCER_VERSION
                     ))
                     res = c_cur.fetchone()
                     if res:
@@ -241,7 +282,8 @@ class LearningObserver:
             with crm_conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
                 cur.execute("""
                     SELECT p.id as prediction_id, t.id as truth_id, p.procurement_id, p.research_generation_hash,
-                           p.has_target_decision, t.has_target_evidence, t.evidence_count, t.truth_completeness
+                           p.has_target_decision, p.document_ranking_json, t.has_target_evidence, t.evidence_count,
+                           t.truth_completeness, t.useful_documents_json, t.non_useful_documents_json
                     FROM crm_v3_shadow_predictions p
                     JOIN crm_v3_exhaustive_truth t 
                       ON p.procurement_id = t.procurement_id 
@@ -260,17 +302,54 @@ class LearningObserver:
                     fact_target = pair["has_target_evidence"] == "YES"
                     false_neg = (not pred_target) and fact_target
 
-                    doc_recall_1 = None
-                    doc_recall_3 = None
-                    doc_recall_5 = None
-                    mrr = None
-                    first_rank = None
+                    useful_docs = pair["useful_documents_json"]
+                    if isinstance(useful_docs, str):
+                        useful_docs = json.loads(useful_docs)
+                    useful_keys = {d["document_key"] for d in useful_docs if "document_key" in d}
+
+                    ranking = pair["document_ranking_json"]
+                    if isinstance(ranking, str):
+                        ranking = json.loads(ranking)
+
+                    # Calculate mathematically derived ranking metrics if useful docs exist
+                    if len(useful_keys) > 0 and len(ranking) > 0:
+                        ranks = []
+                        for item in ranking:
+                            d_k = item.get("document_key")
+                            r_num = item.get("rank", 1)
+                            if d_k in useful_keys:
+                                ranks.append(r_num)
+
+                        if ranks:
+                            first_rank = min(ranks)
+                            mrr = round(1.0 / first_rank, 4)
+                            doc_recall_1 = round(sum(1 for r in ranks if r <= 1) / float(len(useful_keys)), 4)
+                            doc_recall_3 = round(sum(1 for r in ranks if r <= 3) / float(len(useful_keys)), 4)
+                            doc_recall_5 = round(sum(1 for r in ranks if r <= 5) / float(len(useful_keys)), 4)
+                            sim_needed = first_rank
+                            sim_skipped = sum(1 for item in ranking if item.get("rank", 1) < first_rank and item.get("document_key") not in useful_keys)
+                        else:
+                            first_rank = None
+                            mrr = None
+                            doc_recall_1 = 0.0
+                            doc_recall_3 = 0.0
+                            doc_recall_5 = 0.0
+                            sim_needed = len(ranking)
+                            sim_skipped = 0
+                    else:
+                        doc_recall_1 = None
+                        doc_recall_3 = None
+                        doc_recall_5 = None
+                        mrr = None
+                        first_rank = None
+                        sim_needed = 0
+                        sim_skipped = 0
 
                     error_payload = {
                         "false_negative": false_neg,
                         "pred_decision": pair["has_target_decision"],
                         "fact_evidence": pair["has_target_evidence"],
-                        "evidence_count": pair["evidence_count"]
+                        "useful_doc_keys": list(useful_keys)
                     }
 
                     cur.execute("""
@@ -284,7 +363,7 @@ class LearningObserver:
                     """, (
                         pair["prediction_id"], pair["truth_id"], pair["procurement_id"], pair["research_generation_hash"],
                         false_neg, doc_recall_1, doc_recall_3, doc_recall_5,
-                        mrr, first_rank, 1, 0, json.dumps(error_payload), PRODUCER_VERSION
+                        mrr, first_rank, sim_needed, sim_skipped, json.dumps(error_payload), PRODUCER_VERSION
                     ))
                     res = cur.fetchone()
                     if res:
@@ -301,7 +380,8 @@ class LearningObserver:
             with crm_conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
                 cur.execute("""
                     SELECT e.id as eval_id, e.prediction_id, e.truth_id, s.id as snapshot_id,
-                           s.procurement_id, s.source_snapshot_json, t.has_target_evidence
+                           s.procurement_id, s.source_snapshot_json, s.document_manifest_json,
+                           t.has_target_evidence, t.useful_documents_json, t.non_useful_documents_json
                     FROM crm_v3_shadow_evaluations e
                     JOIN crm_v3_shadow_predictions p ON e.prediction_id = p.id
                     JOIN crm_v3_pre_research_snapshots s ON p.snapshot_id = s.id
@@ -322,6 +402,7 @@ class LearningObserver:
                     else:
                         split = "HOLDOUT"
 
+                    # 1. PROCUREMENT_RELEVANCE Example
                     input_json = r["source_snapshot_json"]
                     target_json = {"has_target_evidence": r["has_target_evidence"]}
 
@@ -336,9 +417,36 @@ class LearningObserver:
                         r["snapshot_id"], r["prediction_id"], r["truth_id"], r["eval_id"],
                         json.dumps(input_json), json.dumps(target_json), split, PRODUCER_VERSION
                     ))
-                    res = cur.fetchone()
-                    if res:
+                    if cur.fetchone():
                         ex_count += 1
+
+                    # 2. DOCUMENT_RANKING Example (if manifest contains documents)
+                    manifest = r["document_manifest_json"]
+                    if isinstance(manifest, str):
+                        manifest = json.loads(manifest)
+
+                    if len(manifest) > 0:
+                        doc_input_json = {
+                            "procurement_metadata": input_json,
+                            "document_manifest": manifest
+                        }
+                        doc_target_json = {
+                            "useful_documents": r["useful_documents_json"],
+                            "non_useful_documents": r["non_useful_documents_json"]
+                        }
+                        cur.execute("""
+                            INSERT INTO crm_v3_learning_examples (
+                                snapshot_id, prediction_id, truth_id, evaluation_id,
+                                task_type, input_json, target_json, label_source, sample_weight, dataset_split,
+                                producer_version, created_at
+                            ) VALUES (%s, %s, %s, %s, 'DOCUMENT_RANKING', %s, %s, 'AUTO_FACT', 1.0, %s, %s, NOW())
+                            RETURNING id
+                        """, (
+                            r["snapshot_id"], r["prediction_id"], r["truth_id"], r["eval_id"],
+                            json.dumps(doc_input_json), json.dumps(doc_target_json), split, PRODUCER_VERSION
+                        ))
+                        if cur.fetchone():
+                            ex_count += 1
             crm_conn.commit()
         finally:
             crm_conn.close()
@@ -346,7 +454,7 @@ class LearningObserver:
 
 if __name__ == "__main__":
     observer = LearningObserver()
-    print("Starting CRM V3 Learning Observer loop (v2_corrected)...")
+    print("Starting CRM V3 Learning Observer loop (v3_real_truth)...")
     while True:
         try:
             res = observer.run_cycle()
