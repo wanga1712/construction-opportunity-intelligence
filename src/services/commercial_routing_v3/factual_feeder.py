@@ -184,3 +184,44 @@ class FactualFeeder:
                     admitted_new += 1
 
         return total_scanned, admitted_new, last_seen_id or 0
+
+
+    def run_forever(self, sleep_seconds: int = 10) -> None:
+        """Continuous production feeder loop."""
+        import signal, time, logging
+        logger = logging.getLogger("commercial_routing_v3.factual_feeder")
+        logger.info("Factual procurement feeder service started.")
+        running = [True]
+
+        def _sig_handler(signum, frame):
+            logger.info(f"Received signal {signum}, stopping feeder...")
+            running[0] = False
+
+        signal.signal(signal.SIGINT, _sig_handler)
+        signal.signal(signal.SIGTERM, _sig_handler)
+
+        while running[0]:
+            try:
+                depth_before = self.get_pending_queue_depth()
+                scanned, newly_admitted, last_id = self.run_feeder_cycle()
+                depth_after = self.get_pending_queue_depth()
+                logger.info(
+                    f"Feeder cycle: depth_before={depth_before}, scanned={scanned}, "
+                    f"newly_admitted={newly_admitted}, last_scanned_id={last_id}, depth_after={depth_after}"
+                )
+            except Exception as exc:
+                logger.error(f"Error in feeder loop: {exc}", exc_info=True)
+
+            for _ in range(sleep_seconds):
+                if not running[0]:
+                    break
+                time.sleep(1)
+
+
+if __name__ == "__main__":
+    import logging
+    logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(name)s: %(message)s")
+    from src.services.db_bootstrap import connect_databases
+    _, _, crm_db, _ = connect_databases()
+    feeder = FactualFeeder(crm_db)
+    feeder.run_forever()
