@@ -57,7 +57,6 @@ class ShadowPredictor:
                 """)
                 proc_cnt = cur.fetchone()["cnt"]
             if proc_cnt > 3:
-                # Active document processing load is heavy, yield GPU
                 return False
             return True
         except Exception:
@@ -129,8 +128,8 @@ class ShadowPredictor:
                     raw_text = f'{{"error": "{str(e)}"}}'
 
                 parsed_json = None
-                parse_status = "PARSE_FAILED"
-                val_status = "VALIDATION_FAILED"
+                parse_status = "RAW_RECEIVED_PARSE_FAILED"
+                val_status = "PARSED_SCHEMA_INVALID"
 
                 try:
                     clean_text = raw_text.strip()
