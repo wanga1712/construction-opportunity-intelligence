@@ -2,7 +2,7 @@ import hashlib, os, psycopg2, psycopg2.extras
 from typing import Any, Dict, List, Optional
 from src.services.commercial_routing_v3.document_links import resolve_document_links
 
-PIPELINE_GENERATION = "S13_V2"
+PIPELINE_GENERATION = "S13_V3_EXHAUSTIVE_CONTEXT"
 
 STATE_WAITING_RESEARCH = "WAITING_RESEARCH"
 STATE_RESEARCHING = "RESEARCHING"

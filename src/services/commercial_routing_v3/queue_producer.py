@@ -38,7 +38,7 @@ _ACTION_MAP = {
 }
 _SKIP = {ResearchAction.SKIP.value, ResearchAction.METADATA_ONLY.value}
 
-PIPELINE_GENERATION = "S13_V2"
+PIPELINE_GENERATION = "S13_V3_EXHAUSTIVE_CONTEXT"
 _DOC_ENV_FILES = (
     "/etc/tender-docs-db.env",
     "/opt/tender_documents_research/.env",

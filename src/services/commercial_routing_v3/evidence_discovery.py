@@ -1,10 +1,18 @@
 import hashlib, json, re
-from typing import Any, Dict, List, Optional, Set
+from typing import Any, Dict, List, Optional, Set, Tuple
 from src.services.commercial_routing_v3.parsed_content_iterator import ParsedUnit, iter_parsed_units
+
+PIPELINE_GENERATION = "S13_V3_EXHAUSTIVE_CONTEXT"
 
 def compute_evidence_hash(matched_term: str, raw_text: str, source_locator_json: str) -> str:
     payload = f"{matched_term}||{raw_text}||{source_locator_json}"
     return hashlib.md5(payload.encode("utf-8")).hexdigest()
+
+def compute_vocabulary_hash(vocab: List[Dict[str, Any]]) -> Tuple[str, str]:
+    ser = json.dumps(vocab, ensure_ascii=False, sort_keys=True)
+    h = hashlib.sha256(ser.encode("utf-8")).hexdigest()
+    version = f"v3_vocab_{h[:12]}"
+    return version, h
 
 def load_discovery_vocabulary(crm_db) -> List[Dict[str, Any]]:
     vocab: List[Dict[str, Any]] = []
@@ -43,10 +51,11 @@ def discover_and_persist_raw_evidence(
     source_table: Optional[str] = None,
     source_id: Optional[int] = None,
     contract_number: Optional[str] = None,
-    pipeline_generation: str = "S13_V2",
+    pipeline_generation: str = PIPELINE_GENERATION,
     research_generation_hash: Optional[str] = None,
 ) -> List[Dict[str, Any]]:
     vocab = load_discovery_vocabulary(crm_db)
+    vocab_version, vocab_hash = compute_vocabulary_hash(vocab)
     raw_hits: List[Dict[str, Any]] = []
     seen_hashes: Set[str] = set()
 
@@ -55,39 +64,35 @@ def discover_and_persist_raw_evidence(
         if not text_lower:
             continue
 
-        matched_entry = None
+        # Exhaustive search across ALL vocabulary terms (FIRST_MATCH_BREAK = NO)
         for v in vocab:
             if v["term"] in text_lower:
-                matched_entry = v
-                break
+                matched_term = v["term"]
+                source_loc_json = json.dumps(unit.source_locator, default=str, sort_keys=True)
+                ev_hash = compute_evidence_hash(matched_term, unit.raw_text, source_loc_json)
 
-        if matched_entry:
-            matched_term = matched_entry["term"]
-            source_loc_json = json.dumps(unit.source_locator, default=str, sort_keys=True)
-            ev_hash = compute_evidence_hash(matched_term, unit.raw_text, source_loc_json)
+                if ev_hash in seen_hashes:
+                    continue
+                seen_hashes.add(ev_hash)
 
-            if ev_hash in seen_hashes:
-                continue
-            seen_hashes.add(ev_hash)
+                ctx_before = unit.context_before or ["Content unit preceding locator."]
+                ctx_after = unit.context_after or ["Content unit following locator."]
 
-            ctx_before = unit.context_before or ["Content unit preceding locator."]
-            ctx_after = unit.context_after or ["Content unit following locator."]
-
-            raw_hits.append({
-                "procurement_id": procurement_id,
-                "source_document_id": unit.source_document_id,
-                "document_name": unit.document_name,
-                "matched_term": matched_term,
-                "raw_text": unit.raw_text,
-                "context_before": ctx_before,
-                "context_after": ctx_after,
-                "source_locator_json": source_loc_json,
-                "discovery_method": matched_entry["method"],
-                "suggested_category_code": matched_entry["category_code"],
-                "evidence_hash": ev_hash,
-                "pipeline_generation": pipeline_generation,
-                "research_generation_hash": research_generation_hash,
-            })
+                raw_hits.append({
+                    "procurement_id": procurement_id,
+                    "source_document_id": unit.source_document_id,
+                    "document_name": unit.document_name,
+                    "matched_term": matched_term,
+                    "raw_text": unit.raw_text,
+                    "context_before": ctx_before,
+                    "context_after": ctx_after,
+                    "source_locator_json": source_loc_json,
+                    "discovery_method": v["method"],
+                    "suggested_category_code": v["category_code"],
+                    "evidence_hash": ev_hash,
+                    "pipeline_generation": pipeline_generation,
+                    "research_generation_hash": research_generation_hash,
+                })
 
     persisted_rows: List[Dict[str, Any]] = []
     for hit in raw_hits:
@@ -116,20 +121,9 @@ def discover_and_persist_raw_evidence(
                 hit["evidence_hash"],
                 hit["pipeline_generation"],
                 hit["research_generation_hash"],
-            )
+            ),
         )
         if res:
-            persisted_rows.append(dict(res[0]))
-        else:
-            existing = crm_db.execute_query(
-                """
-                SELECT id, procurement_id, source_document_id, document_name, matched_term, raw_text, source_locator_json, evidence_hash, pipeline_generation, research_generation_hash, created_at
-                FROM crm_v3_raw_source_evidence
-                WHERE procurement_id = %s AND source_document_id = %s AND evidence_hash = %s AND research_generation_hash IS NOT DISTINCT FROM %s
-                """,
-                (hit["procurement_id"], hit["source_document_id"], hit["evidence_hash"], hit["research_generation_hash"])
-            )
-            if existing:
-                persisted_rows.append(dict(existing[0]))
+            persisted_rows.extend(res)
 
     return persisted_rows

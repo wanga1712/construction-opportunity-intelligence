@@ -18,7 +18,7 @@ from src.services.commercial_routing_v3.card_research_state import _get_doc_db_c
 
 logger = logging.getLogger(__name__)
 
-PIPELINE_GENERATION = "S13_V2"
+PIPELINE_GENERATION = "S13_V3_EXHAUSTIVE_CONTEXT"
 
 @dataclass
 class ResearchUiProjection:

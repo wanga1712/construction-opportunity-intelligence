@@ -544,3 +544,46 @@ def enrich_object_mode_routing(
     ]
     out["business_category_hypotheses"] = fixed
     return out
+
+
+def classify_procurement_mode(title: str, okpd_code: Optional[str] = None) -> str:
+    """Deterministic classification of procurement mode based on title and OKPD code.
+    
+    Returns one of:
+    - PROJECT
+    - WORKS
+    - PROJECT_AND_WORKS
+    - DIRECT_SUPPLY
+    - UNCERTAIN
+    """
+    t = (title or "").lower()
+    okpd = (okpd_code or "").strip()
+
+    has_design = bool(re.search(r"проектн|проектир|изыскан|пшд|псд|разработк\w*\s+проект", t))
+    has_works = bool(re.search(r"капитальн\w*\s+ремонт|капремонт|ремонт|строительст|выполнен\w*\s+работ|монтаж|устройств", t))
+    has_supply = bool(re.search(r"поставк|закупк|приобретен|оказани\w*\s+услуг|оснащен", t))
+
+    if okpd.startswith("71.1") or okpd.startswith("71.12"):
+        if has_works:
+            return "PROJECT_AND_WORKS"
+        return "PROJECT"
+
+    if okpd.startswith("41") or okpd.startswith("42") or okpd.startswith("43"):
+        if has_design:
+            return "PROJECT_AND_WORKS"
+        return "WORKS"
+
+    if okpd.startswith("26") or okpd.startswith("27"):
+        if not (has_works or has_design):
+            return "DIRECT_SUPPLY"
+
+    if has_design and has_works:
+        return "PROJECT_AND_WORKS"
+    elif has_design:
+        return "PROJECT"
+    elif has_works:
+        return "WORKS"
+    elif has_supply or okpd.startswith("26") or okpd.startswith("27") or okpd.startswith("28") or okpd.startswith("31") or okpd.startswith("32"):
+        return "DIRECT_SUPPLY"
+    else:
+        return "UNCERTAIN"

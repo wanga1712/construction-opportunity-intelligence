@@ -27,7 +27,7 @@ import psycopg2.extras
 from typing import Dict, Any, List, Optional, Tuple
 
 PRODUCER_VERSION = "v3_real_truth"
-PIPELINE_GENERATION = "S13_V2"
+PIPELINE_GENERATION = "S13_V3_EXHAUSTIVE_CONTEXT"
 
 def get_doc_db():
     user = os.environ.get("S13_DOCUMENT_DB_USER", "doc_worker")

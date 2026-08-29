@@ -238,3 +238,51 @@ def test_filter_composition_category_and_research_state():
         all_ids, projections, selected_research="EVIDENCE_FOUND", selected_category="Гидроизоляция"
     )
     assert res == [2]
+
+
+def test_procurement_mode_classification():
+    from src.services.commercial_routing_v3.object_mode_routing import classify_procurement_mode
+
+    assert classify_procurement_mode("Поставка светильников настольных светодиодных", "27.40.22") == "DIRECT_SUPPLY"
+    assert classify_procurement_mode("Поставка системных блоков и мониторов", "26.20.15") == "DIRECT_SUPPLY"
+    assert classify_procurement_mode("Выполнение работ по капитальному ремонту здания школы", "41.20.40") == "WORKS"
+    assert classify_procurement_mode("Разработка проектной и рабочей документации", "71.12.12") == "PROJECT"
+    assert classify_procurement_mode("Выполнение проектных и строительно-монтажных работ", "41.20.40") == "PROJECT_AND_WORKS"
+
+
+def test_exhaustive_evidence_discovery_no_break():
+    from src.services.commercial_routing_v3.evidence_discovery import discover_and_persist_raw_evidence
+    from src.services.commercial_routing_v3.parsed_content_iterator import ParsedUnit
+
+    mock_crm_db = MagicMock()
+    mock_crm_db.execute_query.side_effect = [
+        [{"category_code": "flooring", "category_name": "flooring", "is_active": True},
+         {"category_code": "lighting", "category_name": "lighting", "is_active": True}],
+        [],  # subcategories
+        [{"id": 1}],  # insert 1
+        [{"id": 2}],  # insert 2
+    ]
+
+    unit = ParsedUnit(
+        procurement_id=123,
+        source_document_id=1,
+        document_name="Spec.pdf",
+        document_url=None,
+        document_type="pdf",
+        unit_type="PAGE_TEXT",
+        raw_text="Specification includes flooring linoleum and lighting luminaire",
+        page_number=1,
+        sheet_name=None,
+        row_number=None,
+        column=None,
+        archive_member=None,
+        source_locator={"page": 1},
+        context_before=["Page text before"],
+        context_after=["Page text after"],
+    )
+
+    with patch("src.services.commercial_routing_v3.evidence_discovery.iter_parsed_units", return_value=[unit]):
+        hits = discover_and_persist_raw_evidence(123, mock_crm_db)
+        # Provenance: BOTH flooring and lighting must be matched and persisted (FIRST_MATCH_BREAK = NO!)
+        assert len(hits) == 2
+

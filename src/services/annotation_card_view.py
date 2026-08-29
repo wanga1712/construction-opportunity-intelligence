@@ -7,7 +7,7 @@ from src.services.annotation_card_provenance import load_annotation_history, sou
 from src.services.commercial_routing_v3.document_links import resolve_document_links
 from src.services.commercial_routing_v3.research_ui_projection import format_friendly_locator
 
-PIPELINE_GENERATION = "S13_V2"
+PIPELINE_GENERATION = "S13_V3_EXHAUSTIVE_CONTEXT"
 
 
 def _lifecycle(header: dict) -> str:
