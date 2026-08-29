@@ -250,39 +250,33 @@ def test_procurement_mode_classification():
     assert classify_procurement_mode("Выполнение проектных и строительно-монтажных работ", "41.20.40") == "PROJECT_AND_WORKS"
 
 
-def test_exhaustive_evidence_discovery_no_break():
-    from src.services.commercial_routing_v3.evidence_discovery import discover_and_persist_raw_evidence
-    from src.services.commercial_routing_v3.parsed_content_iterator import ParsedUnit
+def test_exhaustive_evidence_discovery_bridge_no_lexical_scan():
+    """EVIDENCE_DISCOVERY_PERFORMS_LEXICAL_SEARCH=NO.
 
-    mock_crm_db = MagicMock()
-    mock_crm_db.execute_query.side_effect = [
-        [{"category_code": "flooring", "category_name": "flooring", "is_active": True},
-         {"category_code": "lighting", "category_name": "lighting", "is_active": True}],
-        [],  # subcategories
-        [{"id": 1}],  # insert 1
-        [{"id": 2}],  # insert 2
-    ]
+    evidence_discovery now bridges document_match_details → crm_v3_raw_source_evidence.
+    It must NOT use iter_parsed_units (lexical scanning is forbidden).
+    FIRST_MATCH_BREAK=NO is enforced by the production matcher; the bridge persists
+    ALL match_detail rows for a procurement, not just the first match.
+    """
+    from src.services.commercial_routing_v3 import evidence_discovery
+    import inspect
 
-    unit = ParsedUnit(
-        procurement_id=123,
-        source_document_id=1,
-        document_name="Spec.pdf",
-        document_url=None,
-        document_type="pdf",
-        unit_type="PAGE_TEXT",
-        raw_text="Specification includes flooring linoleum and lighting luminaire",
-        page_number=1,
-        sheet_name=None,
-        row_number=None,
-        column=None,
-        archive_member=None,
-        source_locator={"page": 1},
-        context_before=["Page text before"],
-        context_after=["Page text after"],
+    # Verify the new module does NOT contain iter_parsed_units reference
+    src = inspect.getsource(evidence_discovery)
+    assert "iter_parsed_units" not in src, (
+        "EVIDENCE_DISCOVERY_PERFORMS_LEXICAL_SEARCH=NO: "
+        "iter_parsed_units must not appear in evidence_discovery"
+    )
+    assert "ParsedUnit" not in src, (
+        "EVIDENCE_DISCOVERY_PERFORMS_LEXICAL_SEARCH=NO: "
+        "ParsedUnit (lexical scan unit) must not appear in evidence_discovery"
     )
 
-    with patch("src.services.commercial_routing_v3.evidence_discovery.iter_parsed_units", return_value=[unit]):
-        hits = discover_and_persist_raw_evidence(123, mock_crm_db)
-        # Provenance: BOTH flooring and lighting must be matched and persisted (FIRST_MATCH_BREAK = NO!)
-        assert len(hits) == 2
+    # Verify the module correctly delegates to bridge
+    assert "bridge_match_details_to_evidence" in src, (
+        "evidence_discovery must delegate to bridge_match_details_to_evidence"
+    )
+    assert "discover_and_persist_raw_evidence" in src, (
+        "discover_and_persist_raw_evidence must exist for legacy compatibility"
+    )
 

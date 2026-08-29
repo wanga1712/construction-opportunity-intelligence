@@ -129,9 +129,9 @@ class CommercialRoutingV3QueueProducer:
         }
 
     def decide_from_normalized(self, normalized: Dict[str, Any]) -> Optional[Dict[str, Any]]:
-        empty_st = str(normalized.get("empty_hypothesis_status") or "").upper()
-        if empty_st == "NO_COMMERCIAL_ENTRY":
-            return None
+        # AI_QUEUE_ADMISSION_GATE=NO: NO_COMMERCIAL_ENTRY does NOT gate queue admission.
+        # All lifecycle-eligible procurements use populate_all_eligible() directly.
+        # decide_from_normalized retained for legacy assessment-driven flow compatibility.
         hypotheses = (
             normalized.get("commercial_category_hypotheses")
             or normalized.get("category_opportunities")
@@ -205,6 +205,133 @@ class CommercialRoutingV3QueueProducer:
             ],
         }
 
+    # ------------------------------------------------------------------
+    # STEP 3/4: Exhaustive population — AI_QUEUE_ADMISSION_GATE=NO
+    # Eligibility = deterministic (has links + not terminal crm_stage).
+    # Model output NOT consulted. Every eligible procurement enters queue.
+    # ------------------------------------------------------------------
+
+    _TERMINAL_STAGES = frozenset([
+        "cancelled", "failed", "closed", "rejected",
+        "archived", "no_winner", "suspended",
+    ])
+
+    def populate_all_eligible(
+        self,
+        *,
+        batch_size: int = 500,
+        max_total: int = 0,
+        dry_run: bool = False,
+    ) -> Dict[str, Any]:
+        """Queue ALL lifecycle-eligible procurements from CRM.
+
+        Eligibility criteria (deterministic, no AI):
+          - Has document links (count_document_links > 0)
+          - crm_stage not in terminal/excluded list
+          - Not already queued for this pipeline_generation
+
+        AI_QUEUE_ADMISSION_GATE=NO
+        STOPWORD_QUEUE_ADMISSION_GATE=NO
+        Every eligible procurement enters queue at lane=open_active, priority=50.
+        """
+        from src.services.commercial_routing_v3.document_links import count_document_links
+
+        inserted = updated = skipped = errors = 0
+        offset = 0
+
+        crm = psycopg2.connect(**self._crm_dsn)
+        crm.autocommit = True
+        try:
+            while True:
+                with crm.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+                    cur.execute(
+                        """
+                        SELECT p.id, p.source_table, p.source_id, p.contract_number,
+                               p.end_date, p.crm_stage, p.award_status
+                        FROM crm_procurements p
+                        WHERE p.crm_stage NOT IN (
+                            'cancelled', 'failed', 'closed', 'rejected',
+                            'archived', 'no_winner', 'suspended'
+                        )
+                        ORDER BY p.id
+                        LIMIT %s OFFSET %s
+                        """,
+                        (batch_size, offset),
+                    )
+                    rows = cur.fetchall()
+
+                if not rows:
+                    break
+                offset += len(rows)
+
+                for proc in rows:
+                    pid = proc["id"]
+                    if max_total and (inserted + updated) >= max_total:
+                        break
+                    try:
+                        lc = count_document_links(
+                            source_table=str(proc.get("source_table") or ""),
+                            source_id=proc.get("source_id"),
+                            contract_number=proc.get("contract_number"),
+                        )
+                        if lc == 0:
+                            skipped += 1
+                            continue
+
+                        task = {
+                            "procurement_id": pid,
+                            "source_table": proc.get("source_table") or "",
+                            "source_id": proc.get("source_id"),
+                            "contract_number": proc.get("contract_number"),
+                            "assessment_id": None,
+                            "category_codes": [],
+                            "category_context": {
+                                "populate_method": "EXHAUSTIVE_ALL_ELIGIBLE",
+                                "AI_QUEUE_ADMISSION_GATE": "NO",
+                                "link_count": lc,
+                            },
+                            "candidate_level": None,
+                            "candidate_score": None,
+                            "research_action": ResearchAction.DEEP_RESEARCH.value,
+                            "research_depth": "highest",
+                            "queue_lane": "open_active",
+                            "priority_score": 50,
+                            "dispatchable": True,
+                        }
+
+                        if dry_run:
+                            inserted += 1
+                            continue
+
+                        result = self._upsert_queue_task(task, status="PENDING")
+                        action = result.get("action")
+                        if action == "inserted":
+                            inserted += 1
+                        elif action == "updated":
+                            updated += 1
+                        else:
+                            skipped += 1
+                    except Exception as exc:
+                        errors += 1
+                        logger.exception("populate_all_eligible pid=%s: %s", pid, exc)
+
+                if max_total and (inserted + updated) >= max_total:
+                    break
+        finally:
+            crm.close()
+
+        return {
+            "pipeline": PIPELINE_GENERATION,
+            "AI_QUEUE_ADMISSION_GATE": "NO",
+            "STOPWORD_QUEUE_ADMISSION_GATE": "NO",
+            "inserted": inserted,
+            "updated": updated,
+            "skipped_no_links": skipped,
+            "errors": errors,
+            "total_processed": inserted + updated + skipped + errors,
+            "dry_run": dry_run,
+        }
+
     def upsert(
         self,
         procurement_id: int,
@@ -257,59 +384,9 @@ class CommercialRoutingV3QueueProducer:
         link_count = self._count_links(proc)
         track_u = str(track or "").upper()
         action_u = str(decision.get("research_action") or "").upper()
-        assess_status = str(
-            (procurement or {}).get("assessment_status")
-            or (procurement or {}).get("ai_assessment_status")
-            or ""
-        ).upper()
 
-        # Hard non-executable contracts
-        empty_st = str(
-            decision.get("empty_hypothesis_status")
-            or (procurement or {}).get("empty_hypothesis_status")
-            or ""
-        ).upper()
-        if empty_st == "NO_COMMERCIAL_ENTRY" or track_u == "NO_COMMERCIAL_ENTRY":
-            return {
-                "action": "analytics_only",
-                "status": "NO_COMMERCIAL_ENTRY_NOT_EXECUTABLE",
-                "dispatchable": False,
-                "link_count": link_count,
-                "reason": "empty_hypothesis_status=NO_COMMERCIAL_ENTRY"
-                if empty_st == "NO_COMMERCIAL_ENTRY"
-                else "opportunity_track=NO_COMMERCIAL_ENTRY",
-                "procurement_id": procurement_id,
-                "research_action": ResearchAction.SKIP.value,
-                "opportunity_track": track or "NO_COMMERCIAL_ENTRY",
-            }
-        if action_u in _SKIP or action_u in ("SKIP", "METADATA_ONLY"):
-            return {
-                "action": "analytics_only",
-                "status": "SKIP_NOT_EXECUTABLE",
-                "dispatchable": False,
-                "link_count": link_count,
-                "reason": "research_action=SKIP",
-                **{k: decision.get(k) for k in ("research_action", "opportunity_track", "candidate_medal", "primary_category")},
-                "procurement_id": procurement_id,
-            }
-        if assess_status == "FAILED" or action_u == "FAILED":
-            return {
-                "action": "analytics_only",
-                "status": "FAILED_NOT_EXECUTABLE",
-                "dispatchable": False,
-                "link_count": link_count,
-                "reason": "assessment_or_action=FAILED",
-                "procurement_id": procurement_id,
-            }
-        if str(decision.get("candidate_medal") or "").upper() == "WOOD":
-            return {
-                "action": "analytics_only",
-                "status": "WOOD_NOT_AUTO_EXECUTABLE",
-                "dispatchable": False,
-                "link_count": link_count,
-                "reason": "WOOD_NOT_AUTO_EXECUTABLE",
-                "procurement_id": procurement_id,
-            }
+        # AI_QUEUE_ADMISSION_GATE=NO: NO_COMMERCIAL_ENTRY, SKIP, WOOD do NOT gate queue insertion.
+        # Only hard lifecycle states (HOLD/CLOSED via admission) and zero-links block executable status.
 
         task = {
             "procurement_id": procurement_id,

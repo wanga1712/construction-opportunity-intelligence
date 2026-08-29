@@ -1,22 +1,3 @@
-"""CRM V3 Learning Observer Daemon (v3_real_truth)
-
-Responsibilities:
-- Enrich queue identity and generation hash
-- Build immutable pre-research blind snapshots (STRICT allowlist: source metadata + real canonical document manifest)
-- Create exhaustive ground truth ONLY when per-document terminal states are evaluated from document_files LEFT JOIN document_processing_results by source_document_id
-- Enforce temporal order: PREDICTION_CREATED_AT < TRUTH_CREATED_AT and TRUTH_CREATED_AT >= LAST_PARSE_TERMINAL_AT
-- Exact document classification:
-  - USEFUL: download successful AND parse successful AND current-generation evidence linked.
-  - NO_TARGET_EVIDENCE: download successful AND parse successful AND zero current-generation evidence.
-  - UNKNOWN: download failure, parse failure, unsupported format, unreadable, missing row, missing parse result, incomplete.
-- Procurement truth:
-  - USEFUL > 0 and UNKNOWN == 0 -> has_target_evidence=YES, truth_completeness=COMPLETE
-  - USEFUL > 0 and UNKNOWN > 0 -> has_target_evidence=YES, truth_completeness=PARTIAL
-  - USEFUL == 0 and UNKNOWN == 0 -> has_target_evidence=NO, truth_completeness=COMPLETE
-  - USEFUL == 0 and UNKNOWN > 0 -> has_target_evidence=UNKNOWN, truth_completeness=PARTIAL
-- Producer version: v3_real_truth
-"""
-
 import os
 import sys
 import json
@@ -73,6 +54,50 @@ class LearningObserver:
 
         return processed
 
+    def _resolve_document_manifest(self, p_fact: Dict[str, Any]) -> List[Dict[str, Any]]:
+        """Build document manifest from resolve_document_links() (S7 canonical links).
+
+        Step 6: Manifest from resolve_document_links(), NOT from document_files.
+        This creates an immutable pre-research snapshot of what documents EXIST
+        before download begins. Timestamp: BLIND_PREDICTION_AT < FIRST_PARSED_CONTENT_AVAILABLE_AT.
+        """
+        try:
+            from src.services.commercial_routing_v3.document_links import resolve_document_links
+            result = resolve_document_links(
+                source_table=str(p_fact.get("source_table") or ""),
+                source_id=p_fact.get("source_id"),
+                contract_number=p_fact.get("contract_number"),
+                limit=500,
+            )
+            # resolve_document_links returns normalized deduplicated list.
+            # Each item: source_document_id, document_url, document_name, physical_download_key
+            links = result.get("links") or []
+            manifest = []
+            for idx, link in enumerate(links):
+                file_name = link.get("document_name") or ""
+                doc_url = link.get("document_url") or ""
+                src_id = link.get("source_document_id")
+                ext = "pdf"
+                if file_name and "." in file_name:
+                    ext = file_name.rsplit(".", 1)[-1].lower() or "pdf"
+                manifest.append({
+                    # source_document_id: populated from S7 link table row id.
+                    # Will be matched to document_files.id by truth builder after download.
+                    "source_document_id": src_id,
+                    "document_key": f"link_{src_id}_{idx}" if src_id is not None else f"link_idx_{idx}",
+                    "document_name": file_name or f"document_{idx}",
+                    "source_url": doc_url,
+                    "extension": ext,
+                })
+            return manifest
+        except Exception as exc:
+            # If S7 is unreachable, return empty manifest (will be retried next cycle)
+            import logging
+            logging.getLogger("learning_observer").warning(
+                "resolve_document_links failed pid=%s: %s", p_fact.get("id"), exc
+            )
+            return []
+
     def _build_missing_snapshots(self) -> int:
         doc_conn = get_doc_db()
         crm_conn = get_crm_db()
@@ -124,25 +149,13 @@ class LearningObserver:
                         "award_status": p_fact.get("award_status")
                     }
 
-                    with doc_conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as d_cur:
-                        d_cur.execute("""
-                            SELECT id, url, file_name, content_type
-                            FROM document_files
-                            WHERE procurement_id = %s
-                        """, (pid,))
-                        doc_rows = d_cur.fetchall()
-
-                    document_manifest = []
-                    for d in doc_rows:
-                        fn = d.get("file_name") or ""
-                        ext = fn.split(".")[-1] if "." in fn else "pdf"
-                        document_manifest.append({
-                            "source_document_id": d["id"],
-                            "document_key": f"doc_{pid}_{d['id']}",
-                            "document_name": fn or f"document_{d['id']}",
-                            "source_url": d.get("url"),
-                            "extension": ext
-                        })
+                    # Step 6: Manifest from resolve_document_links(), NOT document_files.
+                    # Pre-research canonical document manifest from S7 source.
+                    document_manifest = self._resolve_document_manifest(dict(p_fact))
+                    if not document_manifest:
+                        # No canonical links found — skip snapshot creation,
+                        # will retry when S7 is reachable or links become available.
+                        continue
 
                     snap_payload = {
                         "source": source_snapshot,
@@ -155,7 +168,7 @@ class LearningObserver:
                             procurement_id, queue_id, pipeline_generation, research_generation_hash,
                             source_snapshot_json, document_manifest_json, snapshot_sha256, snapshot_schema_version,
                             producer_version, created_at
-                        ) VALUES (%s, %s, %s, %s, %s, %s, %s, 'v2_canonical_manifest', %s, NOW())
+                        ) VALUES (%s, %s, %s, %s, %s, %s, %s, 'v3_canonical_links', %s, NOW())
                         ON CONFLICT (procurement_id, research_generation_hash, producer_version) DO NOTHING
                         RETURNING id
                     """, (
