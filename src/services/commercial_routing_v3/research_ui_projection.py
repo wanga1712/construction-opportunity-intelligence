@@ -59,23 +59,31 @@ def format_friendly_locator(locator_data: Any) -> str:
         return str(locator_data)
 
     parts = []
-    if locator_data.get("archive_member_path"):
-        parts.append(f"файл в архиве: {locator_data['archive_member_path']}")
-    if locator_data.get("sheet_name"):
-        sheet = locator_data['sheet_name']
-        if locator_data.get("row_number"):
-            parts.append(f"лист «{sheet}», строка {locator_data['row_number']}")
+    archive = locator_data.get("archive_member_path") or locator_data.get("archive")
+    if archive:
+        parts.append(f"файл в архиве: {archive}")
+
+    sheet = locator_data.get("sheet_name") or locator_data.get("sheet")
+    row = locator_data.get("row_number") or locator_data.get("row")
+    if sheet:
+        if row is not None:
+            parts.append(f"лист «{sheet}», строка {row}")
         else:
             parts.append(f"лист «{sheet}»")
-    elif locator_data.get("row_number"):
-        parts.append(f"строка {locator_data['row_number']}")
+    elif row is not None:
+        parts.append(f"строка {row}")
 
-    if locator_data.get("page_number"):
-        parts.append(f"стр. {locator_data['page_number']}")
-    if locator_data.get("paragraph_index"):
-        parts.append(f"абзац {locator_data['paragraph_index']}")
-    if locator_data.get("position_number"):
-        parts.append(f"позиция {locator_data['position_number']}")
+    page = locator_data.get("page_number") or locator_data.get("page")
+    if page is not None:
+        parts.append(f"стр. {page}")
+
+    para = locator_data.get("paragraph_index") or locator_data.get("paragraph")
+    if para is not None:
+        parts.append(f"абзац {para}")
+
+    pos = locator_data.get("position_number") or locator_data.get("position")
+    if pos is not None:
+        parts.append(f"позиция {pos}")
 
     return ", ".join(parts) if parts else ""
 
