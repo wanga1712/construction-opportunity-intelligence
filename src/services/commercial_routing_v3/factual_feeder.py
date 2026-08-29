@@ -1,7 +1,7 @@
 """Factual Procurement Feeder into document_processing_queue.
 
 Ensures continuous feeder capability with watermark control, generation-aware admission,
-and candidate advancement truth.
+and candidate advancement truth via keyset pagination.
 """
 
 from datetime import datetime, timezone
@@ -128,37 +128,59 @@ class FactualFeeder:
         finally:
             conn.close()
 
-    def run_feeder_cycle(self) -> int:
-        """Continuous watermark refill cycle advancing past already enqueued procurements."""
+    def run_feeder_cycle(self, max_pages: int = 10) -> Tuple[int, int, int]:
+        """Continuous watermark refill cycle with keyset pagination advancing past already enqueued procurements.
+
+        Returns tuple: (scanned_count, newly_admitted_count, last_scanned_id).
+        """
         depth = self.get_pending_queue_depth()
         if depth >= LOW_WATERMARK:
-            return 0
+            return 0, 0, 0
 
         target_refill = min(HIGH_WATERMARK - depth, FEED_BATCH_SIZE)
         pred = f"p.crm_stage = 'torgi' AND p.award_status = 'submission_open' AND {actionable_submission_sql('p')}"
 
-        rows = self.crm_db.execute_query(
-            f"""
-            SELECT p.id, p.source_table, p.source_id, p.contract_number
-            FROM crm_procurements p
-            WHERE {pred}
-            ORDER BY p.id DESC
-            LIMIT %s
-            """,
-            (target_refill * 4,),
-        ) or []
-
+        last_seen_id = None
+        total_scanned = 0
         admitted_new = 0
-        for r in rows:
+
+        for _ in range(max_pages):
             if admitted_new >= target_refill:
                 break
-            qid, created_new = self.admit_procurement(
-                procurement_id=r["id"],
-                source_table=r["source_table"],
-                source_id=r["source_id"],
-                contract_number=r.get("contract_number"),
-            )
-            if created_new:
-                admitted_new += 1
 
-        return admitted_new
+            where_clause = pred
+            params = [FEED_BATCH_SIZE * 2]
+            if last_seen_id is not None:
+                where_clause += " AND p.id < %s"
+                params = [last_seen_id, FEED_BATCH_SIZE * 2]
+
+            rows = self.crm_db.execute_query(
+                f"""
+                SELECT p.id, p.source_table, p.source_id, p.contract_number
+                FROM crm_procurements p
+                WHERE {where_clause}
+                ORDER BY p.id DESC
+                LIMIT %s
+                """,
+                params,
+            ) or []
+
+            if not rows:
+                break
+
+            total_scanned += len(rows)
+            last_seen_id = rows[-1]["id"]
+
+            for r in rows:
+                if admitted_new >= target_refill:
+                    break
+                qid, created_new = self.admit_procurement(
+                    procurement_id=r["id"],
+                    source_table=r["source_table"],
+                    source_id=r["source_id"],
+                    contract_number=r.get("contract_number"),
+                )
+                if created_new:
+                    admitted_new += 1
+
+        return total_scanned, admitted_new, last_seen_id or 0
