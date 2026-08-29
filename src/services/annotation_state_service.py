@@ -121,13 +121,14 @@ def load_current_annotation_states(procurement_ids: list[int], crm_db: Any) -> d
         outcome = classify_annotation_payload(payload)
         staged = is_staged_complete(payload)
         partial = is_partially_reviewed(payload)
+        is_rev = bool(scope or legacy)
         states[pid] = {
             "has_annotation": True,
             "annotation_id": row.get("id"),
             "annotation_version": row.get("annotation_version"),
             "created_at": row.get("created_at"),
             "annotation_state": outcome,
-            "is_reviewed": staged,
+            "is_reviewed": is_rev,
             "is_category_reviewed": bool(scope),
             "is_staged_complete": staged,
             "is_partial": partial,
@@ -154,7 +155,7 @@ def load_current_annotation_states(procurement_ids: list[int], crm_db: Any) -> d
 def annotation_state_counts(states: dict[int, dict]) -> dict[str, int]:
     """Staged progress counters including commercial secondary filters."""
     total = len(states)
-    reviewed = sum(1 for value in states.values() if value.get("is_staged_complete"))
+    reviewed = sum(1 for value in states.values() if value.get("is_reviewed"))
     out_of_category = sum(
         1 for value in states.values() if value.get("expert_category_scope") == OUT_OF_CATEGORY
     )
@@ -190,9 +191,9 @@ def annotation_state_counts(states: dict[int, dict]) -> dict[str, int]:
 
 
 def count_annotation_states_sql(procurement_ids: list[int], crm_db: Any) -> dict[str, int]:
-    """Compute review filter counts via SQL ??? no full Python load needed.
+    """Compute review filter counts via SQL aggregation ??? no full Python load needed.
 
-    Returns the same keys as annotation_state_counts() but uses SQL aggregation.
+    Returns exact same keys as annotation_state_counts().
     """
     ids = list(dict.fromkeys(int(v) for v in procurement_ids))
     total = len(ids)
@@ -204,43 +205,58 @@ def count_annotation_states_sql(procurement_ids: list[int], crm_db: Any) -> dict
 
     rows = crm_db.execute_query(
         """SELECT
-              payload ->> 'expert_category_scope' AS scope,
+              CASE 
+                WHEN jsonb_typeof(payload -> 'expert_category_scope') = 'object' 
+                THEN payload -> 'expert_category_scope' ->> 'verdict' 
+                ELSE payload ->> 'expert_category_scope' 
+              END AS scope,
               payload ->> 'expert_commercial_entry' AS commercial,
-              CASE WHEN payload ->> 'expert_category_scope' IS NOT NULL
-                        AND payload ->> 'expert_category_scope' != ''
-                   THEN TRUE ELSE FALSE END AS has_scope,
+              payload ->> 'expert_commercial_verdict' AS comm_verdict,
+              payload ->> 'expert_scope_verdict' AS scope_verdict,
+              payload ->> 'expert_medal' AS medal,
+              payload -> 'error_reasons' AS error_reasons,
               count(*) AS cnt
            FROM crm_v3_expert_annotations
            WHERE is_current = TRUE AND procurement_id = ANY(%s)
-           GROUP BY scope, commercial, has_scope""",
+           GROUP BY scope, commercial, comm_verdict, scope_verdict, medal, error_reasons""",
         (ids,),
     )
-    # Accumulate
-    annotated_ids = 0
+    annotated_cnt = 0
     out_cat = 0; in_cat = 0; uncertain = 0
     commercial = 0; non_commercial = 0
-    reviewed = 0; legacy = 0
+    legacy = 0
     for r in (rows or []):
         cnt = int(r["cnt"])
-        annotated_ids += cnt
+        annotated_cnt += cnt
         scope = r.get("scope") or ""
         comm = r.get("commercial") or ""
+        
+        reasons = r.get("error_reasons") or []
+        if isinstance(reasons, str):
+            reasons = [reasons]
+        is_legacy = (not scope) and (
+            r.get("comm_verdict") == "NO_COMMERCIAL_ENTRY"
+            or r.get("scope_verdict") == "OUT_OF_PROFILE"
+            or r.get("medal") == "NCE"
+            or "OUT_OF_PROFILE" in reasons
+        )
+        
         if scope == OUT_OF_CATEGORY:
             out_cat += cnt
-            reviewed += cnt  # OUT is considered reviewed
         elif scope == IN_CATEGORY:
             in_cat += cnt
-            reviewed += cnt
         elif scope == UNCERTAIN:
             uncertain += cnt
-            reviewed += cnt
-        # legacy negative: scope empty but has annotation -> count as legacy
-        if not scope and cnt:
+            
+        if is_legacy:
             legacy += cnt
+
         if comm == COMMERCIAL:
             commercial += cnt
         elif comm == NON_COMMERCIAL:
             non_commercial += cnt
+
+    reviewed = in_cat + out_cat + uncertain + legacy
     not_interesting = legacy + out_cat
     return {
         "ALL": total,
@@ -254,8 +270,8 @@ def count_annotation_states_sql(procurement_ids: list[int], crm_db: Any) -> dict
         LEGACY_NOT_INTERESTING: legacy,
         NOT_INTERESTING: not_interesting,
         PROFILED: max(0, reviewed - out_cat),
-        UNANNOTATED: total - annotated_ids,
-        ANNOTATED: annotated_ids,
+        UNANNOTATED: total - annotated_cnt,
+        ANNOTATED: annotated_cnt,
     }
 
 
@@ -285,3 +301,123 @@ def annotation_filter_sql_clause(selected_state: str) -> str:
     if selected_state == LEGACY_NOT_INTERESTING:
         return "AND ea.id IS NOT NULL AND (ea.payload ->> 'expert_category_scope' IS NULL OR ea.payload ->> 'expert_category_scope' = '')"
     return ""
+
+
+def filter_workset_ids_sql(procurement_ids: list[int], selected_review: str, crm_db: Any) -> list[int]:
+    """Filter procurement_ids by selected review state in SQL before pagination."""
+    if not procurement_ids or selected_review == "ALL":
+        return procurement_ids
+    scope_expr = "CASE WHEN jsonb_typeof(payload -> 'expert_category_scope') = 'object' THEN payload -> 'expert_category_scope' ->> 'verdict' ELSE payload ->> 'expert_category_scope' END"
+    if selected_review == UNREVIEWED:
+        sql = f"""
+            SELECT p_id FROM unnest(%s::bigint[]) AS p_id
+            WHERE p_id NOT IN (
+                SELECT ea.procurement_id 
+                FROM crm_v3_expert_annotations ea
+                WHERE ea.is_current = TRUE AND ea.procurement_id = ANY(%s)
+                  AND (
+                    ({scope_expr} IS NOT NULL AND {scope_expr} != '')
+                    OR (({scope_expr} IS NULL OR {scope_expr} = '') AND (
+                      ea.payload ->> 'expert_commercial_verdict' = 'NO_COMMERCIAL_ENTRY'
+                      OR ea.payload ->> 'expert_scope_verdict' = 'OUT_OF_PROFILE'
+                      OR ea.payload ->> 'expert_medal' = 'NCE'
+                    ))
+                  )
+            )
+        """
+        rows = crm_db.execute_query(sql, (procurement_ids, procurement_ids))
+    elif selected_review == REVIEWED:
+        sql = f"""
+            SELECT ea.procurement_id 
+            FROM crm_v3_expert_annotations ea
+            WHERE ea.is_current = TRUE AND ea.procurement_id = ANY(%s)
+              AND (
+                ({scope_expr} IS NOT NULL AND {scope_expr} != '')
+                OR (({scope_expr} IS NULL OR {scope_expr} = '') AND (
+                  ea.payload ->> 'expert_commercial_verdict' = 'NO_COMMERCIAL_ENTRY'
+                  OR ea.payload ->> 'expert_scope_verdict' = 'OUT_OF_PROFILE'
+                  OR ea.payload ->> 'expert_medal' = 'NCE'
+                ))
+              )
+        """
+        rows = crm_db.execute_query(sql, (procurement_ids,))
+    elif selected_review == OUT_OF_CATEGORY:
+        sql = f"SELECT ea.procurement_id FROM crm_v3_expert_annotations ea WHERE ea.is_current = TRUE AND ea.procurement_id = ANY(%s) AND {scope_expr} = 'OUT_OF_CATEGORY'"
+        rows = crm_db.execute_query(sql, (procurement_ids,))
+    elif selected_review == IN_CATEGORY:
+        sql = f"SELECT ea.procurement_id FROM crm_v3_expert_annotations ea WHERE ea.is_current = TRUE AND ea.procurement_id = ANY(%s) AND {scope_expr} = 'IN_CATEGORY'"
+        rows = crm_db.execute_query(sql, (procurement_ids,))
+    elif selected_review == UNCERTAIN:
+        sql = f"SELECT ea.procurement_id FROM crm_v3_expert_annotations ea WHERE ea.is_current = TRUE AND ea.procurement_id = ANY(%s) AND {scope_expr} = 'UNCERTAIN'"
+        rows = crm_db.execute_query(sql, (procurement_ids,))
+    elif selected_review == COMMERCIAL:
+        sql = f"SELECT ea.procurement_id FROM crm_v3_expert_annotations ea WHERE ea.is_current = TRUE AND ea.procurement_id = ANY(%s) AND ea.payload ->> 'expert_commercial_entry' = 'COMMERCIAL'"
+        rows = crm_db.execute_query(sql, (procurement_ids,))
+    elif selected_review == NON_COMMERCIAL:
+        sql = f"SELECT ea.procurement_id FROM crm_v3_expert_annotations ea WHERE ea.is_current = TRUE AND ea.procurement_id = ANY(%s) AND ea.payload ->> 'expert_commercial_entry' = 'NON_COMMERCIAL'"
+        rows = crm_db.execute_query(sql, (procurement_ids,))
+    elif selected_review == LEGACY_NOT_INTERESTING:
+        sql = f"""
+            SELECT ea.procurement_id FROM crm_v3_expert_annotations ea 
+            WHERE ea.is_current = TRUE AND ea.procurement_id = ANY(%s) 
+              AND ({scope_expr} IS NULL OR {scope_expr} = '')
+              AND (
+                ea.payload ->> 'expert_commercial_verdict' = 'NO_COMMERCIAL_ENTRY'
+                OR ea.payload ->> 'expert_scope_verdict' = 'OUT_OF_PROFILE'
+                OR ea.payload ->> 'expert_medal' = 'NCE'
+              )
+        """
+        rows = crm_db.execute_query(sql, (procurement_ids,))
+    else:
+        rows = []
+    filtered = [r[0] if isinstance(r, (tuple, list)) else r.get("procurement_id") or r.get("p_id") for r in (rows or [])]
+    filtered_set = set(int(x) for x in filtered)
+    return [pid for pid in procurement_ids if pid in filtered_set]
+
+
+LAW_FILTERS = (
+    ("ALL", "\u0412\u0441\u0435"),
+    ("44-\u0424\u0417", "44-\u0424\u0417"),
+    ("223-\u0424\u0417", "223-\u0424\u0417"),
+)
+
+def count_law_states_sql(procurement_ids: list[int], crm_db: Any) -> dict[str, int]:
+    """Compute law filter counts via SQL aggregation."""
+    if not procurement_ids:
+        return {"ALL": 0, "44-\u0424\u0417": 0, "223-\u0424\u0417": 0}
+    rows = crm_db.execute_query(
+        "SELECT source_table, count(*) AS cnt FROM crm_procurements WHERE id = ANY(%s) GROUP BY source_table",
+        (procurement_ids,),
+    )
+    c44 = 0
+    c223 = 0
+    for r in (rows or []):
+        stbl = r.get("source_table")
+        cnt = int(r.get("cnt") or 0)
+        if stbl == "reestr_contract_44_fz":
+            c44 = cnt
+        elif stbl == "reestr_contract_223_fz":
+            c223 = cnt
+    return {
+        "ALL": len(procurement_ids),
+        "44-\u0424\u0417": c44,
+        "223-\u0424\u0417": c223,
+    }
+
+def filter_workset_ids_by_law(procurement_ids: list[int], selected_law: str, crm_db: Any) -> list[int]:
+    """Filter procurement_ids by law in SQL before review filtering and pagination."""
+    if not procurement_ids or selected_law == "ALL":
+        return procurement_ids
+    if selected_law == "44-\u0424\u0417":
+        source_tbl = "reestr_contract_44_fz"
+    elif selected_law == "223-\u0424\u0417":
+        source_tbl = "reestr_contract_223_fz"
+    else:
+        return procurement_ids
+        
+    rows = crm_db.execute_query(
+        "SELECT id FROM crm_procurements WHERE id = ANY(%s) AND source_table = %s",
+        (procurement_ids, source_tbl),
+    )
+    matching = set(r["id"] for r in (rows or []))
+    return [pid for pid in procurement_ids if pid in matching]

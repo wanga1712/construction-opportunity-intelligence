@@ -32,6 +32,8 @@ def category_scope_of(payload: dict | None) -> str | None:
     if not payload:
         return None
     value = payload.get(CATEGORY_SCOPE_FIELD)
+    if isinstance(value, dict):
+        value = value.get("verdict")
     return value if value in CATEGORY_SCOPE_VALUES else None
 
 

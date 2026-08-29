@@ -116,7 +116,10 @@ def torgi_deadline_order_by(sort_mode: str) -> str:
 
 
 def _reset_torgi_page() -> None:
-    st.session_state.pop("torgi_workset_page", None)
+    st.session_state["torgi_workset_page"] = 1
+    for k in list(st.session_state.keys()):
+        if "torgi_workset_page" in k:
+            st.session_state[k] = 1
 
 
 # ─── DB helpers ───────────────────────────────────────────────────────────────
@@ -173,9 +176,10 @@ def _stage_workset_ids(stage: str) -> list[int]:
         conn.close()
 
 
-def _page_offset(stage: str, total: int) -> tuple[int, int]:
+def _page_offset(stage: str, total: int, law_key: str = "ALL") -> tuple[int, int]:
     pages = max(1, (total + _PAGE_SIZE - 1) // _PAGE_SIZE)
-    page = st.number_input("Страница", 1, pages, 1, key=f"{stage}_workset_page")
+    key = f"{stage}_workset_page_{law_key}"
+    page = st.number_input("\u0421\u0442\u0440\u0430\u043d\u0438\u0446\u0430", 1, pages, 1, key=key)
     return int(page), (int(page) - 1) * _PAGE_SIZE
 
 
@@ -487,14 +491,35 @@ _TORGI_AI_FILTERS = ["Все", "Неоцененные", "Неполные оц�
 
 
 
+def _render_law_filter_from_counts(
+    counts: dict[str, int], session_key: str, *, on_change=None
+) -> str:
+    """Render law filter pills using pre-computed SQL counts."""
+    from src.services.annotation_state_service import LAW_FILTERS
+    labels = [f"{label} \u00b7 {counts.get(key, 0)}" for key, label in LAW_FILTERS]
+    key = f"torgi_law_filter_{session_key}"
+    prev_key = f"prev_{key}"
+    selected_label = st.pills(
+        "\u0417\u0430\u043a\u043e\u043d / \u0438\u0441\u0442\u043e\u0447\u043d\u0438\u043a",
+        labels,
+        default=labels[0],
+        key=key,
+        on_change=on_change,
+    )
+    if st.session_state.get(prev_key) != selected_label:
+        st.session_state[prev_key] = selected_label
+        _reset_torgi_page()
+    return LAW_FILTERS[labels.index(selected_label)][0]
+
+
 def _render_review_filter_from_counts(
     counts: dict[str, int], session_key: str, *, on_change=None
 ) -> str:
     """Render review filter pills using pre-computed SQL counts."""
     from src.ui.components.analytics_v2.stage_workspace import FILTERS
-    labels = [f"{label} ?? {counts.get(key, 0)}" for key, label in FILTERS]
+    labels = [f"{label} \u00b7 {counts.get(key, 0)}" for key, label in FILTERS]
     selected_label = st.pills(
-        "??????????????",
+        "\u042d\u043a\u0441\u043f\u0435\u0440\u0442\u043d\u0430\u044f \u0440\u0430\u0437\u043c\u0435\u0442\u043a\u0430",
         labels,
         default=labels[0],
         key=f"annotation_state_filter_{session_key}",
@@ -524,19 +549,28 @@ def _render_torgi_tab() -> None:
     )
     from src.services.annotation_state_service import (
         count_annotation_states_sql,
+        count_law_states_sql,
+        filter_workset_ids_by_law,
+        filter_workset_ids_sql,
         load_current_annotation_states,
     )
     from src.services.db_bootstrap import connect_databases
     _, _, crm_db, _ = connect_databases()
-    # ── SQL-level counts (no full Python workset load) ──
-    sql_counts = count_annotation_states_sql(workset_ids, crm_db)
+    # ?????? Law filter (SQL count & filter) ??????
+    law_counts = count_law_states_sql(workset_ids, crm_db)
+    selected_law = _render_law_filter_from_counts(
+        law_counts, _SESSION_TORGI, on_change=_reset_torgi_page
+    )
+    law_workset_ids = filter_workset_ids_by_law(workset_ids, selected_law, crm_db)
+    # ?????? Expert review filter (SQL count & filter) ??????
+    sql_counts = count_annotation_states_sql(law_workset_ids, crm_db)
     selected_review = _render_review_filter_from_counts(
         sql_counts, _SESSION_TORGI, on_change=_reset_torgi_page
     )
-    # ── Filtered count for pagination ──
-    filtered_total = sql_counts.get(selected_review, sql_counts["ALL"])
-    page, offset = _page_offset("torgi", filtered_total)
-    cards = _load_torgi(_PAGE_SIZE, offset, sort_mode, workset_ids)
+    filtered_workset_ids = filter_workset_ids_sql(law_workset_ids, selected_review, crm_db)
+    filtered_total = len(filtered_workset_ids)
+    page, offset = _page_offset("torgi", filtered_total, selected_law)
+    cards = _load_torgi(_PAGE_SIZE, offset, sort_mode, filtered_workset_ids)
     # ── Page-only annotation state load (max 25 IDs) ──
     page_ids = [c["id"] for c in cards]
     annotation_states = load_current_annotation_states(page_ids, crm_db)
