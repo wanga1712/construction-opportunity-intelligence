@@ -240,3 +240,19 @@ class AutonomousWorker:
                 logger.error(f"Error in daemon loop: {exc}", exc_info=True)
             if processed == 0:
                 time.sleep(sleep_seconds)
+
+
+if __name__ == "__main__":
+    import signal, logging
+    logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(name)s: %(message)s")
+    from src.services.db_bootstrap import connect_databases
+    _, _, crm_db, _ = connect_databases()
+    worker = AutonomousWorker(crm_db)
+
+    def sigterm_handler(signum, frame):
+        worker.stop()
+
+    signal.signal(signal.SIGINT, sigterm_handler)
+    signal.signal(signal.SIGTERM, sigterm_handler)
+
+    worker.run_forever()
