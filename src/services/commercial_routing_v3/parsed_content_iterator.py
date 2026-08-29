@@ -3,7 +3,7 @@ import json, os, re
 from typing import Any, Dict, Generator, List, Optional, Tuple
 import psycopg2, psycopg2.extras
 from src.services.commercial_routing_v3.document_links import resolve_document_links
-from src.services.commercial_routing_v3.factual_feeder import _get_doc_db_conn
+from src.services.commercial_routing_v3.card_research_state import _get_doc_db_conn
 
 @dataclass
 class ParsedUnit:
