@@ -1,7 +1,11 @@
 from pathlib import Path
 from typing import Any, Dict, Tuple
 
-from PyPDF2 import PdfReader
+try:
+    from PyPDF2 import PdfReader
+except ImportError:
+    PdfReader = None
+
 
 from .pdf_table_extractor import PdfTableExtractor
 
