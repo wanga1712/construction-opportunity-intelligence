@@ -15,6 +15,7 @@ class TableLineMatch:
 
     score: int
     winning_cell: Optional[dict] = None
+    match_method: str = "UNKNOWN"
 
 
 def score_table_line(
@@ -54,7 +55,7 @@ def score_table_line(
             if match is None:
                 continue
             if best is None or match.score > best.score:
-                best = TableLineMatch(score=match.score, winning_cell=cell)
+                best = TableLineMatch(score=match.score, winning_cell=cell, match_method=match.match_method)
         return best
 
     match = _score_single_text(
@@ -68,7 +69,7 @@ def score_table_line(
     )
     if match is None:
         return None
-    return TableLineMatch(score=match.score)
+    return TableLineMatch(score=match.score, match_method=match.match_method)
 
 
 def _score_single_text(
@@ -88,7 +89,7 @@ def _score_single_text(
             + r"($|\s|[^a-zA-Z0-9а-яА-Я])"
         )
         if re.search(pattern, text_lower):
-            return TableLineMatch(score=100)
+            return TableLineMatch(score=100, match_method="EXACT")
         return None
 
     if len(text_lower) < max(3, int(kw_len * 0.3)):
@@ -96,21 +97,24 @@ def _score_single_text(
 
     if len(text_lower) < kw_len * 1.5:
         score = int(fuzz.ratio(keyword, text_lower))
+        method = "FUZZY_RATIO"
     elif kw_len < len(text_lower):
         score = int(fuzz.partial_ratio(keyword, text_lower))
+        method = "FUZZY_TOKEN_SET"
     else:
         score = int(fuzz.token_set_ratio(keyword, text_lower))
+        method = "FUZZY_TOKEN_SET"
 
     if score >= required_score:
         if len(kw_words) >= 2 and not _word_coverage_ok(kw_words, text_lower, normalize_line):
             return None
         if not numbers_match(keyword, text_lower):
             return None
-        return TableLineMatch(score=score)
+        return TableLineMatch(score=score, match_method=method)
 
     if score >= 50 and len(kw_words) >= 2:
         if _word_coverage_ok(kw_words, text_lower, normalize_line) and numbers_match(keyword, text_lower):
-            return TableLineMatch(score=required_score)
+            return TableLineMatch(score=required_score, match_method="STEM_PREFIX")
     return None
 
 

@@ -141,6 +141,8 @@ def match_composite_drainage(
             "matched_line": original_line,
             "matched_display_text": original_line,
             "match_rule": "composite_drainage_compound",
+            "match_method": "COMPOUND_RULE",
+            "validation_status": "UNKNOWN",
             "product_group": "composites",
         }
         if line_number in meta:

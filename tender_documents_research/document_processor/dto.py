@@ -19,6 +19,13 @@ class MatchDetailResult:
     row_number: int
     context_before: Dict[str, Any] = field(default_factory=dict)
     context_after: Dict[str, Any] = field(default_factory=dict)
+    match_method: str = "UNKNOWN"
+    validation_status: str = "UNKNOWN"
+    validation_method: Optional[str] = None
+    validation_reason: Optional[str] = None
+    validated_at: Optional[Any] = None
+    validator_name: Optional[str] = None
+    validator_version: Optional[str] = None
 
 @dataclass
 class MatchResult:
@@ -33,6 +40,9 @@ class EvidenceResult:
     evidence_score: float
     match_count: int
     next_stage: str = "STRUCTURED_EXTRACTION_PENDING"
+    validation_status: str = "CONFIRMED"
+    validation_version: str = "v1"
+    validation_method: Optional[str] = None
 
 @dataclass
 class FileProcessResult:

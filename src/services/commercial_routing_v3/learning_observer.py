@@ -227,10 +227,15 @@ class LearningObserver:
                     with doc_conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as d_cur:
                         d_cur.execute("""
                             SELECT f.canonical_source_document_id as source_document_id, f.download_status, f.downloaded_at, f.created_at as file_created_at,
-                                   r.status as parse_status, r.completed_at as parse_completed_at
+                                   r.status as parse_status, r.completed_at as parse_completed_at,
+                                   COALESCE(SUM(CASE WHEN d.validation_status = 'CONFIRMED' THEN 1 ELSE 0 END), 0) as confirmed_count,
+                                   COALESCE(SUM(CASE WHEN d.validation_status IN ('UNKNOWN', 'PENDING', 'RAW') OR d.validation_status IS NULL THEN 1 ELSE 0 END), 0) as unknown_match_count
                             FROM document_files f
                             LEFT JOIN document_processing_results r ON f.id = r.file_id
+                            LEFT JOIN document_matches m ON r.id = m.result_id
+                            LEFT JOIN document_match_details d ON m.id = d.match_id
                             WHERE f.procurement_id = %s AND f.pipeline_generation = %s
+                            GROUP BY f.canonical_source_document_id, f.download_status, f.downloaded_at, f.created_at, r.status, r.completed_at
                         """, (pid, PIPELINE_GENERATION))
                         doc_results = d_cur.fetchall()
 
@@ -267,14 +272,20 @@ class LearningObserver:
                         dl_st = str(dr.get("download_status") or "").upper()
                         pr_st = str(dr.get("parse_status") or "").upper() if dr.get("parse_status") else None
                         p_at = dr.get("parse_completed_at") or dr.get("downloaded_at") or dr.get("file_created_at")
+                        confirmed_cnt = int(dr.get("confirmed_count") or 0)
+                        unknown_match_cnt = int(dr.get("unknown_match_count") or 0)
 
                         if p_at and (max_parse_at is None or p_at > max_parse_at):
                             max_parse_at = p_at
 
                         if dl_st == "COMPLETED" and pr_st == "COMPLETED":
-                            if d_id and d_id in ev_doc_ids:
+                            if confirmed_cnt > 0 or (d_id and d_id in ev_doc_ids):
                                 useful_docs.append(d_item)
+                            elif unknown_match_cnt > 0:
+                                # Unresolved candidate matches exist -> UNKNOWN, cannot declare NO
+                                unknown_docs.append(d_item)
                             else:
+                                # Parse complete, confirmed=0 AND unknown=0 -> NO_TARGET_EVIDENCE
                                 non_useful_docs.append(d_item)
                         else:
                             # Any failure/unsupported/unreadable/missing parse result -> UNKNOWN

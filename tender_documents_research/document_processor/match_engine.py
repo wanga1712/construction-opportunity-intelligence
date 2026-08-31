@@ -99,6 +99,7 @@ class MatchEngine:
 
             is_bm_keyword = bool(bm_strict_pattern.match(keyword))
             use_strict_match = is_bm_keyword or len(keyword) <= 5
+            match_method = "EXACT" if use_strict_match else "UNKNOWN"
 
             if use_strict_match:
                 found_exact = False
@@ -135,13 +136,16 @@ class MatchEngine:
                         continue
 
                     if line_len < kw_len * 1.5:
-                        score = fuzz.ratio(keyword, line)
+                        score = int(fuzz.ratio(keyword, line))
+                        curr_method = "FUZZY_RATIO"
                     else:
-                        score = fuzz.token_set_ratio(keyword, line)
+                        score = int(fuzz.token_set_ratio(keyword, line))
+                        curr_method = "FUZZY_TOKEN_SET"
 
                     if score > best_score:
                         best_score = score
                         best_line_idx = idx
+                        match_method = curr_method
 
                 if best_score < required_score:
                     if best_score >= 50 and len(kw_words) >= 2 and best_line_idx >= 0:
@@ -166,6 +170,7 @@ class MatchEngine:
                             coverage = words_present / len(meaningful_words)
                             if coverage >= 0.8:
                                 best_score = required_score
+                                match_method = "STEM_PREFIX"
                             else:
                                 continue
                         else:
@@ -227,6 +232,8 @@ class MatchEngine:
                 "level": level,
                 "line_number": line_number,
                 "matched_line": matched_line,
+                "match_method": match_method,
+                "validation_status": "UNKNOWN",
             }
             if line_number in meta:
                 extra = meta[line_number]

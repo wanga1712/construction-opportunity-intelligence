@@ -100,32 +100,46 @@ class S13V2TaskPersistenceService:
                                 for detail in match.details:
                                     cursor.execute("""
                                         INSERT INTO document_match_details
-                                        (match_id, procurement_id, category_code, subcategory_code, matched_term, term_type, score, row_data, page_or_sheet, row_number, context_before, context_after, pipeline_generation)
-                                        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                                        (match_id, procurement_id, category_code, subcategory_code, matched_term, term_type, score, row_data, page_or_sheet, row_number, context_before, context_after, match_method, validation_status, validation_method, validation_reason, validated_at, validator_name, validator_version, pipeline_generation)
+                                        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
                                     """, (
                                         match_id, result.procurement_id, detail.category_code, detail.subcategory_code,
                                         detail.matched_term, detail.term_type, detail.score,
                                         json.dumps(detail.row_data), detail.page_or_sheet, detail.row_number,
                                         json.dumps(detail.context_before), json.dumps(detail.context_after),
+                                        getattr(detail, "match_method", "UNKNOWN") or "UNKNOWN",
+                                        getattr(detail, "validation_status", "UNKNOWN") or "UNKNOWN",
+                                        getattr(detail, "validation_method", None),
+                                        getattr(detail, "validation_reason", None),
+                                        getattr(detail, "validated_at", None),
+                                        getattr(detail, "validator_name", None),
+                                        getattr(detail, "validator_version", None),
                                         self.pipeline_generation
                                     ))
 
-                # 3. Persist Evidence
+                # 3. Persist Evidence (Only for explicitly confirmed evidence)
                 for ev in result.evidence:
                     if ev.category_code == "processed":
                         continue
                     cursor.execute("""
                         INSERT INTO document_evidence
-                        (procurement_id, queue_id, category_code, evidence_score, match_count, next_stage, pipeline_generation)
-                        VALUES (%s, %s, %s, %s, %s, %s, %s)
+                        (procurement_id, queue_id, category_code, evidence_score, match_count, next_stage, validation_status, validation_version, validation_method, pipeline_generation)
+                        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
                         ON CONFLICT (procurement_id, category_code, pipeline_generation)
                         DO UPDATE SET
                             evidence_score = EXCLUDED.evidence_score,
-                            match_count = EXCLUDED.match_count
+                            match_count = EXCLUDED.match_count,
+                            validation_status = EXCLUDED.validation_status,
+                            validation_version = EXCLUDED.validation_version,
+                            validation_method = EXCLUDED.validation_method
                             
                     """, (
                         result.procurement_id, result.queue_id, ev.category_code,
-                        ev.evidence_score, ev.match_count, ev.next_stage, self.pipeline_generation
+                        ev.evidence_score, ev.match_count, ev.next_stage,
+                        getattr(ev, "validation_status", "CONFIRMED") or "CONFIRMED",
+                        getattr(ev, "validation_version", "v1") or "v1",
+                        getattr(ev, "validation_method", None),
+                        self.pipeline_generation
                     ))
 
                 cursor.execute(

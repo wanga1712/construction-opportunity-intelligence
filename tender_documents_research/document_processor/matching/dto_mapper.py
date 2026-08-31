@@ -47,5 +47,13 @@ def to_match_detail(
         page_or_sheet=str(item.get("page_number", item.get("sheet_name", "1"))),
         row_number=item.get("line_number", -1),
         context_before=item.get("context_before", {}),
-        context_after=item.get("context_after", {})
+        context_after=item.get("context_after", {}),
+        match_method=str(item.get("match_method", "UNKNOWN") or "UNKNOWN"),
+        validation_status=str(item.get("validation_status", "UNKNOWN") or "UNKNOWN"),
+        validation_method=item.get("validation_method"),
+        validation_reason=item.get("validation_reason"),
+        validated_at=item.get("validated_at"),
+        validator_name=item.get("validator_name"),
+        validator_version=item.get("validator_version"),
     )
+

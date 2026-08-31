@@ -78,6 +78,8 @@ class TableRowMatcher:
                 "level": level,
                 "line_number": line_number,
                 "matched_line": matched_line,
+                "match_method": getattr(line_match, "match_method", "UNKNOWN") or "UNKNOWN",
+                "validation_status": "UNKNOWN",
             }
 
             for key, value in extra.items():

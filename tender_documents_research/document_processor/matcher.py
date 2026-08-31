@@ -308,6 +308,7 @@ class KeywordMatcher:
             #    (e.g. "act" matching "factor", "75.00" matching "175.00")
             # 3. Lite mode: low LLM priority category (exact match only, no fuzzy)
             use_strict_match = is_bm_keyword or len(keyword) <= 5 or _lite_mode
+            match_method = "EXACT" if use_strict_match else "UNKNOWN"
 
             if use_strict_match:
                 found_exact = False
@@ -355,13 +356,16 @@ class KeywordMatcher:
                     #   token_set_ratio лучше работает с перестановками и лишними словами,
                     #   но не матчит "обрывки" как partial_ratio.
                     if line_len < kw_len * 1.5:
-                        score = fuzz.ratio(keyword, line)
+                        score = int(fuzz.ratio(keyword, line))
+                        curr_method = "FUZZY_RATIO"
                     else:
-                        score = fuzz.token_set_ratio(keyword, line)
+                        score = int(fuzz.token_set_ratio(keyword, line))
+                        curr_method = "FUZZY_TOKEN_SET"
 
                     if score > best_score:
                         best_score = score
                         best_line_idx = idx
+                        match_method = curr_method
 
                 if best_score < required_score:
                     # Fallback: если score между 50 и threshold, проверяем stem coverage
@@ -390,6 +394,7 @@ class KeywordMatcher:
                             if coverage >= 0.8:
                                 # Все корни слов найдены — принимаем как yellow match
                                 best_score = required_score  # Повышаем до порога
+                                match_method = "STEM_PREFIX"
                             else:
                                 continue
                         else:
@@ -463,6 +468,8 @@ class KeywordMatcher:
                 "level": level,
                 "line_number": line_number,
                 "matched_line": matched_line,
+                "match_method": match_method,
+                "validation_status": "UNKNOWN",
             }
             if keyword_meta:
                 item["taxonomy"] = {
