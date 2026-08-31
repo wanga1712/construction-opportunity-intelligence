@@ -426,8 +426,34 @@ def _dedupe_by_lifecycle(rows: Sequence[Dict[str, Any]]) -> List[Dict[str, Any]]
 
 def _upsert_one(crm_db, row: Dict[str, Any], existing: Optional[Dict[str, Any]], dry_run: bool) -> str:
     """Return action: insert|update|reconcile|duplicate|error."""
+    effective_start = row.get("start_date")
+    effective_end = row.get("end_date")
+
+    is_223 = str(row.get("source_table") or "").startswith("reestr_contract_223_fz")
+    if is_223:
+        source_created = row.get("source_created_at")
+        if isinstance(source_created, str):
+            try:
+                if " " in source_created:
+                    source_created = datetime.strptime(source_created.split(".")[0], "%Y-%m-%d %H:%M:%S")
+                else:
+                    source_created = datetime.fromisoformat(source_created.replace("Z", "+00:00")).replace(tzinfo=None)
+            except Exception:
+                source_created = None
+        elif isinstance(source_created, datetime):
+            source_created = source_created.replace(tzinfo=None)
+
+        is_stale_source = False
+        if source_created:
+            if source_created < datetime(2026, 8, 16):
+                is_stale_source = True
+
+        if is_stale_source:
+            effective_start = existing.get("start_date") if existing else None
+            effective_end = existing.get("end_date") if existing else None
+
     stage = stage_from_source_table(str(row.get("source_table") or ""))
-    crm_stage, award_status = _crm_stage_for(str(row.get("source_table") or ""), row.get("end_date"), stage)
+    crm_stage, award_status = _crm_stage_for(str(row.get("source_table") or ""), effective_end, stage)
     cn = normalize_contract_number(row.get("contract_number")) or ""
     title = (str(row.get("auction_name")).strip() if row.get("auction_name") is not None else "") or ""
     okpd_code = row.get("okpd_code")
@@ -455,8 +481,8 @@ def _upsert_one(crm_db, row: Dict[str, Any], existing: Optional[Dict[str, Any]],
         "region_id": row.get("region_id"),
         "okpd_code": okpd_code,
         "okpd_name": okpd_name,
-        "start_date": row.get("start_date"),
-        "end_date": row.get("end_date"),
+        "start_date": effective_start,
+        "end_date": effective_end,
         "delivery_start_date": row.get("delivery_start_date"),
         "delivery_end_date": row.get("delivery_end_date"),
         "tender_link": tender_link,

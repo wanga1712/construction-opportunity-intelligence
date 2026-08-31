@@ -11,7 +11,11 @@
 - Размер рабочего Python-модуля: до 300 строк — желательно; 300–450 допустимо при цельности; свыше 450 требуется записанное объяснение или декомпозиция.
 - Изменение поведения сначала фиксируется тестом или явно записанным ожидаемым результатом.
 
-## CURRENT WIP — 2026-08-27
+## CURRENT WIP — 2026-08-31
+
+**CRM-V3-LAUNCH-R2-223FZ-DATE-RECONCILIATION-1** — `[x]` **PASS / STOP**. Baseline GitHub `7807efa` / S13 start `7807efa`. Scope: `223FZ_DATE_CORRECTNESS_ONLY`. Protected sync mapping in `projection_writer.py` from overwriting CRM deadlines with execution/delivery dates on stale records. Reconciled 24 affected CRM rows based on factual source dates. Verified that normal sync has 0 pending reconciliations and does not reintroduce the bug. Implementation: copy to S13 completed, checked against S7. Tests and AppTest passed. Walkthrough report in walkthrough artifact. STOP after WIP.
+
+## PRIOR CURRENT WIP — 2026-08-27
 
 **CRM-V3-EXPERT-PRODUCT-CATEGORY-AND-COMMERCIAL-MEDAL-STAGE-1** — `[~]` **IN PROGRESS**. Baseline GitHub `8a96424` / S13 start `6b38299`. Extends staged annotation with product subcategory, `expert_commercial_entry` (≠ source contour), and human medal GOLD–WOOD for IN_CATEGORY+COMMERCIAL. OUT_OF_CATEGORY / NON_COMMERCIAL do not require medal. No model/publication/DDL. Report: `docs/reports/expert_product_category_commercial_medal_stage/IMPLEMENTATION_AND_PRODUCTION_ACCEPTANCE.md`.
 
