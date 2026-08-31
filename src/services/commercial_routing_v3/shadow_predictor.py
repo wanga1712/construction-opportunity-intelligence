@@ -16,6 +16,7 @@ import os
 import sys
 import json
 import time
+import hashlib
 import requests
 import psycopg2
 import psycopg2.extras
@@ -35,6 +36,13 @@ PROMPT_VERSION = "v3_pre_research_shadow_v1"
 
 VALID_DECISIONS = {"YES", "NO", "UNCERTAIN"}
 VALID_PRIORITIES = {"GOLD_CANDIDATE", "SILVER_CANDIDATE", "BRONZE_CANDIDATE", "LOW_PRIORITY", "UNSCORED"}
+
+def compute_sha256(val: Any) -> str:
+    if isinstance(val, (dict, list)):
+        s = json.dumps(val, sort_keys=True, ensure_ascii=False)
+    else:
+        s = str(val or "")
+    return hashlib.sha256(s.encode("utf-8")).hexdigest()
 
 def get_crm_db():
     user = os.environ.get("CRM_DB_USER", "crm_app")
@@ -180,8 +188,16 @@ def release_pre_research_queue(
                 UPDATE document_processing_queue
                 SET status = 'PENDING',
                     category_context = %s
-                WHERE id = %s AND pipeline_generation = %s AND research_generation_hash = %s AND status = 'PRE_RESEARCH_WAITING'
-            """, (json.dumps(context), queue_id, pipeline_generation, research_generation_hash))
+                WHERE id = %s 
+                  AND procurement_id = %s 
+                  AND pipeline_generation = %s 
+                  AND (
+                      research_generation_hash = %s 
+                      OR (research_generation_hash IS NULL AND (%s IS NULL OR %s = ''))
+                      OR (research_generation_hash = '' AND (%s IS NULL OR %s = ''))
+                  )
+                  AND status = 'PRE_RESEARCH_WAITING'
+            """, (json.dumps(context), queue_id, procurement_id, pipeline_generation, research_generation_hash, research_generation_hash, research_generation_hash, research_generation_hash, research_generation_hash))
         doc_conn.commit()
         print(f"Released queue row {queue_id} (procurement {procurement_id}) to PENDING with mode {context['learning_sample_mode']}")
     except Exception as exc:
@@ -208,7 +224,7 @@ class ShadowPredictor:
                     SELECT id as queue_id, procurement_id, pipeline_generation, research_generation_hash, category_context
                     FROM document_processing_queue
                     WHERE status = 'PRE_RESEARCH_WAITING' AND pipeline_generation = %s
-                    ORDER BY id ASC LIMIT 1
+                    ORDER BY id DESC LIMIT 1
                 """, (PIPELINE_GENERATION,))
                 queue_row = doc_cur.fetchone()
         except Exception as exc:
@@ -224,6 +240,7 @@ class ShadowPredictor:
         queue_id = queue_row["queue_id"]
         pipeline_generation = queue_row["pipeline_generation"]
         gen_hash = queue_row["research_generation_hash"]
+        effective_gen_hash = gen_hash or compute_sha256(pid)
         cat_ctx = queue_row["category_context"]
         if isinstance(cat_ctx, str):
             cat_ctx = json.loads(cat_ctx)
@@ -266,7 +283,7 @@ class ShadowPredictor:
                     FROM crm_v3_pre_research_snapshots
                     WHERE procurement_id = %s AND pipeline_generation = %s AND research_generation_hash = %s
                     LIMIT 1
-                """, (pid, pipeline_generation, gen_hash))
+                """, (pid, pipeline_generation, effective_gen_hash))
                 snap = cur.fetchone()
         except Exception as exc:
             print(f"Failed to query snapshots in CRM DB: {exc}", file=sys.stderr)
@@ -379,7 +396,7 @@ class ShadowPredictor:
                             producer_version, created_at
                         ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, NOW())
                     """, (
-                        snap["snapshot_id"], run_id, pid, gen_hash,
+                        snap["snapshot_id"], run_id, pid, effective_gen_hash,
                         prob, decision, prio, json.dumps(pred_cats), json.dumps(doc_rank), conf, PRODUCER_VERSION
                     ))
                     print(f"Shadow prediction created for procurement {pid} (decision={decision}, prob={prob})")
