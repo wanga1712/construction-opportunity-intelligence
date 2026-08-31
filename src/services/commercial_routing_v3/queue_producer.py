@@ -235,11 +235,17 @@ class CommercialRoutingV3QueueProducer:
         Every eligible procurement enters queue at lane=open_active, priority=50.
         """
         from src.services.commercial_routing_v3.document_links import batch_count_document_links
-        from src.services.commercial_routing_v3.okpd_priors import load_okpd_priors_from_db, match_okpd_priors
+        from src.services.commercial_routing_v3.okpd_priors import (
+            ADMISSION_OUT_OF_TARGET,
+            ADMISSION_TARGET,
+            ADMISSION_UNKNOWN_OKPD,
+            classify_target_okpd,
+            load_okpd_priors_from_db,
+        )
 
         inserted = updated = skipped_already_active = errors = 0
+        skipped_out_of_target = skipped_unknown_okpd = 0
         target_waiting_inserted = target_waiting_updated = 0
-        out_of_target_failed_inserted = out_of_target_failed_updated = 0
         no_links_inserted = no_links_updated = 0
         offset = 0
 
@@ -292,39 +298,37 @@ class CommercialRoutingV3QueueProducer:
                         if max_total and (inserted + updated) >= max_total:
                             break
                         try:
-                            okpd = proc.get("okpd_code") or ""
-                            matched = match_okpd_priors(okpd, priors)
-                            is_target = bool(matched)
+                            okpd = proc.get("okpd_code")
+                            classification, matched_priors = classify_target_okpd(okpd, priors)
 
+                            if classification == ADMISSION_OUT_OF_TARGET:
+                                skipped_out_of_target += 1
+                                continue
+
+                            if classification == ADMISSION_UNKNOWN_OKPD:
+                                skipped_unknown_okpd += 1
+                                continue
+
+                            # TARGET procurement
                             lc = link_counts.get(pid, 0)
 
-                            if not is_target:
-                                status = "FAILED"
-                                last_error = "OUT_OF_TARGET_OKPD"
-                                category_context = {
-                                    "populate_method": "EXHAUSTIVE_ALL_ELIGIBLE",
-                                    "AI_QUEUE_ADMISSION_GATE": "NO",
-                                    "link_count": lc,
-                                    "OUT_OF_TARGET_CAN_ENTER_TRAINING": "NO",
-                                    "exclusion_reason": "OUT_OF_TARGET_OKPD",
-                                }
-                            elif lc == 0:
+                            if lc == 0:
                                 status = "NO_LINKS"
-                                last_error = None
                                 category_context = {
                                     "populate_method": "EXHAUSTIVE_ALL_ELIGIBLE",
                                     "AI_QUEUE_ADMISSION_GATE": "NO",
                                     "link_count": 0,
                                     "exclusion_reason": "NO_CANONICAL_DOCUMENTS",
                                 }
+                                dispatchable = False
                             else:
                                 status = "PRE_RESEARCH_WAITING"
-                                last_error = None
                                 category_context = {
                                     "populate_method": "EXHAUSTIVE_ALL_ELIGIBLE",
                                     "AI_QUEUE_ADMISSION_GATE": "NO",
                                     "link_count": lc,
                                 }
+                                dispatchable = True
 
                             task = {
                                 "procurement_id": pid,
@@ -332,7 +336,11 @@ class CommercialRoutingV3QueueProducer:
                                 "source_id": proc.get("source_id"),
                                 "contract_number": proc.get("contract_number"),
                                 "assessment_id": None,
-                                "category_codes": [],
+                                "category_codes": [
+                                    p.get("commercial_category_code")
+                                    for p in matched_priors
+                                    if p.get("commercial_category_code")
+                                ],
                                 "category_context": category_context,
                                 "candidate_level": None,
                                 "candidate_score": None,
@@ -340,7 +348,7 @@ class CommercialRoutingV3QueueProducer:
                                 "research_depth": "highest",
                                 "queue_lane": "open_active",
                                 "priority_score": 50,
-                                "dispatchable": is_target and lc > 0,
+                                "dispatchable": dispatchable,
                             }
 
                             if dry_run:
@@ -359,22 +367,18 @@ class CommercialRoutingV3QueueProducer:
                                         else:
                                             action = "updated"
                             else:
-                                result = self._upsert_queue_task(task, status=status, last_error=last_error, conn=doc_conn)
+                                result = self._upsert_queue_task(task, status=status, conn=doc_conn)
                                 action = result.get("action")
 
                             if action == "inserted":
                                 inserted += 1
-                                if not is_target:
-                                    out_of_target_failed_inserted += 1
-                                elif lc == 0:
+                                if lc == 0:
                                     no_links_inserted += 1
                                 else:
                                     target_waiting_inserted += 1
                             elif action == "updated":
                                 updated += 1
-                                if not is_target:
-                                    out_of_target_failed_updated += 1
-                                elif lc == 0:
+                                if lc == 0:
                                     no_links_updated += 1
                                 else:
                                     target_waiting_updated += 1
@@ -404,14 +408,14 @@ class CommercialRoutingV3QueueProducer:
             "inserted": inserted,
             "updated": updated,
             "skipped_already_active": skipped_already_active,
+            "skipped_out_of_target": skipped_out_of_target,
+            "skipped_unknown_okpd": skipped_unknown_okpd,
             "target_waiting_inserted": target_waiting_inserted,
             "target_waiting_updated": target_waiting_updated,
-            "out_of_target_failed_inserted": out_of_target_failed_inserted,
-            "out_of_target_failed_updated": out_of_target_failed_updated,
             "no_links_inserted": no_links_inserted,
             "no_links_updated": no_links_updated,
             "errors": errors,
-            "total_processed": inserted + updated + skipped_already_active + errors,
+            "total_processed": inserted + updated + skipped_already_active + skipped_out_of_target + skipped_unknown_okpd + errors,
             "dry_run": dry_run,
         }
 

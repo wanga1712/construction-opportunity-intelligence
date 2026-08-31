@@ -119,3 +119,38 @@ def priors_for_category(
         for p in match_okpd_priors(okpd_code, priors)
         if p.get("commercial_category_code") == category_code
     ]
+
+
+ADMISSION_TARGET = "TARGET"
+ADMISSION_OUT_OF_TARGET = "OUT_OF_TARGET"
+ADMISSION_UNKNOWN_OKPD = "UNKNOWN_OKPD"
+
+
+def classify_target_okpd(
+    okpd_code: Optional[str],
+    priors: List[Dict[str, Any]],
+    *,
+    ancestry_codes: Optional[List[str]] = None,
+) -> Tuple[str, List[Dict[str, Any]]]:
+    """Canonical deterministic admission helper for OKPD target classification.
+
+    Returns:
+        (classification, matched_target_priors)
+        where classification is one of:
+          - 'UNKNOWN_OKPD': no OKPD, blank, or unresolved
+          - 'TARGET': OKPD matches active canonical target priors
+          - 'OUT_OF_TARGET': OKPD is present but has no matching active target priors
+    """
+    raw_code = str(okpd_code or "").strip()
+    if not raw_code:
+        return ADMISSION_UNKNOWN_OKPD, []
+
+    norm = normalize_okpd_code(raw_code)
+    if not norm:
+        return ADMISSION_UNKNOWN_OKPD, []
+
+    matched = match_okpd_priors(norm, priors, ancestry_codes=ancestry_codes)
+    if matched:
+        return ADMISSION_TARGET, matched
+    return ADMISSION_OUT_OF_TARGET, []
+

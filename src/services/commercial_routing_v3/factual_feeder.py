@@ -54,12 +54,12 @@ class FactualFeeder:
         self.crm_db = crm_db
 
     def get_queue_depth(self) -> int:
-        """Get count of active (PENDING / RUNNING / RETRY / PROCESSING) tasks in document_processing_queue."""
+        """Get count of active (PRE_RESEARCH_WAITING / PENDING / RUNNING / RETRY / PROCESSING) tasks in document_processing_queue."""
         conn = _get_doc_db_conn()
         try:
             with conn.cursor() as cur:
                 cur.execute(
-                    "SELECT COUNT(*) FROM document_processing_queue WHERE pipeline_generation = %s AND status IN ('PENDING', 'RUNNING', 'RETRY', 'PROCESSING')",
+                    "SELECT COUNT(*) FROM document_processing_queue WHERE pipeline_generation = %s AND status IN ('PRE_RESEARCH_WAITING', 'PENDING', 'RUNNING', 'RETRY', 'PROCESSING')",
                     (PIPELINE_GENERATION,),
                 )
                 res = cur.fetchone()
@@ -89,15 +89,40 @@ class FactualFeeder:
         source_table = proc.get("source_table") or ""
         source_id = proc.get("source_id")
         contract_number = proc.get("contract_number")
-        okpd = proc.get("okpd_code") or ""
+        okpd = proc.get("okpd_code")
 
         if priors is None:
             from src.services.commercial_routing_v3.okpd_priors import load_okpd_priors_from_db
             priors = load_okpd_priors_from_db(self.crm_db)
 
-        from src.services.commercial_routing_v3.okpd_priors import match_okpd_priors
-        matched = match_okpd_priors(okpd, priors)
-        is_target = bool(matched)
+        from src.services.commercial_routing_v3.okpd_priors import (
+            ADMISSION_OUT_OF_TARGET,
+            ADMISSION_TARGET,
+            ADMISSION_UNKNOWN_OKPD,
+            classify_target_okpd,
+        )
+
+        classification, matched = classify_target_okpd(okpd, priors)
+
+        # OUT_OF_TARGET: must not enter research queue
+        if classification == ADMISSION_OUT_OF_TARGET:
+            return {
+                "procurement_id": procurement_id,
+                "admitted": False,
+                "reason": "OUT_OF_TARGET_OKPD",
+                "classification": ADMISSION_OUT_OF_TARGET,
+                "doc_count": 0,
+            }
+
+        # UNKNOWN_OKPD: must not enter executable research queue
+        if classification == ADMISSION_UNKNOWN_OKPD:
+            return {
+                "procurement_id": procurement_id,
+                "admitted": False,
+                "reason": "UNKNOWN_OKPD",
+                "classification": ADMISSION_UNKNOWN_OKPD,
+                "doc_count": 0,
+            }
 
         # Resolve canonical document links
         from src.services.commercial_routing_v3.card_research_state import compute_research_generation_hash
@@ -125,26 +150,21 @@ class FactualFeeder:
                 row = cur.fetchone()
                 if row:
                     st = row.get("status")
-                    if st in ("PENDING", "RUNNING", "RETRY", "PROCESSING", "COMPLETED", "FAILED", "NO_LINKS"):
+                    if st in ("PRE_RESEARCH_WAITING", "PENDING", "RUNNING", "RETRY", "PROCESSING", "COMPLETED", "FAILED", "NO_LINKS"):
                         return {
                             "procurement_id": procurement_id,
                             "admitted": False,
                             "reason": f"ALREADY_IN_QUEUE_STATUS_{st}",
+                            "classification": ADMISSION_TARGET,
                             "doc_count": len(links),
                         }
 
-                # Determine status and context
-                if not is_target:
-                    status = "FAILED"
-                    last_error = "OUT_OF_TARGET_OKPD"
-                    category_context = {"OUT_OF_TARGET_CAN_ENTER_TRAINING": "NO"}
-                elif not links:
+                # Determine status and context: TARGET procurement begins as PRE_RESEARCH_WAITING (or NO_LINKS)
+                if not links:
                     status = "NO_LINKS"
-                    last_error = None
                     category_context = {"exclusion_reason": "NO_CANONICAL_DOCUMENTS"}
                 else:
-                    status = "PENDING"
-                    last_error = None
+                    status = "PRE_RESEARCH_WAITING"
                     category_context = {}
 
                 # Enqueue factual task with ON CONFLICT clause
@@ -153,11 +173,11 @@ class FactualFeeder:
                     INSERT INTO document_processing_queue (
                         procurement_id, source_table, source_id, contract_number,
                         research_action, queue_lane, priority_score, status,
-                        pipeline_generation, research_generation_hash, category_context, last_error, created_at
+                        pipeline_generation, research_generation_hash, category_context, created_at
                     ) VALUES (
                         %s, %s, %s, %s,
                         'FACTUAL_FEEDER_ADMITTED', 'open_active', 50, %s,
-                        %s, %s, %s, %s, NOW()
+                        %s, %s, %s, NOW()
                     )
                     ON CONFLICT (procurement_id, pipeline_generation, research_generation_hash) DO NOTHING
                     RETURNING id
@@ -171,7 +191,6 @@ class FactualFeeder:
                         PIPELINE_GENERATION,
                         gen_hash,
                         psycopg2.extras.Json(category_context),
-                        last_error,
                     ),
                 )
                 res = cur.fetchone()
@@ -180,11 +199,11 @@ class FactualFeeder:
 
                 return {
                     "procurement_id": procurement_id,
-                    "admitted": status == "PENDING",
+                    "admitted": status == "PRE_RESEARCH_WAITING",
+                    "classification": ADMISSION_TARGET,
                     "queue_task_id": new_id,
                     "doc_count": len(links),
                     "status": status,
-                    "last_error": last_error,
                 }
         finally:
             conn.close()
