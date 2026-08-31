@@ -316,6 +316,8 @@ class ShadowPredictor:
             "}"
         )
         user_prompt = (
+            f"ALLOWED CATEGORIES (you must only use category_code values from this list):\n"
+            f"{json.dumps(list(active_cats or []), ensure_ascii=False)}\n\n"
             f"PROCUREMENT SOURCE METADATA:\n{json.dumps(source_json, ensure_ascii=False, indent=2)}\n\n"
             f"DOCUMENT MANIFEST:\n{json.dumps(manifest_json, ensure_ascii=False, indent=2)}"
         )
