@@ -1,0 +1,19 @@
+[Unit]
+Description=CRM V3 Factual Procurement Feeder Service
+After=network.target
+
+[Service]
+Type=simple
+User=sergey
+Group=sergey
+WorkingDirectory=/opt/CRM_Streamlit
+EnvironmentFile=/opt/CRM_Streamlit/.env
+Environment=PYTHONPATH=/opt/CRM_Streamlit:/opt/pythonProject89
+Environment=LOG_LEVEL=INFO
+Environment=LOG_FILE=/tmp/factual_feeder.log
+ExecStart=/opt/CRM_Streamlit/.venv313/bin/python -m src.services.commercial_routing_v3.factual_feeder
+Restart=always
+RestartSec=10
+
+[Install]
+WantedBy=multi-user.target

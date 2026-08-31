@@ -5,7 +5,7 @@ After=network.target postgresql.service
 [Service]
 Type=oneshot
 User=sergey
-WorkingDirectory=/opt/CRM_Streamlit_rescue
-ExecStart=/opt/CRM_Streamlit/.venv313/bin/python /opt/CRM_Streamlit_rescue/src/services/commercial_routing_v3/dataset_builder.py
+WorkingDirectory=/opt/CRM_Streamlit
+ExecStart=/opt/CRM_Streamlit/.venv313/bin/python /opt/CRM_Streamlit/src/services/commercial_routing_v3/dataset_builder.py
 EnvironmentFile=/etc/crm_v3.env
 Environment=PYTHONUNBUFFERED=1

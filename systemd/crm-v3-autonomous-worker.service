@@ -1,0 +1,21 @@
+[Unit]
+Description=CRM V3 Autonomous Worker
+After=network.target
+
+[Service]
+Type=simple
+User=sergey
+Group=sergey
+WorkingDirectory=/opt/CRM_Streamlit
+EnvironmentFile=/opt/CRM_Streamlit/.env
+Environment=PYTHONPATH=/opt/CRM_Streamlit:/opt/pythonProject89
+Environment=OLLAMA_BASE_URL=http://127.0.0.1:11434
+Environment=OLLAMA_MODEL=qwen2.5:7b
+Environment=LOG_LEVEL=INFO
+Environment=LOG_FILE=/tmp/autonomous_worker.log
+ExecStart=/opt/CRM_Streamlit/.venv313/bin/python -m src.services.commercial_routing_v3.autonomous_worker
+Restart=always
+RestartSec=10
+
+[Install]
+WantedBy=multi-user.target

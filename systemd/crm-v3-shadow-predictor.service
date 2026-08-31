@@ -5,12 +5,13 @@ After=network.target postgresql.service
 [Service]
 Type=simple
 User=sergey
-WorkingDirectory=/opt/CRM_Streamlit_rescue
-ExecStart=/opt/CRM_Streamlit/.venv313/bin/python /opt/CRM_Streamlit_rescue/src/services/commercial_routing_v3/shadow_predictor.py
+WorkingDirectory=/opt/CRM_Streamlit
+Environment=PYTHONPATH=/opt/CRM_Streamlit:/opt/pythonProject89
+Environment=PYTHONUNBUFFERED=1
+EnvironmentFile=/etc/crm_v3.env
+ExecStart=/opt/CRM_Streamlit/.venv313/bin/python -m src.services.commercial_routing_v3.shadow_predictor
 Restart=always
 RestartSec=5
-EnvironmentFile=/etc/crm_v3.env
-Environment=PYTHONUNBUFFERED=1
 
 [Install]
 WantedBy=multi-user.target
