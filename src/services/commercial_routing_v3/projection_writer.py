@@ -449,8 +449,28 @@ def _upsert_one(crm_db, row: Dict[str, Any], existing: Optional[Dict[str, Any]],
                 is_stale_source = True
 
         if is_stale_source:
-            effective_start = existing.get("start_date") if existing else None
-            effective_end = existing.get("end_date") if existing else None
+            source_updated = row.get("source_updated_at")
+            if isinstance(source_updated, str):
+                try:
+                    if " " in source_updated:
+                        source_updated = datetime.strptime(source_updated.split(".")[0], "%Y-%m-%d %H:%M:%S")
+                    else:
+                        source_updated = datetime.fromisoformat(source_updated.replace("Z", "+00:00")).replace(tzinfo=None)
+                except Exception:
+                    source_updated = None
+            elif isinstance(source_updated, datetime):
+                source_updated = source_updated.replace(tzinfo=None)
+
+            is_repaired = False
+            if source_updated and source_updated >= datetime(2026, 8, 16):
+                is_repaired = True
+
+            if is_repaired:
+                effective_end = row.get("end_date")
+                deadline_trust = "RECOVERED"
+            else:
+                effective_end = None
+                deadline_trust = "UNRECOVERABLE_LEGACY"
 
     stage = stage_from_source_table(str(row.get("source_table") or ""))
     crm_stage, award_status = _crm_stage_for(str(row.get("source_table") or ""), effective_end, stage)
@@ -469,6 +489,11 @@ def _upsert_one(crm_db, row: Dict[str, Any], existing: Optional[Dict[str, Any]],
         contract_number=cn,
         tender_link=row.get("tender_link"),
     )
+
+    if is_223 and is_stale_source and not is_repaired:
+        crm_stage = "torgi"
+        award_status = "submission_closed_waiting_award"
+
     payload = {
         "source_table": row.get("source_table"),
         "source_id": int(row["source_id"]),
@@ -493,6 +518,7 @@ def _upsert_one(crm_db, row: Dict[str, Any], existing: Optional[Dict[str, Any]],
         "winner_name": row.get("winner_name"),
         "winner_inn": row.get("winner_inn"),
         "final_contract_price": row.get("final_price") if stage == SourceStage.AWARDED else None,
+        "deadline_trust": deadline_trust,
     }
     if stage == SourceStage.AWARDED:
         payload["source_awarded_table"] = row.get("source_table")
@@ -518,7 +544,8 @@ def _upsert_one(crm_db, row: Dict[str, Any], existing: Optional[Dict[str, Any]],
                     tender_link, source_updated_at,
                     crm_stage, award_status, qualification_state, ai_assessment_status,
                     source_awarded_table, source_awarded_id,
-                    winner_name, winner_inn, final_contract_price
+                    winner_name, winner_inn, final_contract_price,
+                    deadline_trust
                 ) VALUES (
                     %(source_table)s, %(source_id)s, %(contract_number)s, %(auction_name)s,
                     %(initial_price)s, %(final_price)s, %(customer)s, %(delivery_region)s, %(region_id)s,
@@ -527,7 +554,8 @@ def _upsert_one(crm_db, row: Dict[str, Any], existing: Optional[Dict[str, Any]],
                     %(tender_link)s, %(source_updated_at)s,
                     %(crm_stage)s, %(award_status)s, 'unassessed', %(ai_assessment_status)s,
                     %(source_awarded_table)s, %(source_awarded_id)s,
-                    %(winner_name)s, %(winner_inn)s, %(final_contract_price)s
+                    %(winner_name)s, %(winner_inn)s, %(final_contract_price)s,
+                    %(deadline_trust)s
                 )
                 """,
                 {
@@ -557,7 +585,7 @@ def _upsert_one(crm_db, row: Dict[str, Any], existing: Optional[Dict[str, Any]],
                 okpd_code = COALESCE(%(okpd_code)s, okpd_code),
                 okpd_name = COALESCE(%(okpd_name)s, okpd_name),
                 start_date = COALESCE(%(start_date)s, start_date),
-                end_date = COALESCE(%(end_date)s, end_date),
+                end_date = %(end_date)s,
                 delivery_start_date = COALESCE(%(delivery_start_date)s, delivery_start_date),
                 delivery_end_date = COALESCE(%(delivery_end_date)s, delivery_end_date),
                 tender_link = COALESCE(%(tender_link)s, tender_link),
@@ -575,6 +603,7 @@ def _upsert_one(crm_db, row: Dict[str, Any], existing: Optional[Dict[str, Any]],
                 END,
                 source_awarded_table = COALESCE(%(source_awarded_table)s, source_awarded_table),
                 source_awarded_id = COALESCE(%(source_awarded_id)s, source_awarded_id),
+                deadline_trust = %(deadline_trust)s,
                 crm_updated_at = now()
             WHERE id = %(id)s
             """,
