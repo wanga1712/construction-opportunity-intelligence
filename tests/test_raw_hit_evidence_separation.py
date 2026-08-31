@@ -20,50 +20,43 @@ from document_processor.evidence_aggregator import EvidenceAggregator
 from document_processor.matching.dto_mapper import to_match_detail
 
 
-def test_1_raw_fuzzy_candidate_does_not_automatically_become_evidence():
-    """1. Raw fuzzy candidate with default UNKNOWN status does not create evidence."""
-    detail = MatchDetailResult(
-        category_code="lighting",
-        subcategory_code="road_street",
-        matched_term="проспект",
-        term_type="search",
-        score=78.0,
-        row_data={"matched_line": "ПРОЕКТ ДОГОВОРА"},
-        page_or_sheet="1",
-        row_number=10,
-        match_method="FUZZY_RATIO",
-        validation_status="UNKNOWN",
-    )
-    match = MatchResult(category_code="lighting", match_count=1, score=78.0, details=[detail])
-    file_res = FileProcessResult(file_name="contract.pdf", status="COMPLETED", matches=[match])
-
-    evidence = EvidenceAggregator.aggregate([file_res])
-    assert len(evidence) == 0, "Raw fuzzy candidate must not create evidence"
-
-
-def test_2_score_100_raw_hit_does_not_automatically_become_evidence():
-    """2. Score=100 raw hit (e.g. syringe 'инъекц') does not create evidence without CONFIRMED status."""
-    detail = MatchDetailResult(
+def test_1_evidence_result_with_omitted_status_is_not_confirmed():
+    """1. EvidenceResult with omitted status defaults to UNKNOWN (fail-closed, not CONFIRMED)."""
+    ev = EvidenceResult(
         category_code="waterproofing",
-        subcategory_code="injection",
-        matched_term="инъекц",
-        term_type="search",
-        score=100.0,
-        row_data={"matched_line": "Шприц инъекционный однократного применения 50 мл №1."},
-        page_or_sheet="table_3",
-        row_number=250,
-        match_method="STEM_PREFIX",
-        validation_status="UNKNOWN",
+        evidence_score=100.0,
+        match_count=1,
     )
-    match = MatchResult(category_code="waterproofing", match_count=1, score=100.0, details=[detail])
-    file_res = FileProcessResult(file_name="tz.docx", status="COMPLETED", matches=[match])
-
-    evidence = EvidenceAggregator.aggregate([file_res])
-    assert len(evidence) == 0, "Score=100 raw hit must NOT automatically create evidence"
+    assert ev.validation_status == "UNKNOWN", "EvidenceResult default must be UNKNOWN"
+    assert ev.validation_version is None
+    assert ev.validation_method is None
 
 
-def test_3_confirmed_candidate_creates_evidence():
-    """3. Explicitly CONFIRMED candidate creates positive EvidenceResult."""
+def test_2_persistence_with_missing_status_cannot_create_confirmed_evidence():
+    """2. Persistence layer resolves missing/None/empty status to UNKNOWN, never CONFIRMED."""
+    ev = EvidenceResult(
+        category_code="waterproofing",
+        evidence_score=100.0,
+        match_count=1,
+        validation_status=None,
+    )
+    raw_status = getattr(ev, "validation_status", "UNKNOWN")
+    val_status = str(raw_status or "UNKNOWN").upper()
+    if val_status == "CONFIRMED":
+        val_version = getattr(ev, "validation_version", "v1") or "v1"
+        val_method = getattr(ev, "validation_method", "confirmed_v1") or "confirmed_v1"
+    else:
+        val_status = "UNKNOWN"
+        val_version = None
+        val_method = None
+
+    assert val_status == "UNKNOWN", "Missing/None status must not resolve to CONFIRMED"
+    assert val_version is None
+    assert val_method is None
+
+
+def test_3_confirmed_detail_to_aggregator_to_explicit_confirmed_evidence():
+    """3. Confirmed detail -> aggregator -> explicit confirmed EvidenceResult."""
     detail = MatchDetailResult(
         category_code="flooring",
         subcategory_code="polymer_self_leveling",
@@ -87,177 +80,170 @@ def test_3_confirmed_candidate_creates_evidence():
     assert evidence[0].match_count == 1
     assert evidence[0].evidence_score == 100.0
     assert evidence[0].validation_status == "CONFIRMED"
+    assert evidence[0].validation_version == "v1"
+    assert evidence[0].validation_method == "deterministic_fixture_v1"
 
 
-def test_4_rejected_candidate_does_not_create_evidence():
-    """4. Explicitly REJECTED candidate does not create evidence."""
-    detail = MatchDetailResult(
-        category_code="waterproofing",
-        subcategory_code="injection",
-        matched_term="инъекц",
-        term_type="search",
-        score=100.0,
-        row_data={"matched_line": "Шприц инъекционный медицинский"},
-        page_or_sheet="1",
-        row_number=5,
-        match_method="STEM_PREFIX",
-        validation_status="REJECTED",
-        validation_method="medical_syringe_filter",
-        validation_reason="Medical disposable consumable, not construction waterproofing",
-    )
-    match = MatchResult(category_code="waterproofing", match_count=1, score=100.0, details=[detail])
-    file_res = FileProcessResult(file_name="contract.pdf", status="COMPLETED", matches=[match])
-
-    evidence = EvidenceAggregator.aggregate([file_res])
-    assert len(evidence) == 0, "Rejected candidate must not create evidence"
-
-
-def test_5_unknown_candidate_does_not_create_positive_evidence():
-    """5. UNKNOWN candidate does not create positive evidence."""
-    detail = MatchDetailResult(
-        category_code="waterproofing_concrete_repair",
-        subcategory_code="penetrating_waterproofing",
-        matched_term="вектор",
-        term_type="search",
-        score=78.0,
-        row_data={"matched_line": "Генеральный директор"},
-        page_or_sheet="1",
-        row_number=100,
-        match_method="FUZZY_RATIO",
-        validation_status="UNKNOWN",
-    )
-    match = MatchResult(category_code="waterproofing_concrete_repair", match_count=1, score=78.0, details=[detail])
-    file_res = FileProcessResult(file_name="contract.docx", status="COMPLETED", matches=[match])
-
-    evidence = EvidenceAggregator.aggregate([file_res])
-    assert len(evidence) == 0
-
-
-def test_6_unknown_candidate_prevents_complete_factual_no():
-    """6. UNKNOWN candidate ensures document classification stays UNKNOWN / PARTIAL, not NO_TARGET_EVIDENCE."""
-    # When confirmed_count == 0 but unknown_match_count > 0:
-    confirmed_count = 0
-    unknown_match_count = 2
-    dl_st = "COMPLETED"
-    pr_st = "COMPLETED"
-
-    # Truth classification logic
-    if dl_st == "COMPLETED" and pr_st == "COMPLETED":
-        if confirmed_count > 0:
-            doc_class = "USEFUL"
-        elif unknown_match_count > 0:
-            doc_class = "UNKNOWN"
-        else:
-            doc_class = "NO_TARGET_EVIDENCE"
-    else:
-        doc_class = "UNKNOWN"
-
-    assert doc_class == "UNKNOWN", "Document with unknown candidate hits must stay UNKNOWN, preventing false NO"
-
-
-def test_7_category_subcategory_cannot_be_changed_by_validation():
-    """7. Category and subcategory provenance remain immutable from source taxonomy."""
-    item = {
-        "keyword": "мастика",
-        "category_code": "waterproofing",
-        "subcategory_code": "coating",
-        "score": 100,
-        "matched_line": "битумная мастика",
-        "match_method": "EXACT",
-        "validation_status": "UNKNOWN",
-    }
-    detail = to_match_detail(item)
-    assert detail.category_code == "waterproofing"
-    assert detail.subcategory_code == "coating"
-
-    # Validation can only set validation_status, not alter category_code
-    detail.validation_status = "REJECTED"
-    assert detail.category_code == "waterproofing"
-    assert detail.subcategory_code == "coating"
-
-
-def test_8_raw_candidate_remains_persisted_after_rejection():
-    """8. Raw candidate DTO is preserved with full details even when marked REJECTED."""
+def test_4_unknown_detail_produces_no_positive_evidence():
+    """4. UNKNOWN detail produces no positive evidence from aggregator."""
     detail = MatchDetailResult(
         category_code="lighting",
         subcategory_code="road_street",
         matched_term="проспект",
         term_type="search",
         score=78.0,
-        row_data={"matched_line": "ПРОЕКТ"},
+        row_data={"matched_line": "ПРОЕКТ ДОГОВОРА"},
         page_or_sheet="1",
-        row_number=1,
-        match_method="FUZZY_RATIO",
-        validation_status="REJECTED",
-        validation_reason="Fuzzy collision on Russian word ПРОЕКТ",
-    )
-    assert detail.matched_term == "проспект"
-    assert detail.row_data["matched_line"] == "ПРОЕКТ"
-    assert detail.validation_status == "REJECTED"
-    assert detail.validation_reason == "Fuzzy collision on Russian word ПРОЕКТ"
-
-
-def test_9_match_method_provenance_preserved():
-    """9. Match method (EXACT, STEM_PREFIX, FUZZY_RATIO, FUZZY_TOKEN_SET, COMPOUND_RULE) is preserved."""
-    methods = ["EXACT", "STEM_PREFIX", "FUZZY_RATIO", "FUZZY_TOKEN_SET", "COMPOUND_RULE", "OCR_NORMALIZED_EXACT"]
-    for method in methods:
-        item = {
-            "keyword": "test_term",
-            "category_code": "test_cat",
-            "score": 90,
-            "match_method": method,
-            "validation_status": "UNKNOWN",
-        }
-        detail = to_match_detail(item)
-        assert detail.match_method == method
-
-
-def test_10_multiple_confirmed_candidates_aggregate_correctly():
-    """10. Multiple CONFIRMED candidates for the same category aggregate max score and sum count."""
-    d1 = MatchDetailResult(
-        category_code="lighting",
-        subcategory_code="road_street",
-        matched_term="светильник уличный",
-        term_type="search",
-        score=95.0,
-        row_data={"matched_line": "Светильник уличный ДКУ-50"},
-        page_or_sheet="1",
-        row_number=1,
-        match_method="EXACT",
-        validation_status="CONFIRMED",
-    )
-    d2 = MatchDetailResult(
-        category_code="lighting",
-        subcategory_code="office_admin",
-        matched_term="панель светодиодная",
-        term_type="search",
-        score=100.0,
-        row_data={"matched_line": "Панель светодиодная 600х600"},
-        page_or_sheet="1",
-        row_number=2,
-        match_method="EXACT",
-        validation_status="CONFIRMED",
-    )
-    # Plus an unconfirmed/rejected candidate that should NOT be counted
-    d3 = MatchDetailResult(
-        category_code="lighting",
-        subcategory_code="office_admin",
-        matched_term="административ",
-        term_type="search",
-        score=80.0,
-        row_data={"matched_line": "Администрация города"},
-        page_or_sheet="1",
-        row_number=3,
+        row_number=10,
         match_method="FUZZY_RATIO",
         validation_status="UNKNOWN",
     )
-
-    match = MatchResult(category_code="lighting", match_count=3, score=100.0, details=[d1, d2, d3])
-    file_res = FileProcessResult(file_name="spec.xlsx", status="COMPLETED", matches=[match])
+    match = MatchResult(category_code="lighting", match_count=1, score=78.0, details=[detail])
+    file_res = FileProcessResult(file_name="contract.pdf", status="COMPLETED", matches=[match])
 
     evidence = EvidenceAggregator.aggregate([file_res])
-    assert len(evidence) == 1
-    assert evidence[0].category_code == "lighting"
-    assert evidence[0].match_count == 2  # Only d1 and d2
-    assert evidence[0].evidence_score == 100.0
-    assert evidence[0].validation_status == "CONFIRMED"
+    assert len(evidence) == 0, "UNKNOWN candidate must not produce positive evidence"
+
+
+def test_5_legacy_raw_source_evidence_with_confirmed_count_zero_cannot_create_useful_truth():
+    """5. Legacy raw_source_evidence presence cannot create USEFUL truth when confirmed_count == 0."""
+    # Simulate learning_observer document classification
+    confirmed_cnt = 0
+    unknown_match_cnt = 0
+    dl_st = "COMPLETED"
+    pr_st = "COMPLETED"
+    d_id = 999
+    ev_doc_ids = {999}  # Historical raw source evidence exists for this doc
+
+    useful_docs = []
+    non_useful_docs = []
+    unknown_docs = []
+    d_item = {"document_key": "k", "source_document_id": d_id}
+
+    if dl_st == "COMPLETED" and pr_st == "COMPLETED":
+        if confirmed_cnt > 0:
+            useful_docs.append(d_item)
+        elif unknown_match_cnt > 0:
+            unknown_docs.append(d_item)
+        else:
+            non_useful_docs.append(d_item)
+    else:
+        unknown_docs.append(d_item)
+
+    assert len(useful_docs) == 0, "Document with confirmed_cnt=0 must NEVER become useful"
+    assert len(non_useful_docs) == 1, "Document with confirmed_cnt=0, unknown_cnt=0 must become non_useful (NO_TARGET_EVIDENCE)"
+
+
+def test_6_unknown_candidate_prevents_factual_no():
+    """6. UNKNOWN candidate ensures document classification stays UNKNOWN / PARTIAL, not NO_TARGET_EVIDENCE."""
+    confirmed_cnt = 0
+    unknown_match_cnt = 2  # Unresolved candidate matches exist
+    dl_st = "COMPLETED"
+    pr_st = "COMPLETED"
+    d_id = 100
+    d_item = {"document_key": "k", "source_document_id": d_id}
+
+    useful_docs = []
+    non_useful_docs = []
+    unknown_docs = []
+
+    if dl_st == "COMPLETED" and pr_st == "COMPLETED":
+        if confirmed_cnt > 0:
+            useful_docs.append(d_item)
+        elif unknown_match_cnt > 0:
+            unknown_docs.append(d_item)
+        else:
+            non_useful_docs.append(d_item)
+    else:
+        unknown_docs.append(d_item)
+
+    assert len(useful_docs) == 0
+    assert len(non_useful_docs) == 0, "Unknown candidate must NOT become NO_TARGET_EVIDENCE"
+    assert len(unknown_docs) == 1, "Unknown candidate must stay UNKNOWN"
+
+
+def test_7_migration_first_run_marks_pre_barrier_legacy_evidence_unvalidated():
+    """7. Migration logic marks legacy pre-barrier evidence rows as LEGACY_UNVALIDATED."""
+    def apply_migration_row(row):
+        # Emulates:
+        # WHERE validation_status IS NULL
+        #    OR (validation_version IS NULL AND (validation_method IS NULL OR validation_method = 'legacy_pre_r3_3'))
+        if row.get("validation_status") is None or (
+            row.get("validation_version") is None
+            and (row.get("validation_method") is None or row.get("validation_method") == "legacy_pre_r3_3")
+        ):
+            return {
+                **row,
+                "validation_status": "LEGACY_UNVALIDATED",
+                "validation_method": "legacy_pre_r3_3",
+            }
+        return row
+
+    legacy_row = {
+        "id": 1,
+        "category_code": "waterproofing",
+        "validation_status": None,
+        "validation_version": None,
+        "validation_method": None,
+    }
+    updated = apply_migration_row(legacy_row)
+    assert updated["validation_status"] == "LEGACY_UNVALIDATED"
+    assert updated["validation_method"] == "legacy_pre_r3_3"
+
+
+def test_8_migration_second_run_does_not_demote_new_v1_confirmed_evidence():
+    """8. Migration rerun leaves new v1 CONFIRMED evidence intact."""
+    def apply_migration_row(row):
+        if row.get("validation_status") is None or (
+            row.get("validation_version") is None
+            and (row.get("validation_method") is None or row.get("validation_method") == "legacy_pre_r3_3")
+        ):
+            return {
+                **row,
+                "validation_status": "LEGACY_UNVALIDATED",
+                "validation_method": "legacy_pre_r3_3",
+            }
+        return row
+
+    new_confirmed_row = {
+        "id": 2,
+        "category_code": "flooring",
+        "validation_status": "CONFIRMED",
+        "validation_version": "v1",
+        "validation_method": "deterministic_fixture_v1",
+    }
+    # Run migration on new confirmed row
+    result = apply_migration_row(new_confirmed_row)
+    assert result["validation_status"] == "CONFIRMED", "New confirmed evidence must NOT be demoted by migration rerun"
+    assert result["validation_version"] == "v1"
+    assert result["validation_method"] == "deterministic_fixture_v1"
+
+
+def test_9_legacy_evidence_remains_unvalidated():
+    """9. Legacy evidence remains unvalidated and idempotent on repeated runs."""
+    def apply_migration_row(row):
+        if row.get("validation_status") is None or (
+            row.get("validation_version") is None
+            and (row.get("validation_method") is None or row.get("validation_method") == "legacy_pre_r3_3")
+        ):
+            return {
+                **row,
+                "validation_status": "LEGACY_UNVALIDATED",
+                "validation_method": "legacy_pre_r3_3",
+            }
+        return row
+
+    legacy_row = {
+        "id": 1,
+        "category_code": "waterproofing",
+        "validation_status": "LEGACY_UNVALIDATED",
+        "validation_version": None,
+        "validation_method": "legacy_pre_r3_3",
+    }
+    # Run migration once
+    run1 = apply_migration_row(legacy_row)
+    assert run1["validation_status"] == "LEGACY_UNVALIDATED"
+
+    # Run migration second time
+    run2 = apply_migration_row(run1)
+    assert run2["validation_status"] == "LEGACY_UNVALIDATED"

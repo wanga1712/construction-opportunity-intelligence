@@ -279,7 +279,7 @@ class LearningObserver:
                             max_parse_at = p_at
 
                         if dl_st == "COMPLETED" and pr_st == "COMPLETED":
-                            if confirmed_cnt > 0 or (d_id and d_id in ev_doc_ids):
+                            if confirmed_cnt > 0:
                                 useful_docs.append(d_item)
                             elif unknown_match_cnt > 0:
                                 # Unresolved candidate matches exist -> UNKNOWN, cannot declare NO

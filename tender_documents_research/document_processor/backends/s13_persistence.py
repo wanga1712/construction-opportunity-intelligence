@@ -121,6 +121,17 @@ class S13V2TaskPersistenceService:
                 for ev in result.evidence:
                     if ev.category_code == "processed":
                         continue
+
+                    raw_status = getattr(ev, "validation_status", "UNKNOWN")
+                    val_status = str(raw_status or "UNKNOWN").upper()
+                    if val_status == "CONFIRMED":
+                        val_version = getattr(ev, "validation_version", "v1") or "v1"
+                        val_method = getattr(ev, "validation_method", "confirmed_v1") or "confirmed_v1"
+                    else:
+                        val_status = "UNKNOWN"
+                        val_version = None
+                        val_method = None
+
                     cursor.execute("""
                         INSERT INTO document_evidence
                         (procurement_id, queue_id, category_code, evidence_score, match_count, next_stage, validation_status, validation_version, validation_method, pipeline_generation)
@@ -136,9 +147,9 @@ class S13V2TaskPersistenceService:
                     """, (
                         result.procurement_id, result.queue_id, ev.category_code,
                         ev.evidence_score, ev.match_count, ev.next_stage,
-                        getattr(ev, "validation_status", "CONFIRMED") or "CONFIRMED",
-                        getattr(ev, "validation_version", "v1") or "v1",
-                        getattr(ev, "validation_method", None),
+                        val_status,
+                        val_version,
+                        val_method,
                         self.pipeline_generation
                     ))
 

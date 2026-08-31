@@ -40,8 +40,8 @@ class EvidenceResult:
     evidence_score: float
     match_count: int
     next_stage: str = "STRUCTURED_EXTRACTION_PENDING"
-    validation_status: str = "CONFIRMED"
-    validation_version: str = "v1"
+    validation_status: str = "UNKNOWN"
+    validation_version: Optional[str] = None
     validation_method: Optional[str] = None
 
 @dataclass
