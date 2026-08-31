@@ -1,0 +1,19 @@
+[Unit]
+Description=CRM V3 Document Match Context Validator Service
+After=network.target
+
+[Service]
+Type=simple
+User=sergey
+Group=sergey
+WorkingDirectory=/opt/CRM_Streamlit
+EnvironmentFile=/opt/CRM_Streamlit/.env
+Environment=PYTHONPATH=/opt/CRM_Streamlit:/opt/CRM_Streamlit/tender_documents_research:/opt/pythonProject89
+Environment=LOG_LEVEL=INFO
+Environment=LOG_FILE=/tmp/crm_v3_context_validator.log
+ExecStart=/opt/CRM_Streamlit/.venv313/bin/python -m tender_documents_research.document_processor.context_validator_service
+Restart=always
+RestartSec=10
+
+[Install]
+WantedBy=multi-user.target

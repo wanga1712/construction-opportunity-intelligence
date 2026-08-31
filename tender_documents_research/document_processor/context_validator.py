@@ -1,0 +1,321 @@
+"""Context-based semantic validator for raw document matches.
+
+Decides whether a raw search candidate genuinely supports its immutable source category.
+
+Decisions:
+- CONFIRMED: Document context unambiguously specifies a product requirement, material,
+             work, or technical specification belonging to the fixed category.
+- REJECTED: Candidate is clearly unrelated (fuzzy collision, address, organization name,
+            legal boilerplate, unrelated product, negative context).
+- UNKNOWN: Context is insufficient or ambiguous, or model confidence is below threshold,
+           or supporting quote cannot be verified verbatim in the context.
+
+Absolute rule: VALIDATOR_CAN_RECATEGORIZE = NO.
+"""
+
+from __future__ import annotations
+
+import json
+import logging
+import os
+import re
+import urllib.error
+import urllib.request
+from datetime import datetime, timezone
+from typing import Any, Callable, Dict, List, Optional, Tuple
+
+logger = logging.getLogger("document_processor.context_validator")
+
+DEFAULT_MODEL = "qwen2.5:7b"
+DEFAULT_OLLAMA_URL = "http://127.0.0.1:11434"
+DEFAULT_CONFIRM_THRESHOLD = 0.90
+DEFAULT_REJECT_THRESHOLD = 0.95
+DEFAULT_MAX_CONTEXT_CHARS = 3000
+DEFAULT_BATCH_SIZE = 10
+
+VALID_DECISIONS = frozenset({"CONFIRMED", "REJECTED", "UNKNOWN"})
+
+SYSTEM_PROMPT = """Ты — строгий эксперт-валидатор совпадений в документах госзакупок для CRM стройматериалов.
+Твоя задача — проверить, действительно ли найденный фрагмент текста документа подтверждает закупку/потребность в товаре указанной категории, или это ложное срабатывание поиска.
+
+Категория и подкатегория зафиксированы реестром. Менять их ЗАПРЕЩЕНО.
+
+Решения (decision):
+1. CONFIRMED: Текст документа прямо указывает на закупку, потребность, ведомость объемов, спецификацию или применение товара/материала/работы именно указанной категории.
+2. REJECTED: Совпадение ложное. Причины:
+   - FUZZY_LEXICAL_COLLISION: совпадение похожего слова ("ПРОЕКТ" вместо "проспект", "директор" вместо "вектор", "плотность" вместо "плотина").
+   - ADDRESS_OR_LOCATION_ONLY: адрес, улица ("просп. Ленина", "ул. Магистральная").
+   - ORGANIZATION_NAME_ONLY: наименование организации, должность ("ООО Вектор", "Генеральный директор").
+   - LEGAL_ADMINISTRATIVE_TEXT: распоряжение, преамбула, типовой договор ("Распоряжением администрации...").
+   - UNRELATED_PRODUCT: совершенно другой товар (медицинский шприц для гидроизоляции, канцтовары).
+   - NEGATIVE_PHRASE_CONTEXT: фрагмент содержит стоп-фразу.
+3. UNKNOWN: Контекст обрезан, неоднозначен или информации недостаточно для 100% уверенности.
+
+Правило для supporting_quote:
+Цитата ОБЯЗАНА быть точной дословной подстрокой из предоставленного раздела [КОНТЕКСТ ИЗ ДОКУМЕНТА]. Не придумывай цитаты!
+
+Ответ СТРОГО в формате JSON без разметки markdown:
+{
+  "detail_id": <int/str>,
+  "decision": "CONFIRMED" | "REJECTED" | "UNKNOWN",
+  "confidence": <float 0.0-1.0>,
+  "supporting_quote": "<дословная цитата из контекста>",
+  "reason_code": "<SPECIFICATION_PRODUCT_REQUIREMENT|FUZZY_LEXICAL_COLLISION|ADDRESS_OR_LOCATION_ONLY|ORGANIZATION_NAME_ONLY|LEGAL_ADMINISTRATIVE_TEXT|UNRELATED_PRODUCT|NEGATIVE_PHRASE_CONTEXT|INSUFFICIENT_CONTEXT>",
+  "reason": "<краткое объяснение>"
+}"""
+
+
+def _normalize_whitespace(text: str) -> str:
+    if not text:
+        return ""
+    return re.sub(r"\s+", " ", text).strip().lower()
+
+
+def call_ollama(
+    prompt: str,
+    *,
+    model: str = DEFAULT_MODEL,
+    base_url: str = DEFAULT_OLLAMA_URL,
+    timeout: int = 45,
+) -> str:
+    """Invokes local Ollama /api/generate with format=json."""
+    url = f"{base_url.rstrip('/')}/api/generate"
+    payload = {
+        "model": model,
+        "prompt": prompt,
+        "system": SYSTEM_PROMPT,
+        "stream": False,
+        "format": "json",
+        "options": {"temperature": 0.0, "num_predict": 512},
+    }
+    data = json.dumps(payload).encode("utf-8")
+    req = urllib.request.Request(url, data=data, headers={"Content-Type": "application/json"})
+    with urllib.request.urlopen(req, timeout=timeout) as resp:
+        body = json.loads(resp.read().decode("utf-8"))
+        return body.get("response", "")
+
+
+class ContextValidator:
+    def __init__(
+        self,
+        *,
+        model: str = DEFAULT_MODEL,
+        ollama_url: Optional[str] = None,
+        confirm_threshold: float = DEFAULT_CONFIRM_THRESHOLD,
+        reject_threshold: float = DEFAULT_REJECT_THRESHOLD,
+        max_context_chars: int = DEFAULT_MAX_CONTEXT_CHARS,
+        batch_size: int = DEFAULT_BATCH_SIZE,
+        dedupe: bool = True,
+        ai_caller: Optional[Callable[[str], str]] = None,
+    ) -> None:
+        self.model = model
+        self.ollama_url = ollama_url or os.getenv("OLLAMA_BASE_URL", DEFAULT_OLLAMA_URL)
+        self.confirm_threshold = confirm_threshold
+        self.reject_threshold = reject_threshold
+        self.max_context_chars = max_context_chars
+        self.batch_size = batch_size
+        self.dedupe = dedupe
+        self._ai_caller = ai_caller or (lambda p: call_ollama(p, model=self.model, base_url=self.ollama_url))
+
+    def build_context_block(self, candidate: Dict[str, Any]) -> str:
+        """Constructs a bounded, informative context block for Qwen."""
+        pid = candidate.get("procurement_id", "")
+        okpd_code = candidate.get("procurement_okpd_code", "")
+        okpd_name = candidate.get("procurement_okpd_name", "")
+        p_title = candidate.get("procurement_title", "")
+
+        cat_code = candidate.get("category_code", "")
+        cat_name = candidate.get("category_name", cat_code)
+        sub_code = candidate.get("subcategory_code", "")
+        sub_name = candidate.get("subcategory_name", sub_code)
+
+        term = candidate.get("matched_term", "")
+        method = candidate.get("match_method", "UNKNOWN")
+        score = candidate.get("score", "")
+
+        doc_name = candidate.get("document_name", "")
+        page_sheet = candidate.get("page_or_sheet", "")
+        row_num = candidate.get("row_number", "")
+
+        before = candidate.get("context_before") or []
+        if isinstance(before, list):
+            before_str = "\n".join(str(x) for x in before if x)
+        else:
+            before_str = str(before)
+
+        after = candidate.get("context_after") or []
+        if isinstance(after, list):
+            after_str = "\n".join(str(x) for x in after if x)
+        else:
+            after_str = str(after)
+
+        matched_line = candidate.get("matched_line") or ""
+        if not matched_line and isinstance(candidate.get("row_data"), dict):
+            matched_line = candidate["row_data"].get("matched_line", "")
+
+        neg_phrases = candidate.get("negative_phrases") or []
+        neg_str = ", ".join(neg_phrases) if isinstance(neg_phrases, list) else str(neg_phrases)
+
+        doc_loc = f"{page_sheet}:{row_num}" if page_sheet or row_num else ""
+
+        block = (
+            f"[ТЕНДЕР]\n"
+            f"ID: {pid}\n"
+            f"ОКПД2: {okpd_code} ({okpd_name})\n"
+            f"Наименование закупки: {p_title}\n\n"
+            f"[КАНДИДАТ ПОИСКА]\n"
+            f"Категория: {cat_name} ({cat_code})\n"
+            f"Подкатегория: {sub_name} ({sub_code})\n"
+            f"Искомый термин: {term}\n"
+            f"Метод: {method} (score={score})\n"
+            f"Документ: {doc_name} {doc_loc}\n\n"
+            f"[КОНТЕКСТ ИЗ ДОКУМЕНТА]\n"
+            f"{before_str}\n"
+            f">>> НАЙДЕННАЯ СТРОКА: {matched_line}\n"
+            f"{after_str}\n"
+        )
+        if neg_str:
+            block += f"\n[СТОП-ФРАЗЫ КАТЕГОРИИ]\n{neg_str}\n"
+
+        if len(block) > self.max_context_chars:
+            block = block[: self.max_context_chars] + "\n...[контекст обрезан]..."
+
+        return block
+
+    def _verify_and_gate_decision(
+        self,
+        raw_decision: Dict[str, Any],
+        candidate: Dict[str, Any],
+        context_text: str,
+    ) -> Dict[str, Any]:
+        """Applies conservative threshold gating, quote verification, and fail-closed defaults."""
+        detail_id = candidate.get("detail_id") or candidate.get("id")
+        cat_code = candidate.get("category_code")
+        sub_code = candidate.get("subcategory_code")
+
+        decision = str(raw_decision.get("decision") or "UNKNOWN").upper().strip()
+        if decision not in VALID_DECISIONS:
+            decision = "UNKNOWN"
+            reason_code = "INVALID_DECISION_ENUM"
+        else:
+            reason_code = str(raw_decision.get("reason_code") or "UNSPECIFIED")
+
+        try:
+            confidence = float(raw_decision.get("confidence", 0.0))
+        except (ValueError, TypeError):
+            confidence = 0.0
+
+        quote = str(raw_decision.get("supporting_quote") or "").strip()
+        reason = str(raw_decision.get("reason") or "").strip()
+
+        # Quote verification: quote must be exact substring in context
+        if decision in ("CONFIRMED", "REJECTED") and quote:
+            norm_quote = _normalize_whitespace(quote)
+            norm_context = _normalize_whitespace(context_text)
+            if norm_quote not in norm_context:
+                decision = "UNKNOWN"
+                reason_code = "HALLUCINATED_QUOTE"
+                confidence = 0.0
+                reason = f"Supporting quote not found in document context (hallucinated quote): {quote[:60]}"
+
+        # Confidence gating
+        if decision == "CONFIRMED" and confidence < self.confirm_threshold:
+            decision = "UNKNOWN"
+            reason_code = "LOW_CONFIDENCE"
+            reason = f"Confidence {confidence:.2f} below CONFIRM_THRESHOLD {self.confirm_threshold:.2f}"
+        elif decision == "REJECTED" and confidence < self.reject_threshold:
+            decision = "UNKNOWN"
+            reason_code = "LOW_CONFIDENCE"
+            reason = f"Confidence {confidence:.2f} below REJECT_THRESHOLD {self.reject_threshold:.2f}"
+
+        return {
+            "detail_id": detail_id,
+            "procurement_id": candidate.get("procurement_id"),
+            "category_code": cat_code,  # IMMUTABLE
+            "subcategory_code": sub_code,  # IMMUTABLE
+            "decision": decision,
+            "confidence": confidence,
+            "supporting_quote": quote,
+            "reason_code": reason_code,
+            "reason": reason,
+            "validated_at": datetime.now(timezone.utc).isoformat(),
+            "validator_name": "context_validator",
+            "validator_version": "v1",
+            "validation_method": "QWEN_CONTEXT_V1",
+        }
+
+    def validate_single(self, candidate: Dict[str, Any]) -> Dict[str, Any]:
+        """Validates a single candidate."""
+        context_block = self.build_context_block(candidate)
+        prompt = (
+            f"Проанализируй совпадение и определи, подтверждает ли оно категорию.\n\n"
+            f"{context_block}\n\n"
+            f"Верни результат в формате JSON."
+        )
+
+        try:
+            resp_text = self._ai_caller(prompt)
+            # Parse JSON
+            match = re.search(r"\{.*\}", resp_text, re.DOTALL)
+            if not match:
+                raw_decision = {"decision": "UNKNOWN", "reason_code": "INVALID_JSON", "confidence": 0.0}
+            else:
+                raw_decision = json.loads(match.group(0))
+        except Exception as exc:
+            logger.warning("Qwen context validator invocation failed: %s", exc)
+            raw_decision = {"decision": "UNKNOWN", "reason_code": "MODEL_EXCEPTION", "reason": str(exc), "confidence": 0.0}
+
+        return self._verify_and_gate_decision(raw_decision, candidate, context_block)
+
+    def validate_candidates(self, candidates: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+        """Validates a batch of candidates, with deduplication if enabled."""
+        if not candidates:
+            return []
+
+        if not self.dedupe:
+            return [self.validate_single(c) for c in candidates]
+
+        # Group by deduplication key
+        dedupe_groups: Dict[Tuple[Any, ...], List[Dict[str, Any]]] = {}
+        for c in candidates:
+            ctx_text = self.build_context_block(c)
+            key = (
+                c.get("procurement_id"),
+                c.get("document_name"),
+                c.get("category_code"),
+                c.get("subcategory_code"),
+                c.get("matched_term"),
+                _normalize_whitespace(ctx_text),
+            )
+            dedupe_groups.setdefault(key, []).append(c)
+
+        results: List[Dict[str, Any]] = []
+        for key, group in dedupe_groups.items():
+            rep = group[0]
+            rep_result = self.validate_single(rep)
+
+            # Apply result to all members with their own detail_id
+            for member in group:
+                member_result = dict(rep_result)
+                member_result["detail_id"] = member.get("detail_id") or member.get("id")
+                results.append(member_result)
+
+        return results
+
+
+def validate_candidates(
+    candidates: List[Dict[str, Any]],
+    *,
+    model: str = DEFAULT_MODEL,
+    ai_caller: Optional[Callable[[str], str]] = None,
+    confirm_threshold: float = DEFAULT_CONFIRM_THRESHOLD,
+    reject_threshold: float = DEFAULT_REJECT_THRESHOLD,
+) -> List[Dict[str, Any]]:
+    """Convenience functional entry point."""
+    validator = ContextValidator(
+        model=model,
+        ai_caller=ai_caller,
+        confirm_threshold=confirm_threshold,
+        reject_threshold=reject_threshold,
+    )
+    return validator.validate_candidates(candidates)
