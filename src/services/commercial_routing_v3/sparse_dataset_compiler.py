@@ -38,6 +38,14 @@ class SparseDatasetCompiler:
             return None
         facts = dict(facts_rows[0])
 
+        from src.services.commercial_routing_v3.okpd_priors import load_okpd_priors_from_db, match_okpd_priors
+        priors = load_okpd_priors_from_db(self.crm_db)
+        okpd = facts.get("okpd_code") or ""
+        matched = match_okpd_priors(okpd, priors)
+        if not matched:
+            logger.info(f"[DatasetCompiler] Procurement {procurement_id} OKPD '{okpd}' does not match target priors. Return None.")
+            return None
+
         # 2. Load latest expert annotation
         ann_rows = self.crm_db.execute_query(
             """

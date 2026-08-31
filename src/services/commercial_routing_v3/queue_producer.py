@@ -235,23 +235,39 @@ class CommercialRoutingV3QueueProducer:
         Every eligible procurement enters queue at lane=open_active, priority=50.
         """
         from src.services.commercial_routing_v3.document_links import batch_count_document_links
+        from src.services.commercial_routing_v3.okpd_priors import load_okpd_priors_from_db, match_okpd_priors
 
-        inserted = updated = skipped = errors = 0
+        inserted = updated = skipped_already_active = errors = 0
+        target_waiting_inserted = target_waiting_updated = 0
+        out_of_target_failed_inserted = out_of_target_failed_updated = 0
+        no_links_inserted = no_links_updated = 0
         offset = 0
 
         crm = psycopg2.connect(**self._crm_dsn)
         crm.autocommit = True
         try:
+            class CrmDbWrapper:
+                def __init__(self, conn):
+                    self.conn = conn
+                def execute_query(self, sql, params=None):
+                    with self.conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+                        cur.execute(sql, params)
+                        return cur.fetchall()
+
+            crm_wrapper = CrmDbWrapper(crm)
+            priors = load_okpd_priors_from_db(crm_wrapper)
+            logger.info("Loaded %d active OKPD priors from CRM database", len(priors))
+
             while True:
                 with crm.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
                     cur.execute(
                         """
                         SELECT p.id, p.source_table, p.source_id, p.contract_number,
-                               p.end_date, p.crm_stage, p.award_status
+                               p.end_date, p.crm_stage, p.award_status, p.okpd_code
                         FROM crm_procurements p
                         WHERE p.crm_stage NOT IN (
                             'cancelled', 'failed', 'closed', 'rejected',
-                            'archived', 'no_winner', 'suspended'
+                            'archived', 'no_winner', 'suspended', 'razygranye'
                         )
                         ORDER BY p.id
                         LIMIT %s OFFSET %s
@@ -276,10 +292,39 @@ class CommercialRoutingV3QueueProducer:
                         if max_total and (inserted + updated) >= max_total:
                             break
                         try:
+                            okpd = proc.get("okpd_code") or ""
+                            matched = match_okpd_priors(okpd, priors)
+                            is_target = bool(matched)
+
                             lc = link_counts.get(pid, 0)
-                            if lc == 0:
-                                skipped += 1
-                                continue
+
+                            if not is_target:
+                                status = "FAILED"
+                                last_error = "OUT_OF_TARGET_OKPD"
+                                category_context = {
+                                    "populate_method": "EXHAUSTIVE_ALL_ELIGIBLE",
+                                    "AI_QUEUE_ADMISSION_GATE": "NO",
+                                    "link_count": lc,
+                                    "OUT_OF_TARGET_CAN_ENTER_TRAINING": "NO",
+                                    "exclusion_reason": "OUT_OF_TARGET_OKPD",
+                                }
+                            elif lc == 0:
+                                status = "NO_LINKS"
+                                last_error = None
+                                category_context = {
+                                    "populate_method": "EXHAUSTIVE_ALL_ELIGIBLE",
+                                    "AI_QUEUE_ADMISSION_GATE": "NO",
+                                    "link_count": 0,
+                                    "exclusion_reason": "NO_CANONICAL_DOCUMENTS",
+                                }
+                            else:
+                                status = "PRE_RESEARCH_WAITING"
+                                last_error = None
+                                category_context = {
+                                    "populate_method": "EXHAUSTIVE_ALL_ELIGIBLE",
+                                    "AI_QUEUE_ADMISSION_GATE": "NO",
+                                    "link_count": lc,
+                                }
 
                             task = {
                                 "procurement_id": pid,
@@ -288,32 +333,53 @@ class CommercialRoutingV3QueueProducer:
                                 "contract_number": proc.get("contract_number"),
                                 "assessment_id": None,
                                 "category_codes": [],
-                                "category_context": {
-                                    "populate_method": "EXHAUSTIVE_ALL_ELIGIBLE",
-                                    "AI_QUEUE_ADMISSION_GATE": "NO",
-                                    "link_count": lc,
-                                },
+                                "category_context": category_context,
                                 "candidate_level": None,
                                 "candidate_score": None,
                                 "research_action": ResearchAction.DEEP_RESEARCH.value,
                                 "research_depth": "highest",
                                 "queue_lane": "open_active",
                                 "priority_score": 50,
-                                "dispatchable": True,
+                                "dispatchable": is_target and lc > 0,
                             }
 
                             if dry_run:
-                                inserted += 1
-                                continue
+                                with doc_conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as check_cur:
+                                    check_cur.execute(
+                                        "SELECT status FROM document_processing_queue WHERE procurement_id = %s AND pipeline_generation = %s",
+                                        (pid, PIPELINE_GENERATION)
+                                    )
+                                    existing = check_cur.fetchone()
+                                    if existing is None:
+                                        action = "inserted"
+                                    else:
+                                        existing_status = existing.get("status")
+                                        if existing_status in ("PENDING", "PROCESSING", "COMPLETED", "FAILED", "NO_LINKS"):
+                                            action = "skipped_already_active"
+                                        else:
+                                            action = "updated"
+                            else:
+                                result = self._upsert_queue_task(task, status=status, last_error=last_error, conn=doc_conn)
+                                action = result.get("action")
 
-                            result = self._upsert_queue_task(task, status="PRE_RESEARCH_WAITING", conn=doc_conn)
-                            action = result.get("action")
                             if action == "inserted":
                                 inserted += 1
+                                if not is_target:
+                                    out_of_target_failed_inserted += 1
+                                elif lc == 0:
+                                    no_links_inserted += 1
+                                else:
+                                    target_waiting_inserted += 1
                             elif action == "updated":
                                 updated += 1
-                            else:
-                                skipped += 1
+                                if not is_target:
+                                    out_of_target_failed_updated += 1
+                                elif lc == 0:
+                                    no_links_updated += 1
+                                else:
+                                    target_waiting_updated += 1
+                            elif action == "skipped_already_active":
+                                skipped_already_active += 1
                         except Exception as exc:
                             errors += 1
                             logger.exception("populate_all_eligible pid=%s: %s", pid, exc)
@@ -337,9 +403,15 @@ class CommercialRoutingV3QueueProducer:
             "STOPWORD_QUEUE_ADMISSION_GATE": "NO",
             "inserted": inserted,
             "updated": updated,
-            "skipped_no_links": skipped,
+            "skipped_already_active": skipped_already_active,
+            "target_waiting_inserted": target_waiting_inserted,
+            "target_waiting_updated": target_waiting_updated,
+            "out_of_target_failed_inserted": out_of_target_failed_inserted,
+            "out_of_target_failed_updated": out_of_target_failed_updated,
+            "no_links_inserted": no_links_inserted,
+            "no_links_updated": no_links_updated,
             "errors": errors,
-            "total_processed": inserted + updated + skipped + errors,
+            "total_processed": inserted + updated + skipped_already_active + errors,
             "dry_run": dry_run,
         }
 
@@ -651,9 +723,9 @@ class CommercialRoutingV3QueueProducer:
             contract_number=proc.get("contract_number"),
         )
 
-    def _upsert_queue_task(self, task: Dict[str, Any], *, status: str = "PRE_RESEARCH_WAITING", conn: Optional[Any] = None) -> Dict[str, Any]:
+    def _upsert_queue_task(self, task: Dict[str, Any], *, status: str = "PRE_RESEARCH_WAITING", last_error: Optional[str] = None, conn: Optional[Any] = None) -> Dict[str, Any]:
         sql_check = """
-            SELECT id, research_depth FROM document_processing_queue
+            SELECT id, status, research_depth FROM document_processing_queue
             WHERE procurement_id = %s AND pipeline_generation = %s
         """
         sql_insert = """
@@ -663,9 +735,9 @@ class CommercialRoutingV3QueueProducer:
                  candidate_level, candidate_score,
                  research_action, research_depth,
                  queue_lane, priority_score,
-                 status, pipeline_generation)
+                 status, pipeline_generation, last_error)
             VALUES
-                (%s,%s,%s,%s, %s,%s,%s, %s,%s, %s,%s, %s,%s, %s,%s)
+                (%s,%s,%s,%s, %s,%s,%s, %s,%s, %s,%s, %s,%s, %s,%s, %s)
             RETURNING id
         """
         sql_update = """
@@ -680,7 +752,7 @@ class CommercialRoutingV3QueueProducer:
                    candidate_level  = %s,
                    candidate_score  = %s,
                    status           = %s,
-                   last_error       = NULL,
+                   last_error       = %s,
                    worker_id        = NULL,
                    started_at       = NULL,
                    completed_at     = NULL
@@ -696,50 +768,57 @@ class CommercialRoutingV3QueueProducer:
             with doc.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
                 cur.execute(sql_check, (task["procurement_id"], PIPELINE_GENERATION))
                 existing = cur.fetchone()
-                if existing is None:
+                if existing is not None:
+                    existing_status = existing.get("status")
+                    if existing_status in ("PENDING", "PROCESSING", "COMPLETED", "FAILED", "NO_LINKS"):
+                        return {"action": "skipped_already_active", "queue_id": existing["id"], "status": existing_status, **task}
+
                     cur.execute(
-                        sql_insert,
+                        sql_update,
                         (
-                            task["procurement_id"],
-                            task["source_table"],
-                            task["source_id"],
-                            task["contract_number"],
+                            task["research_action"],
+                            task["research_depth"],
+                            task["queue_lane"],
+                            task["priority_score"],
                             task["assessment_id"],
                             task["category_codes"],
                             psycopg2.extras.Json(task["category_context"]),
                             task["candidate_level"],
                             task["candidate_score"],
-                            task["research_action"],
-                            task["research_depth"],
-                            task["queue_lane"],
-                            task["priority_score"],
                             status,
-                            PIPELINE_GENERATION,
+                            last_error,
+                            existing["id"],
                         ),
                     )
-                    row = cur.fetchone()
                     if should_close:
                         doc.commit()
-                    return {"action": "inserted", "queue_id": row["id"], "status": status, **task}
+                    return {"action": "updated", "queue_id": existing["id"], "status": status, **task}
+
                 cur.execute(
-                    sql_update,
+                    sql_insert,
                     (
-                        task["research_action"],
-                        task["research_depth"],
-                        task["queue_lane"],
-                        task["priority_score"],
+                        task["procurement_id"],
+                        task["source_table"],
+                        task["source_id"],
+                        task["contract_number"],
                         task["assessment_id"],
                         task["category_codes"],
                         psycopg2.extras.Json(task["category_context"]),
                         task["candidate_level"],
                         task["candidate_score"],
+                        task["research_action"],
+                        task["research_depth"],
+                        task["queue_lane"],
+                        task["priority_score"],
                         status,
-                        existing["id"],
+                        PIPELINE_GENERATION,
+                        last_error,
                     ),
                 )
+                row = cur.fetchone()
                 if should_close:
                     doc.commit()
-                return {"action": "updated", "queue_id": existing["id"], "status": status, **task}
+                return {"action": "inserted", "queue_id": row["id"], "status": status, **task}
         except Exception:
             if should_close:
                 doc.rollback()

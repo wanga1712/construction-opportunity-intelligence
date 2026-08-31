@@ -13,6 +13,10 @@
 
 ## CURRENT WIP — 2026-08-31
 
+**CRM-V3-LAUNCH-R3-2A-RESTORE-DETERMINISTIC-OKPD-ADMISSION-1** — `[~]` **IN PROGRESS**. Scope: `QUEUE_ADMISSION_CORRECTNESS_ONLY`. Restoring deterministic target OKPD/profile admission for exhaustive document research queue, excluding terminal stage razygranye, and writing skipped out-of-target/no-links rows with appropriate status and context to prevent Qwen LLM shadow predictor from running on them. Deployed clean-up utility `clean_out_of_target_queue.py`. Target tests added to `tests/test_okpd_admission.py` and pass.
+
+**CRM-V3-LAUNCH-R3-1-EXHAUSTIVE-FACTUAL-CANARY-1** — `[x]` **PASS / STOP**. Baseline GitHub `ba00838f0d48fc659f513a0ba6ddf4cc4500663b`. Scope: `FACTUAL_DOCUMENT_RESEARCH_ONLY`. Fixed database schema string truncation limitations (`StringDataRightTruncation`) by altering `pipeline_generation` columns in `document_processing_queue`, `document_processing_results`, `document_matches`, `document_match_details`, `document_evidence`, and `document_files` to `varchar(80)`. Deployed `factual_feeder.py`, corrected database routing aliases for `PROCESSING_BACKEND="S13_V4"`, requeued tasks 148264 and 148265, and verified successful end-to-end execution of the document research pipeline. Extracted positive canaries and multi-match completeness proofs. STOP after WIP.
+
 **CRM-V3-LAUNCH-R2-223FZ-DATE-RECONCILIATION-1** — `[x]` **PASS / STOP**. Baseline GitHub `7807efa` / S13 start `7807efa`. Scope: `223FZ_DATE_CORRECTNESS_ONLY`. Protected sync mapping in `projection_writer.py` from overwriting CRM deadlines with execution/delivery dates on stale records. Reconciled 24 affected CRM rows based on factual source dates. Verified that normal sync has 0 pending reconciliations and does not reintroduce the bug. Implementation: copy to S13 completed, checked against S7. Tests and AppTest passed. Walkthrough report in walkthrough artifact. STOP after WIP.
 
 ## PRIOR CURRENT WIP — 2026-08-27
