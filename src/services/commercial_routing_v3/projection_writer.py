@@ -428,6 +428,7 @@ def _upsert_one(crm_db, row: Dict[str, Any], existing: Optional[Dict[str, Any]],
     """Return action: insert|update|reconcile|duplicate|error."""
     effective_start = row.get("start_date")
     effective_end = row.get("end_date")
+    deadline_trust = "TRUSTED"
 
     is_223 = str(row.get("source_table") or "").startswith("reestr_contract_223_fz")
     if is_223:

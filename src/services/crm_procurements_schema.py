@@ -46,6 +46,7 @@ CREATE TABLE IF NOT EXISTS crm_procurements (
     awarded_match_type      TEXT,
     awarded_match_confidence NUMERIC,
     commercial_window_state TEXT,
+    deadline_trust          TEXT CHECK (deadline_trust IN ('TRUSTED', 'RECOVERED', 'UNRECOVERABLE_LEGACY')),
 
     -- Метаданные
     crm_created_at          TIMESTAMPTZ NOT NULL DEFAULT now(),
