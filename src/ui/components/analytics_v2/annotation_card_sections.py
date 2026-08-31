@@ -1,7 +1,6 @@
 """Presentation sections for the dedicated annotation workbench card."""
 from __future__ import annotations
 
-from html import escape
 import streamlit as st
 
 from src.services.commercial_routing_v3.model_ui_projection import business_view_from_assessment, model_view_from_assessment
@@ -68,15 +67,23 @@ def render_documents(
     priority_state: dict[str, str],
     orphan_observations: list[dict] | None = None,
 ) -> None:
-    st.markdown("### 📎 Документы закупки")
+    st.markdown("### 📎 Документы для экспертной проверки")
     if not rows:
         st.info("Источник не вернул документов для этой закупки. Исследование автоматически не запускается.")
         return
-
+    labels = {
+        "UNOBSERVED": "Документ ещё не исследован",
+        "OBSERVED_WITH_EVIDENCE": "Исследован · найдены коммерческие свидетельства",
+        "OBSERVED_NO_EVIDENCE": "Исследован · коммерческих свидетельств не найдено",
+        "DOWNLOAD_FAILED": "Ошибка скачивания документа",
+        "PARSE_FAILED": "Ошибка разбора документа",
+        "UNSUPPORTED_FORMAT": "Неподдерживаемый формат",
+        "EMPTY_DOCUMENT": "Пустой документ",
+        "DUPLICATE_DOCUMENT": "Дубликат документа",
+    }
     for idx, row in enumerate(rows, 1):
+        # Preserve the existing persisted priority identity (URL-first).
         key = str(row.get("document_url") or row.get("source_document_id") or idx)
-        research_ev = row.get("research_evidence") or []
-
         with st.container(border=True):
             left, right = st.columns([4, 2])
             left.markdown(f"**{idx}. {row.get('document_name') or 'Документ без имени'}**")
@@ -86,56 +93,30 @@ def render_documents(
             )
             if int(row.get("source_row_count") or 1) > 1:
                 left.caption(f"Один физический файл представлен {row['source_row_count']} строками/версиями источника")
-            
             if row.get("document_url"):
                 left.link_button("Открыть / скачать документ", row["document_url"])
-
             state = row.get("observation_state") or "UNOBSERVED"
-
-            # Render explicit Research Result for this document immediately under download button
-            if research_ev:
-                left.success(f"✅ В этом документе найдено: {len(research_ev)} подтверждений")
-                cat_names = sorted(list({e.get("category_name") for e in research_ev if e.get("category_name")}))
-                if cat_names:
-                    left.markdown("**Категории:** " + ", ".join(cat_names))
-                
-                for ev_idx, ev in enumerate(research_ev, 1):
-                    term = ev.get("matched_term") or "совпадение"
-                    c_name = ev.get("category_name") or ev.get("suggested_category_code") or ""
-                    loc = ev.get("friendly_locator") or ""
-                    text_snip = ev.get("raw_text") or ""
-
-                    header_line = f"**{ev_idx}. {escape(str(term))}**"
-                    if c_name:
-                        header_line += f" &nbsp;•&nbsp; *Категория: {escape(str(c_name))}*"
-                    if loc:
-                        header_line += f" &nbsp;•&nbsp; `{escape(str(loc))}`"
-
-                    left.markdown(header_line, unsafe_allow_html=True)
-                    if text_snip:
-                        left.markdown(f"> «{escape(str(text_snip[:400]))}»", unsafe_allow_html=True)
-            elif state == "OBSERVED_NO_EVIDENCE":
-                left.info("○ Исследован · Подтверждений по нашим категориям не найдено")
+            if state == "UNOBSERVED":
+                left.info(labels[state])
             elif state in {"DOWNLOAD_FAILED", "PARSE_FAILED", "UNSUPPORTED_FORMAT", "EMPTY_DOCUMENT"}:
-                err_labels = {
-                    "DOWNLOAD_FAILED": "Ошибка скачивания документа",
-                    "PARSE_FAILED": "Ошибка разбора документа",
-                    "UNSUPPORTED_FORMAT": "Формат документа не поддерживается",
-                    "EMPTY_DOCUMENT": "Пустой документ",
-                }
-                left.error(f"⚠ {err_labels.get(state, state)}")
+                left.error(labels.get(state, state))
+            elif state == "OBSERVED_WITH_EVIDENCE":
+                left.success(labels[state])
             else:
-                left.caption("○ Документ ожидает исследования")
-
-            # Legacy observations compatibility rendering
+                left.warning(labels.get(state, state))
             for observation in row.get("observations") or []:
                 categories = observation.get("matched_categories") or []
                 mentions = observation.get("product_mentions") or []
-                if categories and not research_ev:
-                    left.markdown("**Категории (legacy):** " + ", ".join(map(str, categories)))
-                if mentions and not research_ev:
-                    left.markdown("**Материалы / товары (legacy):** " + ", ".join(map(str, mentions[:8])))
-
+                if categories:
+                    left.markdown("**Категории:** " + ", ".join(map(str, categories)))
+                if mentions:
+                    left.markdown("**Материалы / товары:** " + ", ".join(map(str, mentions[:8])))
+                left.caption(
+                    f"download=`{observation.get('download_status') or '—'}` · "
+                    f"parse=`{observation.get('parse_status') or '—'}` · "
+                    f"outcome=`{observation.get('usefulness_label') or '—'}` · "
+                    f"observed_at=`{observation.get('observed_at') or '—'}`"
+                )
             current = priority_state.get(key, "none")
             selected = right.radio(
                 "Приоритет открытия",
@@ -145,7 +126,6 @@ def render_documents(
                 key=f"ann_doc_priority_{procurement_id}_{idx}",
             )
             priority_state[key] = selected
-
     if orphan_observations:
         st.warning(f"Непривязанные наблюдения: {len(orphan_observations)}. Они не прикреплены к случайным документам.")
 

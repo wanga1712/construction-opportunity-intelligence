@@ -554,8 +554,8 @@ def _render_torgi_tab() -> None:
         filter_workset_ids_sql,
         load_current_annotation_states,
     )
-    from src.services.db_bootstrap import connect_crm_database
-    crm_db = connect_crm_database()
+    from src.services.db_bootstrap import connect_databases
+    _, _, crm_db, _ = connect_databases()
     # ?????? Law filter (SQL count & filter) ??????
     law_counts = count_law_states_sql(workset_ids, crm_db)
     selected_law = _render_law_filter_from_counts(
@@ -568,35 +568,15 @@ def _render_torgi_tab() -> None:
         sql_counts, _SESSION_TORGI, on_change=_reset_torgi_page
     )
     filtered_workset_ids = filter_workset_ids_sql(law_workset_ids, selected_review, crm_db)
-
-    # ── Research & Category filters BEFORE pagination ──
-    from src.services.commercial_routing_v3.research_ui_projection import (
-        filter_research_workset_ids,
-        load_research_filter_index,
-        load_research_ui_projection,
-    )
-    from src.ui.components.analytics_v2.stage_workspace import render_research_filters
-
-    projections = load_research_filter_index(filtered_workset_ids, crm_db)
-    selected_research, selected_category = render_research_filters(
-        projections, _SESSION_TORGI, on_change=_reset_torgi_page
-    )
-    research_filtered_ids = filter_research_workset_ids(
-        filtered_workset_ids, projections, selected_research, selected_category
-    )
-
-    filtered_total = len(research_filtered_ids)
+    filtered_total = len(filtered_workset_ids)
     page, offset = _page_offset("torgi", filtered_total, selected_law)
-    cards = _load_torgi(_PAGE_SIZE, offset, sort_mode, research_filtered_ids)
+    cards = _load_torgi(_PAGE_SIZE, offset, sort_mode, filtered_workset_ids)
     # ── Page-only annotation state load (max 25 IDs) ──
     page_ids = [c["id"] for c in cards]
     annotation_states = load_current_annotation_states(page_ids, crm_db)
 
-    # ── Page-only heavy detailed research projection load ──
-    page_projections = load_research_ui_projection(page_ids, crm_db)
-
     if not cards:
-        st.info("Нет тендеров по выбранным фильтрам.")
+        st.info("Нет тендеров в стадии торгов.")
         return
 
     # ── Batch-load processing results (no N+1) ─────────────────────────────
@@ -623,14 +603,12 @@ def _render_torgi_tab() -> None:
     render_stage_workspace(
         filtered,
         session_key=_SESSION_TORGI,
-        stage="torgi",
+        stage="OPEN",
         stage_label="Идут торги",
         effective_map=eff_map,
-        workset_ids=research_filtered_ids,
+        workset_ids=workset_ids,
         annotation_states=annotation_states,
         selected_annotation_filter=selected_review,
-        projections=page_projections,
-        render_research_controls=False,
     )
 
 
