@@ -28,6 +28,7 @@ from src.services.commercial_routing_v3.gpu_arbiter import (
 )
 
 PRODUCER_VERSION = "v3_real_truth"
+PIPELINE_GENERATION = "S13_V4_EXHAUSTIVE_CONTEXT"
 OLLAMA_URL = os.getenv("OLLAMA_URL", "http://127.0.0.1:11434/api/generate")
 BASE_MODEL = "qwen2.5:7b"
 PROMPT_VERSION = "v3_pre_research_shadow_v1"
@@ -44,6 +45,16 @@ def get_crm_db():
     port = os.environ.get("CRM_DB_PORT", "5432")
     return psycopg2.connect(dbname="crm", user=user, password=password, host=host, port=port)
 
+def get_doc_db():
+    user = os.environ.get("S13_DOCUMENT_DB_USER", "doc_worker")
+    password = os.environ.get("S13_DOCUMENT_DB_PASSWORD")
+    if not password:
+        raise RuntimeError("Missing required environment variable S13_DOCUMENT_DB_PASSWORD")
+    host = os.environ.get("S13_DOCUMENT_DB_HOST", "127.0.0.1")
+    port = os.environ.get("S13_DOCUMENT_DB_PORT", "5432")
+    return psycopg2.connect(dbname="document_intelligence", user=user, password=password, host=host, port=port)
+
+
 def fetch_active_categories(crm_conn) -> Optional[Set[str]]:
     """Query active category codes from crm_product_categories. Return None on failure/empty."""
     try:
@@ -56,7 +67,6 @@ def fetch_active_categories(crm_conn) -> Optional[Set[str]]:
 
 def validate_shadow_output(parsed: Any, manifest: List[Dict[str, Any]], active_cats: Optional[Set[str]]) -> bool:
     if not active_cats:
-        # EMPTY_REGISTRY_BYPASSES_VALIDATION = NO: if registry cannot be loaded or is empty, validation FAILS!
         return False
 
     if not isinstance(parsed, dict):
@@ -138,6 +148,49 @@ def validate_shadow_output(parsed: Any, manifest: List[Dict[str, Any]], active_c
 
     return True
 
+def release_pre_research_queue(
+    queue_id: int,
+    procurement_id: int,
+    pipeline_generation: str,
+    research_generation_hash: str,
+    outcome: str,
+    category_context: Optional[Dict[str, Any]] = None
+) -> None:
+    """Explicitly releases a queue row from PRE_RESEARCH_WAITING to PENDING.
+    
+    If outcome is 'SUCCESS', marks learning_sample_mode = 'ONLINE_CLEAN'.
+    If outcome is 'FAILED', marks learning_sample_mode = 'BACKFILL_FACT_ONLY'.
+    Otherwise, does nothing (waits for retry).
+    """
+    if outcome not in ("SUCCESS", "FAILED"):
+        return
+
+    context = dict(category_context or {})
+    if outcome == "SUCCESS":
+        context["learning_sample_mode"] = "ONLINE_CLEAN"
+        context["blind_prediction_status"] = "SUCCESS"
+    else:
+        context["learning_sample_mode"] = "BACKFILL_FACT_ONLY"
+        context["blind_prediction_status"] = "FAILED"
+
+    doc_conn = get_doc_db()
+    try:
+        with doc_conn.cursor() as cur:
+            cur.execute("""
+                UPDATE document_processing_queue
+                SET status = 'PENDING',
+                    category_context = %s
+                WHERE id = %s AND pipeline_generation = %s AND research_generation_hash = %s AND status = 'PRE_RESEARCH_WAITING'
+            """, (json.dumps(context), queue_id, pipeline_generation, research_generation_hash))
+        doc_conn.commit()
+        print(f"Released queue row {queue_id} (procurement {procurement_id}) to PENDING with mode {context['learning_sample_mode']}")
+    except Exception as exc:
+        doc_conn.rollback()
+        print(f"Failed to release queue row {queue_id} to PENDING: {exc}", file=sys.stderr)
+        raise
+    finally:
+        doc_conn.close()
+
 class ShadowPredictor:
     def __init__(self):
         pass
@@ -147,91 +200,160 @@ class ShadowPredictor:
             time.sleep(2)
             return False
 
+        # 1. Fetch exactly one row in PRE_RESEARCH_WAITING from Document DB
+        doc_conn = get_doc_db()
+        try:
+            with doc_conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as doc_cur:
+                doc_cur.execute("""
+                    SELECT id as queue_id, procurement_id, pipeline_generation, research_generation_hash, category_context
+                    FROM document_processing_queue
+                    WHERE status = 'PRE_RESEARCH_WAITING' AND pipeline_generation = %s
+                    ORDER BY id ASC LIMIT 1
+                """, (PIPELINE_GENERATION,))
+                queue_row = doc_cur.fetchone()
+        except Exception as exc:
+            print(f"Failed to query queue in Document DB: {exc}", file=sys.stderr)
+            return False
+        finally:
+            doc_conn.close()
+
+        if not queue_row:
+            return False
+
+        pid = queue_row["procurement_id"]
+        queue_id = queue_row["queue_id"]
+        pipeline_generation = queue_row["pipeline_generation"]
+        gen_hash = queue_row["research_generation_hash"]
+        cat_ctx = queue_row["category_context"]
+        if isinstance(cat_ctx, str):
+            cat_ctx = json.loads(cat_ctx)
+
+        # 2. Count attempts for this shadow prediction in CRM DB
         crm_conn = get_crm_db()
         try:
-            active_cats = fetch_active_categories(crm_conn)
+            with crm_conn.cursor() as cur:
+                cur.execute("""
+                    SELECT COUNT(1) FROM crm_v3_model_inference_runs
+                    WHERE procurement_id = %s AND run_kind = 'SHADOW'
+                """, (pid,))
+                attempts = cur.fetchone()[0]
+        except Exception as exc:
+            print(f"Failed to query model runs in CRM DB: {exc}", file=sys.stderr)
+            crm_conn.close()
+            return False
 
+        # 3. If attempts >= 3, release as FAILED (BACKFILL_FACT_ONLY)
+        if attempts >= 3:
+            print(f"Procurement {pid} shadow prediction attempts reached limit ({attempts}). Releasing as FAILED.")
+            crm_conn.close()
+            release_pre_research_queue(
+                queue_id=queue_id,
+                procurement_id=pid,
+                pipeline_generation=pipeline_generation,
+                research_generation_hash=gen_hash,
+                outcome="FAILED",
+                category_context=cat_ctx
+            )
+            return True
+
+        # 4. Fetch the exact matching snapshot from CRM DB
+        try:
+            active_cats = fetch_active_categories(crm_conn)
             with crm_conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
                 cur.execute("""
-                    SELECT s.id as snapshot_id, s.procurement_id, s.research_generation_hash,
-                           s.source_snapshot_json, s.document_manifest_json
-                    FROM crm_v3_pre_research_snapshots s
-                    LEFT JOIN crm_v3_shadow_predictions p ON s.id = p.snapshot_id
-                    WHERE p.id IS NULL AND s.producer_version = %s
-                    ORDER BY s.id ASC LIMIT 1
-                """, (PRODUCER_VERSION,))
+                    SELECT id as snapshot_id, procurement_id, research_generation_hash,
+                           source_snapshot_json, document_manifest_json, pipeline_generation, queue_id
+                    FROM crm_v3_pre_research_snapshots
+                    WHERE procurement_id = %s AND pipeline_generation = %s AND research_generation_hash = %s
+                    LIMIT 1
+                """, (pid, pipeline_generation, gen_hash))
                 snap = cur.fetchone()
+        except Exception as exc:
+            print(f"Failed to query snapshots in CRM DB: {exc}", file=sys.stderr)
+            crm_conn.close()
+            return False
 
-                if not snap:
-                    return False
+        if not snap:
+            print(f"Snapshot not found for procurement {pid} of generation {gen_hash}. Waiting for snapshot builder.")
+            crm_conn.close()
+            return False
 
-                pid = snap["procurement_id"]
-                gen_hash = snap["research_generation_hash"]
-                source_json = snap["source_snapshot_json"]
-                manifest_json = snap["document_manifest_json"]
+        source_json = snap["source_snapshot_json"]
+        manifest_json = snap["document_manifest_json"]
+        if isinstance(source_json, str):
+            source_json = json.loads(source_json)
+        if isinstance(manifest_json, str):
+            manifest_json = json.loads(manifest_json)
 
-                if isinstance(source_json, str):
-                    source_json = json.loads(source_json)
-                if isinstance(manifest_json, str):
-                    manifest_json = json.loads(manifest_json)
+        system_prompt = (
+            "You are a pre-research shadow predictor for procurement intelligence.\n"
+            "Analyze the factual procurement metadata and document manifest.\n"
+            "Output ONLY valid JSON matching this schema:\n"
+            "{\n"
+            '  "has_target_probability": float (0.0 to 1.0),\n'
+            '  "has_target_decision": "YES" | "NO" | "UNCERTAIN",\n'
+            '  "priority_candidate": "GOLD_CANDIDATE" | "SILVER_CANDIDATE" | "BRONZE_CANDIDATE" | "LOW_PRIORITY" | "UNSCORED",\n'
+            '  "predicted_categories": [{"category_code": str, "confidence": float}],\n'
+            '  "document_ranking": [{"document_key": str, "rank": int, "useful_evidence_probability": float}],\n'
+            '  "overall_confidence": float (0.0 to 1.0)\n'
+            "}"
+        )
+        user_prompt = (
+            f"PROCUREMENT SOURCE METADATA:\n{json.dumps(source_json, ensure_ascii=False, indent=2)}\n\n"
+            f"DOCUMENT MANIFEST:\n{json.dumps(manifest_json, ensure_ascii=False, indent=2)}"
+        )
 
-                system_prompt = (
-                    "You are a pre-research shadow predictor for procurement intelligence.\n"
-                    "Analyze the factual procurement metadata and document manifest.\n"
-                    "Output ONLY valid JSON matching this schema:\n"
-                    "{\n"
-                    '  "has_target_probability": float (0.0 to 1.0),\n'
-                    '  "has_target_decision": "YES" | "NO" | "UNCERTAIN",\n'
-                    '  "priority_candidate": "GOLD_CANDIDATE" | "SILVER_CANDIDATE" | "BRONZE_CANDIDATE" | "LOW_PRIORITY" | "UNSCORED",\n'
-                    '  "predicted_categories": [{"category_code": str, "confidence": float}],\n'
-                    '  "document_ranking": [{"document_key": str, "rank": int, "useful_evidence_probability": float}],\n'
-                    '  "overall_confidence": float (0.0 to 1.0)\n'
-                    "}"
-                )
-                user_prompt = (
-                    f"PROCUREMENT SOURCE METADATA:\n{json.dumps(source_json, ensure_ascii=False, indent=2)}\n\n"
-                    f"DOCUMENT MANIFEST:\n{json.dumps(manifest_json, ensure_ascii=False, indent=2)}"
-                )
+        full_prompt = f"{system_prompt}\n\n{user_prompt}"
 
-                full_prompt = f"{system_prompt}\n\n{user_prompt}"
+        # 5. Call LLM
+        raw_text = None
+        run_status = "PENDING"
+        try:
+            with acquire_gpu_inference(WORKLOAD_DOCUMENT, poll_sec=0.5, max_wait_sec=60.0):
+                resp = requests.post(OLLAMA_URL, json={
+                    "model": BASE_MODEL,
+                    "prompt": full_prompt,
+                    "stream": False,
+                    "options": {"temperature": 0.1}
+                }, timeout=60)
+                resp_data = resp.json()
+                raw_text = resp_data.get("response", "{}")
+                run_status = "SUCCESS"
+        except Exception as exc:
+            run_status = f"API_FAILED: {exc}"
+            raw_text = f'{{"error": "{str(exc)}"}}'
+            print(f"LLM call failed for procurement {pid}: {exc}", file=sys.stderr)
 
-                try:
-                    with acquire_gpu_inference(WORKLOAD_DOCUMENT, poll_sec=0.5, max_wait_sec=60.0):
-                        resp = requests.post(OLLAMA_URL, json={
-                            "model": BASE_MODEL,
-                            "prompt": full_prompt,
-                            "stream": False,
-                            "options": {"temperature": 0.1}
-                        }, timeout=60)
-                        resp_data = resp.json()
-                        raw_text = resp_data.get("response", "{}")
-                except Exception as e:
-                    raw_text = f'{{"error": "{str(e)}"}}'
+        parsed_json = None
+        parse_status = "RAW_RECEIVED_PARSE_FAILED"
+        val_status = "PARSED_SCHEMA_INVALID"
 
-                parsed_json = None
-                parse_status = "RAW_RECEIVED_PARSE_FAILED"
-                val_status = "PARSED_SCHEMA_INVALID"
+        if raw_text and run_status == "SUCCESS":
+            try:
+                clean_text = raw_text.strip()
+                if clean_text.startswith("```"):
+                    clean_text = clean_text.split("```")[1]
+                    if clean_text.startswith("json"):
+                        clean_text = clean_text[4:]
+                    clean_text = clean_text.strip()
+                parsed_json = json.loads(clean_text)
+                parse_status = "PARSED_OK"
+                if validate_shadow_output(parsed_json, manifest_json, active_cats):
+                    val_status = "VALIDATED_SUCCESS"
+            except Exception:
+                pass
 
-                try:
-                    clean_text = raw_text.strip()
-                    if clean_text.startswith("```"):
-                        clean_text = clean_text.split("```")[1]
-                        if clean_text.startswith("json"):
-                            clean_text = clean_text[4:]
-                        clean_text = clean_text.strip()
-                    
-                    parsed_json = json.loads(clean_text)
-                    parse_status = "PARSED_OK"
+        if run_status != "SUCCESS":
+            val_status = "API_FAILED"
+            parse_status = "API_FAILED"
 
-                    if validate_shadow_output(parsed_json, manifest_json, active_cats):
-                        val_status = "VALIDATED_SUCCESS"
-                except Exception:
-                    pass
+        run_status = val_status if val_status != "VALIDATED_SUCCESS" else "COMPLETED"
+        if parse_status == "RAW_RECEIVED_PARSE_FAILED":
+            run_status = "RAW_RECEIVED_PARSE_FAILED"
 
-                run_status = val_status if val_status != "VALIDATED_SUCCESS" else "COMPLETED"
-                if parse_status == "RAW_RECEIVED_PARSE_FAILED":
-                    run_status = "RAW_RECEIVED_PARSE_FAILED"
-
+        # 6. Save model run and shadow prediction if success
+        try:
+            with crm_conn.cursor() as cur:
                 cur.execute("""
                     INSERT INTO crm_v3_model_inference_runs (
                         procurement_id, run_kind, model_name, model_version, prompt_version,
@@ -239,9 +361,8 @@ class ShadowPredictor:
                     ) VALUES (%s, 'SHADOW', %s, %s, %s, 'v3_learning', %s, %s, %s, %s, NOW())
                     RETURNING id
                 """, (pid, BASE_MODEL, BASE_MODEL, PROMPT_VERSION, raw_text, parse_status, val_status, run_status))
-                run_id = cur.fetchone()["id"]
+                run_id = cur.fetchone()[0]
 
-                # Insert into crm_v3_shadow_predictions ONLY IF validation succeeded!
                 if val_status == "VALIDATED_SUCCESS" and parsed_json:
                     prob = float(parsed_json.get("has_target_probability", 0.5))
                     decision = str(parsed_json.get("has_target_decision", "UNCERTAIN")).upper()
@@ -264,11 +385,40 @@ class ShadowPredictor:
                     print(f"Shadow prediction created for procurement {pid} (decision={decision}, prob={prob})")
                 else:
                     print(f"Shadow model output invalid for procurement {pid} (val_status={val_status}, run_status={run_status}). Prediction omitted.")
-
             crm_conn.commit()
-            return True
-        finally:
+        except Exception as exc:
+            print(f"Failed to write results to CRM DB: {exc}", file=sys.stderr)
+            crm_conn.rollback()
             crm_conn.close()
+            return False
+
+        crm_conn.close()
+
+        # 7. Release or retry queue row
+        if val_status == "VALIDATED_SUCCESS":
+            release_pre_research_queue(
+                queue_id=queue_id,
+                procurement_id=pid,
+                pipeline_generation=pipeline_generation,
+                research_generation_hash=gen_hash,
+                outcome="SUCCESS",
+                category_context=cat_ctx
+            )
+        else:
+            if attempts + 1 >= 3:
+                print(f"Attempts reached limit ({attempts + 1}) after failed run for procurement {pid}. Releasing as FAILED.")
+                release_pre_research_queue(
+                    queue_id=queue_id,
+                    procurement_id=pid,
+                    pipeline_generation=pipeline_generation,
+                    research_generation_hash=gen_hash,
+                    outcome="FAILED",
+                    category_context=cat_ctx
+                )
+            else:
+                print(f"Run failed for procurement {pid} but retry is allowed (attempt {attempts + 1}/3). Keeping in PRE_RESEARCH_WAITING.")
+
+        return True
 
 if __name__ == "__main__":
     predictor = ShadowPredictor()

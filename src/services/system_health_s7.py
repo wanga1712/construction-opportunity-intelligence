@@ -295,6 +295,24 @@ def _ssh_base() -> List[str]:
     ]
 
 
+def check_s7_reachable() -> bool:
+    import socket
+    # Try port 22 (SSH) first
+    try:
+        s = socket.create_connection(("10.8.0.7", 22), timeout=2.0)
+        s.close()
+        return True
+    except Exception:
+        pass
+    # Try ping as fallback
+    try:
+        import subprocess
+        r = subprocess.run(["ping", "-c", "1", "-W", "2", "10.8.0.7"], capture_output=True, timeout=3)
+        return r.returncode == 0
+    except Exception:
+        return False
+
+
 def collect_s7_host() -> Dict[str, Any]:
     """SSH to S7 and collect metrics. Soft-fail → UNREACHABLE payload."""
     base = {
@@ -317,14 +335,25 @@ def collect_s7_host() -> Dict[str, Any]:
             check=False,
         )
     except subprocess.TimeoutExpired:
+        reachable = check_s7_reachable()
+        base["reachable"] = reachable
+        base["connectivity"] = "collector_failed" if reachable else "unavailable"
+        base["overall_status"] = "WARNING" if reachable else "UNREACHABLE"
         base["collection_errors"].append("S7 collection timeout")
-        base["connectivity"] = "unavailable"
         return base
     except Exception as exc:
+        reachable = check_s7_reachable()
+        base["reachable"] = reachable
+        base["connectivity"] = "collector_failed" if reachable else "unavailable"
+        base["overall_status"] = "WARNING" if reachable else "UNREACHABLE"
         base["collection_errors"].append(str(exc))
         return base
 
     if r.returncode != 0:
+        reachable = check_s7_reachable()
+        base["reachable"] = reachable
+        base["connectivity"] = "collector_failed" if reachable else "unavailable"
+        base["overall_status"] = "WARNING" if reachable else "UNREACHABLE"
         err = (r.stderr or r.stdout or "ssh failed")[:500]
         base["collection_errors"].append(err)
         return base
@@ -334,6 +363,10 @@ def collect_s7_host() -> Dict[str, Any]:
     try:
         payload = json.loads(text.splitlines()[-1])
     except Exception as exc:
+        reachable = check_s7_reachable()
+        base["reachable"] = reachable
+        base["connectivity"] = "collector_failed" if reachable else "unavailable"
+        base["overall_status"] = "WARNING" if reachable else "UNREACHABLE"
         base["collection_errors"].append(f"json parse: {exc}")
         return base
 

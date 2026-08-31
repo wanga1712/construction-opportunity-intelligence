@@ -38,7 +38,7 @@ _ACTION_MAP = {
 }
 _SKIP = {ResearchAction.SKIP.value, ResearchAction.METADATA_ONLY.value}
 
-PIPELINE_GENERATION = "S13_V3_EXHAUSTIVE_CONTEXT"
+PIPELINE_GENERATION = "S13_V4_EXHAUSTIVE_CONTEXT"
 _DOC_ENV_FILES = (
     "/etc/tender-docs-db.env",
     "/opt/tender_documents_research/.env",
@@ -234,7 +234,7 @@ class CommercialRoutingV3QueueProducer:
         STOPWORD_QUEUE_ADMISSION_GATE=NO
         Every eligible procurement enters queue at lane=open_active, priority=50.
         """
-        from src.services.commercial_routing_v3.document_links import count_document_links
+        from src.services.commercial_routing_v3.document_links import batch_count_document_links
 
         inserted = updated = skipped = errors = 0
         offset = 0
@@ -264,56 +264,67 @@ class CommercialRoutingV3QueueProducer:
                     break
                 offset += len(rows)
 
-                for proc in rows:
-                    pid = proc["id"]
-                    if max_total and (inserted + updated) >= max_total:
-                        break
-                    try:
-                        lc = count_document_links(
-                            source_table=str(proc.get("source_table") or ""),
-                            source_id=proc.get("source_id"),
-                            contract_number=proc.get("contract_number"),
-                        )
-                        if lc == 0:
-                            skipped += 1
-                            continue
+                # Batch count document links to avoid N+1 queries
+                link_counts = batch_count_document_links(rows)
 
-                        task = {
-                            "procurement_id": pid,
-                            "source_table": proc.get("source_table") or "",
-                            "source_id": proc.get("source_id"),
-                            "contract_number": proc.get("contract_number"),
-                            "assessment_id": None,
-                            "category_codes": [],
-                            "category_context": {
-                                "populate_method": "EXHAUSTIVE_ALL_ELIGIBLE",
-                                "AI_QUEUE_ADMISSION_GATE": "NO",
-                                "link_count": lc,
-                            },
-                            "candidate_level": None,
-                            "candidate_score": None,
-                            "research_action": ResearchAction.DEEP_RESEARCH.value,
-                            "research_depth": "highest",
-                            "queue_lane": "open_active",
-                            "priority_score": 50,
-                            "dispatchable": True,
-                        }
+                # Open a single connection to Document DB for this batch
+                doc_conn = psycopg2.connect(**self._doc_dsn)
+                doc_conn.autocommit = False
+                try:
+                    for proc in rows:
+                        pid = proc["id"]
+                        if max_total and (inserted + updated) >= max_total:
+                            break
+                        try:
+                            lc = link_counts.get(pid, 0)
+                            if lc == 0:
+                                skipped += 1
+                                continue
 
-                        if dry_run:
-                            inserted += 1
-                            continue
+                            task = {
+                                "procurement_id": pid,
+                                "source_table": proc.get("source_table") or "",
+                                "source_id": proc.get("source_id"),
+                                "contract_number": proc.get("contract_number"),
+                                "assessment_id": None,
+                                "category_codes": [],
+                                "category_context": {
+                                    "populate_method": "EXHAUSTIVE_ALL_ELIGIBLE",
+                                    "AI_QUEUE_ADMISSION_GATE": "NO",
+                                    "link_count": lc,
+                                },
+                                "candidate_level": None,
+                                "candidate_score": None,
+                                "research_action": ResearchAction.DEEP_RESEARCH.value,
+                                "research_depth": "highest",
+                                "queue_lane": "open_active",
+                                "priority_score": 50,
+                                "dispatchable": True,
+                            }
 
-                        result = self._upsert_queue_task(task, status="PENDING")
-                        action = result.get("action")
-                        if action == "inserted":
-                            inserted += 1
-                        elif action == "updated":
-                            updated += 1
-                        else:
-                            skipped += 1
-                    except Exception as exc:
-                        errors += 1
-                        logger.exception("populate_all_eligible pid=%s: %s", pid, exc)
+                            if dry_run:
+                                inserted += 1
+                                continue
+
+                            result = self._upsert_queue_task(task, status="PRE_RESEARCH_WAITING", conn=doc_conn)
+                            action = result.get("action")
+                            if action == "inserted":
+                                inserted += 1
+                            elif action == "updated":
+                                updated += 1
+                            else:
+                                skipped += 1
+                        except Exception as exc:
+                            errors += 1
+                            logger.exception("populate_all_eligible pid=%s: %s", pid, exc)
+                    if not dry_run:
+                        doc_conn.commit()
+                except Exception:
+                    if not dry_run:
+                        doc_conn.rollback()
+                    raise
+                finally:
+                    doc_conn.close()
 
                 if max_total and (inserted + updated) >= max_total:
                     break
@@ -441,7 +452,7 @@ class CommercialRoutingV3QueueProducer:
                 "reason": "ZERO_LINK_NOT_EXECUTABLE",
                 **task,
             }
-        status = "PENDING"
+        status = "PRE_RESEARCH_WAITING"
         return self._upsert_queue_task(task, status=status)
 
     def produce_for_procurements(
@@ -640,7 +651,7 @@ class CommercialRoutingV3QueueProducer:
             contract_number=proc.get("contract_number"),
         )
 
-    def _upsert_queue_task(self, task: Dict[str, Any], *, status: str = "PENDING") -> Dict[str, Any]:
+    def _upsert_queue_task(self, task: Dict[str, Any], *, status: str = "PRE_RESEARCH_WAITING", conn: Optional[Any] = None) -> Dict[str, Any]:
         sql_check = """
             SELECT id, research_depth FROM document_processing_queue
             WHERE procurement_id = %s AND pipeline_generation = %s
@@ -675,8 +686,12 @@ class CommercialRoutingV3QueueProducer:
                    completed_at     = NULL
              WHERE id = %s
         """
-        doc = psycopg2.connect(**self._doc_dsn)
-        doc.autocommit = False
+        should_close = False
+        doc = conn
+        if doc is None:
+            doc = psycopg2.connect(**self._doc_dsn)
+            doc.autocommit = False
+            should_close = True
         try:
             with doc.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
                 cur.execute(sql_check, (task["procurement_id"], PIPELINE_GENERATION))
@@ -703,7 +718,8 @@ class CommercialRoutingV3QueueProducer:
                         ),
                     )
                     row = cur.fetchone()
-                    doc.commit()
+                    if should_close:
+                        doc.commit()
                     return {"action": "inserted", "queue_id": row["id"], "status": status, **task}
                 cur.execute(
                     sql_update,
@@ -721,10 +737,13 @@ class CommercialRoutingV3QueueProducer:
                         existing["id"],
                     ),
                 )
-                doc.commit()
+                if should_close:
+                    doc.commit()
                 return {"action": "updated", "queue_id": existing["id"], "status": status, **task}
         except Exception:
-            doc.rollback()
+            if should_close:
+                doc.rollback()
             raise
         finally:
-            doc.close()
+            if should_close:
+                doc.close()

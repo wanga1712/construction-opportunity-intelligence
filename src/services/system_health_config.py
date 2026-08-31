@@ -25,8 +25,8 @@ COLLECTOR_DOWN_AFTER_SEC = 120
 S7_STALE_AFTER_SEC = 90
 
 # S7 remote (collector only — never from UI)
-S7_SSH_TARGET = "<S7_SSH_USER>@S7"
-S7_SSH_IDENTITY = "<HOME>/.ssh/id_to_nyx"
+S7_SSH_TARGET = "wanga@10.8.0.7"
+S7_SSH_IDENTITY = "/home/sergey/.ssh/id_to_nyx"
 S7_CONNECT_TIMEOUT = 5
 S7_COMMAND_TIMEOUT = 25
 S7_COLLECTION_TIMEOUT = 60
@@ -58,27 +58,22 @@ IMPORTANT_MOUNTS_S7 = ("/",)
 SERVICE_EXPECTED_ACTIVE = (
     "crm-streamlit.service",
     "crm-system-health-collector.service",
-    "crm-v3-analytics-refresh.timer",
     "postgresql.service",
+    "ollama.service",
+    "tender-docs-daemon.service",
+    "crm-v3-learning-observer.service",
+    "crm-v3-shadow-predictor.service",
+    "crm-v3-autonomous-worker.service",
 )
 
 # Timer-backed oneshot — idle/activating must NOT be CRITICAL
 SERVICE_ONESHOT_TIMER = {
-    "crm-procurement-sync.service": "crm-procurement-sync.timer",
+    "crm-v3-learning-dataset.service": "crm-v3-learning-dataset.timer",
 }
 
-SERVICE_EXPECTED_FROZEN = (
-    "crm-ai-assessment-runner.timer",
-    "crm-ai-assessment-runner.service",
-    "tender-docs-daemon-open.service",
-    "tender-docs-daemon-awarded.service",
-)
+SERVICE_EXPECTED_FROZEN = ()
 
-SERVICE_WATCH_OPTIONAL = (
-    "crm-computer-tz-loop.service",
-    "ollama.service",
-    "crm-v3-analytics-refresh.service",
-)
+SERVICE_WATCH_OPTIONAL = ()
 
 S7_SOURCE_COLLECTORS = (
     "tendermonitor-eis-parser.service",

@@ -34,7 +34,7 @@ def build_daily_manifest() -> dict:
             cur.execute("""
                 SELECT dataset_split, COUNT(1) as cnt
                 FROM crm_v3_learning_examples
-                WHERE producer_version = %s
+                WHERE producer_version = %s AND (temporal_class = 'ONLINE_CLEAN' OR label_source = 'HUMAN')
                 GROUP BY dataset_split
             """, (PRODUCER_VERSION,))
             splits = {r["dataset_split"]: r["cnt"] for r in cur.fetchall()}
@@ -43,7 +43,7 @@ def build_daily_manifest() -> dict:
             cur.execute("""
                 SELECT label_source, COUNT(1) as cnt
                 FROM crm_v3_learning_examples
-                WHERE producer_version = %s
+                WHERE producer_version = %s AND (temporal_class = 'ONLINE_CLEAN' OR label_source = 'HUMAN')
                 GROUP BY label_source
             """, (PRODUCER_VERSION,))
             labels = {r["label_source"]: r["cnt"] for r in cur.fetchall()}

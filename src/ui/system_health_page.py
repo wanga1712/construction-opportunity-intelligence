@@ -157,6 +157,8 @@ def _top_bar(snap: Dict[str, Any], view: Dict[str, Any]) -> None:
     hosts = snap.get("hosts") or {}
     s13 = hosts.get(HOST_S13) or {}
     s7 = hosts.get(HOST_S7) or {}
+    s7_dot = "🟢" if s7.get("reachable") else status_dot(s7.get("overall_status"))
+    s7_txt = "доступен" if s7.get("reachable") else status_ru(s7.get("overall_status"))
     st.markdown(
         f"""
 <div class="shm-top">
@@ -164,7 +166,7 @@ def _top_bar(snap: Dict[str, Any], view: Dict[str, Any]) -> None:
   <div><b>S13 ↔ S7</b> {conn}</div>
   <div><b>Обновление</b> {fmt_ts_local(snap.get('collected_at'))}</div>
   <div><b>S13</b> {status_dot(s13.get('overall_status'))} {status_ru(s13.get('overall_status'))}</div>
-  <div><b>S7</b> {status_dot(s7.get('overall_status'))} {status_ru(s7.get('overall_status'))}</div>
+  <div><b>S7</b> {s7_dot} {s7_txt}</div>
 </div>
 """,
         unsafe_allow_html=True,
@@ -197,23 +199,26 @@ def _render_overview(hosts: Dict[str, Any], snap: Dict[str, Any]) -> None:
         for a in alerts[:8]:
             _alert_card(a, hosts)
 
-    # Golden V3 canary — status file only (no heavy logic)
-    try:
-        from src.services.commercial_routing_v3.golden_canary_runner import read_status
-
-        canary = read_status()
-        state = canary.get("state") or "UNKNOWN"
-        detail = canary.get("detail") or canary.get("final_verdict") or ""
-        st.markdown(
-            f"**Golden V3 canary:** `{state}`"
-            + (f" — {detail}" if detail else "")
-        )
-    except Exception:
-        pass
+    # Golden V3 canary — marked as stale/unavailable in V4
+    st.markdown("**Golden V3 canary:** `stale/unavailable`")
 
 
 def _host_overview_card(host: Dict[str, Any], title: str, role: str) -> None:
     st_ = host.get("overall_status") or host.get("connectivity") or "UNKNOWN"
+    if title == "SERVER 7":
+        if host.get("reachable") is True:
+            if host.get("connectivity") == "collector_failed":
+                status_header = "🟢 доступен"
+                monitor_status_html = "<div class='shm-role' style='color:#e65c00; font-weight:bold'>Мониторинг S7 · данные устарели / ошибка коллектора</div>"
+            else:
+                status_header = f"{status_dot(st_)} {status_ru(st_)}"
+                monitor_status_html = ""
+        else:
+            status_header = f"{status_dot(st_)} {status_ru(st_)}"
+            monitor_status_html = "<div class='shm-role' style='color:#cc0000; font-weight:bold'>Мониторинг S7 · НЕТ СВЯЗИ</div>"
+    else:
+        status_header = f"{status_dot(st_)} {status_ru(st_)}"
+        monitor_status_html = ""
     cpu = host.get("cpu") or {}
     mem = host.get("memory") or {}
     temps = host.get("temperatures") or {}
@@ -318,8 +323,9 @@ def _host_overview_card(host: Dict[str, Any], title: str, role: str) -> None:
     st.markdown(
         f"""
 <div class="shm-card">
-  <h3>{title} &nbsp; {status_dot(st_)} {status_ru(st_)}</h3>
+  <h3>{title} &nbsp; {status_header}</h3>
   <div class="shm-role">{role}</div>
+  {monitor_status_html}
   <div class="shm-kpis">
     <div class="shm-kpi"><div class="lbl">CPU</div><div class="val">{cpu_txt}</div>
       <div class="sub">{fmt_load(cpu)}</div></div>

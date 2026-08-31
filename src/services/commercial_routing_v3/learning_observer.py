@@ -8,7 +8,7 @@ import psycopg2.extras
 from typing import Dict, Any, List, Optional, Tuple
 
 PRODUCER_VERSION = "v3_real_truth"
-PIPELINE_GENERATION = "S13_V3_EXHAUSTIVE_CONTEXT"
+PIPELINE_GENERATION = "S13_V4_EXHAUSTIVE_CONTEXT"
 
 def get_doc_db():
     user = os.environ.get("S13_DOCUMENT_DB_USER", "doc_worker")
@@ -226,12 +226,12 @@ class LearningObserver:
                     # Inspect document_files LEFT JOIN document_processing_results by source_document_id
                     with doc_conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as d_cur:
                         d_cur.execute("""
-                            SELECT f.id as source_document_id, f.download_status, f.downloaded_at, f.created_at as file_created_at,
+                            SELECT f.canonical_source_document_id as source_document_id, f.download_status, f.downloaded_at, f.created_at as file_created_at,
                                    r.status as parse_status, r.completed_at as parse_completed_at
                             FROM document_files f
                             LEFT JOIN document_processing_results r ON f.id = r.file_id
-                            WHERE f.procurement_id = %s
-                        """, (pid,))
+                            WHERE f.procurement_id = %s AND f.pipeline_generation = %s
+                        """, (pid, PIPELINE_GENERATION))
                         doc_results = d_cur.fetchall()
 
                     doc_map = {dr["source_document_id"]: dr for dr in doc_results}
@@ -452,6 +452,30 @@ class LearningObserver:
                     else:
                         split = "HOLDOUT"
 
+                    # Determine temporal class by checking the queue status/mode in Document DB
+                    temporal_class = "ONLINE_CLEAN"
+                    doc_conn = None
+                    try:
+                        doc_conn = get_doc_db()
+                        with doc_conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as d_cur:
+                            d_cur.execute("""
+                                SELECT category_context FROM document_processing_queue
+                                WHERE procurement_id = %s AND pipeline_generation = %s
+                                ORDER BY id DESC LIMIT 1
+                            """, (pid, PIPELINE_GENERATION))
+                            q_row = d_cur.fetchone()
+                            if q_row and q_row.get("category_context"):
+                                ctx = q_row["category_context"]
+                                if isinstance(ctx, str):
+                                    ctx = json.loads(ctx)
+                                if ctx.get("learning_sample_mode") == "BACKFILL_FACT_ONLY":
+                                    temporal_class = "BACKFILL_FACT_ONLY"
+                    except Exception as d_exc:
+                        print(f"Failed to lookup temporal class for procurement {pid}: {d_exc}", file=sys.stderr)
+                    finally:
+                        if doc_conn:
+                            doc_conn.close()
+
                     input_json = r["source_snapshot_json"]
                     target_json = {"has_target_evidence": r["has_target_evidence"]}
 
@@ -459,12 +483,12 @@ class LearningObserver:
                         INSERT INTO crm_v3_learning_examples (
                             snapshot_id, prediction_id, truth_id, evaluation_id,
                             task_type, input_json, target_json, label_source, sample_weight, dataset_split,
-                            producer_version, created_at
-                        ) VALUES (%s, %s, %s, %s, 'PROCUREMENT_RELEVANCE', %s, %s, 'AUTO_FACT', 1.0, %s, %s, NOW())
+                            producer_version, temporal_class, created_at
+                        ) VALUES (%s, %s, %s, %s, 'PROCUREMENT_RELEVANCE', %s, %s, 'AUTO_FACT', 1.0, %s, %s, %s, NOW())
                         RETURNING id
                     """, (
                         r["snapshot_id"], r["prediction_id"], r["truth_id"], r["eval_id"],
-                        json.dumps(input_json), json.dumps(target_json), split, PRODUCER_VERSION
+                        json.dumps(input_json), json.dumps(target_json), split, PRODUCER_VERSION, temporal_class
                     ))
                     if cur.fetchone():
                         ex_count += 1
@@ -486,12 +510,12 @@ class LearningObserver:
                             INSERT INTO crm_v3_learning_examples (
                                 snapshot_id, prediction_id, truth_id, evaluation_id,
                                 task_type, input_json, target_json, label_source, sample_weight, dataset_split,
-                                producer_version, created_at
-                            ) VALUES (%s, %s, %s, %s, 'DOCUMENT_RANKING', %s, %s, 'AUTO_FACT', 1.0, %s, %s, NOW())
+                                producer_version, temporal_class, created_at
+                            ) VALUES (%s, %s, %s, %s, 'DOCUMENT_RANKING', %s, %s, 'AUTO_FACT', 1.0, %s, %s, %s, NOW())
                             RETURNING id
                         """, (
                             r["snapshot_id"], r["prediction_id"], r["truth_id"], r["eval_id"],
-                            json.dumps(doc_input_json), json.dumps(doc_target_json), split, PRODUCER_VERSION
+                            json.dumps(doc_input_json), json.dumps(doc_target_json), split, PRODUCER_VERSION, temporal_class
                         ))
                         if cur.fetchone():
                             ex_count += 1

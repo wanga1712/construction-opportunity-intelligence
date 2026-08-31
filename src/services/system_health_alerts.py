@@ -136,8 +136,10 @@ def evaluate_host_alerts(
         st = d.get("status") or derive_physical_status(d)
         d["status"] = st
         dev = d.get("device") or "?"
+        is_legacy = (dev == "/dev/sdb" or dev == "sdb")
         if st == "CRITICAL" or d.get("overall") == "FAILED":
-            add(level="CRITICAL", source="disk", target=dev, message="disk health CRITICAL", observed=st, threshold="OK")
+            lvl = "WARNING" if is_legacy else "CRITICAL"
+            add(level=lvl, source="disk", target=dev, message="disk health CRITICAL", observed=st, threshold="OK")
         elif st == "WARNING":
             add(level="WARNING", source="disk", target=dev, message="disk health WARNING", observed=st, threshold="OK")
         pending = d.get("pending_sectors")
