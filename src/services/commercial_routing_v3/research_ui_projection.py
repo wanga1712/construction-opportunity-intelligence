@@ -104,7 +104,9 @@ def _get_crm_db_conn():
     user = os.getenv("CRM_DB_USER") or "crm_app"
     password = os.getenv("CRM_DB_PASSWORD") or "X17B3n5hbANQSRt6i7WIyy0lJudX"
     dbname = os.getenv("CRM_DB_DATABASE") or "crm"
-    return psycopg2.connect(host=host, port=port, user=user, password=password, dbname=dbname)
+    conn = psycopg2.connect(host=host, port=port, user=user, password=password, dbname=dbname)
+    conn.autocommit = True
+    return conn
 
 class _SimpleDbWrapper:
     def __init__(self, conn):
@@ -118,6 +120,226 @@ class _SimpleDbWrapper:
             self.conn.close()
         except Exception:
             pass
+
+import streamlit as st
+
+@st.cache_data(ttl=30)
+def _load_research_filter_index_impl(procurement_ids: tuple[int, ...], _crm_db: Any) -> Dict[int, dict]:
+    unique_ids = list(procurement_ids)
+    
+    # 1. Fetch active categories
+    cat_map: Dict[str, str] = {}
+    real_crm_db = _crm_db
+    crm_conn_closeable = None
+    if not real_crm_db or not hasattr(real_crm_db, "execute_query"):
+        try:
+            raw_crm_conn = _get_crm_db_conn()
+            real_crm_db = _SimpleDbWrapper(raw_crm_conn)
+            crm_conn_closeable = real_crm_db
+        except Exception as e:
+            logger.error(f"Failed _get_crm_db_conn in index: {e}")
+            
+    if real_crm_db:
+        try:
+            cat_rows = real_crm_db.execute_query(
+                "SELECT category_code, category_name FROM crm_product_categories WHERE is_active = True"
+            )
+            for r in (cat_rows or []):
+                code = r.get("category_code") or r.get("code")
+                name = r.get("category_name") or r.get("name")
+                if code and name:
+                    cat_map[code] = name
+        except Exception as e:
+            logger.error(f"Error loading crm_product_categories in index: {e}")
+
+    # 2. Fetch queue status
+    queue_map: Dict[int, dict] = {}
+    doc_conn_closeable = None
+    try:
+        raw_doc_conn = _get_doc_db_conn()
+        doc_conn_wrapper = _SimpleDbWrapper(raw_doc_conn)
+        doc_conn_closeable = doc_conn_wrapper
+        
+        q_rows = doc_conn_wrapper.execute_query(
+            """
+            SELECT DISTINCT ON (procurement_id)
+                   procurement_id, id as queue_id, status, research_generation_hash,
+                   created_at, started_at, completed_at
+            FROM document_processing_queue
+            WHERE pipeline_generation = %s AND procurement_id = ANY(%s)
+            ORDER BY procurement_id, id DESC
+            """,
+            (PIPELINE_GENERATION, unique_ids),
+        )
+        for r in (q_rows or []):
+            queue_map[r["procurement_id"]] = dict(r)
+    except Exception as e:
+        logger.error(f"Error querying queue in index: {e}")
+    finally:
+        if doc_conn_closeable:
+            doc_conn_closeable.close()
+
+    # Build active generation map (pid -> gen_hash)
+    gen_map: Dict[int, str] = {}
+    for pid, q_info in queue_map.items():
+        gh = q_info.get("research_generation_hash")
+        if gh:
+            gen_map[pid] = gh
+
+    # 3. Fetch truth records without parsing full manifest
+    truth_map: Dict[Tuple[int, str], dict] = {}
+    if gen_map and real_crm_db:
+        try:
+            t_rows = real_crm_db.execute_query(
+                """
+                SELECT procurement_id, research_generation_hash, documents_total,
+                       documents_terminal_supported, documents_failed_or_unknown,
+                       has_target_evidence, truth_completeness, evidence_count,
+                       COALESCE(json_array_length(useful_documents_json), 0) as useful_cnt,
+                       COALESCE(json_array_length(non_useful_documents_json), 0) as non_useful_cnt,
+                       COALESCE(json_array_length(unknown_documents_json), 0) as unknown_cnt,
+                       created_at
+                FROM crm_v3_exhaustive_truth
+                WHERE producer_version = 'v3_real_truth' AND procurement_id = ANY(%s)
+                """,
+                (unique_ids,),
+            )
+            for r in (t_rows or []):
+                pid = r["procurement_id"]
+                gh = r["research_generation_hash"]
+                if gen_map.get(pid) == gh:
+                    truth_map[(pid, gh)] = dict(r)
+        except Exception as e:
+            logger.error(f"Error querying crm_v3_exhaustive_truth in index: {e}")
+
+    # 4. Fetch category codes aggregated in database
+    evidence_codes_map: Dict[Tuple[int, str], List[str]] = {}
+    if gen_map and real_crm_db:
+        try:
+            e_rows = real_crm_db.execute_query(
+                """
+                SELECT procurement_id, research_generation_hash, 
+                       array_agg(DISTINCT suggested_category_code) as codes
+                FROM crm_v3_raw_source_evidence
+                WHERE pipeline_generation = %s AND procurement_id = ANY(%s)
+                GROUP BY procurement_id, research_generation_hash
+                """,
+                (PIPELINE_GENERATION, unique_ids),
+            )
+            for r in (e_rows or []):
+                pid = r["procurement_id"]
+                gh = r["research_generation_hash"]
+                if gen_map.get(pid) == gh:
+                    codes = r.get("codes") or []
+                    codes = [c for c in codes if c]
+                    evidence_codes_map[(pid, gh)] = codes
+        except Exception as e:
+            logger.error(f"Error querying crm_v3_raw_source_evidence in index: {e}")
+
+    if crm_conn_closeable:
+        crm_conn_closeable.close()
+
+    # Build simple dicts
+    result = {}
+    for pid in unique_ids:
+        q_info = queue_map.get(pid)
+        gh = q_info.get("research_generation_hash") if q_info else None
+        
+        r_state = "WAITING_RESEARCH"
+        docs_total = 0
+        docs_with_evidence = 0
+        docs_no_evidence = 0
+        docs_unknown = 0
+        docs_researched = 0
+        evidence_count = 0
+        cat_codes = []
+        
+        if q_info:
+            q_status = str(q_info.get("status") or "").upper()
+            started_at = str(q_info.get("started_at") or q_info.get("created_at") or "")
+            completed_at = str(q_info.get("completed_at") or "")
+            
+            truth_row = truth_map.get((pid, gh)) if gh else None
+            ev_codes = evidence_codes_map.get((pid, gh)) if gh else None
+            if ev_codes:
+                cat_codes = ev_codes
+                
+            if truth_row:
+                docs_total = truth_row.get("documents_total") or 0
+                evidence_count = truth_row.get("evidence_count") or 0
+                docs_with_evidence = truth_row.get("useful_cnt") or 0
+                docs_no_evidence = truth_row.get("non_useful_cnt") or 0
+                docs_unknown = truth_row.get("unknown_cnt") or 0
+                docs_researched = docs_with_evidence + docs_no_evidence
+                truth_comp = truth_row.get("truth_completeness")
+                
+                if evidence_count > 0 or docs_with_evidence > 0:
+                    r_state = "EVIDENCE_FOUND"
+                elif truth_comp == "COMPLETE" and docs_unknown == 0:
+                    r_state = "NO_EVIDENCE"
+                else:
+                    r_state = "PARTIAL"
+            else:
+                evidence_count = len(cat_codes)
+                if q_status in ("PENDING", "CLAIMED", "PROCESSING", "DOWNLOADING", "PARSING"):
+                    r_state = "RESEARCHING"
+                    if evidence_count > 0:
+                        r_state = "EVIDENCE_FOUND"
+                elif q_status in ("FAILED", "ERROR"):
+                    r_state = "FAILED"
+                elif q_status in ("COMPLETED", "NO_LINKS"):
+                    if evidence_count > 0:
+                        r_state = "EVIDENCE_FOUND"
+                    else:
+                        r_state = "NO_EVIDENCE"
+                else:
+                    r_state = "WAITING_RESEARCH"
+        else:
+            started_at = ""
+            completed_at = ""
+
+        cat_names = [cat_map.get(c, c) for c in cat_codes]
+        
+        result[pid] = {
+            "procurement_id": pid,
+            "research_generation_hash": gh,
+            "research_state": r_state,
+            "documents_total": docs_total,
+            "documents_researched": docs_researched,
+            "documents_remaining": max(0, docs_total - docs_researched),
+            "documents_with_evidence": docs_with_evidence,
+            "documents_no_evidence": docs_no_evidence,
+            "documents_unknown": docs_unknown,
+            "evidence_count": evidence_count,
+            "category_codes": cat_codes,
+            "category_names": cat_names,
+            "started_at": started_at,
+            "completed_at": completed_at,
+        }
+    return result
+
+def load_research_filter_index(
+    procurement_ids: List[int],
+    crm_db: Any,
+) -> Dict[int, ResearchUiProjection]:
+    """Bulk load lightweight research UI projections for filtering.
+    
+    Loads only status/category information, completely avoiding manifest JSON
+    and raw text database serialization.
+    """
+    if not procurement_ids:
+        return {}
+        
+    unique_ids = tuple(sorted(list(set(procurement_ids))))
+    raw_dicts = _load_research_filter_index_impl(unique_ids, crm_db)
+    
+    projections = {}
+    for pid, d in raw_dicts.items():
+        proj = ResearchUiProjection(procurement_id=pid)
+        for k, v in d.items():
+            setattr(proj, k, v)
+        projections[pid] = proj
+    return projections
 
 def load_research_ui_projection(
     procurement_ids: List[int],

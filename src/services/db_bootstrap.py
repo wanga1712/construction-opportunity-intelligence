@@ -77,3 +77,14 @@ def connect_databases() -> Tuple[
 
     warn = "; ".join(errors) if errors else ""
     return radar_db, tender_db, crm_db, warn
+
+
+def connect_crm_database() -> CrmDatabaseManager:
+    """Connect ONLY to the CRM database without contacting Radar or Tender DB on S7."""
+    from config.settings import Settings
+    from modules.crm.crm_database import CrmDatabaseManager
+    config = Settings()
+    crm_db = CrmDatabaseManager(config.crm_database)
+    crm_db.connect()
+    return crm_db
+

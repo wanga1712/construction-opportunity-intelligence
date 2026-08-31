@@ -370,9 +370,9 @@ def render_stage_workspace(
     render_research_controls: bool = True,
 ) -> str:
     from src.services.annotation_queue_service import batch_publication_visibility
-    from src.services.db_bootstrap import connect_databases
+    from src.services.db_bootstrap import connect_crm_database
 
-    _, _, crm_db, _ = connect_databases()
+    crm_db = connect_crm_database()
     all_ids = workset_ids or [card["id"] for card in cards]
     all_states = annotation_states or load_current_annotation_states(all_ids, crm_db)
     page_states = {card["id"]: all_states[card["id"]] for card in cards}
@@ -510,11 +510,11 @@ def filtered_review_ids(states: dict[int, dict], selected_state: str) -> list[in
 
 def _render_expensive_section(procurement_id: int, section: str) -> None:
     from src.services.annotation_queue_service import fetch_procurement_header
-    from src.services.db_bootstrap import connect_databases
+    from src.services.db_bootstrap import connect_crm_database
     from src.services.expert_annotation_service import load_expert_annotation, load_model_assessment_for_annotation
     from src.ui.components.analytics_v2.annotation_card import render_annotation_section
 
-    _, _, crm_db, _ = connect_databases()
+    crm_db = connect_crm_database()
     header = fetch_procurement_header(crm_db, procurement_id)
     render_annotation_section(
         crm_db=crm_db,
@@ -528,7 +528,7 @@ def _render_expensive_section(procurement_id: int, section: str) -> None:
 
 def _render_legacy_reclassify(procurement_id: int, active_key: str) -> None:
     """Fast reclassification for legacy negatives — no advanced form required."""
-    from src.services.db_bootstrap import connect_databases
+    from src.services.db_bootstrap import connect_crm_database
     from src.services.expert_annotation_service import load_model_assessment_for_annotation
     from src.ui.components.analytics_v2.annotation_card import _persist, scope_decision_key
     from src.ui.components.analytics_v2.annotation_queue import GO_NEXT_FROM_KEY, GO_NEXT_KEY
@@ -536,7 +536,7 @@ def _render_legacy_reclassify(procurement_id: int, active_key: str) -> None:
     st.info("Старая метка: **Неинтересная**. Новая классификация (этап 1 — объект / тип / категории):")
     c1, c2, c3 = st.columns(3)
     created_by = st.session_state.get("user_name") or "expert"
-    _, _, crm_db, _ = connect_databases()
+    crm_db = connect_crm_database()
     assessment = load_model_assessment_for_annotation(procurement_id, crm_db)
     if c1.button("Вне товарных категорий", key=f"legacy_out_{procurement_id}", use_container_width=True):
         st.session_state[scope_decision_key(procurement_id)] = "NO"

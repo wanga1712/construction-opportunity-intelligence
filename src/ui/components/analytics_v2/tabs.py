@@ -554,8 +554,8 @@ def _render_torgi_tab() -> None:
         filter_workset_ids_sql,
         load_current_annotation_states,
     )
-    from src.services.db_bootstrap import connect_databases
-    _, _, crm_db, _ = connect_databases()
+    from src.services.db_bootstrap import connect_crm_database
+    crm_db = connect_crm_database()
     # ?????? Law filter (SQL count & filter) ??????
     law_counts = count_law_states_sql(workset_ids, crm_db)
     selected_law = _render_law_filter_from_counts(
@@ -572,11 +572,12 @@ def _render_torgi_tab() -> None:
     # ── Research & Category filters BEFORE pagination ──
     from src.services.commercial_routing_v3.research_ui_projection import (
         filter_research_workset_ids,
+        load_research_filter_index,
         load_research_ui_projection,
     )
     from src.ui.components.analytics_v2.stage_workspace import render_research_filters
 
-    projections = load_research_ui_projection(filtered_workset_ids, crm_db)
+    projections = load_research_filter_index(filtered_workset_ids, crm_db)
     selected_research, selected_category = render_research_filters(
         projections, _SESSION_TORGI, on_change=_reset_torgi_page
     )
@@ -590,6 +591,9 @@ def _render_torgi_tab() -> None:
     # ── Page-only annotation state load (max 25 IDs) ──
     page_ids = [c["id"] for c in cards]
     annotation_states = load_current_annotation_states(page_ids, crm_db)
+
+    # ── Page-only heavy detailed research projection load ──
+    page_projections = load_research_ui_projection(page_ids, crm_db)
 
     if not cards:
         st.info("Нет тендеров по выбранным фильтрам.")
@@ -625,7 +629,7 @@ def _render_torgi_tab() -> None:
         workset_ids=research_filtered_ids,
         annotation_states=annotation_states,
         selected_annotation_filter=selected_review,
-        projections=projections,
+        projections=page_projections,
         render_research_controls=False,
     )
 

@@ -39,7 +39,9 @@ def _get_doc_db_conn():
         "user": user,
         "password": password,
     }
-    return psycopg2.connect(**dsn)
+    conn = psycopg2.connect(**dsn)
+    conn.autocommit = True
+    return conn
 
 def compute_document_set_hash(canonical_links: List[Dict[str, Any]]) -> str:
     identities = []
