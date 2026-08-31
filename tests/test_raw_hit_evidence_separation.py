@@ -1,12 +1,23 @@
+import os
+import sys
+from pathlib import Path
+
+root_dir = Path(__file__).resolve().parent.parent
+tender_dir = root_dir / "tender_documents_research"
+if str(tender_dir) not in sys.path:
+    sys.path.insert(0, str(tender_dir))
+if str(root_dir) not in sys.path:
+    sys.path.insert(0, str(root_dir))
+
 import pytest
-from tender_documents_research.document_processor.dto import (
+from document_processor.dto import (
     FileProcessResult,
     MatchResult,
     MatchDetailResult,
     EvidenceResult,
 )
-from tender_documents_research.document_processor.evidence_aggregator import EvidenceAggregator
-from tender_documents_research.document_processor.matching.dto_mapper import to_match_detail
+from document_processor.evidence_aggregator import EvidenceAggregator
+from document_processor.matching.dto_mapper import to_match_detail
 
 
 def test_1_raw_fuzzy_candidate_does_not_automatically_become_evidence():
