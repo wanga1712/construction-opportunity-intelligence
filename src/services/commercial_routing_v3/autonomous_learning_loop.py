@@ -2,7 +2,7 @@ from __future__ import annotations
 import os, sys, json, hashlib, logging
 from typing import Any, Dict, List, Optional, Tuple
 
-PIPELINE_GENERATION = "S13_V3_EXHAUSTIVE_CONTEXT"
+PIPELINE_GENERATION = "S13_V4_EXHAUSTIVE_CONTEXT"
 
 """Autonomous Hunter-Auditor learning loop orchestration.
 

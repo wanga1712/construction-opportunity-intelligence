@@ -24,7 +24,7 @@ from typing import Any, Dict, List, Optional, Set, Tuple
 
 logger = logging.getLogger("commercial_routing_v3.evidence_discovery")
 
-PIPELINE_GENERATION = "S13_V3_EXHAUSTIVE_CONTEXT"
+PIPELINE_GENERATION = "S13_V4_EXHAUSTIVE_CONTEXT"
 
 
 def compute_evidence_hash(matched_term: str, raw_text: str, source_locator_json: str) -> str:
@@ -142,8 +142,8 @@ def bridge_match_details_to_evidence(
                     dmd.context_after,
                     dmd.pipeline_generation,
                     dm.document_name,
-                    dm.file_id,
-                    df.id AS source_document_id
+                    dm.file_id AS document_file_id,
+                    df.canonical_source_document_id AS canonical_source_document_id
                 FROM document_match_details dmd
                 JOIN document_matches dm ON dm.id = dmd.match_id
                 LEFT JOIN document_files df ON df.id = dm.file_id
@@ -216,7 +216,8 @@ def bridge_match_details_to_evidence(
 
         hit = {
             "procurement_id": procurement_id,
-            "source_document_id": row.get("source_document_id"),
+            "source_document_id": row.get("canonical_source_document_id"),
+            "document_file_id": row.get("document_file_id"),
             "document_name": row.get("document_name"),
             "matched_term": matched_term,
             "raw_text": raw_text,
@@ -234,13 +235,13 @@ def bridge_match_details_to_evidence(
             res = crm_db.execute_query(
                 """
                 INSERT INTO crm_v3_raw_source_evidence (
-                    procurement_id, source_document_id, document_name,
+                    procurement_id, source_document_id, document_file_id, document_name,
                     matched_term, raw_text, context_before, context_after,
                     source_locator_json, discovery_method, suggested_category_code,
                     evidence_hash, pipeline_generation, research_generation_hash
-                ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
                 ON CONFLICT DO NOTHING
-                RETURNING id, procurement_id, source_document_id, document_name,
+                RETURNING id, procurement_id, source_document_id, document_file_id, document_name,
                           matched_term, raw_text, source_locator_json,
                           evidence_hash, pipeline_generation, research_generation_hash,
                           created_at
@@ -248,6 +249,7 @@ def bridge_match_details_to_evidence(
                 (
                     hit["procurement_id"],
                     hit["source_document_id"],
+                    hit["document_file_id"],
                     hit["document_name"],
                     hit["matched_term"],
                     hit["raw_text"],

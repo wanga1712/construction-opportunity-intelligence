@@ -213,3 +213,108 @@ def count_document_links(
         if phys:
             keys.add(str(phys))
     return len(keys)
+
+
+def batch_count_document_links(
+    rows: List[Dict[str, Any]]
+) -> Dict[int, int]:
+    """Batch count researchable physical download targets for a list of procurements."""
+    by_table = {}
+    for r in rows:
+        tbl = links_table_for_source(r.get("source_table"))
+        by_table.setdefault(tbl, []).append(r)
+
+    results = {}
+    try:
+        conn = psycopg2.connect(**_s7_dsn())
+        try:
+            for tbl, tbl_rows in by_table.items():
+                cns = [str(r["contract_number"]).strip() for r in tbl_rows if r.get("contract_number")]
+                cids = [int(r["source_id"]) for r in tbl_rows if r.get("source_id") is not None]
+
+                links = []
+                if cns or cids:
+                    with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+                        query = f"""
+                            SELECT contract_id, contract_number, document_links, file_name
+                            FROM {tbl}
+                            WHERE (
+                        """
+                        clauses = []
+                        params = []
+                        if cns:
+                            clauses.append("contract_number IN %s")
+                            params.append(tuple(cns))
+                        if cids:
+                            clauses.append("contract_id IN %s")
+                            params.append(tuple(cids))
+                        query += " OR ".join(clauses)
+                        query += """
+                            )
+                            AND (file_name IS NULL OR (
+                                LOWER(TRIM(file_name)) NOT IN (
+                                    'информация о контракте',
+                                    'извещение о проведении электронного аукциона',
+                                    'автоматический контроль',
+                                    '!! в_помощь_участникам_закупок',
+                                    'подписи заключивших контракт'
+                                )
+                                AND NOT (
+                                    LOWER(TRIM(file_name)) LIKE 'печатная форма контракта%%'
+                                    OR LOWER(TRIM(file_name)) LIKE 'печатная форма доп. соглашения%%'
+                                    OR LOWER(TRIM(file_name)) LIKE 'печатная форма электронного контракта%%'
+                                    OR LOWER(TRIM(file_name)) LIKE 'контракт с учетом доп. соглашений%%'
+                                    OR LOWER(TRIM(file_name)) LIKE 'доп. соглашение%%'
+                                    OR LOWER(TRIM(file_name)) LIKE 'электронный контракт%%'
+                                    OR LOWER(TRIM(file_name)) LIKE 'результат контроля%%'
+                                    OR LOWER(TRIM(file_name)) LIKE 'положительный результат контроля%%'
+                                    OR LOWER(TRIM(file_name)) LIKE 'control99%%'
+                                )
+                                AND NOT (
+                                    LOWER(TRIM(file_name)) LIKE '%%.xml'
+                                    OR LOWER(TRIM(file_name)) LIKE '%%.sig'
+                                    OR LOWER(TRIM(file_name)) LIKE '%%.p7s'
+                                )
+                            ))
+                        """
+                        cur.execute(query, tuple(params))
+                        links = cur.fetchall() or []
+
+                links_by_cn = {}
+                links_by_cid = {}
+                for l in links:
+                    cn = (l.get("contract_number") or "").strip()
+                    cid = l.get("contract_id")
+                    if cn:
+                        links_by_cn.setdefault(cn, []).append(l)
+                    if cid is not None:
+                        links_by_cid.setdefault(int(cid), []).append(l)
+
+                for r in tbl_rows:
+                    pid = r["id"]
+                    cn = (r.get("contract_number") or "").strip()
+                    cid = r.get("source_id")
+
+                    matched_links = []
+                    if cn and cn in links_by_cn:
+                        matched_links = links_by_cn[cn]
+                    elif cid is not None and int(cid) in links_by_cid:
+                        matched_links = links_by_cid[int(cid)]
+
+                    keys = set()
+                    for l in matched_links:
+                        if _should_skip_document_name(l.get("file_name")):
+                            continue
+                        url = l.get("document_links")
+                        phys = _physical_download_key(url) or url
+                        if phys:
+                            keys.add(str(phys))
+                    results[pid] = len(keys)
+        finally:
+            conn.close()
+    except Exception as exc:
+        logger.warning("batch_count_document_links failed: %s", exc)
+        for r in rows:
+            results[r["id"]] = 0
+
+    return results
