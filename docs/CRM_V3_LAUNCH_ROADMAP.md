@@ -13,8 +13,8 @@ This document outlines the roadmap for restoring performance, stabilizing queue 
 - **Details**: Authoritative runtime state audit, verification of uncommitted changes, git state synchronization, and mapping of pipeline file authorities completed.
 
 ### R2: 223-FZ DATE RECONCILIATION
-- **Status**: `CURRENT`
-- **Details**: Reconcile date inconsistencies where contract execution dates are incorrectly mapped as tender deadlines.
+- **Status**: `AGENT_PASS`
+- **Details**: Reconcile date inconsistencies where contract execution dates are incorrectly mapped as tender deadlines. Successfully recovered legacy 223-FZ application deadlines, resolved unrecoverable legacy canaries, added check constraints, and verified sync functionality.
 
 ### R3: EXHAUSTIVE FACTUAL RESEARCH
 - **Status**: `TODO`
