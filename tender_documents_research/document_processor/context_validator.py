@@ -51,8 +51,11 @@ SYSTEM_PROMPT = """Ты — строгий эксперт-валидатор с�
    - NEGATIVE_PHRASE_CONTEXT: фрагмент содержит стоп-фразу.
 3. UNKNOWN: Контекст обрезан, неоднозначен или информации недостаточно для 100% уверенности.
 
-Правило для supporting_quote:
-Цитата ОБЯЗАНА быть точной дословной подстрокой из предоставленного раздела [КОНТЕКСТ ИЗ ДОКУМЕНТА]. Не придумывай цитаты!
+Важные правила:
+- confidence: степень твоей уверенности в принятом решении (1.0 = абсолютная уверенность, 0.95-1.0 = высокая уверенность, <0.90 = сомневаешься). Если ты уверен в REJECTED или CONFIRMED, ставь 0.98-1.0!
+- supporting_quote: точная дословная цитата (подстрока) из блока [КОНТЕКСТ ИЗ ДОКУМЕНТА].
+  * Для REJECTED: процитируй найденную строку с ложным термином (например "ПРОЕКТ МУНИЦИПАЛЬНОГО КОНТРАКТА", "Генеральный директор", "Шприц инъекционный").
+  * Для CONFIRMED: процитируй строку с закупаемым товаром/материалом.
 
 Ответ СТРОГО в формате JSON без разметки markdown:
 {
@@ -68,6 +71,7 @@ SYSTEM_PROMPT = """Ты — строгий эксперт-валидатор с�
 def _normalize_whitespace(text: str) -> str:
     if not text:
         return ""
+    text = re.sub(r"[«»\"'„“”]", " ", text)
     return re.sub(r"\s+", " ", text).strip().lower()
 
 
@@ -88,7 +92,7 @@ def call_ollama(
         "format": "json",
         "options": {"temperature": 0.0, "num_predict": 512},
     }
-    data = json.dumps(payload).encode("utf-8")
+    data = json.dumps(payload, ensure_ascii=False).encode("utf-8")
     req = urllib.request.Request(url, data=data, headers={"Content-Type": "application/json"})
     with urllib.request.urlopen(req, timeout=timeout) as resp:
         body = json.loads(resp.read().decode("utf-8"))
@@ -131,27 +135,49 @@ class ContextValidator:
 
         term = candidate.get("matched_term", "")
         method = candidate.get("match_method", "UNKNOWN")
-        score = candidate.get("score", "")
 
         doc_name = candidate.get("document_name", "")
         page_sheet = candidate.get("page_or_sheet", "")
         row_num = candidate.get("row_number", "")
 
         before = candidate.get("context_before") or []
+        if isinstance(before, str):
+            if before.startswith("[") and before.endswith("]"):
+                try:
+                    before = json.loads(before)
+                except Exception:
+                    pass
         if isinstance(before, list):
             before_str = "\n".join(str(x) for x in before if x)
         else:
             before_str = str(before)
 
         after = candidate.get("context_after") or []
+        if isinstance(after, str):
+            if after.startswith("[") and after.endswith("]"):
+                try:
+                    after = json.loads(after)
+                except Exception:
+                    pass
         if isinstance(after, list):
             after_str = "\n".join(str(x) for x in after if x)
         else:
             after_str = str(after)
 
         matched_line = candidate.get("matched_line") or ""
-        if not matched_line and isinstance(candidate.get("row_data"), dict):
-            matched_line = candidate["row_data"].get("matched_line", "")
+        row_data = candidate.get("row_data")
+        if isinstance(row_data, str):
+            try:
+                row_data = json.loads(row_data)
+            except Exception:
+                row_data = {"matched_line": row_data}
+        if not matched_line and isinstance(row_data, dict):
+            matched_line = (
+                row_data.get("matched_line")
+                or row_data.get("matched_display_text")
+                or row_data.get("text")
+                or ""
+            )
 
         neg_phrases = candidate.get("negative_phrases") or []
         neg_str = ", ".join(neg_phrases) if isinstance(neg_phrases, list) else str(neg_phrases)
@@ -167,7 +193,7 @@ class ContextValidator:
             f"Категория: {cat_name} ({cat_code})\n"
             f"Подкатегория: {sub_name} ({sub_code})\n"
             f"Искомый термин: {term}\n"
-            f"Метод: {method} (score={score})\n"
+            f"Метод: {method}\n"
             f"Документ: {doc_name} {doc_loc}\n\n"
             f"[КОНТЕКСТ ИЗ ДОКУМЕНТА]\n"
             f"{before_str}\n"
