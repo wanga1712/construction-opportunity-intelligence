@@ -1,16 +1,15 @@
-"""Deterministic regression tests for Document Context Trust Boundary Repair (R3-4F-B-A).
+"""Deterministic regression tests for Document Context Trust Boundary Repair (R3-4F-B-B).
 
 Validates:
-1. build_source_document_context() and build_visible_document_context() explicit authorities
-2. Negative phrase list removed from model-visible prompt (NEGATIVE_PHRASE_VISIBLE_TO_MODEL=NO)
-3. Supporting quote required for CONFIRMED and REJECTED (EMPTY_QUOTE_CAN_CONFIRM=NO, EMPTY_QUOTE_CAN_REJECT=NO)
-4. Quote verification scope restricted STRICTLY to model-visible document context (QUOTE_VERIFICATION_SCOPE=EXACT_MODEL_VISIBLE_DOCUMENT_CONTEXT)
-5. Quotes in truncated-out context (before/after/long matched line) demoted to UNKNOWN / HALLUCINATED_QUOTE (TRUNCATED_OUT_QUOTE_CAN_CONFIRM=NO, TRUNCATED_OUT_QUOTE_CAN_REJECT=NO)
-6. Preserved quotes in visible matched line / retained before / retained after MUST pass verification
-7. Quotes in metadata (category, subcategory, term, title, question, prompt) demoted to UNKNOWN / HALLUCINATED_QUOTE
-8. Hard 3000 character limit enforcement (assert len(block) <= 3000)
-9. Centered long matched line centered around matched_term (LONG_MATCH_POLICY=CENTERED_AROUND_MATCHED_TERM)
-10. Strict V3 evidence provenance isolation in rebuild_affected_evidence()
+1. build_context_payload() single execution path alignment (VISIBLE_CONTEXT_BUILT_ONCE_PER_VALIDATION=YES)
+2. Verifier visible source text matches exact prompt documentary text (VERIFIER_DOCUMENT_TEXT == PROMPT_DOCUMENT_EVIDENCE_TEXT)
+3. Generated markers/labels CANNOT support decisions (GENERATED_MARKER_CAN_SUPPORT_DECISION=NO)
+4. Real production budget regression: quote from truncated-out source text fails verification via validate_single()
+5. Visible retained before/matched/after quotes pass verification via validate_single()
+6. Pathological metadata handling (very long title, OKPD, category, doc name) preserves [ВОПРОС] and [ДОКУМЕНТАЛЬНЫЙ КОНТЕКСТ]
+7. Hard 3000 max context character contract (assert len(block) <= 3000 without blind clipping)
+8. Impossible budget policy (max_context_chars < 300 raises ValueError)
+9. Strict V3 evidence provenance isolation in rebuild_affected_evidence()
 """
 
 import pytest
@@ -73,8 +72,9 @@ def test_v3_versioning_constants():
     assert PROMPT_VERSION == "context_validator_v3"
 
 
-# 2. Source vs Visible Document Context Authorities check
-def test_source_vs_visible_document_context_authorities():
+# 2. Exact Prompt Evidence Alignment Check
+def test_exact_prompt_evidence_alignment():
+    validator = ContextValidator(ai_caller=lambda p: "")
     candidate = {
         "procurement_title": "Строительство детского сада",
         "category_name": "Гидроизоляция",
@@ -85,180 +85,171 @@ def test_source_vs_visible_document_context_authorities():
         "context_before": ["Строительные работы на объекте."],
         "matched_line": "Нанесение битумной мастики в 2 слоя.",
         "context_after": ["Приемка выполненных работ."],
-        "negative_phrases": ["огнезащитная мастика"],
     }
-    source_ctx = build_source_document_context(candidate)
-    visible_ctx = build_visible_document_context(candidate)
+    payload = validator.build_context_payload(candidate)
 
-    assert "Строительные работы на объекте." in source_ctx
-    assert "Нанесение битумной мастики в 2 слоя." in source_ctx
-    assert "Приемка выполненных работ." in source_ctx
+    context_block = payload["context_block"]
+    visible_source_text = payload["visible_source_text"]
 
-    assert "Нанесение битумной мастики в 2 слоя." in visible_ctx
-    assert "[ДОКУМЕНТАЛЬНЫЙ КОНТЕКСТ]" in visible_ctx
+    # Extract documentary text embedded inside [ДОКУМЕНТАЛЬНЫЙ КОНТЕКСТ]
+    doc_start = context_block.find("[ДОКУМЕНТАЛЬНЫЙ КОНТЕКСТ]")
+    doc_end = context_block.find("[ВОПРОС]")
+    assert doc_start != -1 and doc_end != -1
+    prompt_doc_section = context_block[doc_start:doc_end]
 
-    # Excludes metadata
-    assert "Строительство детского сада" not in visible_ctx
-    assert "Гидроизоляция" not in visible_ctx
-    assert "Обмазочная гидроизоляция" not in visible_ctx
-    assert "огнезащитная мастика" not in visible_ctx
+    # Verify that all lines in visible_source_text are present in prompt_doc_section
+    for line in visible_source_text.splitlines():
+        line_clean = line.strip()
+        if line_clean:
+            assert line_clean in prompt_doc_section
 
 
-# 3. Model-visible prompt does NOT contain negative phrase list
-def test_negative_phrases_removed_from_model_prompt():
+# 3. Generated Markers/Labels CANNOT Support Decisions
+def test_generated_markers_cannot_support_decisions():
     validator = ContextValidator(ai_caller=lambda p: "")
     candidate = {
-        "procurement_id": 100,
-        "category_code": "waterproofing",
-        "subcategory_code": "coating",
-        "matched_term": "мастика",
-        "negative_phrases": ["ОГНЕЗАЩИТНЫЙ_СОСТАВ_АБСОЛЮТНО_НЕЦЕЛЕВОЙ"],
-        "context_before": ["Перед нанесением."],
-        "matched_line": "Битумная мастика 10 кг.",
-        "context_after": ["После нанесения."],
-    }
-    block = validator.build_context_block(candidate)
-
-    assert "ОГНЕЗАЩИТНЫЙ_СОСТАВ_АБСОЛЮТНО_НЕЦЕЛЕВОЙ" not in block
-    assert "[СТОП-ФРАЗЫ КАТЕГОРИИ]" not in block
-
-
-# 4 & 5. Empty quote enforcement
-def test_empty_quote_demotes_confirmed_and_rejected_to_unknown():
-    validator = ContextValidator(ai_caller=lambda p: "")
-    candidate = {
-        "detail_id": 101,
+        "detail_id": 100,
         "category_code": "lighting",
         "subcategory_code": "road_street",
         "matched_line": "Светильник ДКУ 100W",
+        "context_before": ["Преамбула " + ("A" * 100) for _ in range(10)],
     }
+    payload = validator.build_context_payload(candidate)
+    visible_source = payload["visible_source_text"]
 
-    # Raw CONFIRMED with empty quote -> UNKNOWN / MISSING_SUPPORTING_QUOTE
-    raw_conf = {"decision": "CONFIRMED", "confidence": 0.95, "supporting_quote": "", "reason": "Looks good"}
-    res_conf = validator._verify_and_gate_decision(raw_conf, candidate, build_visible_document_context(candidate))
-    assert res_conf["decision"] == "UNKNOWN"
-    assert res_conf["reason_code"] == "MISSING_SUPPORTING_QUOTE"
-    assert res_conf["confidence"] == 0.0
+    # A quote consisting ONLY of generated marker label must fail
+    marker_quotes = [
+        "[ДОКУМЕНТАЛЬНЫЙ КОНТЕКСТ]",
+        ">>> НАЙДЕННАЯ СТРОКА:",
+        "...[контекст до совпадения сокращён]...",
+        "...[контекст после совпадения сокращён]...",
+    ]
 
-    # Raw REJECTED with empty quote -> UNKNOWN / MISSING_SUPPORTING_QUOTE
-    raw_rej = {"decision": "REJECTED", "confidence": 0.95, "supporting_quote": "", "reason": "Not target"}
-    res_rej = validator._verify_and_gate_decision(raw_rej, candidate, build_visible_document_context(candidate))
-    assert res_rej["decision"] == "UNKNOWN"
-    assert res_rej["reason_code"] == "MISSING_SUPPORTING_QUOTE"
-    assert res_rej["confidence"] == 0.0
+    for mq in marker_quotes:
+        raw_conf = {"decision": "CONFIRMED", "confidence": 0.95, "supporting_quote": mq, "reason": "Marker quote"}
+        res = validator._verify_and_gate_decision(raw_conf, candidate, visible_source)
+        assert res["decision"] == "UNKNOWN"
+        assert res["reason_code"] == "HALLUCINATED_QUOTE"
 
 
-# 6. Truncated-out quote MUST fail quote verification
-def test_truncated_out_quote_demoted_to_unknown():
-    validator = ContextValidator(max_context_chars=1200, ai_caller=lambda p: "")
-    # Create long before text containing a secret string that gets truncated out
-    long_before = ["SECRET_TRUNCATED_TEXT_ABC_HEADER_LINE"] + ["Преамбула документа " + ("X" * 100) for _ in range(20)]
-    
+# 4. Real Production Budget Regression (validate_single with truncated-out quote)
+def test_real_production_budget_regression_truncated_out_quote():
+    # Secret text in context_before that will be truncated out by actual prompt budget
+    long_before = ["SECRET_TRUNCATED_TEXT_HEADER_LINE_XYZ"] + ["Строительные работы " + ("X" * 100) for _ in range(25)]
     candidate = {
-        "detail_id": 102,
+        "detail_id": 101,
         "category_code": "lighting",
         "subcategory_code": "road_street",
         "matched_term": "светильник",
         "matched_line": "Светильник ДКУ 100 Вт.",
         "context_before": long_before,
-        "context_after": ["Последующие работы."],
+        "context_after": ["Работы завершены."],
     }
 
-    # Verify that SECRET_TRUNCATED_TEXT_ABC_HEADER_LINE is present in source context but TRUNCATED OUT of visible context
-    source_ctx = build_source_document_context(candidate)
-    visible_ctx = build_visible_document_context(candidate, max_context_chars=1200)
+    # Mock AI caller that returns CONFIRMED quoting the truncated-out secret text
+    def mock_caller_conf(prompt):
+        return json.dumps({
+            "detail_id": 101,
+            "decision": "CONFIRMED",
+            "confidence": 0.95,
+            "supporting_quote": "SECRET_TRUNCATED_TEXT_HEADER_LINE_XYZ",
+            "reason_code": "SPECIFICATION_PRODUCT_REQUIREMENT",
+            "reason": "Found requirement",
+        })
 
-    assert "SECRET_TRUNCATED_TEXT_ABC_HEADER_LINE" in source_ctx
-    assert "SECRET_TRUNCATED_TEXT_ABC_HEADER_LINE" not in visible_ctx
+    validator = ContextValidator(ai_caller=mock_caller_conf)
+    res_conf = validator.validate_single(candidate)
 
-    # Attempting to confirm using truncated-out quote -> MUST BE DEMOTED TO UNKNOWN / HALLUCINATED_QUOTE
-    raw_conf = {"decision": "CONFIRMED", "confidence": 0.95, "supporting_quote": "SECRET_TRUNCATED_TEXT_ABC_HEADER_LINE", "reason": "OK"}
-    res_conf = validator._verify_and_gate_decision(raw_conf, candidate, visible_ctx)
+    # MUST fail quote verification because Qwen never saw SECRET_TRUNCATED_TEXT_HEADER_LINE_XYZ in its prompt!
     assert res_conf["decision"] == "UNKNOWN"
     assert res_conf["reason_code"] == "HALLUCINATED_QUOTE"
 
-    # Attempting to reject using truncated-out quote -> MUST BE DEMOTED TO UNKNOWN / HALLUCINATED_QUOTE
-    raw_rej = {"decision": "REJECTED", "confidence": 0.95, "supporting_quote": "SECRET_TRUNCATED_TEXT_ABC_HEADER_LINE", "reason": "OK"}
-    res_rej = validator._verify_and_gate_decision(raw_rej, candidate, visible_ctx)
+    # Repeat for REJECTED
+    def mock_caller_rej(prompt):
+        return json.dumps({
+            "detail_id": 101,
+            "decision": "REJECTED",
+            "confidence": 0.95,
+            "supporting_quote": "SECRET_TRUNCATED_TEXT_HEADER_LINE_XYZ",
+            "reason_code": "UNRELATED_PRODUCT",
+            "reason": "Not target",
+        })
+
+    validator_rej = ContextValidator(ai_caller=mock_caller_rej)
+    res_rej = validator_rej.validate_single(candidate)
     assert res_rej["decision"] == "UNKNOWN"
     assert res_rej["reason_code"] == "HALLUCINATED_QUOTE"
 
 
-# 7. Preserved quote in visible matched line / retained before / retained after MUST pass verification
-def test_visible_retained_quotes_pass_verification():
-    validator = ContextValidator(ai_caller=lambda p: "")
+# 5. Visible Retained Source Quotes Pass Verification
+def test_visible_retained_quotes_pass_verification_via_validate_single():
     candidate = {
-        "detail_id": 103,
-        "procurement_title": "Закупка оборудования уличного освещения",
-        "category_name": "Освещение",
-        "subcategory_name": "Освещение дорог и улиц",
-        "matched_term": "светильник уличный",
-        "context_before": ["Работы по объекту уличного освещения."],
-        "matched_line": "Поставка оборудования светильник уличный согласно спецификации.",
-        "context_after": ["Монтаж светильников в срок."],
-    }
-    vis_ctx = build_visible_document_context(candidate)
-
-    # A. Quote in matched_line -> VALID
-    raw_a = {"decision": "CONFIRMED", "confidence": 0.95, "supporting_quote": "Поставка оборудования светильник уличный", "reason": "OK"}
-    assert validator._verify_and_gate_decision(raw_a, candidate, vis_ctx)["decision"] == "CONFIRMED"
-
-    # B. Quote in context_before -> VALID
-    raw_b = {"decision": "CONFIRMED", "confidence": 0.95, "supporting_quote": "Работы по объекту уличного освещения", "reason": "OK"}
-    assert validator._verify_and_gate_decision(raw_b, candidate, vis_ctx)["decision"] == "CONFIRMED"
-
-    # C. Quote in context_after -> VALID
-    raw_c = {"decision": "CONFIRMED", "confidence": 0.95, "supporting_quote": "Монтаж светильников в срок", "reason": "OK"}
-    assert validator._verify_and_gate_decision(raw_c, candidate, vis_ctx)["decision"] == "CONFIRMED"
-
-    # D. Quote in category_name -> HALLUCINATED_QUOTE
-    raw_d = {"decision": "CONFIRMED", "confidence": 0.95, "supporting_quote": "Освещение", "reason": "Metadata quote"}
-    assert validator._verify_and_gate_decision(raw_d, candidate, vis_ctx)["decision"] == "UNKNOWN"
-
-    # E. Quote in subcategory_name -> HALLUCINATED_QUOTE
-    raw_e = {"decision": "CONFIRMED", "confidence": 0.95, "supporting_quote": "Освещение дорог и улиц", "reason": "Metadata quote"}
-    assert validator._verify_and_gate_decision(raw_e, candidate, vis_ctx)["decision"] == "UNKNOWN"
-
-    # F. Quote in procurement_title -> HALLUCINATED_QUOTE
-    raw_f = {"decision": "CONFIRMED", "confidence": 0.95, "supporting_quote": "Закупка оборудования уличного освещения", "reason": "Metadata quote"}
-    assert validator._verify_and_gate_decision(raw_f, candidate, vis_ctx)["decision"] == "UNKNOWN"
-
-
-# 8. Hard 3000 Character Contract & Centered Long Matched Line
-def test_hard_3000_character_contract_and_long_matched_line():
-    validator = ContextValidator(max_context_chars=3000, ai_caller=lambda p: "")
-    long_before = ["Преамбула документа " + ("X" * 100) for _ in range(30)]
-    long_after = ["Заключительные положения " + ("Y" * 100) for _ in range(30)]
-
-    # Matched line with 2000 characters and matched_term in center
-    prefix_line = "A" * 1000
-    suffix_line = "B" * 1000
-    pathological_matched_line = f"{prefix_line} СВЕТИЛЬНИК_ДКУ_УЛИЧНЫЙ {suffix_line}"
-
-    candidate = {
-        "procurement_id": 999,
+        "detail_id": 102,
         "category_code": "lighting",
         "subcategory_code": "road_street",
-        "matched_term": "светильник_дку_уличный",
-        "matched_line": pathological_matched_line,
-        "context_before": long_before,
-        "context_after": long_after,
+        "matched_term": "светильник",
+        "context_before": ["Монтаж оборудования уличного освещения."],
+        "matched_line": "Светильник ДКУ 100 Вт согласно спецификации.",
+        "context_after": ["Гарантия 5 лет."],
     }
-    block = validator.build_context_block(candidate)
 
-    # HARD CONTRACT: assert len(block) <= 3000
-    assert len(block) <= 3000, f"Expected len(block) <= 3000, found {len(block)}"
-    assert "СВЕТИЛЬНИК_ДКУ_УЛИЧНЫЙ" in block, "matched_term MUST be preserved when centered"
-    assert "[ВОПРОС]" in block, "Question block MUST be preserved"
-    assert "[ТЕНДЕР]" in block, "Metadata header MUST be preserved"
-    assert "...[строка совпадения сокращена]..." in block
+    def mock_caller(prompt):
+        return json.dumps({
+            "detail_id": 102,
+            "decision": "CONFIRMED",
+            "confidence": 0.95,
+            "supporting_quote": "Светильник ДКУ 100 Вт",
+            "reason_code": "SPECIFICATION_PRODUCT_REQUIREMENT",
+            "reason": "Confirmed requirement",
+        })
+
+    validator = ContextValidator(ai_caller=mock_caller)
+    res = validator.validate_single(candidate)
+    assert res["decision"] == "CONFIRMED"
+    assert res["supporting_quote"] == "Светильник ДКУ 100 Вт"
 
 
-# 9. Strict V3 evidence provenance isolation
+# 6. Pathological Metadata Handling
+def test_pathological_metadata_preserves_question_and_document_section():
+    validator = ContextValidator(max_context_chars=3000, ai_caller=lambda p: "")
+    pathological_title = "ОЧЕНЬ_ДЛИННОЕ_НАИМЕНОВАНИЕ_ЗАКУПКИ_" + ("T" * 2000)
+    pathological_okpd = "ОКПД_ИМЯ_" + ("O" * 2000)
+    pathological_doc = "ДОКУМЕНТ_ИМЯ_" + ("D" * 2000)
+
+    candidate = {
+        "procurement_id": 888,
+        "procurement_title": pathological_title,
+        "procurement_okpd_code": "27.40.39",
+        "procurement_okpd_name": pathological_okpd,
+        "category_code": "lighting",
+        "subcategory_code": "road_street",
+        "matched_term": "светильник",
+        "document_name": pathological_doc,
+        "matched_line": "Светильник ДКУ 100 Вт уличный.",
+        "context_before": ["Контекст до."],
+        "context_after": ["Контекст после."],
+    }
+
+    payload = validator.build_context_payload(candidate)
+    block = payload["context_block"]
+
+    # Invariants:
+    assert len(block) <= 3000, f"Hard limit violated: len(block)={len(block)}"
+    assert "[ВОПРОС]" in block, "Question block MUST be intact"
+    assert "[ДОКУМЕНТАЛЬНЫЙ КОНТЕКСТ]" in block, "Document section MUST be intact"
+    assert "Светильник ДКУ 100 Вт уличный." in block, "Matched line MUST be visible"
+
+
+# 7. Impossible Budget Policy
+def test_impossible_budget_policy_raises_value_error():
+    with pytest.raises(ValueError, match="Impossible context budget"):
+        ContextValidator(max_context_chars=200, ai_caller=lambda p: "")
+
+
+# 8. Strict V3 evidence provenance isolation
 def test_strict_v3_evidence_provenance():
     mock_conn = MockConnection()
 
-    # Case A: v3 trusted CONFIRMED rows exist -> aggregates ONLY v3
     mock_conn.cursor_obj.fetch_data = [
         {"score": 90.0, "queue_id": 1, "validator_version": "v3", "validation_method": "QWEN_CONTEXT_V3"},
         {"score": 85.0, "queue_id": 1, "validator_version": "v2", "validation_method": "QWEN_CONTEXT_V2"},

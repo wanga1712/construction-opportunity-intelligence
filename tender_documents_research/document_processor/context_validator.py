@@ -160,15 +160,17 @@ def build_source_document_context(candidate: Dict[str, Any]) -> str:
     return "\n".join(parts)
 
 
-def build_visible_document_context(
+def _build_visible_document_context_pair(
     candidate: Dict[str, Any],
-    max_context_chars: int = DEFAULT_MAX_CONTEXT_CHARS,
-    fixed_overhead: int = 0,
-) -> str:
-    """Single authority for the EXACT bounded documentary text shown to Qwen in prompt.
+    max_doc_budget: int,
+) -> Tuple[str, str]:
+    """Builds EXACT visible document section AND pure visible source text pair.
 
-    Quote verification MUST validate against this text ONLY.
-    Includes truncation markers inside character budget and centers long matched lines.
+    Returns:
+      (visible_doc_section_str, visible_source_text_str)
+
+    visible_doc_section_str: formatted section with UI headers and truncation markers for Qwen prompt.
+    visible_source_text_str: pure factual retained document text ONLY (without generated markers/headers) for quote verification.
     """
     c_hydrated = hydrate_candidate_context(candidate)
     matched_line = _candidate_matched_line(c_hydrated)
@@ -190,21 +192,22 @@ def build_visible_document_context(
     after_lines = [str(x).strip() for x in after_list if str(x).strip()] if isinstance(after_list, list) else [str(after_list).strip()] if str(after_list).strip() else []
 
     doc_header_overhead = len("[ДОКУМЕНТАЛЬНЫЙ КОНТЕКСТ]\n\n>>> НАЙДЕННАЯ СТРОКА: \n")
-    max_doc_budget = max_context_chars - fixed_overhead - doc_header_overhead
-    if max_doc_budget < 100:
-        max_doc_budget = 100
+    avail_budget = max_doc_budget - doc_header_overhead
+    if avail_budget < 50:
+        avail_budget = 50
 
     prefix_marker = "...[контекст до совпадения сокращён]...\n"
     suffix_marker = "\n...[контекст после совпадения сокращён]..."
     mline_marker = " ...[строка совпадения сокращена]..."
 
-    max_mline_len = max_doc_budget - 50
-    if max_mline_len < 100:
-        max_mline_len = 100
+    max_mline_len = avail_budget - 30
+    if max_mline_len < 50:
+        max_mline_len = 50
 
+    retained_mline = matched_line
     if len(matched_line) > max_mline_len:
         eff_len = max_mline_len - len(mline_marker)
-        if eff_len < 50: eff_len = 50
+        if eff_len < 30: eff_len = 30
         term_idx = matched_line.lower().find(matched_term) if matched_term else -1
         if term_idx != -1:
             half = eff_len // 2
@@ -216,7 +219,7 @@ def build_visible_document_context(
             sub = matched_line[start:end]
             p_mark = "...[строка совпадения сокращена]... " if start > 0 else ""
             s_mark = " ...[строка совпадения сокращена]..." if end < len(matched_line) else ""
-            matched_line = f"{p_mark}{sub}{s_mark}"
+            retained_mline = f"{p_mark}{sub}{s_mark}"
         else:
             half = eff_len // 2
             mid = len(matched_line) // 2
@@ -225,9 +228,9 @@ def build_visible_document_context(
             sub = matched_line[start:end]
             p_mark = "...[строка совпадения сокращена]... " if start > 0 else ""
             s_mark = " ...[строка совпадения сокращена]..." if end < len(matched_line) else ""
-            matched_line = f"{p_mark}{sub}{s_mark}"
+            retained_mline = f"{p_mark}{sub}{s_mark}"
 
-    avail_for_before_after = max_doc_budget - len(matched_line)
+    avail_for_before_after = avail_budget - len(retained_mline)
     if avail_for_before_after < 0:
         avail_for_before_after = 0
 
@@ -265,18 +268,37 @@ def build_visible_document_context(
     p_str = prefix_marker if len(used_before) < len(before_text) else ""
     s_str = suffix_marker if len(used_after) < len(after_text) else ""
 
-    return (
+    doc_section_str = (
         f"[ДОКУМЕНТАЛЬНЫЙ КОНТЕКСТ]\n"
         f"{p_str}{used_before}\n"
-        f">>> НАЙДЕННАЯ СТРОКА: {matched_line}\n"
+        f">>> НАЙДЕННАЯ СТРОКА: {retained_mline}\n"
         f"{used_after}{s_str}\n"
     )
+
+    # Pure factual source text ONLY (no generated headers/markers) for quote verification
+    pure_parts = []
+    if used_before: pure_parts.append(used_before)
+    if retained_mline: pure_parts.append(retained_mline)
+    if used_after: pure_parts.append(used_after)
+    visible_source_text_str = "\n".join(pure_parts)
+
+    return doc_section_str, visible_source_text_str
+
+
+def build_visible_document_context(
+    candidate: Dict[str, Any],
+    max_context_chars: int = DEFAULT_MAX_CONTEXT_CHARS,
+    fixed_overhead: int = 0,
+) -> str:
+    """Single authority for the EXACT bounded documentary section shown in prompt."""
+    max_doc_budget = max_context_chars - fixed_overhead
+    doc_section, _ = _build_visible_document_context_pair(candidate, max_doc_budget)
+    return doc_section
 
 
 def build_document_context(candidate: Dict[str, Any]) -> str:
     """Backward-compatible alias for build_visible_document_context."""
     return build_visible_document_context(candidate)
-
 
 def hydrate_candidate_context(candidate: dict) -> dict:
     """Single authority for resolving matched_line, context_before, context_after.
@@ -393,6 +415,8 @@ class ContextValidator:
         dedupe: bool = True,
         ai_caller: Optional[Callable[[str], str]] = None,
     ) -> None:
+        if max_context_chars < 300:
+            raise ValueError(f"Impossible context budget: max_context_chars={max_context_chars} is below minimum 300")
         self.model = model
         self.confirm_threshold = confirm_threshold
         self.reject_threshold = reject_threshold
@@ -408,8 +432,17 @@ class ContextValidator:
             )
         )
 
-    def build_context_block(self, candidate: Dict[str, Any]) -> str:
-        """Constructs a bounded, informative context block for Qwen with centered budget."""
+    def build_context_payload(self, candidate: Dict[str, Any]) -> Dict[str, Any]:
+        """Unified single-execution-path context builder for model prompt AND quote verification.
+
+        Guarantees that:
+        1. Prompt document context == verifier visible document context (built ONCE per candidate).
+        2. Total context_block length <= max_context_chars without blind prefix/suffix clipping.
+        3. Pathological metadata is truncated cleanly to preserve document context & question blocks.
+        """
+        if self.max_context_chars < 300:
+            raise ValueError(f"Impossible context budget: max_context_chars={self.max_context_chars} is below minimum 300")
+
         candidate = hydrate_candidate_context(candidate)
         pid = candidate.get("procurement_id", "")
         okpd_code = candidate.get("procurement_okpd_code", "")
@@ -427,7 +460,24 @@ class ContextValidator:
         row_num = candidate.get("row_number", "")
         doc_loc = f"{page_sheet}:{row_num}" if page_sheet or row_num else ""
 
-        # Metadata Header (Fixed)
+        # Fixed Question Block
+        question_block = (
+            f"\n[ВОПРОС]\n"
+            f"Подтверждает ли данный фрагмент документа закупку/применение материалов или работ для подкатегории \"{sub_name}\" (категория \"{cat_name}\", термин \"{term}\" )?\n"
+            f"- ВАЖНО: Документальные доказательства берутся ИСКЛЮЧИТЕЛЬНО из раздела [ДОКУМЕНТАЛЬНЫЙ КОНТЕКСТ]. Названия закупки, категории и терминов из раздела метаданных не являются доказательствами.\n"
+            f"- Если подкатегория прямо подтверждается спецификацией, позицией ВОР, описанием товара или характеристиками -> 'CONFIRMED', confidence: 0.80-1.0, supporting_quote: обязательная дословная цитата из документа.\n"
+            f"- Если созвучие/адрес/название организации/нецелевой товар -> 'REJECTED', confidence: 0.85-1.0, supporting_quote: обязательная дословная цитата из документа.\n"
+            f"- Если контекст обрезан или совершенно неоднозначен -> 'UNKNOWN', confidence: 0.0, reason_code: 'INSUFFICIENT_CONTEXT'.\n"
+            f"Ответь строго JSON."
+        )
+
+        # Pathological Metadata Handling: Ensure metadata overhead leaves at least 300 chars for document context
+        min_doc_budget = 300
+        max_meta_budget = self.max_context_chars - len(question_block) - min_doc_budget
+        if max_meta_budget < 120:
+            max_meta_budget = 120
+
+        # Construct raw metadata header
         meta_block = (
             f"[ТЕНДЕР]\n"
             f"ID: {pid}\n"
@@ -440,37 +490,55 @@ class ContextValidator:
             f"Документ: {doc_name} {doc_loc}\n\n"
         )
 
-        # Question / Instructions Footer (Fixed)
-        question_block = (
-            f"\n[ВОПРОС]\n"
-            f"Подтверждает ли данный фрагмент документа закупку/применение материалов или работ для подкатегории \"{sub_name}\" (категория \"{cat_name}\", термин \"{term}\" )?\n"
-            f"- ВАЖНО: Документальные доказательства берутся ИСКЛЮЧИТЕЛЬНО из раздела [ДОКУМЕНТАЛЬНЫЙ КОНТЕКСТ]. Названия закупки, категории и терминов из раздела метаданных не являются доказательствами.\n"
-            f"- Если подкатегория прямо подтверждается спецификацией, позицией ВОР, описанием товара или характеристиками -> 'CONFIRMED', confidence: 0.80-1.0, supporting_quote: обязательная дословная цитата из документа.\n"
-            f"- Если созвучие/адрес/название организации/нецелевой товар -> 'REJECTED', confidence: 0.85-1.0, supporting_quote: обязательная дословная цитата из документа.\n"
-            f"- Если контекст обрезан или совершенно неоднозначен -> 'UNKNOWN', confidence: 0.0, reason_code: 'INSUFFICIENT_CONTEXT'.\n"
-            f"Ответь строго JSON."
-        )
+        if len(meta_block) > max_meta_budget:
+            # Safely truncate verbose metadata fields (p_title, okpd_name, doc_name)
+            p_title_sub = str(p_title)[:40] + "..." if len(str(p_title)) > 40 else str(p_title)
+            okpd_name_sub = str(okpd_name)[:30] + "..." if len(str(okpd_name)) > 30 else str(okpd_name)
+            doc_name_sub = str(doc_name)[:40] + "..." if len(str(doc_name)) > 40 else str(doc_name)
+            meta_block = (
+                f"[ТЕНДЕР]\n"
+                f"ID: {pid}\n"
+                f"ОКПД2: {okpd_code} ({okpd_name_sub})\n"
+                f"Наименование закупки: {p_title_sub}\n\n"
+                f"[ЦЕЛЕВАЯ КАТЕГОРИЯ CRM]\n"
+                f"Категория: {cat_name} ({cat_code})\n"
+                f"Подкатегория: {sub_name} ({sub_code})\n"
+                f"Искомый термин: {term}\n"
+                f"Документ: {doc_name_sub} {doc_loc}\n\n"
+            )
 
         fixed_overhead = len(meta_block) + len(question_block)
-        doc_section = build_visible_document_context(
-            candidate,
-            max_context_chars=self.max_context_chars,
-            fixed_overhead=fixed_overhead,
-        )
+        max_doc_budget = self.max_context_chars - fixed_overhead
 
-        block = f"{meta_block}{doc_section}{question_block}"
-        if len(block) > self.max_context_chars:
-            block = block[: self.max_context_chars]
+        doc_section, visible_source_text = _build_visible_document_context_pair(candidate, max_doc_budget)
 
-        return block
+        context_block = f"{meta_block}{doc_section}{question_block}"
+
+        # Invariant check: Hard limit guaranteed without blind clipping
+        if len(context_block) > self.max_context_chars:
+            # Extra safety truncation of doc section only if needed
+            trim_len = len(context_block) - self.max_context_chars
+            doc_section, visible_source_text = _build_visible_document_context_pair(candidate, max_doc_budget - trim_len - 10)
+            context_block = f"{meta_block}{doc_section}{question_block}"
+
+        return {
+            "context_block": context_block,
+            "visible_doc_section": doc_section,
+            "visible_source_text": visible_source_text,
+        }
+
+    def build_context_block(self, candidate: Dict[str, Any]) -> str:
+        """Constructs a bounded, informative context block for Qwen (backward-compatible wrapper)."""
+        payload = self.build_context_payload(candidate)
+        return payload["context_block"]
 
     def _verify_and_gate_decision(
         self,
         raw_decision: Dict[str, Any],
         candidate: Dict[str, Any],
-        context_text: str,
+        visible_source_text: str,
     ) -> Dict[str, Any]:
-        """Applies conservative threshold gating, quote verification, and fail-closed defaults."""
+        """Applies conservative threshold gating, quote verification against visible_source_text, and fail-closed defaults."""
         detail_id = candidate.get("detail_id") or candidate.get("id")
         cat_code = candidate.get("category_code")
         sub_code = candidate.get("subcategory_code")
@@ -490,13 +558,8 @@ class ContextValidator:
         quote = str(raw_decision.get("supporting_quote") or "").strip()
         reason = str(raw_decision.get("reason") or "").strip()
 
-        # Document context trust boundary verification against EXACT VISIBLE_DOCUMENT_CONTEXT
-        visible_doc_context = build_visible_document_context(
-            candidate,
-            max_context_chars=self.max_context_chars,
-            fixed_overhead=0,
-        )
-        norm_visible_context = _normalize_whitespace(visible_doc_context)
+        # Document context trust boundary verification against EXACT visible_source_text (built ONCE per candidate)
+        norm_visible_source = _normalize_whitespace(visible_source_text)
 
         if decision in ("CONFIRMED", "REJECTED"):
             if not quote:
@@ -506,11 +569,11 @@ class ContextValidator:
                 reason = f"Decision {decision} requires explicit non-empty supporting_quote from document context"
             else:
                 norm_quote = _normalize_whitespace(quote)
-                if norm_quote not in norm_visible_context:
+                if norm_quote not in norm_visible_source:
                     decision = "UNKNOWN"
                     reason_code = "HALLUCINATED_QUOTE"
                     confidence = 0.0
-                    reason = f"Supporting quote not found in model-visible document context: {quote[:60]}"
+                    reason = f"Supporting quote not found in prompt-visible documentary source: {quote[:60]}"
 
         # Confidence gating
         if decision == "CONFIRMED" and confidence < self.confirm_threshold:
@@ -539,8 +602,11 @@ class ContextValidator:
         }
 
     def validate_single(self, candidate: Dict[str, Any]) -> Dict[str, Any]:
-        """Validates a single candidate."""
-        context_block = self.build_context_block(candidate)
+        """Validates a single candidate using unified context payload."""
+        payload = self.build_context_payload(candidate)
+        context_block = payload["context_block"]
+        visible_source_text = payload["visible_source_text"]
+
         prompt = (
             f"Проанализируй совпадение и определи, подтверждает ли оно категорию.\n\n"
             f"{context_block}\n\n"
@@ -549,67 +615,31 @@ class ContextValidator:
 
         try:
             resp_text = self._ai_caller(prompt)
-            # Parse JSON
             match = re.search(r"\{.*\}", resp_text, re.DOTALL)
             if not match:
                 raw_decision = {"decision": "UNKNOWN", "reason_code": "INVALID_JSON", "confidence": 0.0}
             else:
-                raw_decision = json.loads(match.group(0))
-        except Exception as exc:
-            logger.warning("Qwen context validator invocation failed: %s", exc)
-            raw_decision = {"decision": "UNKNOWN", "reason_code": "MODEL_EXCEPTION", "reason": str(exc), "confidence": 0.0}
+                try:
+                    raw_decision = json.loads(match.group(0))
+                except Exception as ex:
+                    raw_decision = {"decision": "UNKNOWN", "reason_code": "JSON_PARSE_ERROR", "confidence": 0.0, "reason": str(ex)}
+        except Exception as ex:
+            logger.error(f"AI caller failed for detail_id {candidate.get('detail_id')}: {ex}")
+            raw_decision = {"decision": "UNKNOWN", "reason_code": "MODEL_EXCEPTION", "confidence": 0.0, "reason": str(ex)}
 
-        return self._verify_and_gate_decision(raw_decision, candidate, context_block)
-
-    def validate_candidates(self, candidates: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
-        """Validates a batch of candidates, with deduplication if enabled."""
-        if not candidates:
-            return []
-
-        if not self.dedupe:
-            return [self.validate_single(c) for c in candidates]
-
-        # Group by deduplication key
-        dedupe_groups: Dict[Tuple[Any, ...], List[Dict[str, Any]]] = {}
-        for c in candidates:
-            ctx_text = self.build_context_block(c)
-            key = (
-                c.get("procurement_id"),
-                c.get("document_name"),
-                c.get("category_code"),
-                c.get("subcategory_code"),
-                c.get("matched_term"),
-                _normalize_whitespace(ctx_text),
-            )
-            dedupe_groups.setdefault(key, []).append(c)
-
-        results: List[Dict[str, Any]] = []
-        for key, group in dedupe_groups.items():
-            rep = group[0]
-            rep_result = self.validate_single(rep)
-
-            # Apply result to all members with their own detail_id
-            for member in group:
-                member_result = dict(rep_result)
-                member_result["detail_id"] = member.get("detail_id") or member.get("id")
-                results.append(member_result)
-
-        return results
+        return self._verify_and_gate_decision(raw_decision, candidate, visible_source_text)
 
 
 def validate_candidates(
     candidates: List[Dict[str, Any]],
     *,
-    model: str = DEFAULT_MODEL,
-    ai_caller: Optional[Callable[[str], str]] = None,
-    confirm_threshold: float = DEFAULT_CONFIRM_THRESHOLD,
-    reject_threshold: float = DEFAULT_REJECT_THRESHOLD,
+    validator: Optional[ContextValidator] = None,
 ) -> List[Dict[str, Any]]:
-    """Convenience functional entry point."""
-    validator = ContextValidator(
-        model=model,
-        ai_caller=ai_caller,
-        confirm_threshold=confirm_threshold,
-        reject_threshold=reject_threshold,
-    )
-    return validator.validate_candidates(candidates)
+    """Convenience helper to validate a batch of candidates."""
+    if validator is None:
+        validator = ContextValidator()
+    results = []
+    for cand in candidates:
+        res = validator.validate_single(cand)
+        results.append(res)
+    return results
