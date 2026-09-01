@@ -191,14 +191,14 @@ def _build_visible_document_context_pair(
             except Exception: pass
     after_lines = [str(x).strip() for x in after_list if str(x).strip()] if isinstance(after_list, list) else [str(after_list).strip()] if str(after_list).strip() else []
 
-    doc_header_overhead = len("[ДОКУМЕНТАЛЬНЫЙ КОНТЕКСТ]\n\n>>> НАЙДЕННАЯ СТРОКА: \n")
-    avail_budget = max_doc_budget - doc_header_overhead
-    if avail_budget < 50:
-        avail_budget = 50
-
     prefix_marker = "...[контекст до совпадения сокращён]...\n"
     suffix_marker = "\n...[контекст после совпадения сокращён]..."
     mline_marker = " ...[строка совпадения сокращена]..."
+
+    doc_header_overhead = len("[ДОКУМЕНТАЛЬНЫЙ КОНТЕКСТ]\n\n>>> НАЙДЕННАЯ СТРОКА: \n") + len(prefix_marker) + len(suffix_marker) + len(mline_marker) + 10
+    avail_budget = max_doc_budget - doc_header_overhead
+    if avail_budget < 50:
+        avail_budget = 50
 
     max_mline_len = avail_budget - 30
     if max_mline_len < 50:
@@ -249,7 +249,7 @@ def _build_visible_document_context_pair(
         if len(after_text) > avail_after:
             avail_after_net = avail_after - len(suffix_marker)
             if avail_after_net < 0: avail_after_net = 0
-            used_after = after_text[:avail_after_net]
+            used_after = after_text[:avail_after_net] if avail_after_net > 0 else ""
         else:
             used_after = after_text
     elif len(after_text) <= half_budget:
@@ -258,7 +258,7 @@ def _build_visible_document_context_pair(
         if len(before_text) > avail_before:
             avail_before_net = avail_before - len(prefix_marker)
             if avail_before_net < 0: avail_before_net = 0
-            used_before = before_text[-avail_before_net:]
+            used_before = before_text[-avail_before_net:] if avail_before_net > 0 else ""
         else:
             used_before = before_text
     else:
