@@ -19,6 +19,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 from tender_documents_research.document_processor.context_validator import (
     ContextValidator,
+    validate_candidates,
     VALIDATOR_NAME,
     VALIDATOR_VERSION,
     VALIDATION_METHOD,
@@ -318,3 +319,60 @@ def test_strict_v4_evidence_provenance():
     params = mock_conn.cursor_obj.last_params
     assert params[7] == "v4"  # validator_version
     assert params[8] == "QWEN_CONTEXT_V4"  # validation_method
+
+
+# 6. Service Batch Binding Regression Test
+def test_validator_instance_and_module_validate_candidates_binding():
+    c1 = {
+        "detail_id": 301,
+        "category_code": "lighting",
+        "subcategory_code": "road_street",
+        "matched_term": "светильник",
+        "matched_line": "Светильник уличный 100 Вт.",
+    }
+    c2 = {
+        "detail_id": 302,
+        "category_code": "lighting",
+        "subcategory_code": "road_street",
+        "matched_term": "директор",
+        "matched_line": "Заместитель директора А.А. Захаров.",
+    }
+
+    def mock_caller(p):
+        if "директор" in p:
+            return json.dumps({
+                "detail_id": 302,
+                "decision": "REJECTED",
+                "confidence": 0.90,
+                "supporting_quote": "Заместитель директора А.А. Захаров.",
+                "reason_code": "ORGANIZATION_NAME_ONLY",
+                "reason": "ФИО и должность административного лица",
+            })
+        return json.dumps({
+            "detail_id": 301,
+            "decision": "CONFIRMED",
+            "confidence": 0.95,
+            "supporting_quote": "Светильник уличный 100 Вт.",
+            "reason_code": "SPECIFICATION_PRODUCT_REQUIREMENT",
+            "reason": "Уличный светильник",
+        })
+
+    validator = ContextValidator(ai_caller=mock_caller)
+
+    # 1. Instance method check (called by service process_batch)
+    assert hasattr(validator, "validate_candidates"), "ContextValidator instance must have validate_candidates method!"
+    res_instance = validator.validate_candidates([c1, c2])
+
+    assert len(res_instance) == 2
+    assert res_instance[0]["detail_id"] == 301
+    assert res_instance[0]["decision"] == "CONFIRMED"
+    assert res_instance[0]["supporting_quote"] == "Светильник уличный 100 Вт."
+    assert res_instance[1]["detail_id"] == 302
+    assert res_instance[1]["decision"] == "REJECTED"
+    assert res_instance[1]["supporting_quote"] == "Заместитель директора А.А. Захаров."
+
+    # 2. Module-level helper check
+    res_module = validate_candidates([c1, c2], validator=validator)
+    assert len(res_module) == 2
+    assert res_module[0]["decision"] == "CONFIRMED"
+    assert res_module[1]["decision"] == "REJECTED"
