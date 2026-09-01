@@ -248,14 +248,19 @@ def update_candidate_validations(conn, results: List[Dict[str, Any]]) -> Set[Tup
 
 
 def rebuild_affected_evidence(conn, affected: Set[Tuple[int, str]]) -> None:
-    """Rebuilds document_evidence ONLY for affected procurement/category pairs."""
+    """Rebuilds document_evidence ONLY for affected procurement/category pairs.
+
+    Truthful version provenance: if any confirmed row in the group was validated with v2,
+    the resulting evidence record uses validation_version='v2', validation_method='QWEN_CONTEXT_V2'.
+    Otherwise if only legacy v1 confirmed rows exist, retains 'v1', 'QWEN_CONTEXT_V1'.
+    """
     if not affected:
         return
 
     with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
         for pid, cat in affected:
             cur.execute("""
-                SELECT d.score, m.queue_id
+                SELECT d.score, m.queue_id, d.validator_version, d.validation_method
                 FROM document_match_details d
                 JOIN document_matches m ON d.match_id = m.id
                 WHERE d.procurement_id = %s
@@ -270,6 +275,14 @@ def rebuild_affected_evidence(conn, affected: Set[Tuple[int, str]]) -> None:
                 match_count = len(confirmed_rows)
                 queue_id = confirmed_rows[0]["queue_id"]
 
+                has_v2 = any(
+                    str(r.get("validator_version") or "").lower() == "v2"
+                    or "V2" in str(r.get("validation_method") or "").upper()
+                    for r in confirmed_rows
+                )
+                val_ver = "v2" if has_v2 else "v1"
+                val_method = "QWEN_CONTEXT_V2" if has_v2 else "QWEN_CONTEXT_V1"
+
                 cur.execute("""
                     INSERT INTO document_evidence
                     (procurement_id, queue_id, category_code, evidence_score, match_count, next_stage, validation_status, validation_version, validation_method, pipeline_generation)
@@ -279,11 +292,11 @@ def rebuild_affected_evidence(conn, affected: Set[Tuple[int, str]]) -> None:
                         evidence_score = EXCLUDED.evidence_score,
                         match_count = EXCLUDED.match_count,
                         validation_status = 'CONFIRMED',
-                        validation_version = 'v1',
-                        validation_method = 'QWEN_CONTEXT_V1'
+                        validation_version = EXCLUDED.validation_version,
+                        validation_method = EXCLUDED.validation_method
                 """, (
                     pid, queue_id, cat, max_score, match_count,
-                    "STRUCTURED_EXTRACTION_PENDING", "CONFIRMED", "v1", "QWEN_CONTEXT_V1",
+                    "STRUCTURED_EXTRACTION_PENDING", "CONFIRMED", val_ver, val_method,
                     PIPELINE_GENERATION
                 ))
             else:
