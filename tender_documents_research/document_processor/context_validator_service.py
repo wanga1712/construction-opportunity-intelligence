@@ -22,8 +22,12 @@ import psycopg2
 import psycopg2.extras
 from dotenv import load_dotenv
 
-from document_processor.context_validator import ContextValidator
-from document_processor.crm_taxonomy_loader import CrmTaxonomyLoader, TaxonomySnapshot
+try:
+    from tender_documents_research.document_processor.context_validator import ContextValidator
+    from tender_documents_research.document_processor.crm_taxonomy_loader import CrmTaxonomyLoader, TaxonomySnapshot
+except ImportError:
+    from document_processor.context_validator import ContextValidator
+    from document_processor.crm_taxonomy_loader import CrmTaxonomyLoader, TaxonomySnapshot
 from src.services.commercial_routing_v3.okpd_priors import (
     classify_target_okpd,
     load_okpd_priors_from_db,
