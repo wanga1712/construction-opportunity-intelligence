@@ -40,6 +40,54 @@ load_dotenv("/opt/CRM_Streamlit/.env")
 logger = logging.getLogger("document_processor.context_validator_service")
 PIPELINE_GENERATION = "S13_V4_EXHAUSTIVE_CONTEXT"
 
+DEFAULT_TARGET_REFRESH_SECONDS = 60.0
+_TARGET_IDS_CACHE: Dict[str, Any] = {"ids": None, "refreshed_at": 0.0}
+
+
+def get_target_procurement_ids(
+    crm_conn,
+    priors: List[Dict[str, Any]],
+) -> List[int]:
+    """Retrieves list of active TARGET procurement IDs from CRM database.
+
+    Uses distinct OKPD classification optimization for high efficiency across 160k+ procurements.
+    Handles both dict and tuple cursors safely.
+    """
+    with crm_conn.cursor() as cur:
+        cur.execute("SELECT DISTINCT okpd_code FROM crm_procurements WHERE okpd_code IS NOT NULL AND okpd_code != ''")
+        rows = cur.fetchall()
+        distinct_okpds = [r[0] if isinstance(r, (list, tuple)) else r["okpd_code"] for r in rows if r]
+
+    target_okpds = [okpd for okpd in distinct_okpds if classify_target_okpd(okpd, priors)[0] == ADMISSION_TARGET]
+    if not target_okpds:
+        return []
+
+    with crm_conn.cursor() as cur:
+        cur.execute("SELECT id FROM crm_procurements WHERE okpd_code = ANY(%s)", (target_okpds,))
+        rows = cur.fetchall()
+        return sorted([r[0] if isinstance(r, (list, tuple)) else r["id"] for r in rows if r])
+
+
+def get_cached_target_procurement_ids(
+    crm_conn,
+    priors: List[Dict[str, Any]],
+    refresh_interval: float = DEFAULT_TARGET_REFRESH_SECONDS,
+    force_refresh: bool = False,
+) -> List[int]:
+    """Gets cached target procurement IDs, refreshing from CRM DB if stale."""
+    now = time.time()
+    if (
+        force_refresh
+        or _TARGET_IDS_CACHE["ids"] is None
+        or (now - _TARGET_IDS_CACHE["refreshed_at"]) >= refresh_interval
+    ):
+        ids = get_target_procurement_ids(crm_conn, priors)
+        _TARGET_IDS_CACHE["ids"] = ids
+        _TARGET_IDS_CACHE["refreshed_at"] = now
+        logger.info("Refreshed target procurement IDs cache: %d target IDs", len(ids))
+    return _TARGET_IDS_CACHE["ids"]
+
+
 
 def get_doc_db_connection():
     return psycopg2.connect(
@@ -62,7 +110,16 @@ def claim_unvalidated_candidates(
     target_procurement_ids: Optional[List[int]] = None,
     generation: str = PIPELINE_GENERATION,
 ) -> List[Dict[str, Any]]:
-    """Claims a batch of candidates for validation with correct SQL precedence."""
+    """Claims a batch of candidates for validation with correct SQL precedence.
+
+    TARGET restriction is applied BEFORE ORDER BY and LIMIT.
+    - None: claims candidates across all procurements (diagnostic/tests).
+    - []: claims ZERO candidates (returns [] immediately).
+    - [...]: adds SQL predicate `AND d.procurement_id = ANY(%s)`.
+    """
+    if target_procurement_ids is not None and len(target_procurement_ids) == 0:
+        return []
+
     with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
         query = """
             SELECT d.id, d.id as detail_id, d.match_id, d.procurement_id, d.category_code, d.subcategory_code,
@@ -78,7 +135,7 @@ def claim_unvalidated_candidates(
             AND d.pipeline_generation = %s
         """
         params: List[Any] = [generation]
-        if target_procurement_ids:
+        if target_procurement_ids is not None:
             query += " AND d.procurement_id = ANY(%s)"
             params.append(target_procurement_ids)
 
@@ -249,22 +306,51 @@ def process_batch(
     *,
     batch_size: int = 50,
     target_procurement_ids: Optional[List[int]] = None,
+    refresh_interval: float = DEFAULT_TARGET_REFRESH_SECONDS,
+    use_target_cache: bool = True,
 ) -> int:
-    """Processes a single batch of unvalidated candidates."""
+    """Processes a single batch of unvalidated candidates.
+
+    When target_procurement_ids is None and use_target_cache is True (normal daemon usage),
+    automatically fetches and uses cached target procurement IDs from CRM DB (refreshed every 60s).
+    """
+    if target_procurement_ids is None and use_target_cache:
+        effective_target_ids = get_cached_target_procurement_ids(
+            crm_conn, priors, refresh_interval=refresh_interval
+        )
+    else:
+        effective_target_ids = target_procurement_ids
+
     candidates = claim_unvalidated_candidates(
-        doc_conn, batch_size=batch_size, target_procurement_ids=target_procurement_ids
+        doc_conn, batch_size=batch_size, target_procurement_ids=effective_target_ids
     )
     if not candidates:
         return 0
 
     enriched = enrich_candidates_with_crm_facts(candidates, crm_conn, taxonomy_snapshot)
     target_candidates = filter_target_candidates(enriched, priors)
+
+    stale_filtered = len(enriched) - len(target_candidates)
+    if stale_filtered > 0:
+        logger.warning(
+            "Detected %d stale claimed candidates (out-of-target); force-refreshing target ID cache",
+            stale_filtered,
+        )
+        if target_procurement_ids is None and use_target_cache:
+            get_cached_target_procurement_ids(crm_conn, priors, force_refresh=True)
+
     if not target_candidates:
         return 0
 
     results = validator.validate_candidates(target_candidates)
     affected = update_candidate_validations(doc_conn, results)
     rebuild_affected_evidence(doc_conn, affected)
+    logger.info(
+        "Processed batch: claimed=%d, target_validated=%d, stale_filtered=%d",
+        len(candidates),
+        len(results),
+        stale_filtered,
+    )
     return len(results)
 
 
