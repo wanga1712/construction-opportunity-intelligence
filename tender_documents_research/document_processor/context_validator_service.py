@@ -132,6 +132,7 @@ def claim_unvalidated_candidates(
                 d.validation_status IN ('UNKNOWN', 'RAW', 'PENDING')
                 OR d.validation_status IS NULL
             )
+            AND d.validated_at IS NULL
             AND d.pipeline_generation = %s
         """
         params: List[Any] = [generation]
