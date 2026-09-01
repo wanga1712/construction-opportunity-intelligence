@@ -269,7 +269,7 @@ def test_12_only_confirmed_creates_evidence():
     assert "DELETE FROM document_evidence" in delete_query
 
     # Case B: confirmed details exist -> inserts CONFIRMED evidence
-    mock_cur.fetchall.return_value = [{"score": 85.0, "queue_id": 148265}]
+    mock_cur.fetchall.return_value = [{"score": 85.0, "queue_id": 148265, "validator_version": "v1", "validation_method": "QWEN_CONTEXT_V1"}]
     rebuild_affected_evidence(mock_conn, {(997, "waterproofing")})
     insert_query = mock_cur.execute.call_args[0][0]
     assert "INSERT INTO document_evidence" in insert_query

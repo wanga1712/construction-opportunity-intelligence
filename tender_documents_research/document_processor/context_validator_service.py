@@ -265,22 +265,15 @@ def update_candidate_validations(conn, results: List[Dict[str, Any]]) -> Set[Tup
 def rebuild_affected_evidence(conn, affected: Set[Tuple[int, str]]) -> None:
     """Rebuilds document_evidence ONLY for affected procurement/category pairs.
 
-    Truthful evidence provenance policy (R3-4E-A):
-    - If current v2 CONFIRMED details exist:
-      Build document_evidence strictly from v2 CONFIRMED details.
-      match_count = len(v2_rows)
-      evidence_score = max(score for r in v2_rows)
-      validation_version = "v2"
-      validation_method = "QWEN_CONTEXT_V2"
-      Legacy v1 rows remain stored in document_match_details but do NOT contribute to v2 score/count.
-    - Else if legacy v1 CONFIRMED details exist:
-      Build document_evidence strictly from v1 CONFIRMED details.
-      match_count = len(v1_rows)
-      evidence_score = max(score for r in v1_rows)
-      validation_version = "v1"
-      validation_method = "QWEN_CONTEXT_V1"
-    - Else (0 confirmed details):
-      DELETE from document_evidence.
+    Strict explicit evidence provenance policy (R3-4E-B):
+    - V2_TRUSTED: validator_version='v2' AND validation_method='QWEN_CONTEXT_V2'
+    - V1_TRUSTED: validator_version='v1' AND validation_method='QWEN_CONTEXT_V1'
+    - UNTRUSTED/MISSING: Untrusted or missing provenance rows NEVER create positive evidence.
+
+    Selection precedence:
+    1. If v2 trusted CONFIRMED rows exist -> aggregate ONLY v2 trusted rows (version='v2', method='QWEN_CONTEXT_V2').
+    2. Else if v1 trusted CONFIRMED rows exist -> aggregate ONLY v1 trusted rows (version='v1', method='QWEN_CONTEXT_V1').
+    3. Else (0 trusted confirmed rows) -> DELETE from document_evidence.
     """
     if not affected:
         return
@@ -307,21 +300,34 @@ def rebuild_affected_evidence(conn, affected: Set[Tuple[int, str]]) -> None:
                 """, (pid, cat, PIPELINE_GENERATION))
                 continue
 
-            # Explicit provenance check for v2 confirmed rows
-            v2_rows = [
+            v2_trusted = [
                 r for r in confirmed_rows
                 if str(r.get("validator_version") or "").lower() == "v2"
                 and str(r.get("validation_method") or "").upper() == "QWEN_CONTEXT_V2"
             ]
 
-            if v2_rows:
-                target_rows = v2_rows
+            v1_trusted = [
+                r for r in confirmed_rows
+                if str(r.get("validator_version") or "").lower() == "v1"
+                and str(r.get("validation_method") or "").upper() == "QWEN_CONTEXT_V1"
+            ]
+
+            if v2_trusted:
+                target_rows = v2_trusted
                 val_ver = "v2"
                 val_method = "QWEN_CONTEXT_V2"
-            else:
-                target_rows = confirmed_rows
+            elif v1_trusted:
+                target_rows = v1_trusted
                 val_ver = "v1"
                 val_method = "QWEN_CONTEXT_V1"
+            else:
+                cur.execute("""
+                    DELETE FROM document_evidence
+                    WHERE procurement_id = %s
+                      AND category_code = %s
+                      AND pipeline_generation = %s
+                """, (pid, cat, PIPELINE_GENERATION))
+                continue
 
             max_score = max(float(r["score"]) for r in target_rows)
             match_count = len(target_rows)

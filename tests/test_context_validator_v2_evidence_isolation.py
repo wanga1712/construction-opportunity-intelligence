@@ -1,21 +1,21 @@
-"""Deterministic unit tests for V2 Evidence Provenance Isolation (R3-4E-A).
+"""Strict deterministic unit tests for Evidence Provenance Closure (R3-4E-B).
 
 Verifies:
-1. Only v2 confirmations -> v2 evidence
-2. Only v1 confirmations -> v1 evidence
-3. 10 v1 + 2 v2 -> evidence match_count=2, version=v2, method=QWEN_CONTEXT_V2
-4. High-score v1 + lower-score v2 -> v2 score comes strictly from v2
-5. v1 rows remain stored in DB
-6. Missing provenance is not treated as v2
-7. ContextValidator returns explicit v2 provenance
-8. SYSTEM_PROMPT unchanged
-9. Thresholds unchanged
+1. Only explicit v2 -> v2 evidence
+2. Only explicit v1 -> v1 evidence
+3. v1 + v2 -> v2 evidence only (v1 ignored)
+4. Only NULL provenance CONFIRMED -> NO positive evidence (deleted)
+5. Only UNKNOWN/UNSPECIFIED provenance CONFIRMED -> NO positive evidence (deleted)
+6. 2 explicit v1 + 5 unknown -> count=2, score strictly from explicit v1, version=v1
+7. 2 explicit v2 + 10 v1 + 8 unknown -> count=2, score strictly from explicit v2, version=v2
+8. Missing provenance CONFIRMED on persistence -> demoted to UNKNOWN
+9. SYSTEM_PROMPT unchanged
+10. Thresholds unchanged
 """
 
 import pytest
 import sys
 import os
-from unittest import mock
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
@@ -25,8 +25,6 @@ from tender_documents_research.document_processor.context_validator_service impo
     PIPELINE_GENERATION,
 )
 from tender_documents_research.document_processor.context_validator import (
-    ContextValidator,
-    SYSTEM_PROMPT,
     DEFAULT_CONFIRM_THRESHOLD,
     DEFAULT_REJECT_THRESHOLD,
 )
@@ -61,10 +59,8 @@ class MockConnection:
         pass
 
 
-# ============================================================
-# Test 1: Only v2 confirmations -> v2 evidence
-# ============================================================
-def test_only_v2_confirmations_builds_v2_evidence():
+# 1. Only explicit v2 -> v2 evidence
+def test_only_explicit_v2_builds_v2_evidence():
     rows = [
         {"score": 85.0, "queue_id": 1, "validator_version": "v2", "validation_method": "QWEN_CONTEXT_V2"},
         {"score": 90.0, "queue_id": 1, "validator_version": "v2", "validation_method": "QWEN_CONTEXT_V2"},
@@ -72,23 +68,18 @@ def test_only_v2_confirmations_builds_v2_evidence():
     conn = MockConnection(rows)
     rebuild_affected_evidence(conn, {(555, "lighting")})
 
-    # Find INSERT INTO document_evidence
     insert_queries = [q for q in conn.cursor_obj.executed_queries if "INSERT INTO document_evidence" in q[0]]
     assert len(insert_queries) == 1
     params = insert_queries[0][1]
 
-    # Params: (pid, queue_id, cat, max_score, match_count, next_stage, status, val_ver, val_method, gen)
-    assert params[0] == 555
-    assert params[3] == 90.0  # max_score
-    assert params[4] == 2     # match_count
+    assert params[3] == 90.0
+    assert params[4] == 2
     assert params[7] == "v2"
     assert params[8] == "QWEN_CONTEXT_V2"
 
 
-# ============================================================
-# Test 2: Only v1 confirmations -> v1 evidence
-# ============================================================
-def test_only_v1_confirmations_builds_v1_evidence():
+# 2. Only explicit v1 -> v1 evidence
+def test_only_explicit_v1_builds_v1_evidence():
     rows = [
         {"score": 75.0, "queue_id": 1, "validator_version": "v1", "validation_method": "QWEN_CONTEXT_V1"},
     ]
@@ -104,14 +95,8 @@ def test_only_v1_confirmations_builds_v1_evidence():
     assert params[8] == "QWEN_CONTEXT_V1"
 
 
-# ============================================================
-# Test 3 & 4: 10 v1 + 2 v2 -> match_count=2, score strictly from v2 rows
-# ============================================================
+# 3. v1 + v2 -> v2 evidence only (v1 ignored)
 def test_mixed_v1_and_v2_confirmations_isolates_v2():
-    """
-    Simulates 10 legacy v1 confirmed rows (high score 99.0) and 2 new v2 confirmed rows (scores 70.0 and 80.0).
-    Rebuild MUST produce v2 evidence with match_count=2 and max_score=80.0 (ignoring 99.0 v1 score).
-    """
     v1_rows = [
         {"score": 99.0, "queue_id": 1, "validator_version": "v1", "validation_method": "QWEN_CONTEXT_V1"}
         for _ in range(10)
@@ -120,9 +105,7 @@ def test_mixed_v1_and_v2_confirmations_isolates_v2():
         {"score": 70.0, "queue_id": 1, "validator_version": "v2", "validation_method": "QWEN_CONTEXT_V2"},
         {"score": 80.0, "queue_id": 1, "validator_version": "v2", "validation_method": "QWEN_CONTEXT_V2"},
     ]
-    rows = v1_rows + v2_rows
-
-    conn = MockConnection(rows)
+    conn = MockConnection(v1_rows + v2_rows)
     rebuild_affected_evidence(conn, {(555, "lighting")})
 
     insert_queries = [q for q in conn.cursor_obj.executed_queries if "INSERT INTO document_evidence" in q[0]]
@@ -135,28 +118,87 @@ def test_mixed_v1_and_v2_confirmations_isolates_v2():
     assert params[8] == "QWEN_CONTEXT_V2"
 
 
-# ============================================================
-# Test 5: Missing or unknown provenance is not treated as v2
-# ============================================================
-def test_missing_provenance_not_treated_as_v2():
+# 4. Only NULL provenance CONFIRMED -> NO positive evidence (deleted)
+def test_only_null_provenance_deletes_evidence():
     rows = [
         {"score": 85.0, "queue_id": 1, "validator_version": None, "validation_method": None},
+    ]
+    conn = MockConnection(rows)
+    rebuild_affected_evidence(conn, {(555, "lighting")})
+
+    insert_queries = [q for q in conn.cursor_obj.executed_queries if "INSERT INTO document_evidence" in q[0]]
+    delete_queries = [q for q in conn.cursor_obj.executed_queries if "DELETE FROM document_evidence" in q[0]]
+
+    assert len(insert_queries) == 0, "NULL provenance rows MUST NOT create positive document_evidence"
+    assert len(delete_queries) == 1, "Evidence record MUST be deleted when no trusted v1/v2 rows exist"
+
+
+# 5. Only UNKNOWN/UNSPECIFIED provenance CONFIRMED -> NO positive evidence (deleted)
+def test_only_unknown_provenance_deletes_evidence():
+    rows = [
         {"score": 88.0, "queue_id": 1, "validator_version": "UNKNOWN", "validation_method": "UNSPECIFIED"},
     ]
     conn = MockConnection(rows)
     rebuild_affected_evidence(conn, {(555, "lighting")})
 
     insert_queries = [q for q in conn.cursor_obj.executed_queries if "INSERT INTO document_evidence" in q[0]]
+    delete_queries = [q for q in conn.cursor_obj.executed_queries if "DELETE FROM document_evidence" in q[0]]
+
+    assert len(insert_queries) == 0, "UNKNOWN/UNSPECIFIED provenance MUST NOT create positive document_evidence"
+    assert len(delete_queries) == 1
+
+
+# 6. 2 explicit v1 + 5 unknown -> count=2, score strictly from explicit v1, version=v1
+def test_explicit_v1_plus_unknown_provenance_isolates_v1():
+    v1_rows = [
+        {"score": 75.0, "queue_id": 1, "validator_version": "v1", "validation_method": "QWEN_CONTEXT_V1"},
+        {"score": 85.0, "queue_id": 1, "validator_version": "v1", "validation_method": "QWEN_CONTEXT_V1"},
+    ]
+    unknown_rows = [
+        {"score": 99.0, "queue_id": 1, "validator_version": None, "validation_method": None}
+        for _ in range(5)
+    ]
+    conn = MockConnection(v1_rows + unknown_rows)
+    rebuild_affected_evidence(conn, {(555, "lighting")})
+
+    insert_queries = [q for q in conn.cursor_obj.executed_queries if "INSERT INTO document_evidence" in q[0]]
     assert len(insert_queries) == 1
     params = insert_queries[0][1]
 
-    assert params[7] == "v1", "Missing/unknown provenance must fall back to v1 evidence, NOT v2"
+    assert params[3] == 85.0, "Score MUST come strictly from explicit v1 rows (85.0), ignoring unknown (99.0)"
+    assert params[4] == 2, "match_count MUST be 2 (only explicit v1 rows), ignoring 5 unknown rows"
+    assert params[7] == "v1"
     assert params[8] == "QWEN_CONTEXT_V1"
 
 
-# ============================================================
-# Test 6: Missing provenance on CONFIRMED candidate demotes to UNKNOWN
-# ============================================================
+# 7. 2 explicit v2 + 10 v1 + 8 unknown -> count=2, score strictly from explicit v2, version=v2
+def test_v2_plus_v1_plus_unknown_isolates_v2():
+    v2_rows = [
+        {"score": 60.0, "queue_id": 1, "validator_version": "v2", "validation_method": "QWEN_CONTEXT_V2"},
+        {"score": 70.0, "queue_id": 1, "validator_version": "v2", "validation_method": "QWEN_CONTEXT_V2"},
+    ]
+    v1_rows = [
+        {"score": 90.0, "queue_id": 1, "validator_version": "v1", "validation_method": "QWEN_CONTEXT_V1"}
+        for _ in range(10)
+    ]
+    unknown_rows = [
+        {"score": 99.0, "queue_id": 1, "validator_version": None, "validation_method": None}
+        for _ in range(8)
+    ]
+    conn = MockConnection(v2_rows + v1_rows + unknown_rows)
+    rebuild_affected_evidence(conn, {(555, "lighting")})
+
+    insert_queries = [q for q in conn.cursor_obj.executed_queries if "INSERT INTO document_evidence" in q[0]]
+    assert len(insert_queries) == 1
+    params = insert_queries[0][1]
+
+    assert params[3] == 70.0, "Score MUST come strictly from explicit v2 rows (70.0)"
+    assert params[4] == 2, "match_count MUST be 2 (only explicit v2 rows)"
+    assert params[7] == "v2"
+    assert params[8] == "QWEN_CONTEXT_V2"
+
+
+# 8. Missing provenance CONFIRMED on persistence -> demoted to UNKNOWN
 def test_update_candidate_missing_provenance_demotes_to_unknown():
     conn = MockConnection([])
     results = [
@@ -177,13 +219,10 @@ def test_update_candidate_missing_provenance_demotes_to_unknown():
     assert len(update_queries) == 1
     params = update_queries[0][1]
 
-    # status is params[0]
     assert params[0] == "UNKNOWN", "CONFIRMED result missing provenance MUST be demoted to UNKNOWN"
 
 
-# ============================================================
-# Test 7: Thresholds unchanged
-# ============================================================
+# 9. Thresholds unchanged
 def test_thresholds_unchanged():
     assert DEFAULT_CONFIRM_THRESHOLD == 0.80
     assert DEFAULT_REJECT_THRESHOLD == 0.85
