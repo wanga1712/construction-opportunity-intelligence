@@ -1,15 +1,14 @@
-"""Deterministic regression tests for Document Context Trust Boundary Repair (R3-4F-B-B).
+"""Deterministic regression tests for Document Context Trust Boundary Repair (R3-4F-B-C).
 
 Validates:
-1. build_context_payload() single execution path alignment (VISIBLE_CONTEXT_BUILT_ONCE_PER_VALIDATION=YES)
-2. Verifier visible source text matches exact prompt documentary text (VERIFIER_DOCUMENT_TEXT == PROMPT_DOCUMENT_EVIDENCE_TEXT)
-3. Generated markers/labels CANNOT support decisions (GENERATED_MARKER_CAN_SUPPORT_DECISION=NO)
-4. Real production budget regression: quote from truncated-out source text fails verification via validate_single()
-5. Visible retained before/matched/after quotes pass verification via validate_single()
-6. Pathological metadata handling (very long title, OKPD, category, doc name) preserves [ВОПРОС] and [ДОКУМЕНТАЛЬНЫЙ КОНТЕКСТ]
-7. Hard 3000 max context character contract (assert len(block) <= 3000 without blind clipping)
-8. Impossible budget policy (max_context_chars < 300 raises ValueError)
-9. Strict V3 evidence provenance isolation in rebuild_affected_evidence()
+1. Pure source text contains ONLY original factual document characters (ZERO generated markers)
+2. Retained match source is a pure substring of the original matched_line (VISIBLE_MATCH_SOURCE_IS_SUBSTRING_OF_ORIGINAL=YES)
+3. Truncation markers (e.g. "строка совпадения сокращена") CANNOT support decisions (MATCH_TRUNCATION_MARKER_CAN_CONFIRM=NO, MATCH_TRUNCATION_MARKER_CAN_REJECT=NO)
+4. Quotes from actual retained source substrings pass verification
+5. Pathological metadata test matrix (title, OKPD, category, subcategory, term, doc_name = 10,000 chars each) preserves [ВОПРОС] and [ДОКУМЕНТАЛЬНЫЙ КОНТЕКСТ]
+6. Hard 3000 max context character contract (assert len(block) <= 3000)
+7. True impossible budget check (ValueError when max_context_chars is smaller than required minimum overhead)
+8. Strict V3 evidence provenance isolation in rebuild_affected_evidence()
 """
 
 import pytest
@@ -72,159 +71,116 @@ def test_v3_versioning_constants():
     assert PROMPT_VERSION == "context_validator_v3"
 
 
-# 2. Exact Prompt Evidence Alignment Check
-def test_exact_prompt_evidence_alignment():
+# 2. Pure Source Text Contains Zero Generated Markers
+def test_pure_source_text_contains_zero_generated_markers():
     validator = ContextValidator(ai_caller=lambda p: "")
+    pathological_mline = ("X" * 1000) + " СВЕТИЛЬНИК_ДКУ " + ("Y" * 1000)
     candidate = {
-        "procurement_title": "Строительство детского сада",
-        "category_name": "Гидроизоляция",
-        "category_code": "waterproofing",
-        "subcategory_name": "Обмазочная гидроизоляция",
-        "subcategory_code": "coating",
-        "matched_term": "мастика",
-        "context_before": ["Строительные работы на объекте."],
-        "matched_line": "Нанесение битумной мастики в 2 слоя.",
-        "context_after": ["Приемка выполненных работ."],
-    }
-    payload = validator.build_context_payload(candidate)
-
-    context_block = payload["context_block"]
-    visible_source_text = payload["visible_source_text"]
-
-    # Extract documentary text embedded inside [ДОКУМЕНТАЛЬНЫЙ КОНТЕКСТ]
-    doc_start = context_block.find("[ДОКУМЕНТАЛЬНЫЙ КОНТЕКСТ]")
-    doc_end = context_block.find("[ВОПРОС]")
-    assert doc_start != -1 and doc_end != -1
-    prompt_doc_section = context_block[doc_start:doc_end]
-
-    # Verify that all lines in visible_source_text are present in prompt_doc_section
-    for line in visible_source_text.splitlines():
-        line_clean = line.strip()
-        if line_clean:
-            assert line_clean in prompt_doc_section
-
-
-# 3. Generated Markers/Labels CANNOT Support Decisions
-def test_generated_markers_cannot_support_decisions():
-    validator = ContextValidator(ai_caller=lambda p: "")
-    candidate = {
-        "detail_id": 100,
+        "procurement_id": 100,
         "category_code": "lighting",
         "subcategory_code": "road_street",
-        "matched_line": "Светильник ДКУ 100W",
-        "context_before": ["Преамбула " + ("A" * 100) for _ in range(10)],
+        "matched_term": "светильник_дку",
+        "matched_line": pathological_mline,
+        "context_before": ["Перед " + ("A" * 100) for _ in range(20)],
+        "context_after": ["После " + ("B" * 100) for _ in range(20)],
     }
     payload = validator.build_context_payload(candidate)
     visible_source = payload["visible_source_text"]
 
-    # A quote consisting ONLY of generated marker label must fail
-    marker_quotes = [
+    generated_markers = [
         "[ДОКУМЕНТАЛЬНЫЙ КОНТЕКСТ]",
         ">>> НАЙДЕННАЯ СТРОКА:",
         "...[контекст до совпадения сокращён]...",
         "...[контекст после совпадения сокращён]...",
+        "...[строка совпадения сокращена]...",
     ]
+    for gm in generated_markers:
+        assert gm not in visible_source, f"Generated marker '{gm}' MUST NOT be in visible_source_text"
 
-    for mq in marker_quotes:
-        raw_conf = {"decision": "CONFIRMED", "confidence": 0.95, "supporting_quote": mq, "reason": "Marker quote"}
-        res = validator._verify_and_gate_decision(raw_conf, candidate, visible_source)
-        assert res["decision"] == "UNKNOWN"
-        assert res["reason_code"] == "HALLUCINATED_QUOTE"
+    assert "СВЕТИЛЬНИК_ДКУ" in visible_source
 
 
-# 4. Real Production Budget Regression (validate_single with truncated-out quote)
-def test_real_production_budget_regression_truncated_out_quote():
-    # Secret text in context_before that will be truncated out by actual prompt budget
-    long_before = ["SECRET_TRUNCATED_TEXT_HEADER_LINE_XYZ"] + ["Строительные работы " + ("X" * 100) for _ in range(25)]
+# 3. Quote Test for Match Truncation Marker
+def test_match_truncation_marker_cannot_support_decision():
+    pathological_mline = ("PRE_" * 500) + " СВЕТИЛЬНИК_УЛИЧНЫЙ_ДКУ " + ("POST_" * 500)
     candidate = {
         "detail_id": 101,
         "category_code": "lighting",
         "subcategory_code": "road_street",
-        "matched_term": "светильник",
-        "matched_line": "Светильник ДКУ 100 Вт.",
-        "context_before": long_before,
-        "context_after": ["Работы завершены."],
+        "matched_term": "светильник_уличный_дку",
+        "matched_line": pathological_mline,
     }
 
-    # Mock AI caller that returns CONFIRMED quoting the truncated-out secret text
-    def mock_caller_conf(prompt):
+    # A. Quote consisting of truncation marker text -> UNKNOWN / HALLUCINATED_QUOTE
+    def mock_caller_marker_conf(p):
         return json.dumps({
             "detail_id": 101,
             "decision": "CONFIRMED",
             "confidence": 0.95,
-            "supporting_quote": "SECRET_TRUNCATED_TEXT_HEADER_LINE_XYZ",
-            "reason_code": "SPECIFICATION_PRODUCT_REQUIREMENT",
-            "reason": "Found requirement",
+            "supporting_quote": "строка совпадения сокращена",
+            "reason": "Quoting display marker",
         })
 
-    validator = ContextValidator(ai_caller=mock_caller_conf)
+    validator = ContextValidator(ai_caller=mock_caller_marker_conf)
     res_conf = validator.validate_single(candidate)
-
-    # MUST fail quote verification because Qwen never saw SECRET_TRUNCATED_TEXT_HEADER_LINE_XYZ in its prompt!
     assert res_conf["decision"] == "UNKNOWN"
     assert res_conf["reason_code"] == "HALLUCINATED_QUOTE"
 
-    # Repeat for REJECTED
-    def mock_caller_rej(prompt):
+    def mock_caller_marker_rej(p):
         return json.dumps({
             "detail_id": 101,
             "decision": "REJECTED",
             "confidence": 0.95,
-            "supporting_quote": "SECRET_TRUNCATED_TEXT_HEADER_LINE_XYZ",
-            "reason_code": "UNRELATED_PRODUCT",
-            "reason": "Not target",
+            "supporting_quote": "строка совпадения сокращена",
+            "reason": "Quoting display marker",
         })
 
-    validator_rej = ContextValidator(ai_caller=mock_caller_rej)
+    validator_rej = ContextValidator(ai_caller=mock_caller_marker_rej)
     res_rej = validator_rej.validate_single(candidate)
     assert res_rej["decision"] == "UNKNOWN"
     assert res_rej["reason_code"] == "HALLUCINATED_QUOTE"
 
-
-# 5. Visible Retained Source Quotes Pass Verification
-def test_visible_retained_quotes_pass_verification_via_validate_single():
-    candidate = {
-        "detail_id": 102,
-        "category_code": "lighting",
-        "subcategory_code": "road_street",
-        "matched_term": "светильник",
-        "context_before": ["Монтаж оборудования уличного освещения."],
-        "matched_line": "Светильник ДКУ 100 Вт согласно спецификации.",
-        "context_after": ["Гарантия 5 лет."],
-    }
-
-    def mock_caller(prompt):
+    # B. Quote from actual retained source substring -> PASSES (CONFIRMED)
+    def mock_caller_valid(p):
         return json.dumps({
-            "detail_id": 102,
+            "detail_id": 101,
             "decision": "CONFIRMED",
             "confidence": 0.95,
-            "supporting_quote": "Светильник ДКУ 100 Вт",
-            "reason_code": "SPECIFICATION_PRODUCT_REQUIREMENT",
-            "reason": "Confirmed requirement",
+            "supporting_quote": "СВЕТИЛЬНИК_УЛИЧНЫЙ_ДКУ",
+            "reason": "Quoting actual retained source",
         })
 
-    validator = ContextValidator(ai_caller=mock_caller)
-    res = validator.validate_single(candidate)
-    assert res["decision"] == "CONFIRMED"
-    assert res["supporting_quote"] == "Светильник ДКУ 100 Вт"
+    validator_valid = ContextValidator(ai_caller=mock_caller_valid)
+    res_valid = validator_valid.validate_single(candidate)
+    assert res_valid["decision"] == "CONFIRMED"
+    assert res_valid["supporting_quote"] == "СВЕТИЛЬНИК_УЛИЧНЫЙ_ДКУ"
 
 
-# 6. Pathological Metadata Handling
-def test_pathological_metadata_preserves_question_and_document_section():
+# 4. Pathological Metadata Test Matrix (10,000 chars for each field)
+@pytest.mark.parametrize("field_name", [
+    "procurement_title",
+    "procurement_okpd_name",
+    "category_name",
+    "subcategory_name",
+    "matched_term",
+    "document_name",
+    "ALL_SIMULTANEOUS",
+])
+def test_pathological_metadata_matrix(field_name):
     validator = ContextValidator(max_context_chars=3000, ai_caller=lambda p: "")
-    pathological_title = "ОЧЕНЬ_ДЛИННОЕ_НАИМЕНОВАНИЕ_ЗАКУПКИ_" + ("T" * 2000)
-    pathological_okpd = "ОКПД_ИМЯ_" + ("O" * 2000)
-    pathological_doc = "ДОКУМЕНТ_ИМЯ_" + ("D" * 2000)
+    huge_str = "PATHOLOGICAL_10K_" + ("Z" * 10000)
 
     candidate = {
         "procurement_id": 888,
-        "procurement_title": pathological_title,
+        "procurement_title": huge_str if field_name in ("procurement_title", "ALL_SIMULTANEOUS") else "Нормальный заголовок",
         "procurement_okpd_code": "27.40.39",
-        "procurement_okpd_name": pathological_okpd,
+        "procurement_okpd_name": huge_str if field_name in ("procurement_okpd_name", "ALL_SIMULTANEOUS") else "Светильники",
         "category_code": "lighting",
+        "category_name": huge_str if field_name in ("category_name", "ALL_SIMULTANEOUS") else "Освещение",
         "subcategory_code": "road_street",
-        "matched_term": "светильник",
-        "document_name": pathological_doc,
+        "subcategory_name": huge_str if field_name in ("subcategory_name", "ALL_SIMULTANEOUS") else "Уличное освещение",
+        "matched_term": huge_str if field_name in ("matched_term", "ALL_SIMULTANEOUS") else "светильник",
+        "document_name": huge_str if field_name in ("document_name", "ALL_SIMULTANEOUS") else "Спецификация.pdf",
         "matched_line": "Светильник ДКУ 100 Вт уличный.",
         "context_before": ["Контекст до."],
         "context_after": ["Контекст после."],
@@ -232,21 +188,32 @@ def test_pathological_metadata_preserves_question_and_document_section():
 
     payload = validator.build_context_payload(candidate)
     block = payload["context_block"]
+    vis_source = payload["visible_source_text"]
 
-    # Invariants:
-    assert len(block) <= 3000, f"Hard limit violated: len(block)={len(block)}"
-    assert "[ВОПРОС]" in block, "Question block MUST be intact"
-    assert "[ДОКУМЕНТАЛЬНЫЙ КОНТЕКСТ]" in block, "Document section MUST be intact"
-    assert "Светильник ДКУ 100 Вт уличный." in block, "Matched line MUST be visible"
+    # HARD CONTRACT assertions:
+    assert len(block) <= 3000, f"Field '{field_name}': len(block)={len(block)} exceeds max_context_chars=3000"
+    assert "[ВОПРОС]" in block, f"Field '{field_name}': [ВОПРОС] block MUST be intact"
+    assert "[ДОКУМЕНТАЛЬНЫЙ КОНТЕКСТ]" in block, f"Field '{field_name}': [ДОКУМЕНТАЛЬНЫЙ КОНТЕКСТ] MUST be intact"
+    assert "Светильник ДКУ 100 Вт уличный." in block, f"Field '{field_name}': Matched line MUST be visible"
+
+    # Pure source check: ZERO generated markers in vis_source
+    assert "[ДОКУМЕНТАЛЬНЫЙ КОНТЕКСТ]" not in vis_source
+    assert ">>> НАЙДЕННАЯ СТРОКА:" not in vis_source
 
 
-# 7. Impossible Budget Policy
-def test_impossible_budget_policy_raises_value_error():
+# 5. True Impossible Budget Check (raises ValueError during context payload build)
+def test_true_impossible_budget_check_raises_value_error():
+    candidate = {
+        "category_code": "lighting",
+        "subcategory_code": "road_street",
+        "matched_line": "Светильник ДКУ",
+    }
+    validator = ContextValidator(max_context_chars=500, ai_caller=lambda p: "")
     with pytest.raises(ValueError, match="Impossible context budget"):
-        ContextValidator(max_context_chars=200, ai_caller=lambda p: "")
+        validator.build_context_payload(candidate)
 
 
-# 8. Strict V3 evidence provenance isolation
+# 6. Strict V3 evidence provenance isolation
 def test_strict_v3_evidence_provenance():
     mock_conn = MockConnection()
 

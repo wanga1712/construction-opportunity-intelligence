@@ -170,7 +170,7 @@ def _build_visible_document_context_pair(
       (visible_doc_section_str, visible_source_text_str)
 
     visible_doc_section_str: formatted section with UI headers and truncation markers for Qwen prompt.
-    visible_source_text_str: pure factual retained document text ONLY (without generated markers/headers) for quote verification.
+    visible_source_text_str: pure factual retained document text ONLY (without ANY generated markers/headers) for quote verification.
     """
     c_hydrated = hydrate_candidate_context(candidate)
     matched_line = _candidate_matched_line(c_hydrated)
@@ -204,7 +204,9 @@ def _build_visible_document_context_pair(
     if max_mline_len < 50:
         max_mline_len = 50
 
-    retained_mline = matched_line
+    display_retained_mline = matched_line
+    pure_source_mline = matched_line
+
     if len(matched_line) > max_mline_len:
         eff_len = max_mline_len - len(mline_marker)
         if eff_len < 30: eff_len = 30
@@ -219,7 +221,8 @@ def _build_visible_document_context_pair(
             sub = matched_line[start:end]
             p_mark = "...[строка совпадения сокращена]... " if start > 0 else ""
             s_mark = " ...[строка совпадения сокращена]..." if end < len(matched_line) else ""
-            retained_mline = f"{p_mark}{sub}{s_mark}"
+            display_retained_mline = f"{p_mark}{sub}{s_mark}"
+            pure_source_mline = sub
         else:
             half = eff_len // 2
             mid = len(matched_line) // 2
@@ -228,9 +231,10 @@ def _build_visible_document_context_pair(
             sub = matched_line[start:end]
             p_mark = "...[строка совпадения сокращена]... " if start > 0 else ""
             s_mark = " ...[строка совпадения сокращена]..." if end < len(matched_line) else ""
-            retained_mline = f"{p_mark}{sub}{s_mark}"
+            display_retained_mline = f"{p_mark}{sub}{s_mark}"
+            pure_source_mline = sub
 
-    avail_for_before_after = avail_budget - len(retained_mline)
+    avail_for_before_after = avail_budget - len(display_retained_mline)
     if avail_for_before_after < 0:
         avail_for_before_after = 0
 
@@ -271,19 +275,18 @@ def _build_visible_document_context_pair(
     doc_section_str = (
         f"[ДОКУМЕНТАЛЬНЫЙ КОНТЕКСТ]\n"
         f"{p_str}{used_before}\n"
-        f">>> НАЙДЕННАЯ СТРОКА: {retained_mline}\n"
+        f">>> НАЙДЕННАЯ СТРОКА: {display_retained_mline}\n"
         f"{used_after}{s_str}\n"
     )
 
-    # Pure factual source text ONLY (no generated headers/markers) for quote verification
+    # Pure factual source text ONLY (zero generated markers/headers) for quote verification
     pure_parts = []
     if used_before: pure_parts.append(used_before)
-    if retained_mline: pure_parts.append(retained_mline)
+    if pure_source_mline: pure_parts.append(pure_source_mline)
     if used_after: pure_parts.append(used_after)
     visible_source_text_str = "\n".join(pure_parts)
 
     return doc_section_str, visible_source_text_str
-
 
 def build_visible_document_context(
     candidate: Dict[str, Any],
@@ -438,11 +441,8 @@ class ContextValidator:
         Guarantees that:
         1. Prompt document context == verifier visible document context (built ONCE per candidate).
         2. Total context_block length <= max_context_chars without blind prefix/suffix clipping.
-        3. Pathological metadata is truncated cleanly to preserve document context & question blocks.
+        3. All dynamic metadata (title, OKPD, category, subcategory, term, doc_name) is deterministically bounded.
         """
-        if self.max_context_chars < 300:
-            raise ValueError(f"Impossible context budget: max_context_chars={self.max_context_chars} is below minimum 300")
-
         candidate = hydrate_candidate_context(candidate)
         pid = candidate.get("procurement_id", "")
         okpd_code = candidate.get("procurement_okpd_code", "")
@@ -460,10 +460,25 @@ class ContextValidator:
         row_num = candidate.get("row_number", "")
         doc_loc = f"{page_sheet}:{row_num}" if page_sheet or row_num else ""
 
-        # Fixed Question Block
+        # Bound dynamic metadata for display to prevent pathological metadata from inflating prompt/question
+        pid_disp = str(pid)[:30]
+        okpd_code_disp = str(okpd_code)[:30]
+        okpd_name_disp = str(okpd_name)[:30] + "..." if len(str(okpd_name)) > 30 else str(okpd_name)
+        p_title_disp = str(p_title)[:40] + "..." if len(str(p_title)) > 40 else str(p_title)
+
+        cat_code_disp = str(cat_code)[:30]
+        cat_name_disp = str(cat_name)[:40] + "..." if len(str(cat_name)) > 40 else str(cat_name)
+        sub_code_disp = str(sub_code)[:30]
+        sub_name_disp = str(sub_name)[:40] + "..." if len(str(sub_name)) > 40 else str(sub_name)
+
+        term_disp = str(term)[:40] + "..." if len(str(term)) > 40 else str(term)
+        doc_name_disp = str(doc_name)[:40] + "..." if len(str(doc_name)) > 40 else str(doc_name)
+        doc_loc_disp = str(doc_loc)[:30]
+
+        # Bounded Question Block
         question_block = (
             f"\n[ВОПРОС]\n"
-            f"Подтверждает ли данный фрагмент документа закупку/применение материалов или работ для подкатегории \"{sub_name}\" (категория \"{cat_name}\", термин \"{term}\" )?\n"
+            f"Подтверждает ли данный фрагмент документа закупку/применение материалов или работ для подкатегории \"{sub_name_disp}\" (категория \"{cat_name_disp}\", термин \"{term_disp}\" )?\n"
             f"- ВАЖНО: Документальные доказательства берутся ИСКЛЮЧИТЕЛЬНО из раздела [ДОКУМЕНТАЛЬНЫЙ КОНТЕКСТ]. Названия закупки, категории и терминов из раздела метаданных не являются доказательствами.\n"
             f"- Если подкатегория прямо подтверждается спецификацией, позицией ВОР, описанием товара или характеристиками -> 'CONFIRMED', confidence: 0.80-1.0, supporting_quote: обязательная дословная цитата из документа.\n"
             f"- Если созвучие/адрес/название организации/нецелевой товар -> 'REJECTED', confidence: 0.85-1.0, supporting_quote: обязательная дословная цитата из документа.\n"
@@ -471,55 +486,36 @@ class ContextValidator:
             f"Ответь строго JSON."
         )
 
-        # Pathological Metadata Handling: Ensure metadata overhead leaves at least 300 chars for document context
-        min_doc_budget = 300
-        max_meta_budget = self.max_context_chars - len(question_block) - min_doc_budget
-        if max_meta_budget < 120:
-            max_meta_budget = 120
-
-        # Construct raw metadata header
+        # Bounded Metadata Header
         meta_block = (
             f"[ТЕНДЕР]\n"
-            f"ID: {pid}\n"
-            f"ОКПД2: {okpd_code} ({okpd_name})\n"
-            f"Наименование закупки: {p_title}\n\n"
+            f"ID: {pid_disp}\n"
+            f"ОКПД2: {okpd_code_disp} ({okpd_name_disp})\n"
+            f"Наименование закупки: {p_title_disp}\n\n"
             f"[ЦЕЛЕВАЯ КАТЕГОРИЯ CRM]\n"
-            f"Категория: {cat_name} ({cat_code})\n"
-            f"Подкатегория: {sub_name} ({sub_code})\n"
-            f"Искомый термин: {term}\n"
-            f"Документ: {doc_name} {doc_loc}\n\n"
+            f"Категория: {cat_name_disp} ({cat_code_disp})\n"
+            f"Подкатегория: {sub_name_disp} ({sub_code_disp})\n"
+            f"Искомый термин: {term_disp}\n"
+            f"Документ: {doc_name_disp} {doc_loc_disp}\n\n"
         )
 
-        if len(meta_block) > max_meta_budget:
-            # Safely truncate verbose metadata fields (p_title, okpd_name, doc_name)
-            p_title_sub = str(p_title)[:40] + "..." if len(str(p_title)) > 40 else str(p_title)
-            okpd_name_sub = str(okpd_name)[:30] + "..." if len(str(okpd_name)) > 30 else str(okpd_name)
-            doc_name_sub = str(doc_name)[:40] + "..." if len(str(doc_name)) > 40 else str(doc_name)
-            meta_block = (
-                f"[ТЕНДЕР]\n"
-                f"ID: {pid}\n"
-                f"ОКПД2: {okpd_code} ({okpd_name_sub})\n"
-                f"Наименование закупки: {p_title_sub}\n\n"
-                f"[ЦЕЛЕВАЯ КАТЕГОРИЯ CRM]\n"
-                f"Категория: {cat_name} ({cat_code})\n"
-                f"Подкатегория: {sub_name} ({sub_code})\n"
-                f"Искомый термин: {term}\n"
-                f"Документ: {doc_name_sub} {doc_loc}\n\n"
-            )
-
         fixed_overhead = len(meta_block) + len(question_block)
-        max_doc_budget = self.max_context_chars - fixed_overhead
+        min_required_budget = fixed_overhead + len("[ДОКУМЕНТАЛЬНЫЙ КОНТЕКСТ]\n\n>>> НАЙДЕННАЯ СТРОКА: \n") + 50
 
+        if self.max_context_chars < min_required_budget:
+            raise ValueError(f"Impossible context budget: max_context_chars={self.max_context_chars} is smaller than required minimum overhead {min_required_budget}")
+
+        max_doc_budget = self.max_context_chars - fixed_overhead
         doc_section, visible_source_text = _build_visible_document_context_pair(candidate, max_doc_budget)
 
         context_block = f"{meta_block}{doc_section}{question_block}"
 
-        # Invariant check: Hard limit guaranteed without blind clipping
         if len(context_block) > self.max_context_chars:
-            # Extra safety truncation of doc section only if needed
-            trim_len = len(context_block) - self.max_context_chars
-            doc_section, visible_source_text = _build_visible_document_context_pair(candidate, max_doc_budget - trim_len - 10)
+            overflow = len(context_block) - self.max_context_chars
+            doc_section, visible_source_text = _build_visible_document_context_pair(candidate, max_doc_budget - overflow)
             context_block = f"{meta_block}{doc_section}{question_block}"
+            if len(context_block) > self.max_context_chars:
+                raise ValueError(f"Final context_block length {len(context_block)} exceeds max_context_chars {self.max_context_chars}")
 
         return {
             "context_block": context_block,
