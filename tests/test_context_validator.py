@@ -101,7 +101,7 @@ def test_4_low_confidence_confirmed_yields_unknown():
         "detail_id": 4,
         "procurement_id": 100,
         "category_code": "flooring",
-        "matched_term": "денстоп",
+        "matched_term": "полимер",
         "matched_line": "Покрытие пола Денстоп ЭП-201",
     }
     result = validator.validate_single(candidate)

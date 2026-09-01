@@ -19,67 +19,59 @@ import json
 import logging
 import os
 import re
-import urllib.error
-import urllib.request
 from datetime import datetime, timezone
 from typing import Any, Callable, Dict, List, Optional, Tuple
 
+from src.services.ai_client import DEFAULT_MODEL, generate
+
 logger = logging.getLogger("document_processor.context_validator")
 
-DEFAULT_MODEL = "qwen2.5:7b"
-DEFAULT_OLLAMA_URL = "http://127.0.0.1:11434"
-DEFAULT_CONFIRM_THRESHOLD = 0.80
+DEFAULT_CONFIRM_THRESHOLD = 0.90
 DEFAULT_REJECT_THRESHOLD = 0.85
 DEFAULT_MAX_CONTEXT_CHARS = 3000
 DEFAULT_BATCH_SIZE = 10
 
 VALID_DECISIONS = frozenset({"CONFIRMED", "REJECTED", "UNKNOWN"})
 
-SYSTEM_PROMPT = """Ты — строгий эксперт-валидатор совпадений в документах госзакупок для CRM строительных материалов и оборудования.
-Твоя задача — проверить, подтверждает ли найденный фрагмент текста документа закупку, потребность, сметную строку, ведомость объемов или спецификацию на материалы/оборудование/работы целевой категории и подкатегории, указанных в блоке [КАНДИДАТ ПОИСКА].
+VALIDATOR_NAME = "context_validator"
+VALIDATOR_VERSION = "v2"
+VALIDATION_METHOD = "QWEN_CONTEXT_V2"
+PROMPT_VERSION = "context_validator_v2"
 
-ВНИМАНИЕ:
-- Целевая проверка проводится на соответствие блоку [КАНДИДАТ ПОИСКА] (Категория и Подкатегория)!
-- Наименование закупки в блоке [ТЕНДЕР] — это лишь общее название всего тендера, а не фильтр. Не путай название тендера с категорией товара!
+SYSTEM_PROMPT = """Ты — эксперт-валидатор совпадений в документах госзакупок для CRM строительных материалов, оборудования и работ.
+Твоя задача — проанализировать контекст документа и определить, действительно ли закупка или спецификация требует/применяет/содержит товар, материал, оборудование, технологию или работу целевой подкатегории (указанной в блоке [ЦЕЛЕВАЯ КАТЕГОРИЯ CRM]).
 
-Справочник строительных категорий и подкатегорий:
-- Напольные покрытия (flooring):
-  * Полимерные наливные полы (polymer_self_leveling): эпоксидные и полиуретановые компаунды, наливные полы (Денстоп, Полиплан и др.).
-  * Топпинги (dry_shake_topping): сухие смеси-упрочнители бетона (MasterTop, Sika и др.).
-- Гидроизоляция (waterproofing):
-  * Мембранная (membrane): ПВХ, ТПО, ЭПДМ мембраны (Пластфоил, Logicroof и др.) для кровли, бассейнов, фундаментов.
-  * Инъекционная (injection): полиуретановые, эпоксидные инъекционные смолы (Манопур, Витрапур и др.) для гидроизоляции швов и бетона. (Медицинские шприцы и уколы — REJECTED!).
-  * Проникающая (penetrating): Пенетрон, Кальматрон, Лахта и др.
-  * Битумная (bitumen_roll, coating): рулонные материалы (Техноэласт, Унифлекс и др.), битумные мастики.
-- Гидроизоляция и ремонт бетона (waterproofing_concrete_repair / concrete_repair): ремонтные смеси и составы для конструкционного ремонта бетона (MasterEmaco, Mapegrout, Sika MonoTop, Скрепа и др.).
-- Композитные материалы (composites):
-  * Композитные водоотводные лотки (drainage_tray): полимеркомпозитные, полимербетонные, композитные лотки и водоотводные каналы.
-  * Композитная арматура (rebar): стеклопластиковая/базальтопластиковая арматура.
-- Освещение (lighting / road_street, industrial, office_admin): светильники уличные (ДКУ), промышленные (хайбей), офисные панели. (Слова "проект", "вектор", "директор", "распоряжение администрации", адреса "ул. Магистральная", "просп. Мира" — REJECTED!).
+ПРАВИЛА ПРИНЯТИЯ РЕШЕНИЯ:
 
-Решения (decision):
-1. CONFIRMED: Фрагмент документа прямо указывает на закупку, потребность, ведомость объемов, смету, ТЗ или применение товара/материала/оборудования указанной категории.
-2. REJECTED: Совпадение ложное:
-   - FUZZY_LEXICAL_COLLISION: совпадение похожего слова ("ПРОЕКТ" вместо "проспект", "директор" вместо "вектор", "плотность" вместо "плотина").
-   - ADDRESS_OR_LOCATION_ONLY: адрес, улица ("просп. Ленина", "ул. 3-я Магистральная").
-   - ORGANIZATION_NAME_ONLY: наименование организации, должность ("ООО Вектор", "Генеральный директор").
-   - LEGAL_ADMINISTRATIVE_TEXT: распоряжение, преамбула, типовой договор ("Распоряжением администрации...").
-   - UNRELATED_PRODUCT: совершенно другой товар (медицинский шприц, канцтовары, продукты).
-   - NEGATIVE_PHRASE_CONTEXT: фрагмент содержит стоп-фразу.
-3. UNKNOWN: Контекст слишком обрезан, неоднозначен или информации недостаточно для уверенного вывода.
+1. CONFIRMED:
+Контекст документа однозначно подтверждает закупку, потребность, сметную позицию, материал, оборудование или работу целевой подкатегории.
+- Указание бренда, производителя, модели, артикула или ГОСТа НЕ ЯВЛЯЕТСЯ ОБЯЗАТЕЛЬНЫМ.
+- Достаточно явного наименования товара, технических характеристик, позиции спецификации/ведомости объемов работ (ВОР), количества с единицами измерения или описания технологического процесса, относящегося к целевой подкатегории.
 
-Правила:
-- confidence: степень уверенности в решении (0.95-1.0 если уверен, <0.90 если сомневаешься).
-- supporting_quote: точная дословная цитата (подстрока) из блока [КОНТЕКСТ ИЗ ДОКУМЕНТА].
-  * Для CONFIRMED: строка/фраза с товаром/материалом.
-  * Для REJECTED: строка с ложным термином.
+2. REJECTED:
+Контекст документа четко показывает, что совпадение НЕ относится к целевой подкатегории.
+Основные причины:
+- Лексическое созвучие (слово похоже по написанию, но означает другой предмет или понятие).
+- Адрес или наименование географического объекта.
+- Наименование организации, реквизит или должность.
+- Юридический или административный текст преамбулы/договора.
+- Заведомо нецелевой товар или услуга.
+- Явный контекст стоп-фразы подкатегории.
 
-Ответ СТРОГО в формате JSON:
+3. UNKNOWN:
+Фрагмент контекста действительно недостаточен или неоднозначен для вывода.
+Примеры:
+- Одиночное общее слово без контекста и параметров.
+- Обрезанный или поврежденный фрагмент таблицы/текста, где роль позиции неясна.
+- Контекст равновероятно допускает как целевое, так и нецелевое применение.
+ВАЖНО: Отсутствие названия бренда или производителя НЕ является причиной для UNKNOWN, если сама позиция/работа четко описана.
+
+Формат ответа — СТРОГО JSON:
 {
   "detail_id": <int/str>,
   "decision": "CONFIRMED" | "REJECTED" | "UNKNOWN",
   "confidence": <float 0.0-1.0>,
-  "supporting_quote": "<дословная цитата из контекста>",
+  "supporting_quote": "<дословная цитата из текста или пустая строка>",
   "reason_code": "<SPECIFICATION_PRODUCT_REQUIREMENT|FUZZY_LEXICAL_COLLISION|ADDRESS_OR_LOCATION_ONLY|ORGANIZATION_NAME_ONLY|LEGAL_ADMINISTRATIVE_TEXT|UNRELATED_PRODUCT|NEGATIVE_PHRASE_CONTEXT|INSUFFICIENT_CONTEXT>",
   "reason": "<краткое объяснение>"
 }"""
@@ -88,32 +80,196 @@ SYSTEM_PROMPT = """Ты — строгий эксперт-валидатор с�
 def _normalize_whitespace(text: str) -> str:
     if not text:
         return ""
-    text = re.sub(r"[«»\"'„“”]", " ", text)
+    for ch in ['«', '»', '"', "'", '„', '“', '”']:
+        text = text.replace(ch, " ")
     return re.sub(r"\s+", " ", text).strip().lower()
 
 
-def call_ollama(
-    prompt: str,
-    *,
-    model: str = DEFAULT_MODEL,
-    base_url: str = DEFAULT_OLLAMA_URL,
-    timeout: int = 45,
-) -> str:
-    """Invokes local Ollama /api/generate with format=json."""
-    url = f"{base_url.rstrip('/')}/api/generate"
-    payload = {
-        "model": model,
-        "prompt": prompt,
-        "system": SYSTEM_PROMPT,
-        "stream": False,
-        "format": "json",
-        "options": {"temperature": 0.0, "num_predict": 512},
-    }
-    data = json.dumps(payload, ensure_ascii=False).encode("utf-8")
-    req = urllib.request.Request(url, data=data, headers={"Content-Type": "application/json"})
-    with urllib.request.urlopen(req, timeout=timeout) as resp:
-        body = json.loads(resp.read().decode("utf-8"))
-        return body.get("response", "")
+def _is_empty_context(val) -> bool:
+    """Treats None, empty string, whitespace-only, {}, [], '{}', '[]', 'null' as empty."""
+    if val is None:
+        return True
+    if isinstance(val, dict) and not val:
+        return True
+    if isinstance(val, list) and not val:
+        return True
+    if isinstance(val, str):
+        stripped = val.strip()
+        if not stripped or stripped in ('{}', '[]', 'null', 'None'):
+            return True
+    return False
+
+
+def _safe_parse_json(val):
+    """Parse JSON string safely; returns parsed value or original on failure."""
+    if isinstance(val, str):
+        try:
+            return json.loads(val)
+        except (json.JSONDecodeError, ValueError):
+            return val
+    return val
+
+
+def _format_raw_cells(raw_cells: list) -> str:
+    """Formats raw_cells list into a human-readable table row string.
+
+    Preserves useful factual structure: column text, headers, units, quantities.
+    """
+    if not raw_cells or not isinstance(raw_cells, list):
+        return ""
+    parts = []
+    for cell in raw_cells:
+        if isinstance(cell, dict):
+            text = str(cell.get("text", "")).strip()
+            if text:
+                parts.append(text)
+        elif isinstance(cell, str):
+            parts.append(cell.strip())
+    return " | ".join(parts) if parts else ""
+
+
+def hydrate_candidate_context(candidate: dict) -> dict:
+    """Single authority for resolving matched_line, context_before, context_after.
+
+    Precedence for each field:
+      A. Explicit non-empty candidate field (from DB column)
+      B. Fallback to row_data nested field
+      C. For matched_line: also try raw_cells formatting
+
+    Returns a NEW dict with resolved 'matched_line', 'context_before', 'context_after'
+    keys added/overwritten. Does NOT mutate the original candidate.
+    """
+    result = dict(candidate)
+
+    # Parse row_data if needed
+    row_data = candidate.get("row_data")
+    if isinstance(row_data, str):
+        row_data = _safe_parse_json(row_data)
+    if not isinstance(row_data, dict):
+        row_data = {}
+
+    # --- matched_line ---
+    matched_line = candidate.get("matched_line") or ""
+    if isinstance(matched_line, str):
+        matched_line = matched_line.strip()
+
+    if not matched_line:
+        # Fallback B: row_data.matched_line / matched_display_text / text
+        matched_line = (
+            row_data.get("matched_line")
+            or row_data.get("matched_display_text")
+            or row_data.get("text")
+            or ""
+        )
+        if isinstance(matched_line, str):
+            matched_line = matched_line.strip()
+
+    if not matched_line:
+        # Fallback C: format raw_cells as matched text
+        matched_line = _format_raw_cells(row_data.get("raw_cells"))
+
+    result["matched_line"] = matched_line
+
+    # --- context_before ---
+    db_before = candidate.get("context_before")
+    if _is_empty_context(db_before):
+        # Fallback to row_data.context_before
+        rd_before = row_data.get("context_before")
+        if isinstance(rd_before, str):
+            rd_before = _safe_parse_json(rd_before)
+        if isinstance(rd_before, list) and rd_before:
+            result["context_before"] = rd_before
+        else:
+            result["context_before"] = []
+    else:
+        # Explicit DB value is non-empty - keep it
+        if isinstance(db_before, str):
+            db_before = _safe_parse_json(db_before)
+        result["context_before"] = db_before if isinstance(db_before, list) else [db_before] if db_before else []
+
+    # --- context_after ---
+    db_after = candidate.get("context_after")
+    if _is_empty_context(db_after):
+        # Fallback to row_data.context_after
+        rd_after = row_data.get("context_after")
+        if isinstance(rd_after, str):
+            rd_after = _safe_parse_json(rd_after)
+        if isinstance(rd_after, list) and rd_after:
+            result["context_after"] = rd_after
+        else:
+            result["context_after"] = []
+    else:
+        # Explicit DB value is non-empty - keep it
+        if isinstance(db_after, str):
+            db_after = _safe_parse_json(db_after)
+        result["context_after"] = db_after if isinstance(db_after, list) else [db_after] if db_after else []
+
+    return result
+
+
+def _candidate_matched_line(candidate: Dict[str, Any]) -> str:
+    """Extracts the best matched text from candidate using hydration precedence."""
+    matched_line = candidate.get("matched_line") or ""
+    if isinstance(matched_line, str):
+        matched_line = matched_line.strip()
+    if matched_line:
+        return matched_line
+    row_data = candidate.get("row_data")
+    if isinstance(row_data, str):
+        row_data = _safe_parse_json(row_data)
+        if not isinstance(row_data, dict):
+            row_data = {"matched_line": str(row_data)}
+    if isinstance(row_data, dict):
+        matched_line = (
+            row_data.get("matched_line")
+            or row_data.get("matched_display_text")
+            or row_data.get("text")
+            or ""
+        )
+        if not matched_line:
+            matched_line = _format_raw_cells(row_data.get("raw_cells"))
+    return str(matched_line)
+
+
+def _term_in_line(term_norm: str, line_norm: str) -> bool:
+    if not term_norm or not line_norm:
+        return False
+    pattern = r"(?<!\w)" + re.escape(term_norm) + r"(?!\w)"
+    return bool(re.search(pattern, line_norm))
+
+
+def _term_supported_in_line(term_norm: str, line_norm: str) -> bool:
+    if not term_norm or not line_norm:
+        return False
+    if _term_in_line(term_norm, line_norm):
+        return True
+    words = [w for w in term_norm.split() if len(w) >= 3]
+    if len(words) >= 2:
+        return all(re.search(r"(?<!\w)" + re.escape(w) + r"(?!\w)", line_norm) for w in words)
+    if len(term_norm) >= 5 and term_norm in line_norm:
+        return True
+    return False
+
+
+def _is_structurally_ambiguous(candidate: Dict[str, Any]) -> bool:
+    """Detect truncated OCR/table fragments where role cannot be established."""
+    candidate = hydrate_candidate_context(candidate)
+    before = candidate.get("context_before") or []
+    after = candidate.get("context_after") or []
+    line = _normalize_whitespace(_candidate_matched_line(candidate))
+    if not line:
+        return True
+    marker_fragments = (
+        "внимание: фрагмент",
+        "внимание: табличная",
+        "внимание: обрывок",
+        "обрезан",
+        "поврежден",
+    )
+    before_text = _normalize_whitespace(" ".join(str(x) for x in before if x))
+    if any(m in before_text for m in marker_fragments):
+        return True
+    return False
 
 
 class ContextValidator:
@@ -121,7 +277,6 @@ class ContextValidator:
         self,
         *,
         model: str = DEFAULT_MODEL,
-        ollama_url: Optional[str] = None,
         confirm_threshold: float = DEFAULT_CONFIRM_THRESHOLD,
         reject_threshold: float = DEFAULT_REJECT_THRESHOLD,
         max_context_chars: int = DEFAULT_MAX_CONTEXT_CHARS,
@@ -130,16 +285,23 @@ class ContextValidator:
         ai_caller: Optional[Callable[[str], str]] = None,
     ) -> None:
         self.model = model
-        self.ollama_url = ollama_url or os.getenv("OLLAMA_BASE_URL", DEFAULT_OLLAMA_URL)
         self.confirm_threshold = confirm_threshold
         self.reject_threshold = reject_threshold
         self.max_context_chars = max_context_chars
         self.batch_size = batch_size
         self.dedupe = dedupe
-        self._ai_caller = ai_caller or (lambda p: call_ollama(p, model=self.model, base_url=self.ollama_url))
+        self._ai_caller = ai_caller or (
+            lambda p: generate(
+                f"{SYSTEM_PROMPT}\n\n{p}",
+                model=self.model,
+                timeout=75,
+                format_json=True,
+            )
+        )
 
     def build_context_block(self, candidate: Dict[str, Any]) -> str:
         """Constructs a bounded, informative context block for Qwen."""
+        candidate = hydrate_candidate_context(candidate)
         pid = candidate.get("procurement_id", "")
         okpd_code = candidate.get("procurement_okpd_code", "")
         okpd_name = candidate.get("procurement_okpd_name", "")
@@ -181,20 +343,7 @@ class ContextValidator:
         else:
             after_str = str(after)
 
-        matched_line = candidate.get("matched_line") or ""
-        row_data = candidate.get("row_data")
-        if isinstance(row_data, str):
-            try:
-                row_data = json.loads(row_data)
-            except Exception:
-                row_data = {"matched_line": row_data}
-        if not matched_line and isinstance(row_data, dict):
-            matched_line = (
-                row_data.get("matched_line")
-                or row_data.get("matched_display_text")
-                or row_data.get("text")
-                or ""
-            )
+        matched_line = _candidate_matched_line(candidate)
 
         neg_phrases = candidate.get("negative_phrases") or []
         neg_str = ", ".join(neg_phrases) if isinstance(neg_phrases, list) else str(neg_phrases)
@@ -221,10 +370,10 @@ class ContextValidator:
 
         block += (
             f"\n[ВОПРОС]\n"
-            f"Подтверждает ли данный фрагмент документа реальную закупку, смету, ведомость объемов или ТЗ на товар/материал/работу для подкатегории \"{sub_name}\" (категория \"{cat_name}\", термин \"{term}\")?\n"
-            f"- Если ДА -> decision: 'CONFIRMED', confidence: 0.95-1.0, supporting_quote: точная подстрока с товаром.\n"
-            f"- Если НЕТ (ложное созвучие слов, адрес, должность/организация, типовой договор, другой товар) -> decision: 'REJECTED', confidence: 0.95-1.0, supporting_quote: строка с ложным термином.\n"
-            f"- Если неясно / контекст обрезан -> decision: 'UNKNOWN'.\n"
+            f"Подтверждает ли данный фрагмент документа закупку/применение материалов или работ для подкатегории \"{sub_name}\" (категория \"{cat_name}\", термин \"{term}\")?\n"
+            f"- Если подкатегория прямо подтверждается спецификацией, позицией ВОР, описанием товара или характеристиками -> 'CONFIRMED', confidence: 0.80-1.0, supporting_quote: дословная цитата.\n"
+            f"- Если созвучие/адрес/название организации/нецелевой товар -> 'REJECTED', confidence: 0.85-1.0, supporting_quote: дословная цитата.\n"
+            f"- Если контекст обрезан или совершенно неоднозначен -> 'UNKNOWN', confidence: 0.0, reason_code: 'INSUFFICIENT_CONTEXT'.\n"
             f"Ответь строго JSON."
         )
 
@@ -259,6 +408,86 @@ class ContextValidator:
         quote = str(raw_decision.get("supporting_quote") or "").strip()
         reason = str(raw_decision.get("reason") or "").strip()
 
+        fail_closed_codes = frozenset({
+            "MODEL_EXCEPTION",
+            "INVALID_JSON",
+            "INVALID_DECISION_ENUM",
+        })
+        if reason_code in fail_closed_codes:
+            return {
+                "detail_id": detail_id,
+                "procurement_id": candidate.get("procurement_id"),
+                "category_code": cat_code,
+                "subcategory_code": sub_code,
+                "decision": "UNKNOWN",
+                "confidence": 0.0,
+                "supporting_quote": "",
+                "reason_code": reason_code,
+                "reason": reason,
+                "validated_at": datetime.now(timezone.utc).isoformat(),
+                "validator_name": VALIDATOR_NAME,
+                "validator_version": VALIDATOR_VERSION,
+                "validation_method": VALIDATION_METHOD,
+            }
+
+        if reason_code == "INSUFFICIENT_CONTEXT":
+            decision = "UNKNOWN"
+            confidence = 0.0
+
+        term_norm = _normalize_whitespace(str(candidate.get("matched_term") or ""))
+        line_norm = _normalize_whitespace(_candidate_matched_line(candidate))
+        neg_phrases = candidate.get("negative_phrases") or []
+        if isinstance(neg_phrases, list):
+            for np in neg_phrases:
+                np_norm = _normalize_whitespace(str(np))
+                if np_norm and np_norm in line_norm:
+                    decision = "REJECTED"
+                    reason_code = "NEGATIVE_PHRASE_CONTEXT"
+                    confidence = max(confidence, self.reject_threshold)
+                    break
+
+        medical_markers = ("шприц", "игла", "медицин", "однократного применения")
+        if (
+            candidate.get("subcategory_code") == "injection"
+            and any(m in line_norm for m in medical_markers)
+        ):
+            decision = "REJECTED"
+            reason_code = "UNRELATED_PRODUCT"
+            confidence = max(confidence, self.reject_threshold)
+
+        if (
+            decision == "REJECTED"
+            and _term_supported_in_line(term_norm, line_norm)
+            and len(line_norm.split()) >= 4
+            and not any(m in line_norm for m in medical_markers)
+            and reason_code not in {
+                "ADDRESS_OR_LOCATION_ONLY",
+                "ORGANIZATION_NAME_ONLY",
+                "LEGAL_ADMINISTRATIVE_TEXT",
+                "NEGATIVE_PHRASE_CONTEXT",
+            }
+        ):
+            decision = "CONFIRMED"
+            reason_code = "SPECIFICATION_PRODUCT_REQUIREMENT"
+            confidence = max(confidence, self.confirm_threshold)
+            if not quote:
+                quote = _candidate_matched_line(candidate)
+
+        if (
+            decision == "CONFIRMED"
+            and _term_supported_in_line(term_norm, line_norm)
+            and len(line_norm.split()) >= 4
+            and confidence < self.confirm_threshold
+            and confidence >= 0.80
+        ):
+            confidence = self.confirm_threshold
+
+        if _is_structurally_ambiguous(candidate):
+            decision = "UNKNOWN"
+            reason_code = "INSUFFICIENT_CONTEXT"
+            confidence = 0.0
+            reason = reason or "Truncated or table fragment without sufficient product context"
+
         # Quote verification: quote must be exact substring in context
         if decision in ("CONFIRMED", "REJECTED") and quote:
             norm_quote = _normalize_whitespace(quote)
@@ -290,9 +519,9 @@ class ContextValidator:
             "reason_code": reason_code,
             "reason": reason,
             "validated_at": datetime.now(timezone.utc).isoformat(),
-            "validator_name": "context_validator",
-            "validator_version": "v1",
-            "validation_method": "QWEN_CONTEXT_V1",
+            "validator_name": VALIDATOR_NAME,
+            "validator_version": VALIDATOR_VERSION,
+            "validation_method": VALIDATION_METHOD,
         }
 
     def validate_single(self, candidate: Dict[str, Any]) -> Dict[str, Any]:
