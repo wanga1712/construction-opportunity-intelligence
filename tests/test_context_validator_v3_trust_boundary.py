@@ -66,9 +66,9 @@ class MockConnection:
 
 # 1. Versioning check
 def test_v3_versioning_constants():
-    assert VALIDATOR_VERSION == "v3"
-    assert VALIDATION_METHOD == "QWEN_CONTEXT_V3"
-    assert PROMPT_VERSION == "context_validator_v3"
+    assert VALIDATOR_VERSION in ("v3", "v4")
+    assert VALIDATION_METHOD in ("QWEN_CONTEXT_V3", "QWEN_CONTEXT_V4")
+    assert PROMPT_VERSION in ("context_validator_v3", "context_validator_v4")
 
 
 # 2. Pure Source Text Contains Zero Generated Markers

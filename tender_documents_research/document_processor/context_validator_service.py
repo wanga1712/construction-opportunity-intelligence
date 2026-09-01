@@ -301,6 +301,12 @@ def rebuild_affected_evidence(conn, affected: Set[Tuple[int, str]]) -> None:
                 """, (pid, cat, PIPELINE_GENERATION))
                 continue
 
+            v4_trusted = [
+                r for r in confirmed_rows
+                if str(r.get("validator_version") or "").lower() == "v4"
+                and str(r.get("validation_method") or "").upper() == "QWEN_CONTEXT_V4"
+            ]
+
             v3_trusted = [
                 r for r in confirmed_rows
                 if str(r.get("validator_version") or "").lower() == "v3"
@@ -319,7 +325,11 @@ def rebuild_affected_evidence(conn, affected: Set[Tuple[int, str]]) -> None:
                 and str(r.get("validation_method") or "").upper() == "QWEN_CONTEXT_V1"
             ]
 
-            if v3_trusted:
+            if v4_trusted:
+                target_rows = v4_trusted
+                val_ver = "v4"
+                val_method = "QWEN_CONTEXT_V4"
+            elif v3_trusted:
                 target_rows = v3_trusted
                 val_ver = "v3"
                 val_method = "QWEN_CONTEXT_V3"

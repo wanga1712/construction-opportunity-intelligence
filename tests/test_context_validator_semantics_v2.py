@@ -107,8 +107,8 @@ def test_generic_lighting_without_brand_confirmed():
 
     assert res["decision"] == "CONFIRMED"
     assert res["confidence"] >= 0.80
-    assert res["validator_version"] == "v2"
-    assert res["validation_method"] == "QWEN_CONTEXT_V2"
+    assert res["validator_version"] in ("v2", "v4")
+    assert res["validation_method"] in ("QWEN_CONTEXT_V2", "QWEN_CONTEXT_V4")
 
 
 # Test B: Generic explicit flooring requirement without brand
@@ -134,7 +134,7 @@ def test_generic_flooring_without_brand_confirmed():
     res = validator.validate_single(c)
 
     assert res["decision"] == "CONFIRMED"
-    assert res["validator_version"] == "v2"
+    assert res["validator_version"] in ("v2", "v4")
 
 
 # Test C: Generic explicit technology/work without brand (Injection)
@@ -339,5 +339,5 @@ def test_v2_provenance_attributes():
     res = validator.validate_single(c)
 
     assert res["validator_name"] == VALIDATOR_NAME == "context_validator"
-    assert res["validator_version"] == VALIDATOR_VERSION == "v2"
-    assert res["validation_method"] == VALIDATION_METHOD == "QWEN_CONTEXT_V2"
+    assert res["validator_version"] == VALIDATOR_VERSION
+    assert res["validation_method"] == VALIDATION_METHOD

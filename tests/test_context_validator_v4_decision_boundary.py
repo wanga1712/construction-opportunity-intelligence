@@ -1,0 +1,254 @@
+# -*- coding: utf-8 -*-
+"""Deterministic unit tests for ContextValidator V4 Decision Boundary Prompt Repair (R3-4F-E).
+
+Validates:
+1. V4 versioning constants (VALIDATOR_VERSION="v4", VALIDATION_METHOD="QWEN_CONTEXT_V4", PROMPT_VERSION="context_validator_v4")
+2. Prompt contract rules (truncation markers != UNKNOWN, literal subcategory not required, brand/model not required, address/org/legal -> REJECTED)
+3. Mocked decision contract tests (CONFIRMED, REJECTED, UNKNOWN, quote gating, fail-closed demotions)
+4. Strict V4 evidence provenance isolation in rebuild_affected_evidence()
+"""
+
+import pytest
+import sys
+import os
+import json
+from unittest import mock
+
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
+
+from tender_documents_research.document_processor.context_validator import (
+    ContextValidator,
+    VALIDATOR_NAME,
+    VALIDATOR_VERSION,
+    VALIDATION_METHOD,
+    PROMPT_VERSION,
+    SYSTEM_PROMPT,
+)
+from tender_documents_research.document_processor.context_validator_service import (
+    rebuild_affected_evidence,
+)
+
+
+class MockCursor:
+    def __init__(self, fetch_data=None):
+        self.fetch_data = fetch_data or []
+        self.last_query = ""
+        self.last_params = None
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        pass
+
+    def execute(self, query, params=None):
+        self.last_query = query
+        self.last_params = params
+
+    def fetchall(self):
+        return self.fetch_data
+
+
+class MockConnection:
+    def __init__(self, fetch_data=None):
+        self.cursor_obj = MockCursor(fetch_data)
+
+    def cursor(self, cursor_factory=None):
+        return self.cursor_obj
+
+    def commit(self):
+        pass
+
+
+# 1. Versioning check
+def test_v4_versioning_constants():
+    assert VALIDATOR_NAME == "context_validator"
+    assert VALIDATOR_VERSION == "v4"
+    assert VALIDATION_METHOD == "QWEN_CONTEXT_V4"
+    assert PROMPT_VERSION == "context_validator_v4"
+
+
+# 2. Prompt Contract Tests (Section 16)
+def test_prompt_contract_truncation_markers_not_automatic_unknown():
+    assert "НЕ должны использоваться как причина для вывода UNKNOWN" in SYSTEM_PROMPT
+    assert "СЛУЖЕБНЫМИ СТРУКТУРНЫМИ МАРКЕРАМИ" in SYSTEM_PROMPT
+
+
+def test_prompt_contract_literal_subcategory_not_required():
+    assert "Документ НЕ ОБЯЗАН содержать дословное название категории или подкатегории" in SYSTEM_PROMPT
+
+
+def test_prompt_contract_brand_model_not_required():
+    assert "Указание бренда, производителя, модели, артикула или ГОСТа НЕ ЯВЛЯЕТСЯ ОБЯЗАТЕЛЬНЫМ" in SYSTEM_PROMPT
+
+
+def test_prompt_contract_address_org_legal_rejected():
+    assert "ADDRESS_OR_LOCATION_ONLY" in SYSTEM_PROMPT
+    assert "ORGANIZATION_NAME_ONLY" in SYSTEM_PROMPT
+    assert "LEGAL_ADMINISTRATIVE_TEXT" in SYSTEM_PROMPT
+
+
+def test_prompt_question_block_consistency():
+    validator = ContextValidator(ai_caller=lambda p: "")
+    candidate = {
+        "category_code": "lighting",
+        "category_name": "Освещение",
+        "subcategory_code": "road_street",
+        "subcategory_name": "Уличное освещение",
+        "matched_term": "светильник",
+        "matched_line": "Светильник ДКУ 100 Вт.",
+    }
+    payload = validator.build_context_payload(candidate)
+    block = payload["context_block"]
+
+    assert "[ВОПРОС]" in block
+    assert "[ДОКУМЕНТАЛЬНЫЙ КОНТЕКСТ]" in block
+    assert "НЕ означают неполноту или повреждение доказательств" in block
+    assert "Наличие дословной фразы подкатегории или бренда НЕ требуется" in block
+    assert "адресу, названию организации, юридическим реквизитам" in block
+
+
+# 3. Mocked Decision Contract Tests (Section 17)
+def test_mocked_confirmed_with_valid_quote():
+    candidate = {
+        "detail_id": 201,
+        "category_code": "lighting",
+        "subcategory_code": "road_street",
+        "matched_term": "светильник",
+        "matched_line": "Светильник уличный ДКУ 100 Вт.",
+    }
+
+    def mock_caller(p):
+        return json.dumps({
+            "detail_id": 201,
+            "decision": "CONFIRMED",
+            "confidence": 0.95,
+            "supporting_quote": "Светильник уличный ДКУ 100 Вт.",
+            "reason_code": "SPECIFICATION_PRODUCT_REQUIREMENT",
+            "reason": "Уличный светильник ДКУ",
+        })
+
+    validator = ContextValidator(ai_caller=mock_caller)
+    res = validator.validate_single(candidate)
+    assert res["decision"] == "CONFIRMED"
+    assert res["confidence"] == 0.95
+    assert res["validator_version"] == "v4"
+    assert res["validation_method"] == "QWEN_CONTEXT_V4"
+    assert res["supporting_quote"] == "Светильник уличный ДКУ 100 Вт."
+
+
+def test_mocked_rejected_with_valid_quote():
+    candidate = {
+        "detail_id": 202,
+        "category_code": "lighting",
+        "subcategory_code": "road_street",
+        "matched_term": "управлен",
+        "matched_line": "Адрес: г. Москва, ул. Большая Тульская, д. 9, Управа района.",
+    }
+
+    def mock_caller(p):
+        return json.dumps({
+            "detail_id": 202,
+            "decision": "REJECTED",
+            "confidence": 0.90,
+            "supporting_quote": "Управа района",
+            "reason_code": "ORGANIZATION_NAME_ONLY",
+            "reason": "Наименование органа власти",
+        })
+
+    validator = ContextValidator(ai_caller=mock_caller)
+    res = validator.validate_single(candidate)
+    assert res["decision"] == "REJECTED"
+    assert res["confidence"] == 0.90
+    assert res["supporting_quote"] == "Управа района"
+    assert res["reason_code"] == "ORGANIZATION_NAME_ONLY"
+
+
+def test_mocked_unknown_decision():
+    candidate = {
+        "detail_id": 203,
+        "category_code": "lighting",
+        "subcategory_code": "road_street",
+        "matched_term": "вектор",
+        "matched_line": "Заместитель директора А.А. Захаров.",
+    }
+
+    def mock_caller(p):
+        return json.dumps({
+            "detail_id": 203,
+            "decision": "UNKNOWN",
+            "confidence": 0.0,
+            "supporting_quote": "",
+            "reason_code": "INSUFFICIENT_CONTEXT",
+            "reason": "Контекст не содержит спецификации",
+        })
+
+    validator = ContextValidator(ai_caller=mock_caller)
+    res = validator.validate_single(candidate)
+    assert res["decision"] == "UNKNOWN"
+    assert res["confidence"] == 0.0
+
+
+def test_mocked_confirmed_missing_quote_demoted():
+    candidate = {
+        "detail_id": 204,
+        "category_code": "lighting",
+        "subcategory_code": "road_street",
+        "matched_term": "светильник",
+        "matched_line": "Светильник уличный ДКУ 100 Вт.",
+    }
+
+    def mock_caller(p):
+        return json.dumps({
+            "detail_id": 204,
+            "decision": "CONFIRMED",
+            "confidence": 0.95,
+            "supporting_quote": "",
+            "reason": "No quote provided",
+        })
+
+    validator = ContextValidator(ai_caller=mock_caller)
+    res = validator.validate_single(candidate)
+    assert res["decision"] == "UNKNOWN"
+    assert res["reason_code"] == "MISSING_SUPPORTING_QUOTE"
+
+
+def test_mocked_rejected_hallucinated_quote_demoted():
+    candidate = {
+        "detail_id": 205,
+        "category_code": "lighting",
+        "subcategory_code": "road_street",
+        "matched_term": "светильник",
+        "matched_line": "Светильник уличный ДКУ 100 Вт.",
+    }
+
+    def mock_caller(p):
+        return json.dumps({
+            "detail_id": 205,
+            "decision": "REJECTED",
+            "confidence": 0.90,
+            "supporting_quote": "Выдуманная цитата которой нет в документе",
+            "reason": "Hallucinated quote",
+        })
+
+    validator = ContextValidator(ai_caller=mock_caller)
+    res = validator.validate_single(candidate)
+    assert res["decision"] == "UNKNOWN"
+    assert res["reason_code"] == "HALLUCINATED_QUOTE"
+
+
+# 4. Strict V4 Evidence Provenance
+def test_strict_v4_evidence_provenance():
+    mock_conn = MockConnection()
+
+    mock_conn.cursor_obj.fetch_data = [
+        {"score": 95.0, "queue_id": 1, "validator_version": "v4", "validation_method": "QWEN_CONTEXT_V4"},
+        {"score": 90.0, "queue_id": 1, "validator_version": "v3", "validation_method": "QWEN_CONTEXT_V3"},
+        {"score": 85.0, "queue_id": 1, "validator_version": "v2", "validation_method": "QWEN_CONTEXT_V2"},
+    ]
+    rebuild_affected_evidence(mock_conn, {(100, "lighting")})
+    query = mock_conn.cursor_obj.last_query
+    assert "INSERT INTO document_evidence" in query
+    params = mock_conn.cursor_obj.last_params
+    assert params[7] == "v4"  # validator_version
+    assert params[8] == "QWEN_CONTEXT_V4"  # validation_method
