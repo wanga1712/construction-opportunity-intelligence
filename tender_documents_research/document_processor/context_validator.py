@@ -632,6 +632,9 @@ class ContextValidator:
 
         return self._verify_and_gate_decision(raw_decision, candidate, visible_source_text)
 
+    def validate_candidates(self, candidates: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+        return [self.validate_single(c) for c in candidates]
+
 
 def validate_candidates(
     candidates: List[Dict[str, Any]],
