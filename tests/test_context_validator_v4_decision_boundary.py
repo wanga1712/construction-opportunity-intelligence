@@ -1,11 +1,12 @@
 # -*- coding: utf-8 -*-
-"""Deterministic unit tests for ContextValidator V4 Decision Boundary Prompt Repair (R3-4F-E).
+"""Deterministic unit tests for ContextValidator V4 Decision Boundary Prompt Repair (R3-4F-E-A).
 
 Validates:
 1. V4 versioning constants (VALIDATOR_VERSION="v4", VALIDATION_METHOD="QWEN_CONTEXT_V4", PROMPT_VERSION="context_validator_v4")
-2. Prompt contract rules (truncation markers != UNKNOWN, literal subcategory not required, brand/model not required, address/org/legal -> REJECTED)
-3. Mocked decision contract tests (CONFIRMED, REJECTED, UNKNOWN, quote gating, fail-closed demotions)
-4. Strict V4 evidence provenance isolation in rebuild_affected_evidence()
+2. Prompt contract rules (truncation markers, taxonomy-agnostic literal subcategory rule, brand/model not required, address/org/person/legal -> REJECTED)
+3. SYSTEM_PROMPT and question_block consistency tests
+4. Mocked decision contract tests (CONFIRMED, REJECTED for person/admin, UNKNOWN for genuine ambiguity, quote gating, demotions)
+5. Strict V4 evidence provenance isolation in rebuild_affected_evidence()
 """
 
 import pytest
@@ -68,24 +69,28 @@ def test_v4_versioning_constants():
     assert PROMPT_VERSION == "context_validator_v4"
 
 
-# 2. Prompt Contract Tests (Section 16)
+# 2. Prompt Contract Tests
 def test_prompt_contract_truncation_markers_not_automatic_unknown():
-    assert "НЕ должны использоваться как причина для вывода UNKNOWN" in SYSTEM_PROMPT
-    assert "СЛУЖЕБНЫМИ СТРУКТУРНЫМИ МАРКЕРАМИ" in SYSTEM_PROMPT
+    assert "указывают лишь на то, что часть окружающего текста была опущена" in SYSTEM_PROMPT
+    assert "Сокращение окружающего контекста само по себе НЕ ЯВЛЯЕТСЯ причиной для UNKNOWN" in SYSTEM_PROMPT
+    assert "НЕ означают неполноту" not in SYSTEM_PROMPT
 
 
-def test_prompt_contract_literal_subcategory_not_required():
+def test_prompt_contract_literal_subcategory_not_required_taxonomy_agnostic():
     assert "Документ НЕ ОБЯЗАН содержать дословное название категории или подкатегории" in SYSTEM_PROMPT
+    assert "уличное освещение" not in SYSTEM_PROMPT
+    assert "Светильник светодиодный" not in SYSTEM_PROMPT
 
 
 def test_prompt_contract_brand_model_not_required():
     assert "Указание бренда, производителя, модели, артикула или ГОСТа НЕ ЯВЛЯЕТСЯ ОБЯЗАТЕЛЬНЫМ" in SYSTEM_PROMPT
 
 
-def test_prompt_contract_address_org_legal_rejected():
+def test_prompt_contract_address_org_person_legal_rejected():
     assert "ADDRESS_OR_LOCATION_ONLY" in SYSTEM_PROMPT
     assert "ORGANIZATION_NAME_ONLY" in SYSTEM_PROMPT
     assert "LEGAL_ADMINISTRATIVE_TEXT" in SYSTEM_PROMPT
+    assert "ФИО или должностью" in SYSTEM_PROMPT
 
 
 def test_prompt_question_block_consistency():
@@ -96,26 +101,84 @@ def test_prompt_question_block_consistency():
         "subcategory_code": "road_street",
         "subcategory_name": "Уличное освещение",
         "matched_term": "светильник",
-        "matched_line": "Светильник ДКУ 100 Вт.",
+        "matched_line": "Светильник светодиодный 100 Вт.",
     }
     payload = validator.build_context_payload(candidate)
     block = payload["context_block"]
 
     assert "[ВОПРОС]" in block
     assert "[ДОКУМЕНТАЛЬНЫЙ КОНТЕКСТ]" in block
-    assert "НЕ означают неполноту или повреждение доказательств" in block
+    assert "игнорируй текст маркеров и оценивай сохранившийся документальный источник" in block
     assert "Наличие дословной фразы подкатегории или бренда НЕ требуется" in block
-    assert "адресу, названию организации, юридическим реквизитам" in block
+    assert "адресу, названию организации, ФИО/должности, юридическим реквизитам" in block
+    assert "НЕ означают неполноту" not in block
 
 
-# 3. Mocked Decision Contract Tests (Section 17)
+# 3. System / Question Consistency Deterministic Tests (Section 7)
+def test_system_question_consistency_truncation_no_automatic_unknown():
+    validator = ContextValidator(ai_caller=lambda p: "")
+    payload = validator.build_context_payload({
+        "category_code": "c", "category_name": "cn",
+        "subcategory_code": "sc", "subcategory_name": "scn",
+        "matched_term": "t", "matched_line": "line"
+    })
+    block = payload["context_block"]
+
+    assert "НЕ ЯВЛЯЕТСЯ причиной для UNKNOWN" in SYSTEM_PROMPT
+    assert "НЕ означают неполноту" not in SYSTEM_PROMPT
+    assert "НЕ означают неполноту" not in block
+
+
+def test_system_question_consistency_literal_subcategory():
+    validator = ContextValidator(ai_caller=lambda p: "")
+    payload = validator.build_context_payload({
+        "category_code": "c", "category_name": "cn",
+        "subcategory_code": "sc", "subcategory_name": "scn",
+        "matched_term": "t", "matched_line": "line"
+    })
+    block = payload["context_block"]
+
+    assert "Документ НЕ ОБЯЗАН содержать дословное название категории или подкатегории" in SYSTEM_PROMPT
+    assert "Наличие дословной фразы подкатегории или бренда НЕ требуется" in block
+
+
+def test_system_question_consistency_negative_boundary():
+    validator = ContextValidator(ai_caller=lambda p: "")
+    payload = validator.build_context_payload({
+        "category_code": "c", "category_name": "cn",
+        "subcategory_code": "sc", "subcategory_name": "scn",
+        "matched_term": "t", "matched_line": "line"
+    })
+    block = payload["context_block"]
+
+    for term in ["адресу", "организации", "юридическим реквизитам"]:
+        assert term in block
+    assert "ADDRESS_OR_LOCATION_ONLY" in SYSTEM_PROMPT
+    assert "ORGANIZATION_NAME_ONLY" in SYSTEM_PROMPT
+    assert "LEGAL_ADMINISTRATIVE_TEXT" in SYSTEM_PROMPT
+
+
+def test_system_question_consistency_unknown_not_default():
+    validator = ContextValidator(ai_caller=lambda p: "")
+    payload = validator.build_context_payload({
+        "category_code": "c", "category_name": "cn",
+        "subcategory_code": "sc", "subcategory_name": "scn",
+        "matched_term": "t", "matched_line": "line"
+    })
+    block = payload["context_block"]
+
+    assert 'UNKNOWN НЕ ЯВЛЯЕТСЯ "ответом по умолчанию"' in SYSTEM_PROMPT
+    assert "'UNKNOWN' выбирай ТОЛЬКО при реальной фактологической неоднозначности" in block
+
+
+# 4. Mocked Decision Contract Tests (Section 6 & 9)
 def test_mocked_confirmed_with_valid_quote():
     candidate = {
         "detail_id": 201,
         "category_code": "lighting",
         "subcategory_code": "road_street",
         "matched_term": "светильник",
-        "matched_line": "Светильник уличный ДКУ 100 Вт.",
+        "matched_line": "Светильник уличный 100 Вт.",
     }
 
     def mock_caller(p):
@@ -123,9 +186,9 @@ def test_mocked_confirmed_with_valid_quote():
             "detail_id": 201,
             "decision": "CONFIRMED",
             "confidence": 0.95,
-            "supporting_quote": "Светильник уличный ДКУ 100 Вт.",
+            "supporting_quote": "Светильник уличный 100 Вт.",
             "reason_code": "SPECIFICATION_PRODUCT_REQUIREMENT",
-            "reason": "Уличный светильник ДКУ",
+            "reason": "Уличный светильник",
         })
 
     validator = ContextValidator(ai_caller=mock_caller)
@@ -134,16 +197,17 @@ def test_mocked_confirmed_with_valid_quote():
     assert res["confidence"] == 0.95
     assert res["validator_version"] == "v4"
     assert res["validation_method"] == "QWEN_CONTEXT_V4"
-    assert res["supporting_quote"] == "Светильник уличный ДКУ 100 Вт."
+    assert res["supporting_quote"] == "Светильник уличный 100 Вт."
 
 
-def test_mocked_rejected_with_valid_quote():
+def test_mocked_rejected_person_title_decision():
+    """Test A: Person / FIO / Title / Admin fragment MUST be REJECTED, not UNKNOWN."""
     candidate = {
         "detail_id": 202,
         "category_code": "lighting",
         "subcategory_code": "road_street",
-        "matched_term": "управлен",
-        "matched_line": "Адрес: г. Москва, ул. Большая Тульская, д. 9, Управа района.",
+        "matched_term": "директор",
+        "matched_line": "Заместитель директора А.А. Захаров.",
     }
 
     def mock_caller(p):
@@ -151,26 +215,27 @@ def test_mocked_rejected_with_valid_quote():
             "detail_id": 202,
             "decision": "REJECTED",
             "confidence": 0.90,
-            "supporting_quote": "Управа района",
+            "supporting_quote": "Заместитель директора А.А. Захаров.",
             "reason_code": "ORGANIZATION_NAME_ONLY",
-            "reason": "Наименование органа власти",
+            "reason": "ФИО и должность административного лица",
         })
 
     validator = ContextValidator(ai_caller=mock_caller)
     res = validator.validate_single(candidate)
     assert res["decision"] == "REJECTED"
     assert res["confidence"] == 0.90
-    assert res["supporting_quote"] == "Управа района"
+    assert res["supporting_quote"] == "Заместитель директора А.А. Захаров."
     assert res["reason_code"] == "ORGANIZATION_NAME_ONLY"
 
 
-def test_mocked_unknown_decision():
+def test_mocked_unknown_genuine_ambiguous_decision():
+    """Test B: Genuinely ambiguous documentary fragment yields UNKNOWN."""
     candidate = {
         "detail_id": 203,
         "category_code": "lighting",
         "subcategory_code": "road_street",
-        "matched_term": "вектор",
-        "matched_line": "Заместитель директора А.А. Захаров.",
+        "matched_term": "раздел",
+        "matched_line": "Раздел 4.2. Позиция 12.",
     }
 
     def mock_caller(p):
@@ -180,13 +245,14 @@ def test_mocked_unknown_decision():
             "confidence": 0.0,
             "supporting_quote": "",
             "reason_code": "INSUFFICIENT_CONTEXT",
-            "reason": "Контекст не содержит спецификации",
+            "reason": "Фрагмент не содержит предметного описания товара или работы",
         })
 
     validator = ContextValidator(ai_caller=mock_caller)
     res = validator.validate_single(candidate)
     assert res["decision"] == "UNKNOWN"
     assert res["confidence"] == 0.0
+    assert res["supporting_quote"] == ""
 
 
 def test_mocked_confirmed_missing_quote_demoted():
@@ -195,7 +261,7 @@ def test_mocked_confirmed_missing_quote_demoted():
         "category_code": "lighting",
         "subcategory_code": "road_street",
         "matched_term": "светильник",
-        "matched_line": "Светильник уличный ДКУ 100 Вт.",
+        "matched_line": "Светильник уличный 100 Вт.",
     }
 
     def mock_caller(p):
@@ -219,7 +285,7 @@ def test_mocked_rejected_hallucinated_quote_demoted():
         "category_code": "lighting",
         "subcategory_code": "road_street",
         "matched_term": "светильник",
-        "matched_line": "Светильник уличный ДКУ 100 Вт.",
+        "matched_line": "Светильник уличный 100 Вт.",
     }
 
     def mock_caller(p):
@@ -237,7 +303,7 @@ def test_mocked_rejected_hallucinated_quote_demoted():
     assert res["reason_code"] == "HALLUCINATED_QUOTE"
 
 
-# 4. Strict V4 Evidence Provenance
+# 5. Strict V4 Evidence Provenance Isolation
 def test_strict_v4_evidence_provenance():
     mock_conn = MockConnection()
 
