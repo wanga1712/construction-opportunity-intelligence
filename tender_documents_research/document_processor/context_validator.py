@@ -11,7 +11,15 @@ Decisions:
            or supporting quote cannot be verified verbatim in the context.
 
 Absolute rule: VALIDATOR_CAN_RECATEGORIZE = NO.
+
+Module size explanation (AGENTS.md §300-450-decomposition):
+  ~564 lines due to hydrate_candidate_context() + helpers added in R3-4C.
+  These functions are tightly coupled to build_context_block() and _verify_and_gate_decision()
+  and splitting them into a separate module would introduce an artificial boundary without
+  reducing cognitive load.  Candidate for decomposition when structured extraction (R5+) adds
+  further context-processing logic.
 """
+
 
 from __future__ import annotations
 
@@ -26,8 +34,8 @@ from src.services.ai_client import DEFAULT_MODEL, generate
 
 logger = logging.getLogger("document_processor.context_validator")
 
-DEFAULT_CONFIRM_THRESHOLD = 0.80
-DEFAULT_REJECT_THRESHOLD = 0.85
+DEFAULT_CONFIRM_THRESHOLD = 0.90
+DEFAULT_REJECT_THRESHOLD = 0.95
 DEFAULT_MAX_CONTEXT_CHARS = 3000
 DEFAULT_BATCH_SIZE = 10
 
@@ -45,7 +53,9 @@ SYSTEM_PROMPT = """Ты — строгий эксперт-валидатор с�
    - Договорная преамбула ("Распоряжением администрации...").
    - Заведомо чужой товар (медицинские шприцы, продукты, канцтовары, спецодежда).
    - Фрагмент содержит стоп-фразу.
-3. UNKNOWN: Термин потенциально относится к категории, но в фрагменте нет конкретной марки или контекст обрезан (например: просто "сухая смесь", "покрытие", "пропитка", "мембрана", "состав", "герметик" без марки и без подробных параметров). Поскольку марка не указана, однозначно подтвердить или исключить закупку нельзя -> decision: "UNKNOWN", confidence: 0.0, reason_code: "INSUFFICIENT_CONTEXT".
+3. UNKNOWN: Термин потенциально относится к категории, но в фрагменте нет конкретной марки или контекст обрезан (например: просто "сухая смесь", "покрытие", "пропитка", "мембрана", "состав", "герметик" без марки и без подробных параметров). Если нельзя однозначно подтвердить или исключить -> decision: "UNKNOWN", confidence: 0.0, reason_code: "INSUFFICIENT_CONTEXT". НЕ используй REJECTED для таких обрывков.
+
+Важно: если искомый термин или его марка (например «Денстоп», «Пенетрон», «Пластфоил») явно присутствует в найденной строке спецификации/сметы — это CONFIRMED, а не REJECTED.
 
 Ответ СТРОГО JSON:
 {
@@ -64,6 +74,175 @@ def _normalize_whitespace(text: str) -> str:
     for ch in ['«', '»', '"', "'", '„', '“', '”']:
         text = text.replace(ch, " ")
     return re.sub(r"\s+", " ", text).strip().lower()
+
+
+
+
+def _is_empty_context(val) -> bool:
+    """Treats None, empty string, whitespace-only, {}, [], '{}', '[]' as empty."""
+    if val is None:
+        return True
+    if isinstance(val, dict) and not val:
+        return True
+    if isinstance(val, list) and not val:
+        return True
+    if isinstance(val, str):
+        stripped = val.strip()
+        if not stripped or stripped in ('{}', '[]', 'null', 'None'):
+            return True
+    return False
+
+
+def _safe_parse_json(val):
+    """Parse JSON string safely; returns parsed value or original on failure."""
+    if isinstance(val, str):
+        try:
+            return json.loads(val)
+        except (json.JSONDecodeError, ValueError):
+            return val
+    return val
+
+
+def _format_raw_cells(raw_cells: list) -> str:
+    """Formats raw_cells list into a human-readable table row string.
+    
+    Preserves useful factual structure: column text, headers, units, quantities.
+    """
+    if not raw_cells or not isinstance(raw_cells, list):
+        return ""
+    parts = []
+    for cell in raw_cells:
+        if isinstance(cell, dict):
+            text = str(cell.get("text", "")).strip()
+            if text:
+                parts.append(text)
+        elif isinstance(cell, str):
+            parts.append(cell.strip())
+    return " | ".join(parts) if parts else ""
+
+
+def hydrate_candidate_context(candidate: dict) -> dict:
+    """Single authority for resolving matched_line, context_before, context_after.
+    
+    Precedence for each field:
+      A. Explicit non-empty candidate field (from DB column)
+      B. Fallback to row_data nested field
+      C. For matched_line: also try raw_cells formatting
+    
+    Returns a NEW dict with resolved 'matched_line', 'context_before', 'context_after'
+    keys added/overwritten. Does NOT mutate the original candidate.
+    """
+    result = dict(candidate)
+    
+    # Parse row_data if needed
+    row_data = candidate.get("row_data")
+    if isinstance(row_data, str):
+        row_data = _safe_parse_json(row_data)
+    if not isinstance(row_data, dict):
+        row_data = {}
+    
+    # --- matched_line ---
+    matched_line = candidate.get("matched_line") or ""
+    if isinstance(matched_line, str):
+        matched_line = matched_line.strip()
+    
+    if not matched_line:
+        # Fallback B: row_data.matched_line / matched_display_text / text
+        matched_line = (
+            row_data.get("matched_line")
+            or row_data.get("matched_display_text")
+            or row_data.get("text")
+            or ""
+        )
+        if isinstance(matched_line, str):
+            matched_line = matched_line.strip()
+    
+    if not matched_line:
+        # Fallback C: format raw_cells as matched text
+        matched_line = _format_raw_cells(row_data.get("raw_cells"))
+    
+    result["matched_line"] = matched_line
+    
+    # --- context_before ---
+    db_before = candidate.get("context_before")
+    if _is_empty_context(db_before):
+        # Fallback to row_data.context_before
+        rd_before = row_data.get("context_before")
+        if isinstance(rd_before, str):
+            rd_before = _safe_parse_json(rd_before)
+        if isinstance(rd_before, list) and rd_before:
+            result["context_before"] = rd_before
+        else:
+            result["context_before"] = []
+    else:
+        # Explicit DB value is non-empty - keep it
+        if isinstance(db_before, str):
+            db_before = _safe_parse_json(db_before)
+        result["context_before"] = db_before if isinstance(db_before, list) else [db_before] if db_before else []
+    
+    # --- context_after ---
+    db_after = candidate.get("context_after")
+    if _is_empty_context(db_after):
+        # Fallback to row_data.context_after
+        rd_after = row_data.get("context_after")
+        if isinstance(rd_after, str):
+            rd_after = _safe_parse_json(rd_after)
+        if isinstance(rd_after, list) and rd_after:
+            result["context_after"] = rd_after
+        else:
+            result["context_after"] = []
+    else:
+        # Explicit DB value is non-empty - keep it
+        if isinstance(db_after, str):
+            db_after = _safe_parse_json(db_after)
+        result["context_after"] = db_after if isinstance(db_after, list) else [db_after] if db_after else []
+    
+    return result
+
+
+def _candidate_matched_line(candidate: Dict[str, Any]) -> str:
+    """Extracts the best matched text from candidate using hydration precedence."""
+    # Use hydrated matched_line if available (set by hydrate_candidate_context)
+    matched_line = candidate.get("matched_line") or ""
+    if isinstance(matched_line, str):
+        matched_line = matched_line.strip()
+    if matched_line:
+        return matched_line
+    # Fallback: parse row_data directly
+    row_data = candidate.get("row_data")
+    if isinstance(row_data, str):
+        row_data = _safe_parse_json(row_data)
+        if not isinstance(row_data, dict):
+            row_data = {"matched_line": str(row_data)}
+    if isinstance(row_data, dict):
+        matched_line = (
+            row_data.get("matched_line")
+            or row_data.get("matched_display_text")
+            or row_data.get("text")
+            or ""
+        )
+        if not matched_line:
+            matched_line = _format_raw_cells(row_data.get("raw_cells"))
+    return str(matched_line)
+
+
+def _is_structurally_ambiguous(candidate: Dict[str, Any]) -> bool:
+    """Detect truncated/table/OCR fragments where relevance cannot be established."""
+    before = candidate.get("context_before") or []
+    after = candidate.get("context_after") or []
+    if isinstance(before, str):
+        before = [before]
+    if isinstance(after, str):
+        after = [after]
+
+    markers = ("обрезан", "обрывок", "без шапки", "поврежден", "фрагмент")
+    has_trunc_marker = any(
+        any(m in str(x).lower() for m in markers) for x in before if x
+    )
+    short_after = not after or all(not str(x).strip() for x in after)
+    matched_line = _candidate_matched_line(candidate)
+    short_line = len(_normalize_whitespace(matched_line).split()) <= 4
+    return bool(has_trunc_marker and short_after and short_line)
 
 
 class ContextValidator:
@@ -94,7 +273,11 @@ class ContextValidator:
         )
 
     def build_context_block(self, candidate: Dict[str, Any]) -> str:
-        """Constructs a bounded, informative context block for Qwen."""
+        """Constructs a bounded, informative context block for Qwen.
+        
+        Hydrates context from row_data when DB columns are empty.
+        """
+        candidate = hydrate_candidate_context(candidate)
         pid = candidate.get("procurement_id", "")
         okpd_code = candidate.get("procurement_okpd_code", "")
         okpd_name = candidate.get("procurement_okpd_name", "")
@@ -136,20 +319,7 @@ class ContextValidator:
         else:
             after_str = str(after)
 
-        matched_line = candidate.get("matched_line") or ""
-        row_data = candidate.get("row_data")
-        if isinstance(row_data, str):
-            try:
-                row_data = json.loads(row_data)
-            except Exception:
-                row_data = {"matched_line": row_data}
-        if not matched_line and isinstance(row_data, dict):
-            matched_line = (
-                row_data.get("matched_line")
-                or row_data.get("matched_display_text")
-                or row_data.get("text")
-                or ""
-            )
+        matched_line = _candidate_matched_line(candidate)
 
         neg_phrases = candidate.get("negative_phrases") or []
         neg_str = ", ".join(neg_phrases) if isinstance(neg_phrases, list) else str(neg_phrases)
@@ -213,6 +383,81 @@ class ContextValidator:
 
         quote = str(raw_decision.get("supporting_quote") or "").strip()
         reason = str(raw_decision.get("reason") or "").strip()
+
+        fail_closed_codes = frozenset({
+            "MODEL_EXCEPTION",
+            "INVALID_JSON",
+            "INVALID_DECISION_ENUM",
+        })
+        if reason_code in fail_closed_codes:
+            return {
+                "detail_id": detail_id,
+                "procurement_id": candidate.get("procurement_id"),
+                "category_code": cat_code,
+                "subcategory_code": sub_code,
+                "decision": "UNKNOWN",
+                "confidence": 0.0,
+                "supporting_quote": "",
+                "reason_code": reason_code,
+                "reason": reason,
+                "validated_at": datetime.now(timezone.utc).isoformat(),
+                "validator_name": "context_validator",
+                "validator_version": "v1",
+                "validation_method": "QWEN_CONTEXT_V1",
+            }
+
+        if reason_code == "INSUFFICIENT_CONTEXT":
+            decision = "UNKNOWN"
+            confidence = 0.0
+
+        term_norm = _normalize_whitespace(str(candidate.get("matched_term") or ""))
+        line_norm = _normalize_whitespace(_candidate_matched_line(candidate))
+        neg_phrases = candidate.get("negative_phrases") or []
+        if isinstance(neg_phrases, list):
+            for np in neg_phrases:
+                np_norm = _normalize_whitespace(str(np))
+                if np_norm and np_norm in line_norm:
+                    decision = "REJECTED"
+                    reason_code = "NEGATIVE_PHRASE_CONTEXT"
+                    confidence = max(confidence, self.reject_threshold)
+                    break
+
+        medical_markers = ("шприц", "игла", "медицин", "однократного применения")
+        if (
+            candidate.get("subcategory_code") == "injection"
+            and any(m in line_norm for m in medical_markers)
+        ):
+            decision = "REJECTED"
+            reason_code = "UNRELATED_PRODUCT"
+            confidence = max(confidence, self.reject_threshold)
+
+        if (
+            decision == "REJECTED"
+            and term_norm
+            and len(term_norm) >= 5
+            and term_norm in line_norm
+            and len(line_norm.split()) >= 4
+            and not any(m in line_norm for m in medical_markers)
+            and reason_code not in {
+                "FUZZY_LEXICAL_COLLISION",
+                "ADDRESS_OR_LOCATION_ONLY",
+                "ORGANIZATION_NAME_ONLY",
+                "LEGAL_ADMINISTRATIVE_TEXT",
+                "NEGATIVE_PHRASE_CONTEXT",
+                "UNRELATED_PRODUCT",
+            }
+        ):
+            decision = "CONFIRMED"
+            reason_code = "SPECIFICATION_PRODUCT_REQUIREMENT"
+            confidence = max(confidence, self.confirm_threshold)
+            if not quote:
+                quote = _candidate_matched_line(candidate)
+
+        if _is_structurally_ambiguous(candidate):
+            decision = "UNKNOWN"
+            reason_code = "INSUFFICIENT_CONTEXT"
+            confidence = 0.0
+            reason = reason or "Truncated or table fragment without sufficient product context"
 
         # Quote verification: quote must be exact substring in context
         if decision in ("CONFIRMED", "REJECTED") and quote:
