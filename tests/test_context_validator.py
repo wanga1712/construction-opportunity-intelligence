@@ -21,13 +21,7 @@ from tender_documents_research.document_processor.context_validator_service impo
 
 
 def test_1_model_timeout_yields_unknown():
-    """1. Qwen timeout/network error → decision MUST be UNKNOWN, never CONFIRMED.
-
-    Note: uses a non-medical term to isolate the timeout behavior.
-    Medical marker gate (шприц+injection) correctly overrides to REJECTED
-    regardless of model timeout — that is tested separately.
-    """
-
+    """1. Model timeout / network error produces UNKNOWN with 0.0 confidence."""
     def timeout_caller(prompt: str) -> str:
         raise TimeoutError("Ollama request timed out after 45s")
 
@@ -36,9 +30,9 @@ def test_1_model_timeout_yields_unknown():
         "detail_id": 1,
         "procurement_id": 100,
         "category_code": "waterproofing",
-        "subcategory_code": "coating",
-        "matched_term": "мастика",
-        "matched_line": "мастика битумная",
+        "subcategory_code": "injection",
+        "matched_term": "инъекц",
+        "matched_line": "Шприц инъекционный 50 мл",
     }
     result = validator.validate_single(candidate)
     assert result["decision"] == "UNKNOWN"
