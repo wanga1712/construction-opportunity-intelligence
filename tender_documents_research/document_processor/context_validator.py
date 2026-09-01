@@ -34,9 +34,9 @@ DEFAULT_BATCH_SIZE = 10
 VALID_DECISIONS = frozenset({"CONFIRMED", "REJECTED", "UNKNOWN"})
 
 VALIDATOR_NAME = "context_validator"
-VALIDATOR_VERSION = "v2"
-VALIDATION_METHOD = "QWEN_CONTEXT_V2"
-PROMPT_VERSION = "context_validator_v2"
+VALIDATOR_VERSION = "v3"
+VALIDATION_METHOD = "QWEN_CONTEXT_V3"
+PROMPT_VERSION = "context_validator_v3"
 
 SYSTEM_PROMPT = """Ты — эксперт-валидатор совпадений в документах госзакупок для CRM строительных материалов, оборудования и работ.
 Твоя задача — проанализировать контекст документа и определить, действительно ли закупка или спецификация требует/применяет/содержит товар, материал, оборудование, технологию или работу целевой подкатегории (указанной в блоке [ЦЕЛЕВАЯ КАТЕГОРИЯ CRM]).
@@ -126,6 +126,46 @@ def _format_raw_cells(raw_cells: list) -> str:
         elif isinstance(cell, str):
             parts.append(cell.strip())
     return " | ".join(parts) if parts else ""
+
+
+
+def build_document_context(candidate: Dict[str, Any]) -> str:
+    """Single authority for documentary factual text ONLY.
+
+    Contains ONLY context_before, matched_line, and context_after.
+    Excludes all metadata (procurement title, OKPD, category, subcategory, term,
+    stop-phrase lists, questions, system instructions).
+    """
+    c_hydrated = hydrate_candidate_context(candidate)
+    before_list = c_hydrated.get("context_before") or []
+    after_list = c_hydrated.get("context_after") or []
+    m_line = c_hydrated.get("matched_line") or ""
+
+    if isinstance(before_list, str):
+        if before_list.startswith("[") and before_list.endswith("]"):
+            try:
+                before_list = json.loads(before_list)
+            except Exception:
+                pass
+    before_str = "\n".join(str(x) for x in before_list if x) if isinstance(before_list, list) else str(before_list)
+
+    if isinstance(after_list, str):
+        if after_list.startswith("[") and after_list.endswith("]"):
+            try:
+                after_list = json.loads(after_list)
+            except Exception:
+                pass
+    after_str = "\n".join(str(x) for x in after_list if x) if isinstance(after_list, list) else str(after_list)
+
+    parts = []
+    if before_str:
+        parts.append(before_str)
+    if m_line:
+        parts.append(m_line)
+    if after_str:
+        parts.append(after_str)
+
+    return "\n".join(parts)
 
 
 def hydrate_candidate_context(candidate: dict) -> dict:
@@ -259,7 +299,7 @@ class ContextValidator:
         )
 
     def build_context_block(self, candidate: Dict[str, Any]) -> str:
-        """Constructs a bounded, informative context block for Qwen."""
+        """Constructs a bounded, informative context block for Qwen with centered budget."""
         candidate = hydrate_candidate_context(candidate)
         pid = candidate.get("procurement_id", "")
         okpd_code = candidate.get("procurement_okpd_code", "")
@@ -272,44 +312,13 @@ class ContextValidator:
         sub_name = candidate.get("subcategory_name", sub_code)
 
         term = candidate.get("matched_term", "")
-        method = candidate.get("match_method", "UNKNOWN")
-
         doc_name = candidate.get("document_name", "")
         page_sheet = candidate.get("page_or_sheet", "")
         row_num = candidate.get("row_number", "")
-
-        before = candidate.get("context_before") or []
-        if isinstance(before, str):
-            if before.startswith("[") and before.endswith("]"):
-                try:
-                    before = json.loads(before)
-                except Exception:
-                    pass
-        if isinstance(before, list):
-            before_str = "\n".join(str(x) for x in before if x)
-        else:
-            before_str = str(before)
-
-        after = candidate.get("context_after") or []
-        if isinstance(after, str):
-            if after.startswith("[") and after.endswith("]"):
-                try:
-                    after = json.loads(after)
-                except Exception:
-                    pass
-        if isinstance(after, list):
-            after_str = "\n".join(str(x) for x in after if x)
-        else:
-            after_str = str(after)
-
-        matched_line = _candidate_matched_line(candidate)
-
-        neg_phrases = candidate.get("negative_phrases") or []
-        neg_str = ", ".join(neg_phrases) if isinstance(neg_phrases, list) else str(neg_phrases)
-
         doc_loc = f"{page_sheet}:{row_num}" if page_sheet or row_num else ""
 
-        block = (
+        # Metadata Header (Fixed)
+        meta_block = (
             f"[ТЕНДЕР]\n"
             f"ID: {pid}\n"
             f"ОКПД2: {okpd_code} ({okpd_name})\n"
@@ -319,27 +328,76 @@ class ContextValidator:
             f"Подкатегория: {sub_name} ({sub_code})\n"
             f"Искомый термин: {term}\n"
             f"Документ: {doc_name} {doc_loc}\n\n"
-            f"[КОНТЕКСТ ИЗ ДОКУМЕНТА]\n"
-            f"{before_str}\n"
-            f">>> НАЙДЕННАЯ СТРОКА: {matched_line}\n"
-            f"{after_str}\n"
         )
-        if neg_str:
-            block += f"\n[СТОП-ФРАЗЫ КАТЕГОРИИ]\n{neg_str}\n"
 
-        block += (
+        # Question / Instructions Footer (Fixed) - NO negative phrase list included!
+        question_block = (
             f"\n[ВОПРОС]\n"
-            f"Подтверждает ли данный фрагмент документа закупку/применение материалов или работ для подкатегории \"{sub_name}\" (категория \"{cat_name}\", термин \"{term}\")?\n"
-            f"- Если подкатегория прямо подтверждается спецификацией, позицией ВОР, описанием товара или характеристиками -> 'CONFIRMED', confidence: 0.80-1.0, supporting_quote: дословная цитата.\n"
-            f"- Если созвучие/адрес/название организации/нецелевой товар -> 'REJECTED', confidence: 0.85-1.0, supporting_quote: дословная цитата.\n"
+            f"Подтверждает ли данный фрагмент документа закупку/применение материалов или работ для подкатегории \"{sub_name}\" (категория \"{cat_name}\", термин \"{term}\" )?\n"
+            f"- ВАЖНО: Документальные доказательства берутся ИСКЛЮЧИТЕЛЬНО из раздела [ДОКУМЕНТАЛЬНЫЙ КОНТЕКСТ]. Названия закупки, категории и терминов из раздела метаданных не являются доказательствами.\n"
+            f"- Если подкатегория прямо подтверждается спецификацией, позицией ВОР, описанием товара или характеристиками -> 'CONFIRMED', confidence: 0.80-1.0, supporting_quote: обязательная дословная цитата из документа.\n"
+            f"- Если созвучие/адрес/название организации/нецелевой товар -> 'REJECTED', confidence: 0.85-1.0, supporting_quote: обязательная дословная цитата из документа.\n"
             f"- Если контекст обрезан или совершенно неоднозначен -> 'UNKNOWN', confidence: 0.0, reason_code: 'INSUFFICIENT_CONTEXT'.\n"
             f"Ответь строго JSON."
         )
 
-        if len(block) > self.max_context_chars:
-            block = block[: self.max_context_chars] + "\n...[контекст обрезан]..."
+        matched_line = _candidate_matched_line(candidate)
+        before_list = candidate.get("context_before") or []
+        after_list = candidate.get("context_after") or []
 
-        return block
+        if isinstance(before_list, str):
+            if before_list.startswith("[") and before_list.endswith("]"):
+                try: before_list = json.loads(before_list)
+                except Exception: pass
+        before_lines = [str(x).strip() for x in before_list if str(x).strip()] if isinstance(before_list, list) else [str(before_list).strip()] if str(before_list).strip() else []
+
+        if isinstance(after_list, str):
+            if after_list.startswith("[") and after_list.endswith("]"):
+                try: after_list = json.loads(after_list)
+                except Exception: pass
+        after_lines = [str(x).strip() for x in after_list if str(x).strip()] if isinstance(after_list, list) else [str(after_list).strip()] if str(after_list).strip() else []
+
+        # Centered Budgeting Allocation
+        fixed_len = len(meta_block) + len(question_block) + len("[ДОКУМЕНТАЛЬНЫЙ КОНТЕКСТ]\n\n>>> НАЙДЕННАЯ СТРОКА: \n")
+        
+        max_matched_len = self.max_context_chars - fixed_len - 100
+        if max_matched_len < 200:
+            max_matched_len = 200
+
+        if len(matched_line) > max_matched_len:
+            matched_line = matched_line[:max_matched_len] + " ...[строка совпадения сокращена]..."
+
+        avail_for_context = self.max_context_chars - fixed_len - len(matched_line)
+        if avail_for_context < 0:
+            avail_for_context = 0
+
+        half_budget = avail_for_context // 2
+        before_text = "\n".join(before_lines)
+        after_text = "\n".join(after_lines)
+
+        if len(before_text) <= half_budget:
+            used_before = before_text
+            avail_after = avail_for_context - len(used_before)
+            used_after = after_text[:avail_after] if len(after_text) > avail_after else after_text
+        elif len(after_text) <= half_budget:
+            used_after = after_text
+            avail_before = avail_for_context - len(used_after)
+            used_before = before_text[-avail_before:] if len(before_text) > avail_before else before_text
+        else:
+            used_before = before_text[-half_budget:]
+            used_after = after_text[:half_budget]
+
+        before_prefix = "...[контекст до совпадения сокращён]...\n" if len(used_before) < len(before_text) else ""
+        after_suffix = "\n...[контекст после совпадения сокращён]..." if len(used_after) < len(after_text) else ""
+
+        doc_section = (
+            f"[ДОКУМЕНТАЛЬНЫЙ КОНТЕКСТ]\n"
+            f"{before_prefix}{used_before}\n"
+            f">>> НАЙДЕННАЯ СТРОКА: {matched_line}\n"
+            f"{used_after}{after_suffix}\n"
+        )
+
+        return f"{meta_block}{doc_section}{question_block}"
 
     def _verify_and_gate_decision(
         self,
@@ -367,15 +425,23 @@ class ContextValidator:
         quote = str(raw_decision.get("supporting_quote") or "").strip()
         reason = str(raw_decision.get("reason") or "").strip()
 
-        # Quote verification: quote must be exact substring in context
-        if decision in ("CONFIRMED", "REJECTED") and quote:
-            norm_quote = _normalize_whitespace(quote)
-            norm_context = _normalize_whitespace(context_text)
-            if norm_quote not in norm_context:
+        # Document context trust boundary verification
+        doc_context_only = build_document_context(candidate)
+        norm_doc_context = _normalize_whitespace(doc_context_only)
+
+        if decision in ("CONFIRMED", "REJECTED"):
+            if not quote:
                 decision = "UNKNOWN"
-                reason_code = "HALLUCINATED_QUOTE"
+                reason_code = "MISSING_SUPPORTING_QUOTE"
                 confidence = 0.0
-                reason = f"Supporting quote not found in document context (hallucinated quote): {quote[:60]}"
+                reason = f"Decision {decision} requires explicit non-empty supporting_quote from document context"
+            else:
+                norm_quote = _normalize_whitespace(quote)
+                if norm_quote not in norm_doc_context:
+                    decision = "UNKNOWN"
+                    reason_code = "HALLUCINATED_QUOTE"
+                    confidence = 0.0
+                    reason = f"Supporting quote not found in document context: {quote[:60]}"
 
         # Confidence gating
         if decision == "CONFIRMED" and confidence < self.confirm_threshold:
