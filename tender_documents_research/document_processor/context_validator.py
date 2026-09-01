@@ -206,11 +206,10 @@ class ContextValidator:
             f"ID: {pid}\n"
             f"ОКПД2: {okpd_code} ({okpd_name})\n"
             f"Наименование закупки: {p_title}\n\n"
-            f"[КАНДИДАТ ПОИСКА]\n"
+            f"[ЦЕЛЕВАЯ КАТЕГОРИЯ CRM]\n"
             f"Категория: {cat_name} ({cat_code})\n"
             f"Подкатегория: {sub_name} ({sub_code})\n"
             f"Искомый термин: {term}\n"
-            f"Метод: {method}\n"
             f"Документ: {doc_name} {doc_loc}\n\n"
             f"[КОНТЕКСТ ИЗ ДОКУМЕНТА]\n"
             f"{before_str}\n"
@@ -219,6 +218,15 @@ class ContextValidator:
         )
         if neg_str:
             block += f"\n[СТОП-ФРАЗЫ КАТЕГОРИИ]\n{neg_str}\n"
+
+        block += (
+            f"\n[ВОПРОС]\n"
+            f"Подтверждает ли данный фрагмент документа реальную закупку, смету, ведомость объемов или ТЗ на товар/материал/работу для подкатегории \"{sub_name}\" (категория \"{cat_name}\", термин \"{term}\")?\n"
+            f"- Если ДА -> decision: 'CONFIRMED', confidence: 0.95-1.0, supporting_quote: точная подстрока с товаром.\n"
+            f"- Если НЕТ (ложное созвучие слов, адрес, должность/организация, типовой договор, другой товар) -> decision: 'REJECTED', confidence: 0.95-1.0, supporting_quote: строка с ложным термином.\n"
+            f"- Если неясно / контекст обрезан -> decision: 'UNKNOWN'.\n"
+            f"Ответь строго JSON."
+        )
 
         if len(block) > self.max_context_chars:
             block = block[: self.max_context_chars] + "\n...[контекст обрезан]..."
