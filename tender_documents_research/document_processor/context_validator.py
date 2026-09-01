@@ -19,15 +19,13 @@ import json
 import logging
 import os
 import re
-import urllib.error
-import urllib.request
 from datetime import datetime, timezone
 from typing import Any, Callable, Dict, List, Optional, Tuple
 
+from src.services.ai_client import DEFAULT_MODEL, generate
+
 logger = logging.getLogger("document_processor.context_validator")
 
-DEFAULT_MODEL = "qwen2.5:7b"
-DEFAULT_OLLAMA_URL = "http://127.0.0.1:11434"
 DEFAULT_CONFIRM_THRESHOLD = 0.80
 DEFAULT_REJECT_THRESHOLD = 0.85
 DEFAULT_MAX_CONTEXT_CHARS = 3000
@@ -36,37 +34,23 @@ DEFAULT_BATCH_SIZE = 10
 VALID_DECISIONS = frozenset({"CONFIRMED", "REJECTED", "UNKNOWN"})
 
 SYSTEM_PROMPT = """Ты — строгий эксперт-валидатор совпадений в документах госзакупок для CRM строительных материалов и оборудования.
-Твоя задача — проверить, подтверждает ли найденный фрагмент текста документа закупку, потребность, сметную строку, ведомость объемов или спецификацию на материалы/оборудование/работы целевой категории и подкатегории, указанных в блоке [КАНДИДАТ ПОИСКА].
+Твоя задача — проверить, подтверждает ли найденный фрагмент текста документа закупку, потребность, сметную строку, ведомость объемов или спецификацию на материалы/оборудование/работы целевой категории и подкатегории, указанных в блоке [ЦЕЛЕВАЯ КАТЕГОРИЯ CRM].
 
 ВНИМАНИЕ:
-- Целевая проверка проводится на соответствие блоку [КАНДИДАТ ПОИСКА] (Категория и Подкатегория)!
+- Целевая проверка проводится строго на соответствие блоку [ЦЕЛЕВАЯ КАТЕГОРИЯ CRM] (Категория и Подкатегория)!
+- Менять категорию или подкатегорию ЗАПРЕЩЕНО.
 - Наименование закупки в блоке [ТЕНДЕР] — это лишь общее название всего тендера, а не фильтр. Не путай название тендера с категорией товара!
 
-Справочник строительных категорий и подкатегорий:
-- Напольные покрытия (flooring):
-  * Полимерные наливные полы (polymer_self_leveling): эпоксидные и полиуретановые компаунды, наливные полы (Денстоп, Полиплан и др.).
-  * Топпинги (dry_shake_topping): сухие смеси-упрочнители бетона (MasterTop, Sika и др.).
-- Гидроизоляция (waterproofing):
-  * Мембранная (membrane): ПВХ, ТПО, ЭПДМ мембраны (Пластфоил, Logicroof и др.) для кровли, бассейнов, фундаментов.
-  * Инъекционная (injection): полиуретановые, эпоксидные инъекционные смолы (Манопур, Витрапур и др.) для гидроизоляции швов и бетона. (Медицинские шприцы и уколы — REJECTED!).
-  * Проникающая (penetrating): Пенетрон, Кальматрон, Лахта и др.
-  * Битумная (bitumen_roll, coating): рулонные материалы (Техноэласт, Унифлекс и др.), битумные мастики.
-- Гидроизоляция и ремонт бетона (waterproofing_concrete_repair / concrete_repair): ремонтные смеси и составы для конструкционного ремонта бетона (MasterEmaco, Mapegrout, Sika MonoTop, Скрепа и др.).
-- Композитные материалы (composites):
-  * Композитные водоотводные лотки (drainage_tray): полимеркомпозитные, полимербетонные, композитные лотки и водоотводные каналы.
-  * Композитная арматура (rebar): стеклопластиковая/базальтопластиковая арматура.
-- Освещение (lighting / road_street, industrial, office_admin): светильники уличные (ДКУ), промышленные (хайбей), офисные панели. (Слова "проект", "вектор", "директор", "распоряжение администрации", адреса "ул. Магистральная", "просп. Мира" — REJECTED!).
-
 Решения (decision):
-1. CONFIRMED: Фрагмент документа прямо указывает на закупку, потребность, ведомость объемов, смету, ТЗ или применение товара/материала/оборудования указанной категории.
+1. CONFIRMED: Фрагмент документа прямо указывает на закупку, потребность, ведомость объемов, смету, ТЗ или применение товара/материала/оборудования указанной категории/подкатегории.
 2. REJECTED: Совпадение ложное:
-   - FUZZY_LEXICAL_COLLISION: совпадение похожего слова ("ПРОЕКТ" вместо "проспект", "директор" вместо "вектор", "плотность" вместо "плотина").
+   - FUZZY_LEXICAL_COLLISION: случайное созвучие слов ("ПРОЕКТ" вместо "проспект", "директор" вместо "вектор", "плотность" вместо "плотина").
    - ADDRESS_OR_LOCATION_ONLY: адрес, улица ("просп. Ленина", "ул. 3-я Магистральная").
    - ORGANIZATION_NAME_ONLY: наименование организации, должность ("ООО Вектор", "Генеральный директор").
    - LEGAL_ADMINISTRATIVE_TEXT: распоряжение, преамбула, типовой договор ("Распоряжением администрации...").
-   - UNRELATED_PRODUCT: совершенно другой товар (медицинский шприц, канцтовары, продукты).
+   - UNRELATED_PRODUCT: совершенно другой товар (медицинский шприц для гидроизоляции, канцтовары, продукты).
    - NEGATIVE_PHRASE_CONTEXT: фрагмент содержит стоп-фразу.
-3. UNKNOWN: Контекст слишком обрезан, неоднозначен или информации недостаточно для уверенного вывода.
+3. UNKNOWN: Контекст слишком обрезан, неоднозначен или информации недостаточно для уверенного подтверждения или отклонения.
 
 Правила:
 - confidence: степень уверенности в решении (0.95-1.0 если уверен, <0.90 если сомневаешься).
@@ -74,7 +58,7 @@ SYSTEM_PROMPT = """Ты — строгий эксперт-валидатор с�
   * Для CONFIRMED: строка/фраза с товаром/материалом.
   * Для REJECTED: строка с ложным термином.
 
-Ответ СТРОГО в формате JSON:
+Ответ СТРОГО в формате JSON без markdown:
 {
   "detail_id": <int/str>,
   "decision": "CONFIRMED" | "REJECTED" | "UNKNOWN",
@@ -92,36 +76,11 @@ def _normalize_whitespace(text: str) -> str:
     return re.sub(r"\s+", " ", text).strip().lower()
 
 
-def call_ollama(
-    prompt: str,
-    *,
-    model: str = DEFAULT_MODEL,
-    base_url: str = DEFAULT_OLLAMA_URL,
-    timeout: int = 45,
-) -> str:
-    """Invokes local Ollama /api/generate with format=json."""
-    url = f"{base_url.rstrip('/')}/api/generate"
-    payload = {
-        "model": model,
-        "prompt": prompt,
-        "system": SYSTEM_PROMPT,
-        "stream": False,
-        "format": "json",
-        "options": {"temperature": 0.0, "num_predict": 512},
-    }
-    data = json.dumps(payload, ensure_ascii=False).encode("utf-8")
-    req = urllib.request.Request(url, data=data, headers={"Content-Type": "application/json"})
-    with urllib.request.urlopen(req, timeout=timeout) as resp:
-        body = json.loads(resp.read().decode("utf-8"))
-        return body.get("response", "")
-
-
 class ContextValidator:
     def __init__(
         self,
         *,
         model: str = DEFAULT_MODEL,
-        ollama_url: Optional[str] = None,
         confirm_threshold: float = DEFAULT_CONFIRM_THRESHOLD,
         reject_threshold: float = DEFAULT_REJECT_THRESHOLD,
         max_context_chars: int = DEFAULT_MAX_CONTEXT_CHARS,
@@ -130,13 +89,19 @@ class ContextValidator:
         ai_caller: Optional[Callable[[str], str]] = None,
     ) -> None:
         self.model = model
-        self.ollama_url = ollama_url or os.getenv("OLLAMA_BASE_URL", DEFAULT_OLLAMA_URL)
         self.confirm_threshold = confirm_threshold
         self.reject_threshold = reject_threshold
         self.max_context_chars = max_context_chars
         self.batch_size = batch_size
         self.dedupe = dedupe
-        self._ai_caller = ai_caller or (lambda p: call_ollama(p, model=self.model, base_url=self.ollama_url))
+        self._ai_caller = ai_caller or (
+            lambda p: generate(
+                f"{SYSTEM_PROMPT}\n\n{p}",
+                model=self.model,
+                timeout=75,
+                format_json=True,
+            )
+        )
 
     def build_context_block(self, candidate: Dict[str, Any]) -> str:
         """Constructs a bounded, informative context block for Qwen."""
@@ -224,7 +189,7 @@ class ContextValidator:
             f"Подтверждает ли данный фрагмент документа реальную закупку, смету, ведомость объемов или ТЗ на товар/материал/работу для подкатегории \"{sub_name}\" (категория \"{cat_name}\", термин \"{term}\")?\n"
             f"- Если ДА -> decision: 'CONFIRMED', confidence: 0.95-1.0, supporting_quote: точная подстрока с товаром.\n"
             f"- Если НЕТ (ложное созвучие слов, адрес, должность/организация, типовой договор, другой товар) -> decision: 'REJECTED', confidence: 0.95-1.0, supporting_quote: строка с ложным термином.\n"
-            f"- Если неясно / контекст обрезан -> decision: 'UNKNOWN'.\n"
+            f"- Если неясно / контекст обрезан / недостаточно данных -> decision: 'UNKNOWN'.\n"
             f"Ответь строго JSON."
         )
 

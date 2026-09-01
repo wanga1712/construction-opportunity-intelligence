@@ -1,12 +1,14 @@
 """Asynchronous worker service for document match context validation.
 
-Claims raw candidate matches, validates them with ContextValidator, updates
-validation status in document_match_details, and rebuilds document_evidence
-for affected procurements.
+Claims raw candidate matches, enriches them with factual procurement data
+and CRM taxonomy, filters to canonical TARGET OKPD procurements, validates
+them with ContextValidator, updates validation status in document_match_details,
+and rebuilds document_evidence for affected procurements.
 
 Fail-closed:
 - Only CONFIRMED details can produce positive document_evidence.
 - Qwen outages do not break document processing (candidates remain UNKNOWN).
+- Out-of-target procurements are excluded from normal service validation.
 """
 
 from __future__ import annotations
@@ -21,6 +23,13 @@ import psycopg2.extras
 from dotenv import load_dotenv
 
 from document_processor.context_validator import ContextValidator
+from document_processor.crm_taxonomy_loader import CrmTaxonomyLoader, TaxonomySnapshot
+from src.services.commercial_routing_v3.okpd_priors import (
+    classify_target_okpd,
+    load_okpd_priors_from_db,
+    ADMISSION_TARGET,
+)
+from src.services.crm_db_runtime import require_crm_db_connect_kwargs
 
 load_dotenv("/opt/CRM_Streamlit/.env")
 
@@ -38,13 +47,18 @@ def get_doc_db_connection():
     )
 
 
+def get_crm_db_connection():
+    return psycopg2.connect(**require_crm_db_connect_kwargs())
+
+
 def claim_unvalidated_candidates(
     conn,
     *,
     batch_size: int = 50,
     target_procurement_ids: Optional[List[int]] = None,
+    generation: str = PIPELINE_GENERATION,
 ) -> List[Dict[str, Any]]:
-    """Claims a batch of candidates for validation."""
+    """Claims a batch of candidates for validation with correct SQL precedence."""
     with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
         query = """
             SELECT d.id, d.id as detail_id, d.match_id, d.procurement_id, d.category_code, d.subcategory_code,
@@ -53,10 +67,13 @@ def claim_unvalidated_candidates(
                    m.document_name, m.archive_member_path
             FROM document_match_details d
             JOIN document_matches m ON d.match_id = m.id
-            WHERE d.validation_status IN ('UNKNOWN', 'RAW', 'PENDING') OR d.validation_status IS NULL
-              AND d.pipeline_generation = %s
+            WHERE (
+                d.validation_status IN ('UNKNOWN', 'RAW', 'PENDING')
+                OR d.validation_status IS NULL
+            )
+            AND d.pipeline_generation = %s
         """
-        params: List[Any] = [PIPELINE_GENERATION]
+        params: List[Any] = [generation]
         if target_procurement_ids:
             query += " AND d.procurement_id = ANY(%s)"
             params.append(target_procurement_ids)
@@ -66,6 +83,75 @@ def claim_unvalidated_candidates(
 
         cur.execute(query, tuple(params))
         return cur.fetchall()
+
+
+def enrich_candidates_with_crm_facts(
+    candidates: List[Dict[str, Any]],
+    crm_conn,
+    taxonomy_snapshot: Optional[TaxonomySnapshot] = None,
+) -> List[Dict[str, Any]]:
+    """Enriches claimed candidates with factual procurement data and canonical CRM taxonomy."""
+    if not candidates:
+        return []
+
+    if taxonomy_snapshot is None:
+        taxonomy_snapshot = CrmTaxonomyLoader().load_snapshot()
+
+    pids = list({c["procurement_id"] for c in candidates if c.get("procurement_id")})
+    proc_map: Dict[int, Dict[str, Any]] = {}
+
+    if pids:
+        with crm_conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+            cur.execute("""
+                SELECT id, auction_name, okpd_code, okpd_name
+                FROM crm_procurements
+                WHERE id = ANY(%s)
+            """, (pids,))
+            for row in cur.fetchall():
+                proc_map[row["id"]] = dict(row)
+
+    enriched: List[Dict[str, Any]] = []
+    for c in candidates:
+        item = dict(c)
+        pid = item.get("procurement_id")
+        p_data = proc_map.get(pid, {})
+
+        item["procurement_title"] = p_data.get("auction_name") or ""
+        item["procurement_okpd_code"] = p_data.get("okpd_code") or ""
+        item["procurement_okpd_name"] = p_data.get("okpd_name") or ""
+
+        cat_code = item.get("category_code") or ""
+        sub_code = item.get("subcategory_code") or ""
+
+        cat_data = taxonomy_snapshot.categories.get(cat_code, {})
+        item["category_name"] = cat_data.get("category_name") or cat_code
+
+        subcategories = cat_data.get("subcategories", {})
+        sub_obj = subcategories.get(sub_code)
+        if sub_obj:
+            item["subcategory_name"] = sub_obj.subcategory_name
+            item["negative_phrases"] = list(sub_obj.negative_phrases)
+        else:
+            item["subcategory_name"] = sub_code
+            item["negative_phrases"] = []
+
+        enriched.append(item)
+
+    return enriched
+
+
+def filter_target_candidates(
+    candidates: List[Dict[str, Any]],
+    priors: List[Dict[str, Any]],
+) -> List[Dict[str, Any]]:
+    """Normal validator processes ONLY TARGET procurements using canonical classify_target_okpd."""
+    target_candidates = []
+    for c in candidates:
+        okpd = c.get("procurement_okpd_code")
+        status, _ = classify_target_okpd(okpd, priors)
+        if status == ADMISSION_TARGET:
+            target_candidates.append(c)
+    return target_candidates
 
 
 def update_candidate_validations(conn, results: List[Dict[str, Any]]) -> Set[Tuple[int, str]]:
@@ -107,7 +193,6 @@ def rebuild_affected_evidence(conn, affected: Set[Tuple[int, str]]) -> None:
 
     with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
         for pid, cat in affected:
-            # Query all CONFIRMED details for this procurement & category
             cur.execute("""
                 SELECT d.score, m.queue_id
                 FROM document_match_details d
@@ -141,7 +226,6 @@ def rebuild_affected_evidence(conn, affected: Set[Tuple[int, str]]) -> None:
                     PIPELINE_GENERATION
                 ))
             else:
-                # No confirmed details exist -> demote or delete evidence
                 cur.execute("""
                     DELETE FROM document_evidence
                     WHERE procurement_id = %s
@@ -153,22 +237,30 @@ def rebuild_affected_evidence(conn, affected: Set[Tuple[int, str]]) -> None:
 
 
 def process_batch(
-    conn,
+    doc_conn,
+    crm_conn,
     validator: ContextValidator,
+    priors: List[Dict[str, Any]],
+    taxonomy_snapshot: TaxonomySnapshot,
     *,
     batch_size: int = 50,
     target_procurement_ids: Optional[List[int]] = None,
 ) -> int:
     """Processes a single batch of unvalidated candidates."""
     candidates = claim_unvalidated_candidates(
-        conn, batch_size=batch_size, target_procurement_ids=target_procurement_ids
+        doc_conn, batch_size=batch_size, target_procurement_ids=target_procurement_ids
     )
     if not candidates:
         return 0
 
-    results = validator.validate_candidates(candidates)
-    affected = update_candidate_validations(conn, results)
-    rebuild_affected_evidence(conn, affected)
+    enriched = enrich_candidates_with_crm_facts(candidates, crm_conn, taxonomy_snapshot)
+    target_candidates = filter_target_candidates(enriched, priors)
+    if not target_candidates:
+        return 0
+
+    results = validator.validate_candidates(target_candidates)
+    affected = update_candidate_validations(doc_conn, results)
+    rebuild_affected_evidence(doc_conn, affected)
     return len(results)
 
 
@@ -178,15 +270,35 @@ def main():
     logger.info("Starting CRM V3 Context Validator Daemon...")
 
     validator = ContextValidator()
-    conn = get_doc_db_connection()
+    doc_conn = get_doc_db_connection()
+    crm_conn = get_crm_db_connection()
+
+    class _CrmDbWrapper:
+        def __init__(self, conn):
+            self.conn = conn
+        def execute_query(self, sql):
+            with self.conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+                cur.execute(sql)
+                return cur.fetchall()
+
+    priors = load_okpd_priors_from_db(_CrmDbWrapper(crm_conn))
+    taxonomy_snapshot = CrmTaxonomyLoader().load_snapshot()
+    logger.info("Loaded %d OKPD priors and %d categories", len(priors), len(taxonomy_snapshot.categories))
 
     while True:
         try:
-            count = process_batch(conn, validator, batch_size=20)
+            count = process_batch(
+                doc_conn,
+                crm_conn,
+                validator,
+                priors,
+                taxonomy_snapshot,
+                batch_size=20,
+            )
             if count == 0:
                 time.sleep(3.0)
             else:
-                logger.info("Validated batch of %d candidates", count)
+                logger.info("Validated batch of %d TARGET candidates", count)
         except Exception as exc:
             logger.error("Error in validator daemon loop: %s", exc)
             time.sleep(5.0)
