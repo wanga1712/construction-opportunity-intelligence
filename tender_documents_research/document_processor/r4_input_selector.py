@@ -2,39 +2,38 @@
 R4 Input Selector Authority Module.
 Provides deterministic selection of trusted V4 CONFIRMED candidate details
 from PostgreSQL document_intelligence DB to serve as R4 structured extraction inputs.
+
+Reuses the accepted public R3 documentary hydration semantics:
+build_source_document_context(candidate) from context_validator.py.
 """
 
-import json
 import hashlib
 import psycopg2.extras
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
+
+from tender_documents_research.document_processor.context_validator import (
+    build_source_document_context,
+)
 
 R4_INPUT_AUTHORITY = "TRUSTED_V4_CONFIRMED_DETAIL"
 
-def build_source_text_snapshot(candidate: Dict[str, Any]) -> str:
+def build_r4_source_snapshot(candidate: Dict[str, Any]) -> str:
     """
-    Builds the documentary source text snapshot for a candidate detail.
-    Contains strictly documentary source text, without title or category metadata.
+    Builds the pure documentary source text snapshot for an R4 candidate detail.
+    Reuses accepted R3 build_source_document_context(candidate).
+    
+    Guarantees:
+    - GENERATED_SOURCE_PLACEHOLDER = NONE (Returns "" if no documentary text exists)
+    - MATCHED_TERM_METADATA_AS_SOURCE = NO (matched_term metadata alone is NOT source text)
+    - SOURCE_METADATA_LEAKS = 0 (No titles, categories, OKPD, or prompt text)
     """
-    row_data = candidate.get("row_data")
-    if row_data:
-        if isinstance(row_data, dict):
-            # Extract values from row dict if present
-            vals = [str(v).strip() for v in row_data.values() if v]
-            if vals:
-                return " | ".join(vals)
-        elif isinstance(row_data, str) and row_data.strip():
-            return row_data.strip()
-    
-    before = (candidate.get("context_before") or "").strip() if isinstance(candidate.get("context_before"), str) else ""
-    term = (candidate.get("matched_term") or "").strip() if isinstance(candidate.get("matched_term"), str) else ""
-    after = (candidate.get("context_after") or "").strip() if isinstance(candidate.get("context_after"), str) else ""
-    
-    parts = [p for p in [before, term, after] if p]
-    if parts:
-        return " ".join(parts)
-    
-    return term or "DOCUMENTARY_SOURCE_SNAPSHOT"
+    # Reuse R3 accepted documentary hydration
+    raw_context = build_source_document_context(candidate)
+    snapshot = raw_context.strip() if raw_context else ""
+    return snapshot
+
+# Alias for backward compatibility
+build_source_text_snapshot = build_r4_source_snapshot
 
 def get_r4_input_candidates(conn, category_code: Optional[str] = None) -> List[Dict[str, Any]]:
     """
@@ -64,6 +63,7 @@ def get_r4_input_candidates(conn, category_code: Optional[str] = None) -> List[D
             d.context_before,
             d.context_after,
             d.row_data,
+            d.validation_status,
             d.validator_name AS source_validator_name,
             d.validator_version AS source_validator_version,
             d.validation_method AS source_validation_method,
@@ -88,8 +88,10 @@ def get_r4_input_candidates(conn, category_code: Optional[str] = None) -> List[D
         rows = [dict(r) for r in cur.fetchall()]
 
     for r in rows:
-        snapshot = build_source_text_snapshot(r)
+        snapshot = build_r4_source_snapshot(r)
         r["source_text_snapshot"] = snapshot
-        r["source_text_sha256"] = hashlib.sha256(snapshot.encode("utf-8")).hexdigest()
+        r["source_text_sha256"] = hashlib.sha256(snapshot.encode("utf-8")).hexdigest() if snapshot else ""
+        r["source_available"] = bool(snapshot)
+        r["extraction_eligible"] = bool(r["validation_status"] == "CONFIRMED" and snapshot)
 
     return rows

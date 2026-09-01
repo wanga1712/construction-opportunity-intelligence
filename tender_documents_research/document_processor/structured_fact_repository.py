@@ -2,7 +2,7 @@
 R4 Structured Product Fact Repository.
 Provides database persistence and retrieval for ExtractionRun, StructuredEntity,
 StructuredFieldEvidence, and StructuredAttribute in PostgreSQL document_intelligence DB.
-Enforces contract validation BEFORE DML, run immutability, stable child IDs, and caller-owned transactions.
+Enforces contract validation BEFORE DML, value-bound provenance, run immutability, stable child IDs, and caller-owned transactions.
 """
 
 from typing import Any, Dict, List, Optional
@@ -28,7 +28,7 @@ def save_extraction_run(conn, run: ExtractionRun) -> int:
     3. Preserves child entity/attribute/evidence IDs on identical repeated save (REPEATED_IDENTICAL_SAVE_STABLE_IDS=YES).
     4. Does NOT commit internally. Caller owns transaction.
     """
-    # 1. Pre-DML Contract Validation (Section 7)
+    # 1. Pre-DML Contract Validation (Section 21)
     is_valid, errors = validate_extraction_run(run)
     if not is_valid:
         raise ValueError(f"Contract Validation Failed: {', '.join(errors)}")
@@ -109,7 +109,7 @@ def save_extraction_run(conn, run: ExtractionRun) -> int:
             ))
             run_id = cur.fetchone()["id"]
 
-        # 3. Preserve Stable Child Identities (Section 15)
+        # 3. Preserve Stable Child Identities (Section 23)
         cur.execute("SELECT id, entity_fingerprint FROM structured_entities WHERE run_id = %s", (run_id,))
         existing_entities = {r["entity_fingerprint"]: r["id"] for r in cur.fetchall()}
         current_entity_fingerprints = set()
@@ -126,19 +126,25 @@ def save_extraction_run(conn, run: ExtractionRun) -> int:
                         brand_normalized = %s,
                         product_line_normalized = %s,
                         model_article_normalized = %s,
+                        quantity_raw = %s,
                         quantity_value = %s,
                         quantity_unit_raw = %s,
                         quantity_unit_normalized = %s,
+                        unit_price_raw = %s,
                         unit_price_value = %s,
+                        total_price_raw = %s,
                         total_price_value = %s,
+                        currency_raw = %s,
                         currency_code = %s
                     WHERE id = %s
                 """, (
                     ent.confidence, ent.product_name_normalized,
                     ent.manufacturer_normalized, ent.brand_normalized,
                     ent.product_line_normalized, ent.model_article_normalized,
-                    ent.quantity_value, ent.quantity_unit_raw, ent.quantity_unit_normalized,
-                    ent.unit_price_value, ent.total_price_value, ent.currency_code,
+                    ent.quantity_raw, ent.quantity_value, ent.quantity_unit_raw, ent.quantity_unit_normalized,
+                    ent.unit_price_raw, ent.unit_price_value,
+                    ent.total_price_raw, ent.total_price_value,
+                    ent.currency_raw, ent.currency_code,
                     entity_id
                 ))
             else:
@@ -151,8 +157,10 @@ def save_extraction_run(conn, run: ExtractionRun) -> int:
                         product_line_raw, product_line_normalized,
                         product_name_raw, product_name_normalized,
                         model_article_raw, model_article_normalized,
-                        quantity_value, quantity_unit_raw, quantity_unit_normalized,
-                        unit_price_value, total_price_value, currency_code,
+                        quantity_raw, quantity_value, quantity_unit_raw, quantity_unit_normalized,
+                        unit_price_raw, unit_price_value,
+                        total_price_raw, total_price_value,
+                        currency_raw, currency_code,
                         source_quote, confidence
                     ) VALUES (
                         %s, %s, %s, %s, %s,
@@ -162,8 +170,10 @@ def save_extraction_run(conn, run: ExtractionRun) -> int:
                         %s, %s,
                         %s, %s,
                         %s, %s,
-                        %s, %s, %s,
-                        %s, %s, %s,
+                        %s, %s, %s, %s,
+                        %s, %s,
+                        %s, %s,
+                        %s, %s,
                         %s, %s
                     )
                     RETURNING id
@@ -175,8 +185,10 @@ def save_extraction_run(conn, run: ExtractionRun) -> int:
                     ent.product_line_raw, ent.product_line_normalized,
                     ent.product_name_raw, ent.product_name_normalized,
                     ent.model_article_raw, ent.model_article_normalized,
-                    ent.quantity_value, ent.quantity_unit_raw, ent.quantity_unit_normalized,
-                    ent.unit_price_value, ent.total_price_value, ent.currency_code,
+                    ent.quantity_raw, ent.quantity_value, ent.quantity_unit_raw, ent.quantity_unit_normalized,
+                    ent.unit_price_raw, ent.unit_price_value,
+                    ent.total_price_raw, ent.total_price_value,
+                    ent.currency_raw, ent.currency_code,
                     ent.source_quote, ent.confidence
                 ))
                 entity_id = cur.fetchone()["id"]
@@ -328,11 +340,15 @@ def get_extraction_run_by_detail(
                 product_line_normalized=ent_row["product_line_normalized"],
                 model_article_raw=ent_row["model_article_raw"],
                 model_article_normalized=ent_row["model_article_normalized"],
+                quantity_raw=ent_row["quantity_raw"],
                 quantity_value=float(ent_row["quantity_value"]) if ent_row["quantity_value"] is not None else None,
                 quantity_unit_raw=ent_row["quantity_unit_raw"],
                 quantity_unit_normalized=ent_row["quantity_unit_normalized"],
+                unit_price_raw=ent_row["unit_price_raw"],
                 unit_price_value=float(ent_row["unit_price_value"]) if ent_row["unit_price_value"] is not None else None,
+                total_price_raw=ent_row["total_price_raw"],
                 total_price_value=float(ent_row["total_price_value"]) if ent_row["total_price_value"] is not None else None,
+                currency_raw=ent_row["currency_raw"],
                 currency_code=ent_row["currency_code"],
                 confidence=float(ent_row["confidence"]) if ent_row["confidence"] is not None else None,
                 field_evidence=field_evidence,

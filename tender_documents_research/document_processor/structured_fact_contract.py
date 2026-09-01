@@ -1,7 +1,7 @@
 """
 R4 Structured Product Fact Contract & Validation Helpers.
-Provides data classes, fingerprinting, quote verification, field-level evidence,
-and strict validation rules for R4 structured product/material/equipment/technology/work extraction.
+Provides data classes, fingerprinting, quote verification, value-bound field evidence,
+numeric & currency consistency, and strict validation rules for R4 structured fact extraction.
 """
 
 from dataclasses import dataclass, field, asdict
@@ -24,20 +24,71 @@ def normalize_whitespace(text: str) -> str:
     """Normalizes all whitespace (newlines, tabs, spaces) to single spaces and strips."""
     if not text:
         return ""
-    return re.sub(r"\s+", " ", text).strip()
+    return re.sub(r"\s+", " ", str(text)).strip()
 
 def verify_source_quote(source_quote: str, source_text_snapshot: str) -> bool:
     """
     Validates that normalized source_quote is a non-empty substring of normalized source_text_snapshot.
     """
-    if not source_quote or not source_quote.strip():
+    if not source_quote or not str(source_quote).strip():
         return False
-    if not source_text_snapshot or not source_text_snapshot.strip():
+    if not source_text_snapshot or not str(source_text_snapshot).strip():
         return False
     
     norm_quote = normalize_whitespace(source_quote)
     norm_snapshot = normalize_whitespace(source_text_snapshot)
     return norm_quote in norm_snapshot
+
+def parse_numeric_values_from_string(raw_str: str) -> List[float]:
+    """
+    Parses numeric values from a raw string (e.g. '10 шт', '4 500,00 руб', '10.5 м3').
+    Handles spaces in thousand separators and comma as decimal separator.
+    """
+    if not raw_str:
+        return []
+    # Replace spaces inside numbers e.g. "4 500" -> "4500"
+    cleaned = re.sub(r"(\d)\s+(\d)", r"\1\2", raw_str)
+    # Find decimal numbers with dot or comma
+    tokens = re.findall(r"\d+(?:[.,]\d+)?", cleaned)
+    results: List[float] = []
+    for tok in tokens:
+        try:
+            val = float(tok.replace(",", "."))
+            results.append(val)
+        except ValueError:
+            pass
+    return results
+
+def validate_numeric_consistency(raw_str: Optional[str], value: Optional[float]) -> bool:
+    """
+    Validates that normalized numeric value is consistent with raw string fact.
+    If raw_str contains parseable numbers, value must match one of them.
+    """
+    if value is None:
+        return True
+    if not raw_str or not raw_str.strip():
+        return False
+    
+    parsed = parse_numeric_values_from_string(raw_str)
+    if not parsed:
+        return True  # If complex text cannot be parsed deterministically, raw fact is preserved
+    
+    return any(abs(p - value) < 1e-4 for p in parsed)
+
+def validate_currency_consistency(raw_str: Optional[str], currency_code: Optional[str]) -> bool:
+    """
+    Validates that currency_code matches recognized raw wording (руб., рублей, ₽, RUB).
+    """
+    if not currency_code:
+        return True
+    if not raw_str or not raw_str.strip():
+        return False
+    
+    norm_raw = normalize_whitespace(raw_str).lower()
+    if currency_code.upper() == "RUB":
+        return any(term in norm_raw for term in ["руб", "рублей", "рубля", "₽", "rub"])
+    
+    return True
 
 def compute_sha256(text: str) -> str:
     """Computes UTF-8 SHA256 hex digest of a string."""
@@ -128,12 +179,16 @@ class StructuredEntity:
     product_line_normalized: Optional[str] = None
     model_article_raw: Optional[str] = None
     model_article_normalized: Optional[str] = None
+    quantity_raw: Optional[str] = None
     quantity_value: Optional[float] = None
     quantity_unit_raw: Optional[str] = None
     quantity_unit_normalized: Optional[str] = None
+    unit_price_raw: Optional[str] = None
     unit_price_value: Optional[float] = None
+    total_price_raw: Optional[str] = None
     total_price_value: Optional[float] = None
-    currency_code: Optional[str] = None  # Currency is nullable (Section 13: NO default RUB!)
+    currency_raw: Optional[str] = None
+    currency_code: Optional[str] = None  # Nullable currency (Section 13: NO default RUB!)
     confidence: Optional[float] = None
     field_evidence: List[StructuredFieldEvidence] = field(default_factory=list)
     attributes: List[StructuredAttribute] = field(default_factory=list)
@@ -188,8 +243,9 @@ def validate_extraction_run(run: ExtractionRun) -> Tuple[bool, List[str]]:
     1. Mandatory explicit source provenance (context_validator v4 QWEN_CONTEXT_V4)
     2. SHA256 snapshot consistency
     3. Valid entity types
-    4. Mandatory field-level documentary evidence for every populated core raw field
-    5. Valid source quotes matching source_text_snapshot
+    4. Value-bound field-level evidence (source quote MUST contain raw_value and exist in snapshot)
+    5. Numeric & currency normalization consistency
+    6. Attribute raw value provenance within attribute source_quote
     """
     errors: List[str] = []
 
@@ -201,7 +257,7 @@ def validate_extraction_run(run: ExtractionRun) -> Tuple[bool, List[str]]:
     if not run.source_validation_method or run.source_validation_method.upper() != "QWEN_CONTEXT_V4":
         errors.append(f"Invalid source_validation_method '{run.source_validation_method}': expected 'QWEN_CONTEXT_V4'")
 
-    # 2. Source Snapshot & SHA (Section 18 & 19)
+    # 2. Source Snapshot & SHA (Section 9, 10, 11)
     if not run.source_text_snapshot or not run.source_text_snapshot.strip():
         errors.append("source_text_snapshot is empty")
     else:
@@ -209,7 +265,19 @@ def validate_extraction_run(run: ExtractionRun) -> Tuple[bool, List[str]]:
         if run.source_text_sha256 and run.source_text_sha256 != calc_sha:
             errors.append(f"source_text_sha256 mismatch: expected {calc_sha}, got {run.source_text_sha256}")
 
-    # 3. Entity & Field Evidence Validation (Section 9 & 10)
+    # 3. Entity & Field Evidence Validation (Section 14 & 15)
+    core_field_map = [
+        ("product_name_raw", "product_name"),
+        ("manufacturer_raw", "manufacturer"),
+        ("brand_raw", "brand"),
+        ("product_line_raw", "product_line"),
+        ("model_article_raw", "model_article"),
+        ("quantity_raw", "quantity"),
+        ("unit_price_raw", "unit_price"),
+        ("total_price_raw", "total_price"),
+        ("currency_raw", "currency"),
+    ]
+
     for idx, ent in enumerate(run.entities):
         if ent.entity_type not in ALLOWED_ENTITY_TYPES:
             errors.append(f"Entity [{idx}] has invalid entity_type '{ent.entity_type}'")
@@ -218,41 +286,64 @@ def validate_extraction_run(run: ExtractionRun) -> Tuple[bool, List[str]]:
             errors.append(f"Entity [{idx}] product_name_raw is empty")
 
         if not verify_source_quote(ent.source_quote, run.source_text_snapshot):
-            errors.append(f"Entity [{idx}] source_quote failed verification against source snapshot")
+            errors.append(f"Entity [{idx}] entity anchor source_quote failed verification against source snapshot")
 
-        # Map of field_name -> list of evidence quotes
-        field_ev_map: Dict[str, List[str]] = {}
+        # Field Evidence Index
+        field_ev_quotes: Dict[str, List[str]] = {}
         for fe in ent.field_evidence:
             if not fe.source_quote or not verify_source_quote(fe.source_quote, run.source_text_snapshot):
                 errors.append(f"Entity [{idx}] FieldEvidence '{fe.field_name}' quote failed verification against source snapshot")
-            field_ev_map.setdefault(fe.field_name, []).append(fe.source_quote)
+            field_ev_quotes.setdefault(fe.field_name, []).append(fe.source_quote)
 
-        # Core Field Requirements
-        if ent.product_name_raw and "product_name" not in field_ev_map:
-            errors.append(f"Entity [{idx}] populated product_name_raw requires 'product_name' field_evidence")
-        if ent.manufacturer_raw and "manufacturer" not in field_ev_map:
-            errors.append(f"Entity [{idx}] populated manufacturer_raw requires 'manufacturer' field_evidence")
-        if ent.brand_raw and "brand" not in field_ev_map:
-            errors.append(f"Entity [{idx}] populated brand_raw requires 'brand' field_evidence")
-        if ent.product_line_raw and "product_line" not in field_ev_map:
-            errors.append(f"Entity [{idx}] populated product_line_raw requires 'product_line' field_evidence")
-        if ent.model_article_raw and "model_article" not in field_ev_map:
-            errors.append(f"Entity [{idx}] populated model_article_raw requires 'model_article' field_evidence")
-        if (ent.quantity_value is not None or ent.quantity_unit_raw) and "quantity" not in field_ev_map:
-            errors.append(f"Entity [{idx}] populated quantity requires 'quantity' field_evidence")
-        if ent.unit_price_value is not None and "unit_price" not in field_ev_map:
-            errors.append(f"Entity [{idx}] populated unit_price_value requires 'unit_price' field_evidence")
-        if ent.total_price_value is not None and "total_price" not in field_ev_map:
-            errors.append(f"Entity [{idx}] populated total_price_value requires 'total_price' field_evidence")
-        if ent.currency_code and "currency" not in field_ev_map:
-            errors.append(f"Entity [{idx}] populated currency_code requires 'currency' field_evidence")
+        # Check raw core field value-bound provenance (Section 14 & 15)
+        for raw_attr, field_name in core_field_map:
+            raw_val = getattr(ent, raw_attr, None)
+            if raw_val:
+                quotes = field_ev_quotes.get(field_name, [])
+                if not quotes:
+                    errors.append(f"Entity [{idx}] populated '{raw_attr}' requires '{field_name}' field_evidence")
+                else:
+                    norm_val = normalize_whitespace(raw_val)
+                    supported = any(norm_val in normalize_whitespace(q) for q in quotes)
+                    if not supported:
+                        errors.append(f"Entity [{idx}] raw_value '{raw_val}' for '{field_name}' is NOT supported by field_evidence quote(s)")
 
-        # Attribute Provenance (Section 12)
+        # Numeric / Normalized Consistency Checks (Section 16 & 17)
+        if ent.quantity_value is not None:
+            if not ent.quantity_raw:
+                errors.append(f"Entity [{idx}] populated quantity_value requires quantity_raw")
+            elif not validate_numeric_consistency(ent.quantity_raw, ent.quantity_value):
+                errors.append(f"Entity [{idx}] quantity_value {ent.quantity_value} inconsistent with quantity_raw '{ent.quantity_raw}'")
+
+        if ent.unit_price_value is not None:
+            if not ent.unit_price_raw:
+                errors.append(f"Entity [{idx}] populated unit_price_value requires unit_price_raw")
+            elif not validate_numeric_consistency(ent.unit_price_raw, ent.unit_price_value):
+                errors.append(f"Entity [{idx}] unit_price_value {ent.unit_price_value} inconsistent with unit_price_raw '{ent.unit_price_raw}'")
+
+        if ent.total_price_value is not None:
+            if not ent.total_price_raw:
+                errors.append(f"Entity [{idx}] populated total_price_value requires total_price_raw")
+            elif not validate_numeric_consistency(ent.total_price_raw, ent.total_price_value):
+                errors.append(f"Entity [{idx}] total_price_value {ent.total_price_value} inconsistent with total_price_raw '{ent.total_price_raw}'")
+
+        if ent.currency_code is not None:
+            if not ent.currency_raw:
+                errors.append(f"Entity [{idx}] populated currency_code requires currency_raw")
+            elif not validate_currency_consistency(ent.currency_raw, ent.currency_code):
+                errors.append(f"Entity [{idx}] currency_code '{ent.currency_code}' inconsistent with currency_raw '{ent.currency_raw}'")
+
+        # Attribute Value Provenance (Section 18 & 19)
         for attr_idx, attr in enumerate(ent.attributes):
             if not attr.raw_value or not attr.raw_value.strip():
                 errors.append(f"Entity [{idx}] Attribute [{attr_idx}] raw_value is empty")
             if not verify_source_quote(attr.source_quote, run.source_text_snapshot):
                 errors.append(f"Entity [{idx}] Attribute [{attr_idx}] source_quote failed verification against source snapshot")
+            else:
+                norm_attr_raw = normalize_whitespace(attr.raw_value)
+                norm_attr_quote = normalize_whitespace(attr.source_quote)
+                if norm_attr_raw not in norm_attr_quote:
+                    errors.append(f"Entity [{idx}] Attribute [{attr_idx}] raw_value '{attr.raw_value}' is NOT supported by attribute source_quote '{attr.source_quote}'")
 
     return (len(errors) == 0, errors)
 
