@@ -42,7 +42,7 @@ STRUCTURED_EXTRACTOR_MODEL = "qwen2.5:7b"
 def default_ai_caller(prompt: str, model: str = STRUCTURED_EXTRACTOR_MODEL, format_json: bool = True) -> Tuple[str, Dict[str, Any]]:
     """Default AI caller using src.services.ai_client.generate_with_meta()."""
     from src.services.ai_client import generate_with_meta
-    return generate_with_meta(prompt, model=model, format_json=format_json)
+    return generate_with_meta(prompt, model=model, format_json=format_json, timeout=180)
 
 class StructuredFactExtractor:
     def __init__(
