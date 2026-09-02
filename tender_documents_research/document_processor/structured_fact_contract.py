@@ -1,7 +1,7 @@
 """
 R4 Structured Product Fact Contract & Validation Helpers.
 Provides data classes, fingerprinting, quote verification, value-bound field evidence,
-numeric & currency consistency, and strict validation rules for R4 structured fact extraction.
+derived numeric/unit/currency fail-closed validation, and strict contract enforcement.
 """
 
 from dataclasses import dataclass, field, asdict
@@ -15,6 +15,7 @@ EXTRACTION_METHOD = "QWEN_STRUCTURED_FACT_V1"
 PROMPT_VERSION = "structured_fact_v1"
 
 ALLOWED_ENTITY_TYPES = {"PRODUCT", "MATERIAL", "EQUIPMENT", "TECHNOLOGY", "WORK"}
+RECOGNIZED_CURRENCIES = {"RUB"}
 
 class ExtractionRunIdentityConflict(ValueError):
     """Raised when an extraction run identity matches an existing run but immutable inputs differ."""
@@ -41,15 +42,29 @@ def verify_source_quote(source_quote: str, source_text_snapshot: str) -> bool:
 
 def parse_numeric_values_from_string(raw_str: str) -> List[float]:
     """
-    Parses numeric values from a raw string (e.g. '10 шт', '4 500,00 руб', '10.5 м3').
-    Handles spaces in thousand separators and comma as decimal separator.
+    Parses numeric values deterministically from a raw string fact.
+    Handles formats:
+      - 10
+      - 10,5 -> 10.5
+      - 10.5 -> 10.5
+      - 4 500 -> 4500.0
+      - 4 500,00 -> 4500.0
+      - 1 234 567,89 -> 1234567.89
+    Returns [] if no parseable numbers exist (e.g. 'десять штук').
     """
-    if not raw_str:
+    if not raw_str or not str(raw_str).strip():
         return []
-    # Replace spaces inside numbers e.g. "4 500" -> "4500"
-    cleaned = re.sub(r"(\d)\s+(\d)", r"\1\2", raw_str)
-    # Find decimal numbers with dot or comma
-    tokens = re.findall(r"\d+(?:[.,]\d+)?", cleaned)
+    
+    text = str(raw_str).strip()
+    
+    # 1. Clean thousand spaces inside digits: "4 500" -> "4500", "1 234 567,89" -> "1234567,89"
+    cleaned = re.sub(r"(\d)\s+(\d{3})(?!\d)", r"\1\2", text)
+    cleaned = re.sub(r"(\d)\s+(\d{3})(?!\d)", r"\1\2", cleaned)
+    
+    # 2. Match floating point / decimal numbers with dot or comma
+    pattern = r"\d+(?:[.,]\d+)?"
+    tokens = re.findall(pattern, cleaned)
+    
     results: List[float] = []
     for tok in tokens:
         try:
@@ -61,34 +76,47 @@ def parse_numeric_values_from_string(raw_str: str) -> List[float]:
 
 def validate_numeric_consistency(raw_str: Optional[str], value: Optional[float]) -> bool:
     """
-    Validates that normalized numeric value is consistent with raw string fact.
-    If raw_str contains parseable numbers, value must match one of them.
+    Fail-closed numeric validation contract (Section 4 & 5):
+    If value is NOT NULL:
+      - raw_str MUST exist and be non-empty.
+      - raw_str MUST contain at least one deterministically parseable numeric value.
+      - value MUST match one of the parsed numbers.
+    If raw cannot be parsed -> returns False (UNPARSEABLE_RAW_WITH_NUMERIC_VALUE_VALID=NO).
     """
     if value is None:
         return True
-    if not raw_str or not raw_str.strip():
+    if not raw_str or not str(raw_str).strip():
         return False
     
     parsed = parse_numeric_values_from_string(raw_str)
     if not parsed:
-        return True  # If complex text cannot be parsed deterministically, raw fact is preserved
+        return False  # Unparseable raw with non-null numeric value is FAIL CLOSED -> False
     
     return any(abs(p - value) < 1e-4 for p in parsed)
 
 def validate_currency_consistency(raw_str: Optional[str], currency_code: Optional[str]) -> bool:
     """
-    Validates that currency_code matches recognized raw wording (руб., рублей, ₽, RUB).
+    Fail-closed currency validation contract (Section 10 & 11):
+    If currency_code is NOT NULL:
+      - raw_str MUST exist and be non-empty.
+      - currency_code MUST be recognized (e.g. "RUB").
+      - raw_str MUST contain recognized currency wording (руб., рублей, ₽, RUB).
+    If currency_code is unrecognized or unsupported -> returns False.
     """
-    if not currency_code:
+    if currency_code is None:
         return True
-    if not raw_str or not raw_str.strip():
+    if not raw_str or not str(raw_str).strip():
         return False
     
+    code = currency_code.strip().upper()
+    if code not in RECOGNIZED_CURRENCIES:
+        return False  # Arbitrary non-recognized currency code is FAIL CLOSED -> False
+    
     norm_raw = normalize_whitespace(raw_str).lower()
-    if currency_code.upper() == "RUB":
+    if code == "RUB":
         return any(term in norm_raw for term in ["руб", "рублей", "рубля", "₽", "rub"])
     
-    return True
+    return False
 
 def compute_sha256(text: str) -> str:
     """Computes UTF-8 SHA256 hex digest of a string."""
@@ -188,7 +216,7 @@ class StructuredEntity:
     total_price_raw: Optional[str] = None
     total_price_value: Optional[float] = None
     currency_raw: Optional[str] = None
-    currency_code: Optional[str] = None  # Nullable currency (Section 13: NO default RUB!)
+    currency_code: Optional[str] = None  # Nullable currency (NO default RUB!)
     confidence: Optional[float] = None
     field_evidence: List[StructuredFieldEvidence] = field(default_factory=list)
     attributes: List[StructuredAttribute] = field(default_factory=list)
@@ -239,17 +267,19 @@ class ExtractionRun:
 
 def validate_extraction_run(run: ExtractionRun) -> Tuple[bool, List[str]]:
     """
-    Strictly validates an ExtractionRun instance for:
-    1. Mandatory explicit source provenance (context_validator v4 QWEN_CONTEXT_V4)
+    Strictly validates an ExtractionRun instance for fail-closed derived values:
+    1. Source validator provenance (context_validator v4 QWEN_CONTEXT_V4)
     2. SHA256 snapshot consistency
     3. Valid entity types
-    4. Value-bound field-level evidence (source quote MUST contain raw_value and exist in snapshot)
-    5. Numeric & currency normalization consistency
-    6. Attribute raw value provenance within attribute source_quote
+    4. Core raw fields value-bound to source quotes
+    5. Fail-closed numeric consistency (quantity, unit_price, total_price)
+    6. Quantity unit provenance & normalized unit dependencies
+    7. Fail-closed currency consistency
+    8. Attribute numeric & unit provenance
     """
     errors: List[str] = []
 
-    # 1. Source Provenance Explicitness (Section 5 & 6)
+    # 1. Source Provenance Explicitness
     if not run.source_validator_name or run.source_validator_name != "context_validator":
         errors.append(f"Invalid source_validator_name '{run.source_validator_name}': expected 'context_validator'")
     if not run.source_validator_version or run.source_validator_version.lower() != "v4":
@@ -257,7 +287,7 @@ def validate_extraction_run(run: ExtractionRun) -> Tuple[bool, List[str]]:
     if not run.source_validation_method or run.source_validation_method.upper() != "QWEN_CONTEXT_V4":
         errors.append(f"Invalid source_validation_method '{run.source_validation_method}': expected 'QWEN_CONTEXT_V4'")
 
-    # 2. Source Snapshot & SHA (Section 9, 10, 11)
+    # 2. Source Snapshot & SHA
     if not run.source_text_snapshot or not run.source_text_snapshot.strip():
         errors.append("source_text_snapshot is empty")
     else:
@@ -265,7 +295,6 @@ def validate_extraction_run(run: ExtractionRun) -> Tuple[bool, List[str]]:
         if run.source_text_sha256 and run.source_text_sha256 != calc_sha:
             errors.append(f"source_text_sha256 mismatch: expected {calc_sha}, got {run.source_text_sha256}")
 
-    # 3. Entity & Field Evidence Validation (Section 14 & 15)
     core_field_map = [
         ("product_name_raw", "product_name"),
         ("manufacturer_raw", "manufacturer"),
@@ -295,7 +324,7 @@ def validate_extraction_run(run: ExtractionRun) -> Tuple[bool, List[str]]:
                 errors.append(f"Entity [{idx}] FieldEvidence '{fe.field_name}' quote failed verification against source snapshot")
             field_ev_quotes.setdefault(fe.field_name, []).append(fe.source_quote)
 
-        # Check raw core field value-bound provenance (Section 14 & 15)
+        # Core Field Value-Bound Provenance
         for raw_attr, field_name in core_field_map:
             raw_val = getattr(ent, raw_attr, None)
             if raw_val:
@@ -308,32 +337,40 @@ def validate_extraction_run(run: ExtractionRun) -> Tuple[bool, List[str]]:
                     if not supported:
                         errors.append(f"Entity [{idx}] raw_value '{raw_val}' for '{field_name}' is NOT supported by field_evidence quote(s)")
 
-        # Numeric / Normalized Consistency Checks (Section 16 & 17)
+        # Entity Fail-Closed Numeric Checks (Section 4 & 5)
         if ent.quantity_value is not None:
-            if not ent.quantity_raw:
-                errors.append(f"Entity [{idx}] populated quantity_value requires quantity_raw")
-            elif not validate_numeric_consistency(ent.quantity_raw, ent.quantity_value):
-                errors.append(f"Entity [{idx}] quantity_value {ent.quantity_value} inconsistent with quantity_raw '{ent.quantity_raw}'")
+            if not validate_numeric_consistency(ent.quantity_raw, ent.quantity_value):
+                errors.append(f"Entity [{idx}] quantity_value {ent.quantity_value} failed numeric consistency against quantity_raw '{ent.quantity_raw}'")
 
         if ent.unit_price_value is not None:
-            if not ent.unit_price_raw:
-                errors.append(f"Entity [{idx}] populated unit_price_value requires unit_price_raw")
-            elif not validate_numeric_consistency(ent.unit_price_raw, ent.unit_price_value):
-                errors.append(f"Entity [{idx}] unit_price_value {ent.unit_price_value} inconsistent with unit_price_raw '{ent.unit_price_raw}'")
+            if not validate_numeric_consistency(ent.unit_price_raw, ent.unit_price_value):
+                errors.append(f"Entity [{idx}] unit_price_value {ent.unit_price_value} failed numeric consistency against unit_price_raw '{ent.unit_price_raw}'")
 
         if ent.total_price_value is not None:
-            if not ent.total_price_raw:
-                errors.append(f"Entity [{idx}] populated total_price_value requires total_price_raw")
-            elif not validate_numeric_consistency(ent.total_price_raw, ent.total_price_value):
-                errors.append(f"Entity [{idx}] total_price_value {ent.total_price_value} inconsistent with total_price_raw '{ent.total_price_raw}'")
+            if not validate_numeric_consistency(ent.total_price_raw, ent.total_price_value):
+                errors.append(f"Entity [{idx}] total_price_value {ent.total_price_value} failed numeric consistency against total_price_raw '{ent.total_price_raw}'")
 
+        # Quantity Unit Provenance (Section 9)
+        if ent.quantity_unit_raw is not None and str(ent.quantity_unit_raw).strip():
+            if not ent.quantity_raw or not str(ent.quantity_raw).strip():
+                errors.append(f"Entity [{idx}] quantity_unit_raw '{ent.quantity_unit_raw}' requires quantity_raw")
+            else:
+                norm_q_unit = normalize_whitespace(ent.quantity_unit_raw)
+                q_quotes = field_ev_quotes.get("quantity", [])
+                supported = (norm_q_unit in normalize_whitespace(ent.quantity_raw)) or any(norm_q_unit in normalize_whitespace(q) for q in q_quotes)
+                if not supported:
+                    errors.append(f"Entity [{idx}] quantity_unit_raw '{ent.quantity_unit_raw}' not supported by quantity_raw or quote")
+
+        if ent.quantity_unit_normalized is not None and str(ent.quantity_unit_normalized).strip():
+            if not ent.quantity_unit_raw or not str(ent.quantity_unit_raw).strip():
+                errors.append(f"Entity [{idx}] quantity_unit_normalized '{ent.quantity_unit_normalized}' requires quantity_unit_raw")
+
+        # Currency Fail-Closed Check (Section 10 & 11)
         if ent.currency_code is not None:
-            if not ent.currency_raw:
-                errors.append(f"Entity [{idx}] populated currency_code requires currency_raw")
-            elif not validate_currency_consistency(ent.currency_raw, ent.currency_code):
-                errors.append(f"Entity [{idx}] currency_code '{ent.currency_code}' inconsistent with currency_raw '{ent.currency_raw}'")
+            if not validate_currency_consistency(ent.currency_raw, ent.currency_code):
+                errors.append(f"Entity [{idx}] currency_code '{ent.currency_code}' failed consistency against currency_raw '{ent.currency_raw}'")
 
-        # Attribute Value Provenance (Section 18 & 19)
+        # Attribute Fail-Closed Checks (Section 7 & 8)
         for attr_idx, attr in enumerate(ent.attributes):
             if not attr.raw_value or not attr.raw_value.strip():
                 errors.append(f"Entity [{idx}] Attribute [{attr_idx}] raw_value is empty")
@@ -344,6 +381,25 @@ def validate_extraction_run(run: ExtractionRun) -> Tuple[bool, List[str]]:
                 norm_attr_quote = normalize_whitespace(attr.source_quote)
                 if norm_attr_raw not in norm_attr_quote:
                     errors.append(f"Entity [{idx}] Attribute [{attr_idx}] raw_value '{attr.raw_value}' is NOT supported by attribute source_quote '{attr.source_quote}'")
+
+            # Attribute Numeric Validation (Section 7)
+            if attr.numeric_value is not None:
+                parsed_attr_nums = parse_numeric_values_from_string(attr.raw_value)
+                if not parsed_attr_nums:
+                    errors.append(f"Entity [{idx}] Attribute [{attr_idx}] numeric_value {attr.numeric_value} provided for unparseable raw_value '{attr.raw_value}'")
+                elif not any(abs(p - attr.numeric_value) < 1e-4 for p in parsed_attr_nums):
+                    errors.append(f"Entity [{idx}] Attribute [{attr_idx}] numeric_value {attr.numeric_value} does not match raw_value '{attr.raw_value}'")
+
+            # Attribute Unit Validation (Section 8)
+            if attr.unit_raw is not None and str(attr.unit_raw).strip():
+                norm_attr_unit = normalize_whitespace(attr.unit_raw)
+                unit_supported = (norm_attr_unit in normalize_whitespace(attr.raw_value)) or (norm_attr_unit in normalize_whitespace(attr.source_quote))
+                if not unit_supported:
+                    errors.append(f"Entity [{idx}] Attribute [{attr_idx}] unit_raw '{attr.unit_raw}' not supported by raw_value or quote")
+
+            if attr.unit_normalized is not None and str(attr.unit_normalized).strip():
+                if not attr.unit_raw or not str(attr.unit_raw).strip():
+                    errors.append(f"Entity [{idx}] Attribute [{attr_idx}] unit_normalized '{attr.unit_normalized}' requires unit_raw")
 
     return (len(errors) == 0, errors)
 
