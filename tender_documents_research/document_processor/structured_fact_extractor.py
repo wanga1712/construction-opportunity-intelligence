@@ -4,7 +4,9 @@ Extracts raw documentary product/material/equipment/technology/work facts and ex
 from trusted V4 CONFIRMED candidate source document snapshots using qwen2.5:7b.
 
 Guarantees:
+- Taxonomy human-readable category/subcategory lookup using CrmTaxonomyLoader.
 - Model output is RAW-first (raw text + exact quotes). Model does NOT invent normalized commercial truth.
+- Strict schema validation (missing entity_type, malformed optional fields/attributes, orphan quotes/units fail closed).
 - Fail-closed validation via validate_extraction_run() BEFORE an extraction is marked COMPLETE.
 - Strict input authority verification (no model call if input snapshot is invalid).
 - Model identity verification (refuses calls if returned model is not qwen2.5:7b).
@@ -48,33 +50,46 @@ class StructuredFactExtractor:
     def __init__(
         self,
         ai_caller: Optional[Callable[..., Tuple[str, Dict[str, Any]]]] = None,
-        taxonomy_loader: Optional[CrmTaxonomyLoader] = None,
+        taxonomy_loader: Optional[Any] = None,
         model_name: str = STRUCTURED_EXTRACTOR_MODEL,
     ):
         self.ai_caller = ai_caller or default_ai_caller
-        self.taxonomy_loader = taxonomy_loader
+        if taxonomy_loader is None:
+            self.taxonomy_loader = CrmTaxonomyLoader()
+        else:
+            self.taxonomy_loader = taxonomy_loader
         self.model_name = model_name
 
     def get_category_names(self, category_code: str, subcategory_code: Optional[str] = None) -> Tuple[str, str]:
-        """Resolves human-readable category and subcategory names from taxonomy loader."""
-        cat_name = category_code
-        subcat_name = subcategory_code or ""
-        
+        """
+        Resolves human-readable category and subcategory names from taxonomy loader.
+        Uses exact CrmTaxonomyLoader data contract:
+          category_entry["category_name"]
+          subcat_obj.subcategory_name
+        Falls back explicitly to machine codes if category or subcategory is unknown.
+        Does NOT swallow structural/type errors on known taxonomy entries.
+        """
+        category_name = category_code
+        subcategory_name = subcategory_code or ""
+
         if self.taxonomy_loader:
-            try:
-                tax = self.taxonomy_loader.load_snapshot()
-                cats = tax.categories if hasattr(tax, "categories") else {}
-                if category_code in cats:
-                    c_info = cats[category_code]
-                    cat_name = c_info.get("name", category_code)
-                    if subcategory_code and "subcategories" in c_info:
-                        subcats = c_info["subcategories"]
-                        if subcategory_code in subcats:
-                            subcat_info = subcats[subcategory_code]
-                            subcat_name = subcat_info.get("name", subcategory_code)
-            except Exception:
-                pass
-        return (cat_name, subcat_name)
+            snapshot = self.taxonomy_loader.load_snapshot()
+            categories = snapshot.categories if hasattr(snapshot, "categories") else (snapshot.get("categories") if isinstance(snapshot, dict) else {})
+            
+            if category_code in categories:
+                c_entry = categories[category_code]
+                category_name = c_entry["category_name"]
+
+                if subcategory_code:
+                    subcats = c_entry.get("subcategories", {})
+                    if subcategory_code in subcats:
+                        subcat_obj = subcats[subcategory_code]
+                        if hasattr(subcat_obj, "subcategory_name"):
+                            subcategory_name = subcat_obj.subcategory_name
+                        elif isinstance(subcat_obj, dict):
+                            subcategory_name = subcat_obj["subcategory_name"]
+
+        return (category_name, subcategory_name)
 
     def build_prompt(
         self,
@@ -99,7 +114,7 @@ CRITICAL INSTRUCTIONS:
 2. RAW FACTS ONLY: Output raw text exactly as written in the source document. Do NOT invent normalized names or normalized commercial identities.
 3. QUOTE REQUIREMENT: For EVERY non-null raw field and attribute, you MUST provide the exact verbatim "quote" from the source text where that value appears. Every quote MUST be an exact substring of the source text.
 4. MISSING FACTS = NULL: If a field (manufacturer, brand, product_line, model_article, quantity, price, currency, attribute) is NOT explicitly stated in the source text, set its "raw" and "quote" to null. NEVER infer a missing manufacturer from brand or model names.
-5. ENTITY TYPES: Allowed entity_type values are ONLY: "PRODUCT", "MATERIAL", "EQUIPMENT", "TECHNOLOGY", "WORK".
+5. ENTITY TYPES: Allowed entity_type values are ONLY: "PRODUCT", "MATERIAL", "EQUIPMENT", "TECHNOLOGY", "WORK". entity_type MUST be explicitly provided.
 6. MULTIPLE OR ZERO ENTITIES: You may extract 0, 1, or multiple entities if multiple distinct items exist. If no separable entity is described in the text, return "entities": [].
 7. JSON ONLY: Respond ONLY with a valid JSON object matching the JSON schema.
 
@@ -142,15 +157,14 @@ SOURCE DOCUMENT TEXT:
         source_text_snapshot: str,
     ) -> Tuple[List[StructuredEntity], Optional[str]]:
         """
-        Parses raw model JSON output into StructuredEntity list.
-        Validates exact quote containment against source_text_snapshot.
-        Applies deterministic fail-closed post-extraction normalization helpers.
+        Parses raw model JSON output into StructuredEntity list with strict schema enforcement.
+        Protected by complete exception boundary (never raises AttributeError/TypeError/KeyError).
         
         Returns (entities, error_code). If error_code is not None, parsing failed.
         """
         try:
             # Clean JSON markdown fences if present
-            cleaned_text = raw_response_text.strip()
+            cleaned_text = str(raw_response_text).strip()
             if cleaned_text.startswith("```json"):
                 cleaned_text = cleaned_text[7:]
             if cleaned_text.startswith("```"):
@@ -160,193 +174,242 @@ SOURCE DOCUMENT TEXT:
             cleaned_text = cleaned_text.strip()
 
             data = json.loads(cleaned_text)
-        except Exception as e:
+        except Exception:
             return ([], "INVALID_JSON")
 
-        if not isinstance(data, dict) or "entities" not in data:
-            return ([], "INVALID_SCHEMA")
+        try:
+            if not isinstance(data, dict):
+                return ([], "INVALID_SCHEMA")
+            if "entities" not in data or not isinstance(data["entities"], list):
+                return ([], "INVALID_SCHEMA")
 
-        raw_entities = data.get("entities")
-        if not isinstance(raw_entities, list):
-            return ([], "INVALID_SCHEMA")
+            raw_entities = data["entities"]
+            entities: List[StructuredEntity] = []
 
-        entities: List[StructuredEntity] = []
+            for idx, ent_dict in enumerate(raw_entities):
+                if not isinstance(ent_dict, dict):
+                    return ([], "INVALID_ENTITY_SHAPE")
 
-        for idx, ent_dict in enumerate(raw_entities):
-            if not isinstance(ent_dict, dict):
-                return ([], "INVALID_ENTITY_SHAPE")
-
-            entity_type = str(ent_dict.get("entity_type", "PRODUCT")).upper()
-            if entity_type not in ALLOWED_ENTITY_TYPES:
-                return ([], "INVALID_ENTITY_TYPE")
-
-            prod_dict = ent_dict.get("product_name") or {}
-            p_raw = prod_dict.get("raw")
-            p_quote = prod_dict.get("quote")
-
-            if not p_raw or not str(p_raw).strip():
-                return ([], "MISSING_PRODUCT_NAME")
-            if not p_quote or not verify_source_quote(p_quote, source_text_snapshot):
-                return ([], "PRODUCT_NAME_QUOTE_INVALID")
-            if normalize_whitespace(p_raw) not in normalize_whitespace(p_quote):
-                return ([], "PRODUCT_NAME_VALUE_NOT_IN_QUOTE")
-
-            entity_anchor_quote = p_quote
-            field_evidence: List[StructuredFieldEvidence] = [
-                StructuredFieldEvidence(field_name="product_name", source_quote=p_quote)
-            ]
-
-            # Core fields helper
-            core_fields = {
-                "manufacturer": "manufacturer_raw",
-                "brand": "brand_raw",
-                "product_line": "product_line_raw",
-                "model_article": "model_article_raw",
-                "unit_price": "unit_price_raw",
-                "total_price": "total_price_raw",
-                "currency": "currency_raw",
-            }
-            extracted_raw: Dict[str, Optional[str]] = {}
-
-            for field_key, entity_attr in core_fields.items():
-                f_dict = ent_dict.get(field_key) or {}
-                raw_v = f_dict.get("raw")
-                quote_v = f_dict.get("quote")
-                if raw_v and str(raw_v).strip():
-                    if not quote_v or not verify_source_quote(quote_v, source_text_snapshot):
-                        return ([], f"{field_key.upper()}_QUOTE_INVALID")
-                    if normalize_whitespace(raw_v) not in normalize_whitespace(quote_v):
-                        return ([], f"{field_key.upper()}_VALUE_NOT_IN_QUOTE")
-                    extracted_raw[entity_attr] = str(raw_v).strip()
-                    field_evidence.append(StructuredFieldEvidence(field_name=field_key, source_quote=quote_v))
-                else:
-                    extracted_raw[entity_attr] = None
-
-            # Quantity handling
-            q_dict = ent_dict.get("quantity") or {}
-            q_raw = q_dict.get("raw")
-            q_unit_raw = q_dict.get("unit_raw")
-            q_quote = q_dict.get("quote")
-            
-            quantity_raw = None
-            quantity_value = None
-            quantity_unit_raw = None
-            
-            if q_raw and str(q_raw).strip():
-                if not q_quote or not verify_source_quote(q_quote, source_text_snapshot):
-                    return ([], "QUANTITY_QUOTE_INVALID")
-                if normalize_whitespace(q_raw) not in normalize_whitespace(q_quote):
-                    return ([], "QUANTITY_VALUE_NOT_IN_QUOTE")
+                # Explicit entity_type requirement (NO default to PRODUCT!)
+                if "entity_type" not in ent_dict or ent_dict["entity_type"] is None:
+                    return ([], "MISSING_ENTITY_TYPE")
                 
-                quantity_raw = str(q_raw).strip()
-                field_evidence.append(StructuredFieldEvidence(field_name="quantity", source_quote=q_quote))
-                
-                # Fail-closed deterministic numeric parsing: ONLY if uniquely parseable!
-                nums = parse_numeric_values_from_string(quantity_raw)
-                if len(nums) == 1:
-                    quantity_value = nums[0]
-                else:
-                    quantity_value = None  # Multiple or 0 parseable numbers -> NULL!
+                e_type_raw = ent_dict["entity_type"]
+                if not isinstance(e_type_raw, str) or not e_type_raw.strip():
+                    return ([], "INVALID_ENTITY_TYPE")
 
-                if q_unit_raw and str(q_unit_raw).strip():
-                    q_unit_str = str(q_unit_raw).strip()
-                    norm_u = normalize_whitespace(q_unit_str)
-                    if norm_u in normalize_whitespace(quantity_raw) or norm_u in normalize_whitespace(q_quote):
-                        quantity_unit_raw = q_unit_str
-                    else:
-                        return ([], "QUANTITY_UNIT_NOT_IN_QUOTE")
+                entity_type = e_type_raw.strip().upper()
+                if entity_type not in ALLOWED_ENTITY_TYPES:
+                    return ([], "UNSUPPORTED_ENTITY_TYPE")
 
-            # Deterministic numeric parsing for price fields
-            unit_price_value = None
-            if extracted_raw["unit_price_raw"]:
-                nums = parse_numeric_values_from_string(extracted_raw["unit_price_raw"])
-                if len(nums) == 1:
-                    unit_price_value = nums[0]
+                # Required product_name shape
+                if "product_name" not in ent_dict or not isinstance(ent_dict["product_name"], dict):
+                    return ([], "INVALID_PRODUCT_NAME_SHAPE")
 
-            total_price_value = None
-            if extracted_raw["total_price_raw"]:
-                nums = parse_numeric_values_from_string(extracted_raw["total_price_raw"])
-                if len(nums) == 1:
-                    total_price_value = nums[0]
+                prod_dict = ent_dict["product_name"]
+                p_raw = prod_dict.get("raw")
+                p_quote = prod_dict.get("quote")
 
-            # Currency code check
-            currency_code = None
-            if extracted_raw["currency_raw"]:
-                if validate_currency_consistency(extracted_raw["currency_raw"], "RUB"):
-                    currency_code = "RUB"
+                if p_raw is None or not isinstance(p_raw, str) or not p_raw.strip():
+                    return ([], "MISSING_PRODUCT_NAME")
+                if p_quote is None or not isinstance(p_quote, str) or not p_quote.strip():
+                    return ([], "PRODUCT_NAME_QUOTE_INVALID")
+                if not verify_source_quote(p_quote, source_text_snapshot):
+                    return ([], "PRODUCT_NAME_QUOTE_NOT_IN_SOURCE")
+                if normalize_whitespace(p_raw) not in normalize_whitespace(p_quote):
+                    return ([], "PRODUCT_NAME_VALUE_NOT_IN_QUOTE")
 
-            # Attributes parsing
-            raw_attrs = ent_dict.get("attributes") or []
-            attributes: List[StructuredAttribute] = []
-            
-            if isinstance(raw_attrs, list):
-                for a_idx, a_dict in enumerate(raw_attrs):
-                    if not isinstance(a_dict, dict):
-                        return ([], "INVALID_ATTRIBUTE_SHAPE")
-                    a_name = a_dict.get("name")
-                    a_raw = a_dict.get("raw_value")
-                    a_quote = a_dict.get("quote")
-                    a_unit = a_dict.get("unit_raw")
+                entity_anchor_quote = p_quote
+                field_evidence: List[StructuredFieldEvidence] = [
+                    StructuredFieldEvidence(field_name="product_name", source_quote=p_quote)
+                ]
 
-                    if not a_name or not str(a_name).strip() or not a_raw or not str(a_raw).strip():
-                        return ([], "ATTRIBUTE_MISSING_NAME_OR_VALUE")
-                    if not a_quote or not verify_source_quote(a_quote, source_text_snapshot):
-                        return ([], "ATTRIBUTE_QUOTE_INVALID")
-                    if normalize_whitespace(a_raw) not in normalize_whitespace(a_quote):
-                        return ([], "ATTRIBUTE_VALUE_NOT_IN_QUOTE")
+                # Optional core fields shape & coherence check
+                core_fields = [
+                    ("manufacturer", "manufacturer_raw"),
+                    ("brand", "brand_raw"),
+                    ("product_line", "product_line_raw"),
+                    ("model_article", "model_article_raw"),
+                    ("unit_price", "unit_price_raw"),
+                    ("total_price", "total_price_raw"),
+                    ("currency", "currency_raw"),
+                ]
+                extracted_raw: Dict[str, Optional[str]] = {}
 
-                    norm_a_name = re.sub(r"[^\w]+", "_", str(a_name).lower()).strip("_")
-                    if not norm_a_name:
-                        norm_a_name = f"attribute_{a_idx+1}"
+                for field_key, entity_attr in core_fields:
+                    f_val = ent_dict.get(field_key)
+                    if f_val is not None:
+                        if not isinstance(f_val, dict):
+                            return ([], f"INVALID_{field_key.upper()}_SHAPE")
+                        raw_v = f_val.get("raw")
+                        quote_v = f_val.get("quote")
 
-                    a_num_value = None
-                    a_nums = parse_numeric_values_from_string(str(a_raw))
-                    if len(a_nums) == 1:
-                        a_num_value = a_nums[0]
-
-                    a_unit_raw = None
-                    if a_unit and str(a_unit).strip():
-                        u_str = str(a_unit).strip()
-                        norm_u = normalize_whitespace(u_str)
-                        if norm_u in normalize_whitespace(a_raw) or norm_u in normalize_whitespace(a_quote):
-                            a_unit_raw = u_str
+                        if raw_v is None:
+                            if quote_v is not None:
+                                return ([], f"ORPHAN_QUOTE_{field_key.upper()}")
+                            extracted_raw[entity_attr] = None
                         else:
-                            return ([], "ATTRIBUTE_UNIT_NOT_IN_QUOTE")
+                            if not isinstance(raw_v, str) or not raw_v.strip():
+                                return ([], f"INVALID_RAW_{field_key.upper()}")
+                            if quote_v is None or not isinstance(quote_v, str) or not quote_v.strip():
+                                return ([], f"MISSING_QUOTE_{field_key.upper()}")
+                            if not verify_source_quote(quote_v, source_text_snapshot):
+                                return ([], f"{field_key.upper()}_QUOTE_NOT_IN_SOURCE")
+                            if normalize_whitespace(raw_v) not in normalize_whitespace(quote_v):
+                                return ([], f"{field_key.upper()}_VALUE_NOT_IN_QUOTE")
+                            
+                            extracted_raw[entity_attr] = raw_v.strip()
+                            field_evidence.append(StructuredFieldEvidence(field_name=field_key, source_quote=quote_v))
+                    else:
+                        extracted_raw[entity_attr] = None
 
-                    attributes.append(
-                        StructuredAttribute(
-                            attribute_name=str(a_name).strip(),
-                            attribute_name_normalized=norm_a_name,
-                            raw_value=str(a_raw).strip(),
-                            source_quote=a_quote,
-                            numeric_value=a_num_value,
-                            unit_raw=a_unit_raw,
+                # Quantity shape & coherence check
+                quantity_raw = None
+                quantity_value = None
+                quantity_unit_raw = None
+
+                q_val = ent_dict.get("quantity")
+                if q_val is not None:
+                    if not isinstance(q_val, dict):
+                        return ([], "INVALID_QUANTITY_SHAPE")
+                    
+                    q_raw = q_val.get("raw")
+                    q_quote = q_val.get("quote")
+                    q_unit_raw = q_val.get("unit_raw")
+
+                    if q_raw is None:
+                        if q_quote is not None:
+                            return ([], "ORPHAN_QUOTE_QUANTITY")
+                        if q_unit_raw is not None:
+                            return ([], "ORPHAN_UNIT_QUANTITY")
+                    else:
+                        if not isinstance(q_raw, str) or not q_raw.strip():
+                            return ([], "INVALID_RAW_QUANTITY")
+                        if q_quote is None or not isinstance(q_quote, str) or not q_quote.strip():
+                            return ([], "MISSING_QUOTE_QUANTITY")
+                        if not verify_source_quote(q_quote, source_text_snapshot):
+                            return ([], "QUANTITY_QUOTE_NOT_IN_SOURCE")
+                        if normalize_whitespace(q_raw) not in normalize_whitespace(q_quote):
+                            return ([], "QUANTITY_VALUE_NOT_IN_QUOTE")
+
+                        quantity_raw = q_raw.strip()
+                        field_evidence.append(StructuredFieldEvidence(field_name="quantity", source_quote=q_quote))
+
+                        nums = parse_numeric_values_from_string(quantity_raw)
+                        if len(nums) == 1:
+                            quantity_value = nums[0]
+
+                        if q_unit_raw is not None:
+                            if not isinstance(q_unit_raw, str) or not q_unit_raw.strip():
+                                return ([], "INVALID_QUANTITY_UNIT_SHAPE")
+                            q_unit_str = q_unit_raw.strip()
+                            norm_u = normalize_whitespace(q_unit_str)
+                            if norm_u in normalize_whitespace(quantity_raw) or norm_u in normalize_whitespace(q_quote):
+                                quantity_unit_raw = q_unit_str
+                            else:
+                                return ([], "QUANTITY_UNIT_NOT_IN_QUOTE")
+
+                # Deterministic numeric parsing for price fields
+                unit_price_value = None
+                if extracted_raw["unit_price_raw"]:
+                    nums = parse_numeric_values_from_string(extracted_raw["unit_price_raw"])
+                    if len(nums) == 1:
+                        unit_price_value = nums[0]
+
+                total_price_value = None
+                if extracted_raw["total_price_raw"]:
+                    nums = parse_numeric_values_from_string(extracted_raw["total_price_raw"])
+                    if len(nums) == 1:
+                        total_price_value = nums[0]
+
+                # Currency code check
+                currency_code = None
+                if extracted_raw["currency_raw"]:
+                    if validate_currency_consistency(extracted_raw["currency_raw"], "RUB"):
+                        currency_code = "RUB"
+
+                # Attributes strict shape & coherence check
+                attributes: List[StructuredAttribute] = []
+                if "attributes" in ent_dict and ent_dict["attributes"] is not None:
+                    if not isinstance(ent_dict["attributes"], list):
+                        return ([], "INVALID_ATTRIBUTES_SHAPE")
+
+                    for a_idx, a_dict in enumerate(ent_dict["attributes"]):
+                        if not isinstance(a_dict, dict):
+                            return ([], "INVALID_ATTRIBUTE_SHAPE")
+
+                        a_name = a_dict.get("name")
+                        a_raw = a_dict.get("raw_value")
+                        a_quote = a_dict.get("quote")
+                        a_unit = a_dict.get("unit_raw")
+
+                        if a_name is None or not isinstance(a_name, str) or not a_name.strip():
+                            return ([], "INVALID_ATTRIBUTE_NAME")
+                        if a_raw is None or not isinstance(a_raw, str) or not a_raw.strip():
+                            return ([], "INVALID_ATTRIBUTE_RAW_VALUE")
+                        if a_quote is None or not isinstance(a_quote, str) or not a_quote.strip():
+                            return ([], "INVALID_ATTRIBUTE_QUOTE")
+                        if not verify_source_quote(a_quote, source_text_snapshot):
+                            return ([], "ATTRIBUTE_QUOTE_NOT_IN_SOURCE")
+                        if normalize_whitespace(a_raw) not in normalize_whitespace(a_quote):
+                            return ([], "ATTRIBUTE_VALUE_NOT_IN_QUOTE")
+
+                        norm_a_name = re.sub(r"[^\w]+", "_", a_name.lower()).strip("_")
+                        if not norm_a_name:
+                            norm_a_name = f"attribute_{a_idx+1}"
+
+                        a_num_value = None
+                        a_nums = parse_numeric_values_from_string(a_raw)
+                        if len(a_nums) == 1:
+                            a_num_value = a_nums[0]
+
+                        a_unit_raw = None
+                        if a_unit is not None:
+                            if not isinstance(a_unit, str) or not a_unit.strip():
+                                return ([], "INVALID_ATTRIBUTE_UNIT_SHAPE")
+                            u_str = a_unit.strip()
+                            norm_u = normalize_whitespace(u_str)
+                            if norm_u in normalize_whitespace(a_raw) or norm_u in normalize_whitespace(a_quote):
+                                a_unit_raw = u_str
+                            else:
+                                return ([], "ATTRIBUTE_UNIT_NOT_IN_QUOTE")
+
+                        attributes.append(
+                            StructuredAttribute(
+                                attribute_name=a_name.strip(),
+                                attribute_name_normalized=norm_a_name,
+                                raw_value=a_raw.strip(),
+                                source_quote=a_quote,
+                                numeric_value=a_num_value,
+                                unit_raw=a_unit_raw,
+                            )
                         )
-                    )
 
-            ent = StructuredEntity(
-                product_name_raw=p_raw.strip(),
-                source_quote=entity_anchor_quote,
-                entity_type=entity_type,
-                manufacturer_raw=extracted_raw["manufacturer_raw"],
-                brand_raw=extracted_raw["brand_raw"],
-                product_line_raw=extracted_raw["product_line_raw"],
-                model_article_raw=extracted_raw["model_article_raw"],
-                quantity_raw=quantity_raw,
-                quantity_value=quantity_value,
-                quantity_unit_raw=quantity_unit_raw,
-                unit_price_raw=extracted_raw["unit_price_raw"],
-                unit_price_value=unit_price_value,
-                total_price_raw=extracted_raw["total_price_raw"],
-                total_price_value=total_price_value,
-                currency_raw=extracted_raw["currency_raw"],
-                currency_code=currency_code,
-                field_evidence=field_evidence,
-                attributes=attributes,
-            )
-            entities.append(ent)
+                ent = StructuredEntity(
+                    product_name_raw=p_raw.strip(),
+                    source_quote=entity_anchor_quote,
+                    entity_type=entity_type,
+                    manufacturer_raw=extracted_raw["manufacturer_raw"],
+                    brand_raw=extracted_raw["brand_raw"],
+                    product_line_raw=extracted_raw["product_line_raw"],
+                    model_article_raw=extracted_raw["model_article_raw"],
+                    quantity_raw=quantity_raw,
+                    quantity_value=quantity_value,
+                    quantity_unit_raw=quantity_unit_raw,
+                    unit_price_raw=extracted_raw["unit_price_raw"],
+                    unit_price_value=unit_price_value,
+                    total_price_raw=extracted_raw["total_price_raw"],
+                    total_price_value=total_price_value,
+                    currency_raw=extracted_raw["currency_raw"],
+                    currency_code=currency_code,
+                    field_evidence=field_evidence,
+                    attributes=attributes,
+                )
+                entities.append(ent)
 
-        return (entities, None)
+            return (entities, None)
+        except Exception:
+            return ([], "PARSER_EXCEPTION")
 
     def extract_candidate(self, candidate: Dict[str, Any]) -> ExtractionRun:
         """
@@ -387,7 +450,7 @@ SOURCE DOCUMENT TEXT:
             status="PENDING",
         )
 
-        # 1. Authority Pre-checks (Section 5)
+        # 1. Authority Pre-checks
         if (
             candidate.get("validation_status") != "CONFIRMED"
             or candidate.get("source_validator_name") != "context_validator"
@@ -406,7 +469,7 @@ SOURCE DOCUMENT TEXT:
         # 2. Build Prompt
         prompt = self.build_prompt(category_code, subcategory_code, snapshot)
 
-        # 3. Model Call & Model Identity Check (Section 22)
+        # 3. Model Call & Model Identity Check
         try:
             raw_text, meta = self.ai_caller(prompt, model=self.model_name, format_json=True)
         except Exception as e:
@@ -441,7 +504,7 @@ SOURCE DOCUMENT TEXT:
 
         run.entities = entities
 
-        # 5. Contract Validation & All-or-Nothing V1 Safety (Section 19 & 20)
+        # 5. Contract Validation & All-or-Nothing V1 Safety
         is_valid, errors = validate_extraction_run(run)
         if not is_valid:
             run.status = "ERROR"
@@ -450,7 +513,7 @@ SOURCE DOCUMENT TEXT:
             run.entities = []
             return run
 
-        # 6. Final Status (Section 21)
+        # 6. Final Status
         if len(entities) >= 1:
             run.status = "COMPLETE"
         else:
