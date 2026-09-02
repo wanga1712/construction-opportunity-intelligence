@@ -13,6 +13,7 @@ Fail-closed:
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 import json
 import logging
 import os
@@ -23,10 +24,16 @@ import psycopg2.extras
 from dotenv import load_dotenv
 
 try:
-    from tender_documents_research.document_processor.context_validator import ContextValidator
+    from tender_documents_research.document_processor.context_validator import (
+        ContextValidator,
+        is_retryable_technical_result,
+    )
     from tender_documents_research.document_processor.crm_taxonomy_loader import CrmTaxonomyLoader, TaxonomySnapshot
 except ImportError:
-    from document_processor.context_validator import ContextValidator
+    from document_processor.context_validator import (
+        ContextValidator,
+        is_retryable_technical_result,
+    )
     from document_processor.crm_taxonomy_loader import CrmTaxonomyLoader, TaxonomySnapshot
 from src.services.commercial_routing_v3.okpd_priors import (
     classify_target_okpd,
@@ -42,6 +49,32 @@ PIPELINE_GENERATION = "S13_V4_EXHAUSTIVE_CONTEXT"
 
 DEFAULT_TARGET_REFRESH_SECONDS = 60.0
 _TARGET_IDS_CACHE: Dict[str, Any] = {"ids": None, "refreshed_at": 0.0}
+
+INITIAL_BACKOFF_SECONDS = 60.0
+MAX_BACKOFF_SECONDS = 900.0
+BACKOFF_FACTOR = 2.0
+
+
+@dataclass
+class BatchResult:
+    claimed_count: int
+    target_validated_count: int
+    stale_filtered_count: int
+    has_technical_failure: bool = False
+    technical_reason: Optional[str] = None
+
+    def __eq__(self, other: Any) -> bool:
+        if isinstance(other, (int, float)):
+            return self.target_validated_count == int(other)
+        if isinstance(other, BatchResult):
+            return (
+                self.claimed_count == other.claimed_count
+                and self.target_validated_count == other.target_validated_count
+                and self.stale_filtered_count == other.stale_filtered_count
+                and self.has_technical_failure == other.has_technical_failure
+                and self.technical_reason == other.technical_reason
+            )
+        return False
 
 
 def get_target_procurement_ids(
@@ -221,13 +254,20 @@ def update_candidate_validations(conn, results: List[Dict[str, Any]]) -> Set[Tup
 
     Strict provenance enforcement: CONFIRMED results missing explicit validator provenance
     are demoted to UNKNOWN to prevent fake v1/v2 evidence creation.
+    Retryable technical failures (is_retryable_technical_result == True) are NEVER written
+    as terminal validations; they receive zero DML update so they remain unvalidated in DB.
     """
     affected: Set[Tuple[int, str]] = set()
     if not results:
         return affected
 
+    # Filter out retryable technical results — never write them to DB as terminal validations
+    terminal_results = [r for r in results if not is_retryable_technical_result(r)]
+    if not terminal_results:
+        return affected
+
     with conn.cursor() as cur:
-        for r in results:
+        for r in terminal_results:
             detail_id = r["detail_id"]
             status = r["decision"]
             method = r.get("validation_method")
@@ -385,11 +425,12 @@ def process_batch(
     target_procurement_ids: Optional[List[int]] = None,
     refresh_interval: float = DEFAULT_TARGET_REFRESH_SECONDS,
     use_target_cache: bool = True,
-) -> int:
+) -> BatchResult:
     """Processes a single batch of unvalidated candidates.
 
     When target_procurement_ids is None and use_target_cache is True (normal daemon usage),
     automatically fetches and uses cached target procurement IDs from CRM DB (refreshed every 60s).
+    Returns a BatchResult detailing claimed count, validated count, and any technical infrastructure failures.
     """
     if target_procurement_ids is None and use_target_cache:
         effective_target_ids = get_cached_target_procurement_ids(
@@ -402,7 +443,7 @@ def process_batch(
         doc_conn, batch_size=batch_size, target_procurement_ids=effective_target_ids
     )
     if not candidates:
-        return 0
+        return BatchResult(claimed_count=0, target_validated_count=0, stale_filtered_count=0)
 
     enriched = enrich_candidates_with_crm_facts(candidates, crm_conn, taxonomy_snapshot)
     target_candidates = filter_target_candidates(enriched, priors)
@@ -417,18 +458,40 @@ def process_batch(
             get_cached_target_procurement_ids(crm_conn, priors, force_refresh=True)
 
     if not target_candidates:
-        return 0
+        return BatchResult(
+            claimed_count=len(candidates),
+            target_validated_count=0,
+            stale_filtered_count=stale_filtered,
+        )
 
     results = validator.validate_candidates(target_candidates)
+
+    has_technical = any(is_retryable_technical_result(r) for r in results)
+    tech_reason = None
+    if has_technical:
+        for r in reversed(results):
+            if is_retryable_technical_result(r):
+                tech_reason = f"[{r.get('reason_code')}] {r.get('reason', '')}"
+                break
+
     affected = update_candidate_validations(doc_conn, results)
     rebuild_affected_evidence(doc_conn, affected)
+
+    terminal_validated_count = len([r for r in results if not is_retryable_technical_result(r)])
     logger.info(
-        "Processed batch: claimed=%d, target_validated=%d, stale_filtered=%d",
+        "Processed batch: claimed=%d, target_validated=%d, stale_filtered=%d, technical_failure=%s",
         len(candidates),
-        len(results),
+        terminal_validated_count,
         stale_filtered,
+        has_technical,
     )
-    return len(results)
+    return BatchResult(
+        claimed_count=len(candidates),
+        target_validated_count=terminal_validated_count,
+        stale_filtered_count=stale_filtered,
+        has_technical_failure=has_technical,
+        technical_reason=tech_reason,
+    )
 
 
 def main():
@@ -452,9 +515,11 @@ def main():
     taxonomy_snapshot = CrmTaxonomyLoader().load_snapshot()
     logger.info("Loaded %d OKPD priors and %d categories", len(priors), len(taxonomy_snapshot.categories))
 
+    current_backoff = 0.0
+
     while True:
         try:
-            count = process_batch(
+            batch_res = process_batch(
                 doc_conn,
                 crm_conn,
                 validator,
@@ -462,13 +527,32 @@ def main():
                 taxonomy_snapshot,
                 batch_size=20,
             )
-            if count == 0:
-                time.sleep(3.0)
+            if batch_res.has_technical_failure:
+                if current_backoff <= 0.0:
+                    current_backoff = INITIAL_BACKOFF_SECONDS
+                else:
+                    current_backoff = min(current_backoff * BACKOFF_FACTOR, MAX_BACKOFF_SECONDS)
+                logger.warning(
+                    "Infrastructure technical failure detected (%s). Backing off for %.1f seconds...",
+                    batch_res.technical_reason,
+                    current_backoff,
+                )
+                time.sleep(current_backoff)
             else:
-                logger.info("Validated batch of %d TARGET candidates", count)
+                if batch_res.claimed_count == 0:
+                    time.sleep(3.0)
+                else:
+                    logger.info("Validated batch of %d TARGET candidates", batch_res.target_validated_count)
+                # Reset backoff after a successful model-backed batch execution
+                current_backoff = 0.0
+
         except Exception as exc:
             logger.error("Error in validator daemon loop: %s", exc)
-            time.sleep(5.0)
+            if current_backoff <= 0.0:
+                current_backoff = INITIAL_BACKOFF_SECONDS
+            else:
+                current_backoff = min(current_backoff * BACKOFF_FACTOR, MAX_BACKOFF_SECONDS)
+            time.sleep(current_backoff)
 
 
 if __name__ == "__main__":

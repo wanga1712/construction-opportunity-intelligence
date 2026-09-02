@@ -30,8 +30,27 @@ DEFAULT_CONFIRM_THRESHOLD = 0.80
 DEFAULT_REJECT_THRESHOLD = 0.85
 DEFAULT_MAX_CONTEXT_CHARS = 3000
 DEFAULT_BATCH_SIZE = 10
+CONTEXT_VALIDATOR_MODEL_TIMEOUT_SECONDS = 180
 
 VALID_DECISIONS = frozenset({"CONFIRMED", "REJECTED", "UNKNOWN"})
+
+RETRYABLE_TECHNICAL_REASON_CODES = frozenset({
+    "MODEL_EXCEPTION",
+    "INVALID_JSON",
+    "JSON_PARSE_ERROR",
+    "INVALID_DECISION_ENUM",
+})
+
+
+def is_retryable_technical_result(result: Dict[str, Any]) -> bool:
+    """Determines if a validation result is an infrastructure/model technical failure that must NOT be written as a terminal DB validation."""
+    if not isinstance(result, dict):
+        return False
+    if result.get("is_technical_error"):
+        return True
+    reason_code = str(result.get("reason_code") or "").upper().strip()
+    return reason_code in RETRYABLE_TECHNICAL_REASON_CODES
+
 
 VALIDATOR_NAME = "context_validator"
 VALIDATOR_VERSION = "v4"
@@ -422,6 +441,7 @@ class ContextValidator:
         max_context_chars: int = DEFAULT_MAX_CONTEXT_CHARS,
         batch_size: int = DEFAULT_BATCH_SIZE,
         dedupe: bool = True,
+        timeout: float = CONTEXT_VALIDATOR_MODEL_TIMEOUT_SECONDS,
         ai_caller: Optional[Callable[[str], str]] = None,
     ) -> None:
         if max_context_chars < 300:
@@ -432,11 +452,12 @@ class ContextValidator:
         self.max_context_chars = max_context_chars
         self.batch_size = batch_size
         self.dedupe = dedupe
+        self.timeout = timeout
         self._ai_caller = ai_caller or (
             lambda p: generate(
                 f"{SYSTEM_PROMPT}\n\n{p}",
                 model=self.model,
-                timeout=75,
+                timeout=self.timeout,
                 format_json=True,
             )
         )
@@ -546,10 +567,12 @@ class ContextValidator:
         cat_code = candidate.get("category_code")
         sub_code = candidate.get("subcategory_code")
 
+        is_technical = bool(raw_decision.get("is_technical_error", False))
         decision = str(raw_decision.get("decision") or "UNKNOWN").upper().strip()
         if decision not in VALID_DECISIONS:
             decision = "UNKNOWN"
             reason_code = "INVALID_DECISION_ENUM"
+            is_technical = True
         else:
             reason_code = str(raw_decision.get("reason_code") or "UNSPECIFIED")
 
@@ -570,6 +593,7 @@ class ContextValidator:
                 reason_code = "MISSING_SUPPORTING_QUOTE"
                 confidence = 0.0
                 reason = f"Decision {decision} requires explicit non-empty supporting_quote from document context"
+                is_technical = False
             else:
                 norm_quote = _normalize_whitespace(quote)
                 if norm_quote not in norm_visible_source:
@@ -577,18 +601,21 @@ class ContextValidator:
                     reason_code = "HALLUCINATED_QUOTE"
                     confidence = 0.0
                     reason = f"Supporting quote not found in prompt-visible documentary source: {quote[:60]}"
+                    is_technical = False
 
         # Confidence gating
         if decision == "CONFIRMED" and confidence < self.confirm_threshold:
             decision = "UNKNOWN"
             reason_code = "LOW_CONFIDENCE"
             reason = f"Confidence {confidence:.2f} below CONFIRM_THRESHOLD {self.confirm_threshold:.2f}"
+            is_technical = False
         elif decision == "REJECTED" and confidence < self.reject_threshold:
             decision = "UNKNOWN"
             reason_code = "LOW_CONFIDENCE"
             reason = f"Confidence {confidence:.2f} below REJECT_THRESHOLD {self.reject_threshold:.2f}"
+            is_technical = False
 
-        return {
+        res = {
             "detail_id": detail_id,
             "procurement_id": candidate.get("procurement_id"),
             "category_code": cat_code,  # IMMUTABLE
@@ -602,7 +629,10 @@ class ContextValidator:
             "validator_name": VALIDATOR_NAME,
             "validator_version": VALIDATOR_VERSION,
             "validation_method": VALIDATION_METHOD,
+            "is_technical_error": is_technical,
         }
+        res["is_retryable"] = is_retryable_technical_result(res)
+        return res
 
     def validate_single(self, candidate: Dict[str, Any]) -> Dict[str, Any]:
         """Validates a single candidate using unified context payload."""
@@ -620,20 +650,48 @@ class ContextValidator:
             resp_text = self._ai_caller(prompt)
             match = re.search(r"\{.*\}", resp_text, re.DOTALL)
             if not match:
-                raw_decision = {"decision": "UNKNOWN", "reason_code": "INVALID_JSON", "confidence": 0.0}
+                raw_decision = {
+                    "decision": "UNKNOWN",
+                    "reason_code": "INVALID_JSON",
+                    "confidence": 0.0,
+                    "is_technical_error": True,
+                }
             else:
                 try:
                     raw_decision = json.loads(match.group(0))
                 except Exception as ex:
-                    raw_decision = {"decision": "UNKNOWN", "reason_code": "JSON_PARSE_ERROR", "confidence": 0.0, "reason": str(ex)}
+                    raw_decision = {
+                        "decision": "UNKNOWN",
+                        "reason_code": "JSON_PARSE_ERROR",
+                        "confidence": 0.0,
+                        "reason": str(ex),
+                        "is_technical_error": True,
+                    }
         except Exception as ex:
             logger.error(f"AI caller failed for detail_id {candidate.get('detail_id')}: {ex}")
-            raw_decision = {"decision": "UNKNOWN", "reason_code": "MODEL_EXCEPTION", "confidence": 0.0, "reason": str(ex)}
+            raw_decision = {
+                "decision": "UNKNOWN",
+                "reason_code": "MODEL_EXCEPTION",
+                "confidence": 0.0,
+                "reason": str(ex),
+                "is_technical_error": True,
+            }
 
         return self._verify_and_gate_decision(raw_decision, candidate, visible_source_text)
 
     def validate_candidates(self, candidates: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
-        return [self.validate_single(c) for c in candidates]
+        results = []
+        for c in candidates:
+            res = self.validate_single(c)
+            results.append(res)
+            if is_retryable_technical_result(res):
+                logger.error(
+                    "Technical infrastructure failure on candidate %s (%s). Stopping candidate batch validation.",
+                    c.get("detail_id") or c.get("id"),
+                    res.get("reason_code"),
+                )
+                break
+        return results
 
 
 def validate_candidates(
@@ -644,8 +702,4 @@ def validate_candidates(
     """Convenience helper to validate a batch of candidates."""
     if validator is None:
         validator = ContextValidator()
-    results = []
-    for cand in candidates:
-        res = validator.validate_single(cand)
-        results.append(res)
-    return results
+    return validator.validate_candidates(candidates)
