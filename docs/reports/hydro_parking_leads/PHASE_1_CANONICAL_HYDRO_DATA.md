@@ -9,20 +9,28 @@ BLOCKER_RESOLUTION=APPROVED_S13_ALIAS_PROVIDED
 
 ## Status
 
-`BLOCKED — SOURCE CATALOG AUTHORITY MISSING`
+`BLOCKED — IDENTITY_AUTHORITY_MISSING_S7_ALIAS`
 
 The operator authorized Phase 1 and supplied the exact approved S13 alias.
-The CRM catalog preflight completed read-only. The required source-side
-catalog is a separate S7 authority, but its exact approved SSH alias is not
-available in the checkpoint. A safe attempt must not select an arbitrary SSH
-block. Therefore source schema is not assumed and no Phase 1 DDL design,
-migration, service code or production write was performed.
+The CRM catalog preflight completed read-only. Deterministic local SSH-config
+discovery found zero blocks that can be proven to be the approved S7 block.
+A safe attempt must not select an arbitrary SSH block. Therefore the source
+schema is not assumed and no Phase 1 DDL design, migration, service code or
+production write was performed.
+
+```text
+S13_CATALOG_PREFLIGHT=PASS
+S7_ALIAS_DISCOVERY=BLOCKED
+MATCHING_BLOCK_COUNT=0
+S7_SOURCE_CATALOG_PREFLIGHT=NOT_RUN
+IDENTITY_AUTHORITY_MISSING_S7_ALIAS
+```
 
 ## Live catalog preflight
 
 ```text
 CRM_CATALOG_PREFLIGHT=PASS (S13, read-only)
-SOURCE_CATALOG_PREFLIGHT=NOT_RUN
+S7_SOURCE_CATALOG_PREFLIGHT=NOT_RUN
 OVERALL_LIVE_CATALOG_PREFLIGHT=BLOCKED
 ```
 

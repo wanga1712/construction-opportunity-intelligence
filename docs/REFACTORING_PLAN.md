@@ -44,19 +44,17 @@ Phase 0 audit status and gate:
 
 ## PHASE 1 — CANONICAL HYDRO DATA
 
-`[!]` **BLOCKED BEFORE IMPLEMENTATION — SOURCE CATALOG AUTHORITY MISSING**
+`[!]` **BLOCKED BEFORE IMPLEMENTATION — IDENTITY_AUTHORITY_MISSING_S7_ALIAS**
 
 Operator explicitly authorized Phase 1 and the Phase 0 branch was published
 normally to canonical `origin` at `aae7377d6d1b9d235ffd17f206dc08b2e121a69f`.
 The approved S13 alias was supplied and the CRM catalog preflight passed
-read-only. It found production-side `parking_prefunnel_*` and
-`management_companies` structures not present in the Phase 0 repository
-contract, while the Phase 0 source tables are absent from the CRM database.
-The required source-side catalog is a separate S7 authority, but its exact
-approved SSH alias was not supplied. Per `docs/PROJECT_OPERATING_RULES.md`,
-implementation cannot proceed against an assumed source schema. No Phase 1
-schema, migration or code has been created. Resume after the exact approved
-S7 Host alias is supplied or otherwise made available through documented
+read-only. Deterministic local SSH-config discovery found zero blocks that
+can be proven to be the approved S7 block (`MATCHING_BLOCK_COUNT=0`). The
+required source-side catalog is therefore not inspected. Per
+`docs/PROJECT_OPERATING_RULES.md`, implementation cannot proceed against an
+assumed source schema. No Phase 1 schema, migration or code has been created.
+Resume after the exact approved S7 Host alias is available through documented
 authority; then update the Phase 1 design before implementation.
 
 ## Правила ведения
