@@ -42,6 +42,20 @@ Phase 0 audit status and gate:
 - No schema, migration, UI, source sync, lead generation, AI, Analytics V3, procurement routing or production change is allowed in this iteration.
 - After the Phase 0 report is committed, **STOP**. Phase 1 requires explicit operator approval.
 
+## PHASE 1 — CANONICAL HYDRO DATA
+
+`[!]` **BLOCKED BEFORE IMPLEMENTATION — IDENTITY_AUTHORITY_MISSING**
+
+Operator explicitly authorized Phase 1 and the Phase 0 branch was published
+normally to canonical `origin` at `aae7377d6d1b9d235ffd17f206dc08b2e121a69f`.
+Implementation is stopped because the required live CRM catalog preflight
+cannot safely select the approved S13 SSH Host block from the locally protected
+SSH configuration: the available project authority intentionally redacts the
+alias, user and identity, and selecting an arbitrary block would violate
+`docs/PROJECT_OPERATING_RULES.md`. No Phase 1 schema, migration or code has
+been created. Resume only after the exact approved S13 Host alias is supplied
+or otherwise made available through the documented authority.
+
 ## Правила ведения
 
 - Статусы: `[ ]` не начато, `[~]` выполняется, `[x]` выполнено, `[!]` заблокировано.
