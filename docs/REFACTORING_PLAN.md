@@ -2,6 +2,46 @@
 
 Живой документ проекта. Он является источником истины для последовательности рефакторинга и фактически выполненных работ.
 
+## CURRENT WIP — CRM-HYDRO-PARKING-LEAD-CARDS-AND-MAP-1
+
+`[x]` **PHASE 0 — DATA / SCHEMA / IDENTITY AUDIT ONLY**
+
+Baseline: `fc0d53ae0be8621fb63eae0e43b67a680b709d13`.
+
+Goal: rebuild the «Гидроизоляция» CRM section into a real object-project sales
+workspace for underground parking / waterproofing opportunities. Hydro remains
+a separate CRM business contour from Analytics V3; canonical CRM object,
+company, procurement identities and the CRM database remain shared.
+
+Architectural rules:
+
+- LEAD is the primary commercial unit.
+- `COMPANY_CONTOUR` means one management company with one or many physical objects.
+- `STANDALONE_OBJECT` means one physical object without a resolved management company; it remains an actionable lead.
+- Resolving a standalone object later attaches it to the company lead, preserves history, marks the old lead `MERGED`, and stores `merged_into_lead_id`.
+- Never create fake management-company entities such as «УК не найдена #123».
+- Hydro must not depend on Analytics V3 inference and must not merge with its pipeline.
+- The Hydro UI must read canonical CRM snapshots; a source outage is a health warning with last-successful-sync freshness, not a blocking page error.
+- Keep object potential and lead readiness as separate scores.
+- Do not introduce a duplicate company/object master, generic activity engine, or map engine without an audit-backed reason.
+
+Target phases:
+
+- **PHASE 0 — DATA / SCHEMA / IDENTITY AUDIT** `[~]`: inspect current Hydro, generic CRM, source facts, identities, persistence and outage boundary; define the design contract; stop here in this iteration.
+- **PHASE 1 — CANONICAL HYDRO DATA** `[ ]`: minimal canonical snapshot, lead generation and lead-object association; remove direct runtime source dependency.
+- **PHASE 2 — LEAD CARDS** `[ ]`: cards and detail for `COMPANY_CONTOUR` and `STANDALONE_OBJECT`.
+- **PHASE 3 — HYDRO MAP** `[ ]`: map-to-lead identity, Hydro filters, contour highlighting and navigation.
+- **PHASE 4 — REAL COMMERCIAL FUNNEL** `[ ]`: contacts, activities, next actions, overdue actions, meetings, inspection/TKP lifecycle and stage history.
+- **PHASE 5 — ENRICHMENT / AI** `[ ]`: shared procurement/document facts and AI recommendations without Analytics V3 dependency.
+
+Phase 0 audit status and gate:
+
+- Plan and WIP recorded before implementation: `YES`.
+- Result: completed read-only code/schema/identity audit; report: `docs/reports/hydro_parking_leads/PHASE_0_DATA_SCHEMA_IDENTITY_AUDIT.md`.
+- Deviation/open gate: generic-table live catalog and deterministic cross-system identity mapping require an approved pre-Phase-1 runtime preflight; no assumptions were promoted to schema.
+- No schema, migration, UI, source sync, lead generation, AI, Analytics V3, procurement routing or production change is allowed in this iteration.
+- After the Phase 0 report is committed, **STOP**. Phase 1 requires explicit operator approval.
+
 ## Правила ведения
 
 - Статусы: `[ ]` не начато, `[~]` выполняется, `[x]` выполнено, `[!]` заблокировано.
