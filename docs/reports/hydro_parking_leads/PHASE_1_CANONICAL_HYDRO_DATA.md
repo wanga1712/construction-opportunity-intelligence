@@ -2,6 +2,11 @@
 
 WIP: `CRM-HYDRO-PARKING-LEAD-CARDS-AND-MAP-1`
 
+```text
+WORK_HEAD=d97850f8243936216368c91d45122b76df7d92b7
+REMOTE_HEAD=d97850f8243936216368c91d45122b76df7d92b7
+```
+
 ## Result
 
 `PASS / STOP`. Initial S13 blocker is preserved and resolved. Deterministic
