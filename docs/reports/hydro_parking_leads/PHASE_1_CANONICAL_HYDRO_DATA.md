@@ -2,16 +2,54 @@
 
 WIP: `CRM-HYDRO-PARKING-LEAD-CARDS-AND-MAP-1`
 
+```text
+INITIAL_BLOCKER=IDENTITY_AUTHORITY_MISSING
+BLOCKER_RESOLUTION=APPROVED_S13_ALIAS_PROVIDED
+```
+
 ## Status
 
-`BLOCKED — IDENTITY_AUTHORITY_MISSING`
+`BLOCKED — SOURCE CATALOG AUTHORITY MISSING`
 
-The operator authorized Phase 1, but implementation must begin with a
-read-only live catalog preflight. The local sandbox cannot read the protected
-SSH config, and the project authority redacts the exact S13 Host alias,
-username and identity path. A safe attempt must not select an arbitrary SSH
-block. Therefore no live catalog query, DDL design, migration, service code or
-production access was performed.
+The operator authorized Phase 1 and supplied the exact approved S13 alias.
+The CRM catalog preflight completed read-only. The required source-side
+catalog is a separate S7 authority, but its exact approved SSH alias is not
+available in the checkpoint. A safe attempt must not select an arbitrary SSH
+block. Therefore source schema is not assumed and no Phase 1 DDL design,
+migration, service code or production write was performed.
+
+## Live catalog preflight
+
+```text
+CRM_CATALOG_PREFLIGHT=PASS (S13, read-only)
+SOURCE_CATALOG_PREFLIGHT=NOT_RUN
+OVERALL_LIVE_CATALOG_PREFLIGHT=BLOCKED
+```
+
+Verified in the canonical CRM database:
+
+- `crm_leads`, `crm_external_entities`, `crm_pipelines`,
+  `crm_lead_inbox_stages`, `crm_objects_index` exist with the expected core
+  columns and foreign keys; `crm_leads` also has nullable `owner_id` and
+  `parking_spaces`.
+- Generic related tables exist: `crm_activities`, `crm_tasks`,
+  `crm_opportunities`, `crm_pipeline_stages`,
+  `crm_opportunity_stage_history`. Their entity links are partly polymorphic;
+  no generic Hydro lead-object relation was found.
+- Existing parking-related structures are `parking_prefunnel_objects`,
+  `parking_prefunnel_stages`, `parking_prefunnel_stage_history`,
+  `management_companies`, and `mc_parking_links`.
+- `parking_prefunnel_objects` is an existing object/workflow table keyed by
+  unique `cadastral_number`, with inspection/meeting/contact/next-step fields,
+  but it is not a complete source snapshot and is not linked to `crm_leads`.
+- The Phase 0 source names `cadastral_object`, `parking_candidate`,
+  `cadastral_object_management`, and singular `management_company` are absent
+  from the CRM database. Their source-side schema must be inspected on S7
+  before choosing a feeder query or snapshot field mapping.
+
+This is a material refinement of the Phase 0 application-contract audit, not a
+basis for guessed DDL. The exact production catalog output is intentionally
+not copied wholesale; it contains no credentials or business-row data.
 
 ## Starting Git state and publication
 
@@ -29,7 +67,7 @@ The branch was published with a normal non-force push. The worktree is clean.
 ```text
 PHASE0_REPORT_READ=YES
 REMOTE_BRANCH_CONFIRMED=YES
-LIVE_CATALOG_PREFLIGHT=BLOCKED
+LIVE_CATALOG_PREFLIGHT=BLOCKED (CRM PASS; S7 source authority unavailable)
 SCHEMA_DELTA=NOT_DESIGNED
 MIGRATIONS_CREATED=NONE
 SOURCE_SNAPSHOT=NOT_IMPLEMENTED
