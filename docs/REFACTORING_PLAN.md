@@ -11,7 +11,11 @@
 - Размер рабочего Python-модуля: до 300 строк — желательно; 300–450 допустимо при цельности; свыше 450 требуется записанное объяснение или декомпозиция.
 - Изменение поведения сначала фиксируется тестом или явно записанным ожидаемым результатом.
 
-## CURRENT WIP — 2026-08-31
+## CURRENT WIP — 2026-09-04
+
+**CRM-V3-OKPD-PRIOR-V2-FEATURE-EXPANSION-1** — `[x]` **PASS / STOP**. Scope: `IMPLEMENT_V2_OFFLINE_AND_EVALUATION_ONLY` (Shadow mode only). Implemented Stage 1 V2 Semantic and Feature-Expanded priority models (`TITLE_TEXT_BASELINE_V2`, `TITLE_SEMANTIC_V2`, `research_priority_v2`), domain disambiguation for dual-use keywords (construction injection vs medical injection, lighting vs electronics, works vs goods), and runtime Superuser Research Taxonomy (`TaxonomyService`, `TaxonomyRepository`, Streamlit UI). Verified 112-row definitive corpus snapshot (SHA256 `5de406d1938562f9001dba2d33051d810645056b8d6587b5d2cdf81e2511c1c2`). 5-fold CV OOF evaluation demonstrated PR-AUC 0.7308 / ROC-AUC 0.9003 for Semantic V2 (vs 0.5809 / 0.8240 baseline). Full test suite expanded to 62 PASS, 0 FAIL. S13 validator service active (PID=2580991, NRestarts=0). STOP after WIP.
+
+## PRIOR CURRENT WIP — 2026-08-31
 
 **CRM-V3-LAUNCH-R3-2A-RESTORE-DETERMINISTIC-OKPD-ADMISSION-1** — `[~]` **IN PROGRESS**. Scope: `QUEUE_ADMISSION_CORRECTNESS_ONLY`. Restoring deterministic target OKPD/profile admission for exhaustive document research queue, excluding terminal stage razygranye, and writing skipped out-of-target/no-links rows with appropriate status and context to prevent Qwen LLM shadow predictor from running on them. Deployed clean-up utility `clean_out_of_target_queue.py`. Target tests added to `tests/test_okpd_admission.py` and pass.
 
