@@ -117,9 +117,37 @@ $$\text{Expected Value per Second} = \frac{P(\text{RESEARCH\_HIT})}{\mathbb{E}[\
 
 ---
 
-### Ступень 2 — Связи товарных категорий (Cross-Product Discovery)
+---
 
-После накопления фактических данных модель обучается связям между товарными категориями и типами проектов (например, дорожное освещение $\to$ светильники $\to$ опоры освещения).
+### Ступень 2 — Автономное исследование рынка и поиск товаров в документах (Market Exploration & Product Discovery)
+
+Система переходит от концепции «найти закупки по известным категориям» к «самостоятельно исследовать рынок и находить новые коммерческие товары в сметах»:
+
+```text
+PRODUCT_TAXONOMY ≠ OKPD_TAXONOMY
+```
+
+#### 1. Подсистема исследования рынка (`src/market_exploration/`)
+- **Иерархическое профилирование (`market_profile.py`)**: Агрегация пула закупок по уровням ОКПД (`ROOT`, `LEVEL2`, `LEVEL3`, `FULL`) и категориям товаров (`PRODUCT_CATEGORY`) с расчетом объема рынка, медианной цены контракта, покрытия исследованиями и неопределенности.
+- **Ограниченный скоринг ценности исследования (`exploration_scoring.py`)**:
+  $$\text{Exploration Value} = \frac{\log_{10}(\text{Volume} + 1) \times \text{Uncertainty} \times \text{Simplicity} \times \text{Repeatability}}{\text{Research Cost}} + \text{Novel Child Bonus}$$
+- **Бюджетный селектор (`exploration_selector.py`)**: Формирование плана с жесткими лимитами (`max_clusters_per_run`, `max_procurements_per_cluster`, `max_total_procurements`, `max_bytes`, `max_runtime_seconds`).
+- **Теневой исполнитель (`exploration_runner.py`)**: Идемпотентный ежедневный цикл без модификации production-очередей.
+
+#### 2. Подсистема поиска товаров в документах и сметах (`src/product_discovery/`)
+- **Классификация строк смет (`row_classifier.py`)**: Строгое разделение работ (`WORK`), услуг (`SERVICE`), машин (`MACHINE`) и физических товаров/оборудования/материалов (`PRODUCT`, `EQUIPMENT`, `MATERIAL`).
+- **Нормализация единиц (`unit_normalizer.py`)**: Защита от межразмерных сравнений (`CROSS_UNIT_QUANTITY_COMPARISON=NO`). Сравнение количеств возможно только при совместимости (`PCS` vs `PCS`/`SET`).
+- **Квалификация кандидатов и фильтрация шума (`candidate_qualifier.py`)**:
+  - $A: \text{amount} \ge \text{seed\_amount}$
+  - $B: \text{compatible\_unit} \land \text{quantity} \ge \text{seed\_quantity}$
+  - $C: \text{amount} / \text{seed\_amount} \ge 0.50$
+  - $D: \text{compatible\_unit} \land \min(q_1, q_2)/\max(q_1, q_2) \ge 0.70$
+  - $E: \text{amount} / \text{section\_product\_amount} \ge 0.05$
+  - Подавление шума: отсечение мелких расходников (напр., 2400 болтов на 48 тыс. руб. в смете на 14 млн руб.).
+- **Канонизация наименований (`product_normalizer.py`)**: Приведение частных артикулов и марок к отраслевым категориям (напр., `Опора металлическая ОГК-8` $\to$ `Опора наружного освещения`).
+- **Управление жизненным циклом категорий (`category_manager.py`)**: Статусы `AUTO_DISCOVERED`, `MODEL_CONFIRMED`, `EXPERT_CONFIRMED`, `REJECTED`, `MERGED`. Модель не может присвоить `EXPERT_CONFIRMED`. Поиск синонимов и дедупликация алиасов.
+- **Граф совместной встречаемости (`coproduct_graph.py`)**: Эмпирические условные вероятности $P(\text{Category}_B \mid \text{Category}_A)$, медианные соотношения сумм и количеств.
+- **Экстрактор смет (`estimate_extractor.py`)**: Разбор структурированных и табличных сметных данных с привязкой к разделам и provenance.
 
 ---
 

@@ -38,6 +38,17 @@ class TaxonomyService:
     def __init__(self, repository: Optional[TaxonomyRepository] = None) -> None:
         self.repository = repository or TaxonomyRepository()
 
+    def _require_superuser(self, actor: str) -> None:
+        """Enforces superuser authority for taxonomy mutations."""
+        valid_actors = {"superuser", "admin", "system_admin", "lead_expert"}
+        if not actor or (
+            actor not in valid_actors
+            and not actor.startswith("superuser")
+            and not actor.startswith("admin")
+            and not actor.startswith("lead_expert")
+        ):
+            raise PermissionError(f"ORDINARY_USER_TAXONOMY_MUTATION=DENIED: actor '{actor}' is not authorized")
+
     def find_matching_rule(self, okpd_code: str) -> Optional[TaxonomyRuleDTO]:
         """Finds the longest-prefix matching active taxonomy rule for a given OKPD code."""
         if not okpd_code:
@@ -118,6 +129,7 @@ class TaxonomyService:
         rule_id: Optional[str] = None,
     ) -> TaxonomyRuleDTO:
         """Creates or updates a taxonomy rule and logs the action."""
+        self._require_superuser(actor)
         clean_pattern = okpd_pattern.strip()
         weight = (
             adjustment_weight
@@ -150,6 +162,7 @@ class TaxonomyService:
 
     def delete_rule(self, rule_id: str, actor: str = "superuser") -> bool:
         """Deletes a taxonomy rule and logs the action."""
+        self._require_superuser(actor)
         rule = self.repository.get_rule_by_id(rule_id)
         if not rule:
             return False
@@ -243,6 +256,7 @@ class TaxonomyService:
         actor: str = "superuser",
     ) -> Optional[TaxonomyRuleDTO]:
         """Approves a proposal, turning it into an active rule."""
+        self._require_superuser(actor)
         prop = self.repository.update_proposal_status(
             proposal_id=proposal_id,
             status=PROPOSAL_STATUS_APPROVED,
@@ -275,6 +289,7 @@ class TaxonomyService:
         actor: str = "superuser",
     ) -> bool:
         """Rejects a pending proposal."""
+        self._require_superuser(actor)
         prop = self.repository.update_proposal_status(
             proposal_id=proposal_id,
             status=PROPOSAL_STATUS_REJECTED,

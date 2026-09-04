@@ -1,0 +1,113 @@
+﻿"""Data Transfer Objects for Market Exploration."""
+
+from __future__ import annotations
+
+from dataclasses import asdict, dataclass, field
+from datetime import datetime, timezone
+from typing import Any, Dict, List, Optional
+
+
+@dataclass
+class MarketClusterProfile:
+    """Aggregated profile and exploration metrics for a market category/cluster."""
+    cluster_key: str
+    cluster_level: str  # OKPD_ROOT, OKPD_LEVEL2, OKPD_LEVEL3, OKPD_FULL, PRODUCT_CATEGORY
+    parent_key: Optional[str] = None
+    procurement_count: int = 0
+    total_market_value: float = 0.0
+    median_contract_value: float = 0.0
+    researched_count: int = 0
+    research_coverage: float = 0.0
+    uncertainty_score: float = 1.0
+    market_volume_score: float = 0.0
+    execution_simplicity_estimate: float = 0.5
+    repeatability_estimate: float = 0.5
+    research_cost_estimate: float = 1.0
+    child_cluster_count: int = 0
+    unseen_child_cluster_count: int = 0
+    exploration_score: float = 0.0
+
+    def to_dict(self) -> Dict[str, Any]:
+        return asdict(self)
+
+    @classmethod
+    def from_dict(cls, data: Dict[str, Any]) -> "MarketClusterProfile":
+        return cls(**data)
+
+
+@dataclass
+class ExplorationBudgetDTO:
+    """Resource budget constraints for an exploration cycle."""
+    max_clusters_per_run: int = 10
+    max_procurements_per_cluster: int = 5
+    max_total_procurements: int = 50
+    max_bytes: int = 100_000_000
+    max_runtime_seconds: int = 300
+
+    def to_dict(self) -> Dict[str, Any]:
+        return asdict(self)
+
+    @classmethod
+    def from_dict(cls, data: Dict[str, Any]) -> "ExplorationBudgetDTO":
+        return cls(**data)
+
+
+@dataclass
+class ExplorationPlanItemDTO:
+    """Individual procurement candidate selected for exploratory research."""
+    plan_id: str
+    cluster_key: str
+    cluster_level: str
+    procurement_id: int
+    title: str
+    okpd_code: str
+    lot_price: float
+    exploration_priority: float
+    reason: str
+
+    def to_dict(self) -> Dict[str, Any]:
+        return asdict(self)
+
+    @classmethod
+    def from_dict(cls, data: Dict[str, Any]) -> "ExplorationPlanItemDTO":
+        return cls(**data)
+
+
+@dataclass
+class ExplorationPlanDTO:
+    """Complete budget-constrained market exploration plan."""
+    plan_id: str
+    generated_at: str = field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
+    total_clusters_targeted: int = 0
+    total_procurements_targeted: int = 0
+    items: List[ExplorationPlanItemDTO] = field(default_factory=list)
+    budget: ExplorationBudgetDTO = field(default_factory=ExplorationBudgetDTO)
+    is_dry_run: bool = True
+    metadata: Dict[str, Any] = field(default_factory=dict)
+
+    def to_dict(self) -> Dict[str, Any]:
+        return {
+            "plan_id": self.plan_id,
+            "generated_at": self.generated_at,
+            "total_clusters_targeted": self.total_clusters_targeted,
+            "total_procurements_targeted": self.total_procurements_targeted,
+            "items": [item.to_dict() for item in self.items],
+            "budget": self.budget.to_dict(),
+            "is_dry_run": self.is_dry_run,
+            "metadata": self.metadata,
+        }
+
+    @classmethod
+    def from_dict(cls, data: Dict[str, Any]) -> "ExplorationPlanDTO":
+        items = [ExplorationPlanItemDTO.from_dict(i) for i in data.get("items", [])]
+        budget = ExplorationBudgetDTO.from_dict(data.get("budget", {})) if data.get("budget") else ExplorationBudgetDTO()
+        return cls(
+            plan_id=str(data["plan_id"]),
+            generated_at=str(data.get("generated_at") or datetime.now(timezone.utc).isoformat()),
+            total_clusters_targeted=int(data.get("total_clusters_targeted", len(items))),
+            total_procurements_targeted=int(data.get("total_procurements_targeted", len(items))),
+            items=items,
+            budget=budget,
+            is_dry_run=bool(data.get("is_dry_run", True)),
+            metadata=dict(data.get("metadata", {})),
+        )

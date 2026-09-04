@@ -31,6 +31,8 @@ from src.learning.okpd_prior.semantic_model import TitleSemanticModelV2
 
 MODEL_NAME_V2 = "research_priority_v2"
 MODEL_TYPE_V2 = "COMBINED_SEMANTIC_HIERARCHICAL_GBDT"
+TEXT_REPRESENTATION_TYPE = "TFIDF_WORD_CHAR_PLUS_DOMAIN_FEATURES"
+NEURAL_EMBEDDINGS_USED = False
 FEATURE_NAMES_V2 = [
     "semantic_score",
     "construction_prior",
@@ -170,11 +172,12 @@ class ResearchPriorityModelV2:
         )
 
         # 4. Fit Gradient Boosting model
+        min_leaf = max(1, min(3, n // 5))
         self.gbdt = HistGradientBoostingClassifier(
             max_iter=150,
             learning_rate=0.05,
             max_leaf_nodes=15,
-            min_samples_leaf=3,
+            min_samples_leaf=min_leaf,
             class_weight="balanced",
             random_state=self.random_state,
         )
@@ -186,6 +189,37 @@ class ResearchPriorityModelV2:
         self.trained_at = datetime.now(timezone.utc).isoformat()
         self.dataset_snapshot_sha256 = dataset_snapshot_sha256
         return self
+
+    def fit_oof_predictions(
+        self,
+        titles: List[str],
+        okpd_codes: List[str],
+        prices: List[float],
+        y: List[int],
+        n_splits: int = 5,
+    ) -> np.ndarray:
+        """Computes true out-of-fold predictions with strictly cross-fitted target encodings."""
+        from sklearn.model_selection import StratifiedKFold
+        n = len(y)
+        oof = np.zeros(n, dtype=np.float32)
+        skf = StratifiedKFold(n_splits=n_splits, shuffle=True, random_state=self.random_state)
+
+        for train_idx, val_idx in skf.split(titles, y):
+            train_titles = [titles[i] for i in train_idx]
+            val_titles = [titles[i] for i in val_idx]
+            train_okpd = [okpd_codes[i] for i in train_idx]
+            val_okpd = [okpd_codes[i] for i in val_idx]
+            train_prices = [prices[i] for i in train_idx]
+            val_prices = [prices[i] for i in val_idx]
+            y_train = [y[i] for i in train_idx]
+
+            fold_model = ResearchPriorityModelV2(random_state=self.random_state)
+            fold_model.fit(train_titles, train_okpd, train_prices, y_train)
+            val_probs = fold_model.predict_proba(val_titles, val_okpd, val_prices)
+            for local_i, original_i in enumerate(val_idx):
+                oof[original_i] = val_probs[local_i]
+
+        return oof
 
     def predict_proba(
         self,
