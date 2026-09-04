@@ -27,9 +27,14 @@ Architectural rules:
 
 Target phases:
 
-- **PHASE 0 — DATA / SCHEMA / IDENTITY AUDIT** `[~]`: inspect current Hydro, generic CRM, source facts, identities, persistence and outage boundary; define the design contract; stop here in this iteration.
-- **PHASE 1 — CANONICAL HYDRO DATA** `[ ]`: minimal canonical snapshot, lead generation and lead-object association; remove direct runtime source dependency.
-- **PHASE 2 — LEAD CARDS** `[ ]`: cards and detail for `COMPANY_CONTOUR` and `STANDALONE_OBJECT`.
+- **PHASE 0 — DATA / SCHEMA / IDENTITY AUDIT** `[x]`: read-only audit and
+  identity gate completed; report recorded.
+- **PHASE 1 — CANONICAL HYDRO DATA** `[x]`: canonical snapshot, lead
+  generation and lead-object association completed; report recorded.
+- **PHASE 2 — LEAD CARDS** `[x]`: canonical CRM read layer, DTO projection and
+  primary Leads feed/detail are complete. Report:
+  `docs/reports/hydro_parking_leads/PHASE_2_HYDRO_LEAD_CARDS.md`. Map, funnel
+  redesign and production DDL remain out of scope; STOP before Phase 3.
 - **PHASE 3 — HYDRO MAP** `[ ]`: map-to-lead identity, Hydro filters, contour highlighting and navigation.
 - **PHASE 4 — REAL COMMERCIAL FUNNEL** `[ ]`: contacts, activities, next actions, overdue actions, meetings, inspection/TKP lifecycle and stage history.
 - **PHASE 5 — ENRICHMENT / AI** `[ ]`: shared procurement/document facts and AI recommendations without Analytics V3 dependency.
