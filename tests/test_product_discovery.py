@@ -1,4 +1,4 @@
-﻿"""Comprehensive integration and unit tests for Document Product Discovery subsystem."""
+"""Comprehensive integration and unit tests for Document Product Discovery subsystem."""
 
 from __future__ import annotations
 
@@ -164,3 +164,69 @@ def test_coproduct_graph_construction():
     assert pole_given_lum.conditional_prob_b_given_a == 1.0
     assert pole_given_lum.median_amount_ratio == 1.5
     assert pole_given_lum.median_quantity_ratio == 1.0
+
+
+def test_document_table_adapter_and_money_parsing():
+    """Verifies deterministic table extraction, column detection, and money parsing."""
+    import tempfile
+    import os
+    from src.product_discovery.document_table_adapter import DocumentTableAdapter, parse_numeric_cell
+
+    # 1. Test deterministic money parsing
+    assert parse_numeric_cell("1 250 000,50 руб.") == 1250000.50
+    assert parse_numeric_cell("5,50") == 5.50
+    assert parse_numeric_cell(1000) == 1000.0
+    assert parse_numeric_cell(None) == 0.0
+
+    # 2. Test CSV parsing via DocumentTableAdapter
+    with tempfile.TemporaryDirectory() as tmpdir:
+        csv_path = os.path.join(tmpdir, "test_spec.csv")
+        with open(csv_path, "w", encoding="utf-8") as f:
+            f.write("№;Наименование товара;Кол-во;Ед. изм.;Цена за ед.;Сумма\n")
+            f.write("1;Опора металлическая ОГК-8;10;шт;25000,00;250000,00\n")
+            f.write("2;Светильник ДКУ-100;10;шт;15000,00;150000,00\n")
+
+        adapter = DocumentTableAdapter()
+        rows = adapter.parse_document_tables(csv_path, procurement_id=999)
+        assert len(rows) == 2
+        assert rows[0].procurement_id == 999
+        assert "Опора" in rows[0].raw_text
+        assert rows[0].observation_key != ""
+
+        # Extract observations from ExtractedTableRow
+        obs = extract_observations_from_table(rows, procurement_id=999)
+        assert len(obs) == 2
+        assert obs[0].normalized_name == "Опора наружного освещения"
+        assert obs[0].domain == "ELECTRICAL"
+        assert obs[0].total_amount == 250000.0
+        assert obs[0].quantity == 10.0
+
+
+def test_model_normalizer_multi_domain():
+    """Verifies multi-domain normalization across MEDICAL, IT, ELECTRICAL, and BUILDING_EQUIPMENT."""
+    from src.product_discovery.product_normalizer import ModelProductNormalizerV1
+
+    norm = ModelProductNormalizerV1()
+
+    # Medical
+    d_med = norm.normalize("Шприц трехкомпонентный 5мл одноразовый стерильный", okpd_code="32.50.13")
+    assert d_med.domain == "MEDICAL"
+    assert d_med.normalized_product_name == "Шприц медицинский"
+    assert d_med.subcategory_name == "Шприцы"
+
+    # IT
+    d_it = norm.normalize("Сервер стоечный 2U Xeon Silver 64GB", okpd_code="26.20.14")
+    assert d_it.domain == "IT"
+    assert d_it.normalized_product_name == "Сервер стоечный"
+
+    # Electrical
+    d_el = norm.normalize("Светильник уличный консольный светодиодный 120Вт", okpd_code="27.40.39")
+    assert d_el.domain == "ELECTRICAL"
+    assert d_el.normalized_product_name == "Светильник уличный светодиодный"
+
+    # Building Equipment
+    d_eq = norm.normalize("Лифт пассажирский 630 кг со скоростью 1.0 м/с", okpd_code="28.22.16")
+    assert d_eq.domain == "BUILDING_EQUIPMENT"
+    assert d_eq.normalized_product_name == "Лифт пассажирский"
+    assert d_eq.item_type == RowType.EQUIPMENT
+

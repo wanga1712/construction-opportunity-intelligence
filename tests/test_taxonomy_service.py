@@ -153,7 +153,10 @@ def test_service_rule_deletion():
 
     deleted = service.delete_rule(rule.rule_id, actor="admin")
     assert deleted is True
-    assert repo.get_rule_by_id(rule.rule_id) is None
+    archived = repo.get_rule_by_id(rule.rule_id)
+    assert archived is not None
+    assert archived.is_active is False
+    assert service.find_matching_rule("43.21") is None
 
 
 def test_exploration_band_guarantee():

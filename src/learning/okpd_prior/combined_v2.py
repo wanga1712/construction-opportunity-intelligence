@@ -62,42 +62,65 @@ class ResearchPriorityModelV2:
             "level3": {},
             "full": {},
         }
+        self.training_global_positive_rate: float = 0.23
+        self.target_encoding_smoothing: float = 5.0
+        self.target_encoding_levels: List[str] = ["root", "level2", "level3", "full"]
         self.is_fitted = False
         self.training_sample_count = 0
         self.positive_count = 0
         self.trained_at: Optional[str] = None
         self.dataset_snapshot_sha256: Optional[str] = None
 
-    def _build_target_encodings(
-        self,
+    @staticmethod
+    def _compute_target_encoding_dict(
         okpd_tuples: List[Tuple[str, str, str, str]],
         y: List[int],
-    ) -> None:
-        """Computes empirical smoothed target encodings for OKPD hierarchy levels."""
-        global_mean = sum(y) / len(y) if y else 0.23
-        smoothing = 5.0
-
+        global_mean: float,
+        smoothing: float = 5.0,
+    ) -> Dict[str, Dict[str, float]]:
+        """Computes empirical smoothed target encodings dictionary from data split."""
         counts: Dict[str, Dict[str, Tuple[int, int]]] = {
             "root": {},
             "level2": {},
             "level3": {},
             "full": {},
         }
-
         for (root, l2, l3, full), label in zip(okpd_tuples, y):
             for level, val in [("root", root), ("level2", l2), ("level3", l3), ("full", full)]:
                 pos, tot = counts[level].get(val, (0, 0))
                 counts[level][val] = (pos + label, tot + 1)
 
+        result: Dict[str, Dict[str, float]] = {}
         for level in ("root", "level2", "level3", "full"):
-            self.okpd_encodings[level] = {}
+            result[level] = {}
             for val, (pos, tot) in counts[level].items():
                 smoothed = (pos + smoothing * global_mean) / (tot + smoothing)
-                self.okpd_encodings[level][val] = float(smoothed)
+                result[level][val] = float(smoothed)
+        return result
 
-    def _get_okpd_encoded_value(self, level: str, val: str) -> float:
-        """Retrieves smoothed target encoded value for an OKPD string."""
-        return self.okpd_encodings.get(level, {}).get(val, 0.23)
+    def _build_target_encodings(
+        self,
+        okpd_tuples: List[Tuple[str, str, str, str]],
+        y: List[int],
+    ) -> None:
+        """Computes full empirical smoothed target encodings for inference."""
+        global_mean = sum(y) / len(y) if y else self.training_global_positive_rate
+        self.training_global_positive_rate = float(global_mean)
+        self.okpd_encodings = self._compute_target_encoding_dict(
+            okpd_tuples, y, global_mean, self.target_encoding_smoothing
+        )
+
+    def _get_okpd_encoded_value(
+        self,
+        level: str,
+        val: str,
+        encoding_dict: Optional[Dict[str, Dict[str, float]]] = None,
+        fallback_rate: Optional[float] = None,
+    ) -> float:
+        """Retrieves smoothed target encoded value with dynamic fallback."""
+        d = encoding_dict if encoding_dict is not None else self.okpd_encodings
+        fb = fallback_rate if fallback_rate is not None else self.training_global_positive_rate
+        return d.get(level, {}).get(val, fb)
 
     def _extract_tabular_features(
         self,
@@ -105,19 +128,23 @@ class ResearchPriorityModelV2:
         titles: List[str],
         okpd_tuples: List[Tuple[str, str, str, str]],
         prices: List[float],
+        okpd_encodings_per_row: Optional[List[Tuple[float, float, float, float]]] = None,
     ) -> np.ndarray:
         """Builds feature matrix from inputs."""
         rows = []
-        for sem, title, (root, l2, l3, full), price in zip(
-            semantic_scores, titles, okpd_tuples, prices
+        for i, (sem, title, (root, l2, l3, full), price) in enumerate(
+            zip(semantic_scores, titles, okpd_tuples, prices)
         ):
             sig = extract_domain_signals(title, full)
             log_p = float(math.log1p(max(0.0, price))) if price else 0.0
 
-            r_enc = self._get_okpd_encoded_value("root", root)
-            l2_enc = self._get_okpd_encoded_value("level2", l2)
-            l3_enc = self._get_okpd_encoded_value("level3", l3)
-            full_enc = self._get_okpd_encoded_value("full", full)
+            if okpd_encodings_per_row is not None and i < len(okpd_encodings_per_row):
+                r_enc, l2_enc, l3_enc, full_enc = okpd_encodings_per_row[i]
+            else:
+                r_enc = self._get_okpd_encoded_value("root", root)
+                l2_enc = self._get_okpd_encoded_value("level2", l2)
+                l3_enc = self._get_okpd_encoded_value("level3", l3)
+                full_enc = self._get_okpd_encoded_value("full", full)
 
             rows.append([
                 sem,
@@ -143,7 +170,7 @@ class ResearchPriorityModelV2:
         y: List[int],
         dataset_snapshot_sha256: Optional[str] = None,
     ) -> "ResearchPriorityModelV2":
-        """Fits combined model on full dataset using OOF stacking for semantic features."""
+        """Fits combined model using cross-fitted OOF representations for both text and OKPD."""
         if not titles or not y or len(titles) != len(y):
             raise ValueError("Titles and labels must be of equal non-zero length.")
 
@@ -153,22 +180,57 @@ class ResearchPriorityModelV2:
         if len(prices) != n:
             prices = [0.0 for _ in range(n)]
 
+        self.training_global_positive_rate = float(sum(y) / len(y)) if y else 0.23
         hierarchies = [parse_okpd_hierarchy(c) for c in okpd_codes]
         okpd_tuples = [
             (h.okpd_root, h.okpd_level2, h.okpd_level3, h.okpd_full) for h in hierarchies
         ]
 
-        # 1. Compute target encodings
-        self._build_target_encodings(okpd_tuples, y)
-
-        # 2. Get OOF semantic scores
+        # 1. Compute OOF semantic scores (leakage-free)
         oof_semantic_scores = self.semantic_model.fit_oof_predictions(
             titles, okpd_codes, y, n_splits=5
         )
 
-        # 3. Extract tabular features
+        # 2. Compute OOF OKPD target encodings (each training row's label does NOT participate in its encoding)
+        from sklearn.model_selection import StratifiedKFold
+        oof_okpd_encs: List[Tuple[float, float, float, float]] = [(0.0, 0.0, 0.0, 0.0)] * n
+        pos_cnt = sum(y)
+        neg_cnt = n - pos_cnt
+        actual_splits = min(5, min(pos_cnt, neg_cnt))
+
+        if actual_splits >= 2:
+            skf = StratifiedKFold(n_splits=actual_splits, shuffle=True, random_state=self.random_state)
+            for tr_idx, val_idx in skf.split(titles, y):
+                tr_tuples = [okpd_tuples[i] for i in tr_idx]
+                tr_y = [y[i] for i in tr_idx]
+                tr_mean = sum(tr_y) / len(tr_y) if tr_y else self.training_global_positive_rate
+                fold_enc_dict = self._compute_target_encoding_dict(
+                    tr_tuples, tr_y, tr_mean, self.target_encoding_smoothing
+                )
+
+                for vi in val_idx:
+                    root, l2, l3, full = okpd_tuples[vi]
+                    r_e = self._get_okpd_encoded_value("root", root, fold_enc_dict, tr_mean)
+                    l2_e = self._get_okpd_encoded_value("level2", l2, fold_enc_dict, tr_mean)
+                    l3_e = self._get_okpd_encoded_value("level3", l3, fold_enc_dict, tr_mean)
+                    f_e = self._get_okpd_encoded_value("full", full, fold_enc_dict, tr_mean)
+                    oof_okpd_encs[vi] = (r_e, l2_e, l3_e, f_e)
+        else:
+            # Fallback for very small non-splittable sample
+            full_dict = self._compute_target_encoding_dict(
+                okpd_tuples, y, self.training_global_positive_rate, self.target_encoding_smoothing
+            )
+            for vi in range(n):
+                root, l2, l3, full = okpd_tuples[vi]
+                r_e = self._get_okpd_encoded_value("root", root, full_dict)
+                l2_e = self._get_okpd_encoded_value("level2", l2, full_dict)
+                l3_e = self._get_okpd_encoded_value("level3", l3, full_dict)
+                f_e = self._get_okpd_encoded_value("full", full, full_dict)
+                oof_okpd_encs[vi] = (r_e, l2_e, l3_e, f_e)
+
+        # 3. Extract training tabular features using OOF inputs
         x_train = self._extract_tabular_features(
-            list(oof_semantic_scores), titles, okpd_tuples, prices
+            list(oof_semantic_scores), titles, okpd_tuples, prices, oof_okpd_encs
         )
 
         # 4. Fit Gradient Boosting model
@@ -182,6 +244,9 @@ class ResearchPriorityModelV2:
             random_state=self.random_state,
         )
         self.gbdt.fit(x_train, y)
+
+        # 5. AFTER training: build full-corpus target encodings for future unseen inference
+        self._build_target_encodings(okpd_tuples, y)
 
         self.is_fitted = True
         self.training_sample_count = n
@@ -325,6 +390,9 @@ class ResearchPriorityModelV2:
             "positive_count": self.positive_count,
             "trained_at": self.trained_at,
             "dataset_snapshot_sha256": self.dataset_snapshot_sha256,
+            "training_global_positive_rate": self.training_global_positive_rate,
+            "target_encoding_smoothing": self.target_encoding_smoothing,
+            "target_encoding_levels": self.target_encoding_levels,
             "okpd_encodings": self.okpd_encodings,
         }
         with open(filepath, "wb") as f:
@@ -333,6 +401,9 @@ class ResearchPriorityModelV2:
                 "semantic_model": self.semantic_model,
                 "gbdt": self.gbdt,
                 "okpd_encodings": self.okpd_encodings,
+                "training_global_positive_rate": self.training_global_positive_rate,
+                "target_encoding_smoothing": self.target_encoding_smoothing,
+                "target_encoding_levels": self.target_encoding_levels,
             }, f)
 
     @classmethod
@@ -345,6 +416,15 @@ class ResearchPriorityModelV2:
         instance.semantic_model = data.get("semantic_model")
         instance.gbdt = data.get("gbdt")
         instance.okpd_encodings = data.get("okpd_encodings", {})
+        instance.training_global_positive_rate = float(
+            meta.get("training_global_positive_rate") or data.get("training_global_positive_rate", 0.23)
+        )
+        instance.target_encoding_smoothing = float(
+            meta.get("target_encoding_smoothing") or data.get("target_encoding_smoothing", 5.0)
+        )
+        instance.target_encoding_levels = list(
+            meta.get("target_encoding_levels") or data.get("target_encoding_levels", ["root", "level2", "level3", "full"])
+        )
         instance.is_fitted = True
         instance.training_sample_count = meta.get("training_sample_count", 0)
         instance.positive_count = meta.get("positive_count", 0)

@@ -4,7 +4,18 @@ from __future__ import annotations
 
 from dataclasses import asdict, dataclass, field
 from datetime import datetime, timezone
+import hashlib
 from typing import Any, Dict, List, Optional
+
+
+def generate_exploration_run_key(
+    run_date: str,
+    policy_version: str = "v1",
+    source_snapshot_id: str = "live_db",
+) -> str:
+    """Generates deterministic run_key for daily idempotency."""
+    raw = f"{run_date}:{policy_version}:{source_snapshot_id}".encode("utf-8")
+    return hashlib.sha256(raw).hexdigest()[:16]
 
 
 @dataclass
@@ -16,8 +27,15 @@ class MarketClusterProfile:
     procurement_count: int = 0
     total_market_value: float = 0.0
     median_contract_value: float = 0.0
+    p25_contract_value: float = 0.0
+    p75_contract_value: float = 0.0
     researched_count: int = 0
+    positive_count: int = 0
+    safe_negative_count: int = 0
+    unresolved_count: int = 0
     research_coverage: float = 0.0
+    distinct_customers: int = 0
+    distinct_regions: int = 0
     uncertainty_score: float = 1.0
     market_volume_score: float = 0.0
     execution_simplicity_estimate: float = 0.5
@@ -41,6 +59,7 @@ class ExplorationBudgetDTO:
     max_clusters_per_run: int = 10
     max_procurements_per_cluster: int = 5
     max_total_procurements: int = 50
+    max_document_downloads: int = 100
     max_bytes: int = 100_000_000
     max_runtime_seconds: int = 300
 
@@ -64,6 +83,7 @@ class ExplorationPlanItemDTO:
     lot_price: float
     exploration_priority: float
     reason: str
+    selection_stratum: str = "GENERAL"  # LOW_VALUE, MED_VALUE, HIGH_VALUE, DIVERSE_CHILD
 
     def to_dict(self) -> Dict[str, Any]:
         return asdict(self)
@@ -77,9 +97,13 @@ class ExplorationPlanItemDTO:
 class ExplorationPlanDTO:
     """Complete budget-constrained market exploration plan."""
     plan_id: str
+    run_key: str = ""
+    run_date: str = field(default_factory=lambda: datetime.now(timezone.utc).strftime("%Y-%m-%d"))
     generated_at: str = field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
     total_clusters_targeted: int = 0
     total_procurements_targeted: int = 0
+    estimated_bytes: int = 0
+    estimated_cost: float = 0.0
     items: List[ExplorationPlanItemDTO] = field(default_factory=list)
     budget: ExplorationBudgetDTO = field(default_factory=ExplorationBudgetDTO)
     is_dry_run: bool = True
@@ -88,9 +112,13 @@ class ExplorationPlanDTO:
     def to_dict(self) -> Dict[str, Any]:
         return {
             "plan_id": self.plan_id,
+            "run_key": self.run_key,
+            "run_date": self.run_date,
             "generated_at": self.generated_at,
             "total_clusters_targeted": self.total_clusters_targeted,
             "total_procurements_targeted": self.total_procurements_targeted,
+            "estimated_bytes": self.estimated_bytes,
+            "estimated_cost": self.estimated_cost,
             "items": [item.to_dict() for item in self.items],
             "budget": self.budget.to_dict(),
             "is_dry_run": self.is_dry_run,
@@ -103,9 +131,13 @@ class ExplorationPlanDTO:
         budget = ExplorationBudgetDTO.from_dict(data.get("budget", {})) if data.get("budget") else ExplorationBudgetDTO()
         return cls(
             plan_id=str(data["plan_id"]),
+            run_key=str(data.get("run_key", "")),
+            run_date=str(data.get("run_date", "")),
             generated_at=str(data.get("generated_at") or datetime.now(timezone.utc).isoformat()),
             total_clusters_targeted=int(data.get("total_clusters_targeted", len(items))),
             total_procurements_targeted=int(data.get("total_procurements_targeted", len(items))),
+            estimated_bytes=int(data.get("estimated_bytes", 0)),
+            estimated_cost=float(data.get("estimated_cost", 0.0)),
             items=items,
             budget=budget,
             is_dry_run=bool(data.get("is_dry_run", True)),

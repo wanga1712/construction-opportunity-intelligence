@@ -1,7 +1,8 @@
-﻿"""Category management and taxonomy lifecycle for discovered products."""
+"""Category management and taxonomy lifecycle for discovered products."""
 
 from __future__ import annotations
 
+from collections import defaultdict
 import difflib
 import threading
 from typing import Any, Dict, List, Optional, Set
@@ -16,13 +17,14 @@ from src.product_discovery.product_normalizer import normalize_product_name
 
 
 class ProductCategoryManager:
-    """Manages autonomous discovery, alias resolution, and lifecycle of product categories."""
+    """Manages autonomous discovery, alias resolution, and lifecycle of hierarchical product categories."""
 
     def __init__(self) -> None:
         self._lock = threading.Lock()
         self._categories: Dict[str, ProductCategoryDTO] = {}
         self._observations: List[ProductObservationDTO] = []
         self._alias_to_id: Dict[str, str] = {}
+        self._category_procurement_ids: Dict[str, Set[int]] = defaultdict(set)
 
     def _find_matching_category_id(self, name: str) -> Optional[str]:
         """Finds matching category id by exact name, alias, or high fuzzy similarity."""
@@ -37,7 +39,6 @@ class ProductCategoryManager:
                 if alias.strip().lower() == key:
                     return cat_id
 
-        # Fuzzy matching against existing canonical categories
         canonical_names = [c.canonical_name for c in self._categories.values() if c.status != DiscoveryStatus.MERGED]
         matches = difflib.get_close_matches(name, canonical_names, n=1, cutoff=0.88)
         if matches:
@@ -49,15 +50,19 @@ class ProductCategoryManager:
         return None
 
     def register_observation(self, obs: ProductObservationDTO) -> ProductCategoryDTO:
-        """Registers a discovered product observation and links or creates its product category."""
+        """Registers a discovered product observation and links or creates its hierarchical product category."""
         with self._lock:
-            canonical = normalize_product_name(obs.raw_text)
+            canonical = obs.normalized_name or normalize_product_name(obs.raw_text)
+            domain = obs.domain or "CONSTRUCTION"
             matched_id = self._find_matching_category_id(canonical)
 
             if matched_id and matched_id in self._categories:
                 cat = self._categories[matched_id]
                 cat.observation_count += 1
                 cat.total_discovered_amount += obs.total_amount
+                self._category_procurement_ids[cat.category_id].add(obs.procurement_id)
+                cat.procurement_count = len(self._category_procurement_ids[cat.category_id])
+
                 if obs.raw_text and obs.raw_text not in cat.aliases and obs.raw_text != cat.canonical_name:
                     cat.aliases.append(obs.raw_text)
                     self._alias_to_id[obs.raw_text.strip().lower()] = cat.category_id
@@ -66,7 +71,8 @@ class ProductCategoryManager:
                 cat = ProductCategoryDTO(
                     category_id=cat_id,
                     canonical_name=canonical,
-                    domain="CONSTRUCTION_MATERIALS",
+                    domain=domain,
+                    hierarchy_level="SUBCATEGORY" if obs.subcategory_name else "CATEGORY",
                     status=DiscoveryStatus.AUTO_DISCOVERED,
                     observation_count=1,
                     procurement_count=1,
@@ -77,6 +83,7 @@ class ProductCategoryManager:
                 self._alias_to_id[canonical.strip().lower()] = cat_id
                 if obs.raw_text:
                     self._alias_to_id[obs.raw_text.strip().lower()] = cat_id
+                self._category_procurement_ids[cat_id].add(obs.procurement_id)
 
             obs.normalized_name = canonical
             obs.category_name = cat.canonical_name
@@ -99,7 +106,6 @@ class ProductCategoryManager:
             if is_human_expert:
                 cat.status = DiscoveryStatus.EXPERT_CONFIRMED
             else:
-                # Model/system can confirm up to MODEL_CONFIRMED, never EXPERT_CONFIRMED
                 if cat.status == DiscoveryStatus.AUTO_DISCOVERED:
                     cat.status = DiscoveryStatus.MODEL_CONFIRMED
 
@@ -129,6 +135,10 @@ class ProductCategoryManager:
 
             target.observation_count += source.observation_count
             target.total_discovered_amount += source.total_discovered_amount
+            pids = self._category_procurement_ids[source_id]
+            self._category_procurement_ids[target_id].update(pids)
+            target.procurement_count = len(self._category_procurement_ids[target_id])
+
             for alias in [source.canonical_name] + source.aliases:
                 if alias not in target.aliases and alias != target.canonical_name:
                     target.aliases.append(alias)
@@ -152,3 +162,4 @@ class ProductCategoryManager:
             if procurement_id is not None:
                 obs = [o for o in obs if o.procurement_id == procurement_id]
             return obs
+

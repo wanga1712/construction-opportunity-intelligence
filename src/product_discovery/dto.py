@@ -1,10 +1,11 @@
-﻿"""Data Transfer Objects for Document Product Discovery."""
+"""Data Transfer Objects for Document Product Discovery."""
 
 from __future__ import annotations
 
 from dataclasses import asdict, dataclass, field
 from datetime import datetime, timezone
 from enum import Enum
+import hashlib
 from typing import Any, Dict, List, Optional
 
 
@@ -41,6 +42,44 @@ class UnitCategory(str, Enum):
 
 
 @dataclass
+class ExtractedTableRow:
+    """Raw table row parsed deterministically from an uploaded or downloaded document."""
+    procurement_id: int
+    document_id: str
+    file_path: str
+    sheet_name: str
+    page_number: Optional[int]
+    table_index: int
+    row_index: int
+    raw_cells: List[str]
+    raw_text: str
+    section_name: str = ""
+    column_mapping: Dict[str, int] = field(default_factory=dict)
+    observation_key: str = ""
+
+    def compute_observation_key(self, doc_hash: str = "") -> str:
+        """Computes deterministic stable hash key for this extracted row."""
+        raw_sig = f"{self.procurement_id}:{doc_hash or self.document_id}:{self.sheet_name or self.page_number}:{self.table_index}:{self.row_index}:{self.raw_text.strip()}".encode("utf-8")
+        self.observation_key = hashlib.sha256(raw_sig).hexdigest()
+        return self.observation_key
+
+
+@dataclass
+class ProductNormalizationDecision:
+    """Structured normalization result from model / rule normalizer."""
+    item_type: RowType
+    normalized_product_name: str
+    domain: str = "GENERAL"
+    category_name: str = ""
+    subcategory_name: str = ""
+    product_family: str = ""
+    aliases: List[str] = field(default_factory=list)
+    confidence: float = 0.8
+    novelty_probability: float = 0.0
+    explanation: str = ""
+
+
+@dataclass
 class ProductObservationDTO:
     """Individual product observation extracted from a tender document row."""
     observation_id: str
@@ -53,6 +92,9 @@ class ProductObservationDTO:
     raw_text: str = ""
     normalized_name: str = ""
     category_name: str = ""
+    domain: str = "GENERAL"
+    subcategory_name: str = ""
+    product_family: str = ""
     row_type: RowType = RowType.UNKNOWN
     quantity: float = 0.0
     unit_raw: str = ""
@@ -62,6 +104,7 @@ class ProductObservationDTO:
     is_seed: bool = False
     seed_observation_id: Optional[str] = None
     confidence: float = 0.5
+    observation_key: str = ""
     discovered_at: str = field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
 
     def to_dict(self) -> Dict[str, Any]:
@@ -80,10 +123,12 @@ class ProductObservationDTO:
 
 @dataclass
 class ProductCategoryDTO:
-    """Canonical or discovered product category."""
+    """Canonical or discovered product category with hierarchy support."""
     category_id: str
     canonical_name: str
     domain: str = "GENERAL"
+    parent_category_id: Optional[str] = None
+    hierarchy_level: str = "CATEGORY"  # DOMAIN, CATEGORY, SUBCATEGORY, PRODUCT_FAMILY
     status: DiscoveryStatus = DiscoveryStatus.AUTO_DISCOVERED
     first_discovered_at: str = field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
     observation_count: int = 0
@@ -110,6 +155,7 @@ class CategoryRelationDTO:
     category_b: str
     co_occurrence_count: int = 0
     conditional_prob_b_given_a: float = 0.0
+    conditional_prob_a_given_b: float = 0.0
     median_amount_ratio: float = 0.0
     median_quantity_ratio: float = 0.0
 
@@ -119,3 +165,4 @@ class CategoryRelationDTO:
     @classmethod
     def from_dict(cls, data: Dict[str, Any]) -> "CategoryRelationDTO":
         return cls(**data)
+

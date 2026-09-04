@@ -26,6 +26,24 @@ PROPOSAL_STATUS_PENDING = "PENDING"
 PROPOSAL_STATUS_APPROVED = "APPROVED"
 PROPOSAL_STATUS_REJECTED = "REJECTED"
 
+PERMISSION_TAXONOMY_MANAGE = "RESEARCH_TAXONOMY_MANAGE"
+
+
+@dataclass
+class UserContext:
+    """Authenticated user context for operation security boundaries."""
+    user_id: str
+    username: str
+    roles: List[str] = field(default_factory=list)
+    permissions: List[str] = field(default_factory=list)
+
+    def has_permission(self, permission: str) -> bool:
+        """Checks if context has explicit permission or superuser/admin role."""
+        if any(r.upper() in ("SUPERUSER", "ADMIN", "SYSTEM_ADMIN", "LEAD_EXPERT") for r in self.roles):
+            return True
+        return permission in self.permissions
+
+
 
 @dataclass
 class TaxonomyRuleDTO:

@@ -1,4 +1,4 @@
-﻿"""Budget-constrained selection of exploration target clusters and procurements."""
+"""Budget-constrained selection of exploration target clusters and procurements."""
 
 from __future__ import annotations
 
@@ -17,7 +17,7 @@ from src.market_exploration.dto import (
 
 def _matches_cluster(procurement: Dict[str, Any], cluster_key: str, cluster_level: str) -> bool:
     """Checks if a procurement matches a given cluster key and level."""
-    raw_okpd = str(procurement.get("okpd_code") or procurement.get("okpd_raw") or "")
+    raw_okpd = str(procurement.get("okpd_code") or procurement.get("okpd_code_raw") or procurement.get("okpd_raw") or "")
     hier = parse_okpd_hierarchy(raw_okpd)
     prod_cat = str(procurement.get("product_category") or "").strip()
 
@@ -34,6 +34,44 @@ def _matches_cluster(procurement: Dict[str, Any], cluster_key: str, cluster_leve
     elif cluster_level == "PRODUCT_CATEGORY":
         return prod_cat == code
     return False
+
+
+def _stratified_sample_matching(
+    matching: List[Dict[str, Any]],
+    max_k: int,
+    p25: float = 0.0,
+    p75: float = 0.0,
+) -> List[Dict[str, Any]]:
+    """Selects stratified sample across price tiers (HIGH, MED, LOW) rather than only top lot price."""
+    if len(matching) <= max_k:
+        return matching
+
+    # Sort descending by price
+    sorted_items = sorted(
+        matching,
+        key=lambda p: float(p.get("lot_price") or p.get("initial_price") or 0.0),
+        reverse=True,
+    )
+
+    if max_k == 1:
+        return [sorted_items[0]]
+    if max_k == 2:
+        return [sorted_items[0], sorted_items[-1]]
+
+    # For k >= 3, pick high (top), low (bottom), and evenly spaced middle items
+    selected: List[Dict[str, Any]] = []
+    selected.append(sorted_items[0])
+    selected.append(sorted_items[-1])
+
+    remaining_needed = max_k - 2
+    middle_pool = sorted_items[1:-1]
+    if middle_pool:
+        step = max(1, len(middle_pool) // (remaining_needed + 1))
+        for i in range(remaining_needed):
+            idx = min(len(middle_pool) - 1, (i + 1) * step)
+            selected.append(middle_pool[idx])
+
+    return selected[:max_k]
 
 
 def select_exploration_plan(
@@ -61,10 +99,17 @@ def select_exploration_plan(
     selected_pids: Set[int] = set()
     targeted_clusters: Set[str] = set()
 
+    cumulative_docs = 0
+    cumulative_bytes = 0
+
     for profile in sorted_profiles:
         if len(targeted_clusters) >= b.max_clusters_per_run:
             break
         if len(selected_items) >= b.max_total_procurements:
+            break
+        if cumulative_docs >= b.max_document_downloads:
+            break
+        if cumulative_bytes >= b.max_bytes:
             break
 
         # Match procurements for this cluster
@@ -77,17 +122,25 @@ def select_exploration_plan(
         if not matching:
             continue
 
-        # Sort matching items by lot price descending
-        matching.sort(
-            key=lambda p: float(p.get("lot_price") or p.get("initial_price") or 0.0),
-            reverse=True,
+        # Stratified sampling across price distribution
+        stratified = _stratified_sample_matching(
+            matching=matching,
+            max_k=b.max_procurements_per_cluster,
+            p25=profile.p25_contract_value,
+            p75=profile.p75_contract_value,
         )
 
         cluster_added_count = 0
-        for p in matching:
-            if cluster_added_count >= b.max_procurements_per_cluster:
-                break
+        for p in stratified:
             if len(selected_items) >= b.max_total_procurements:
+                break
+            
+            p_docs = int(p.get("document_count") or 1)
+            p_bytes = int(p.get("estimated_size_bytes") or (p_docs * 500_000))
+
+            if cumulative_docs + p_docs > b.max_document_downloads and selected_items:
+                break
+            if cumulative_bytes + p_bytes > b.max_bytes and selected_items:
                 break
 
             pid = int(p.get("procurement_id") or p.get("id") or 0)
@@ -111,6 +164,8 @@ def select_exploration_plan(
             )
             selected_items.append(item)
             selected_pids.add(pid)
+            cumulative_docs += p_docs
+            cumulative_bytes += p_bytes
             cluster_added_count += 1
 
         if cluster_added_count > 0:
@@ -127,5 +182,7 @@ def select_exploration_plan(
         metadata={
             "total_available_unresearched": len(unresearched),
             "candidate_clusters_evaluated": len(profiles),
+            "cumulative_estimated_docs": cumulative_docs,
+            "cumulative_estimated_bytes": cumulative_bytes,
         },
     )

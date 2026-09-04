@@ -1,4 +1,4 @@
-﻿"""Unit and integration tests for Market Exploration subsystem."""
+"""Unit and integration tests for Market Exploration subsystem."""
 
 from __future__ import annotations
 
@@ -118,3 +118,34 @@ def test_run_market_exploration_cycle_dry_run():
     assert plan.is_dry_run is True
     assert plan.total_procurements_targeted > 0
     assert len(plan.items) > 0
+
+
+def test_rolling_window_filtering_and_percentiles():
+    """Verifies time window filtering and statistical quartile calculations."""
+    from src.market_exploration.market_profile import filter_by_rolling_window
+
+    tenders = [
+        {"procurement_id": 1, "okpd_code": "27.40", "publish_date": "2026-09-01T10:00:00Z", "lot_price": 100_000.0, "customer": "C1", "region": "77"},
+        {"procurement_id": 2, "okpd_code": "27.40", "publish_date": "2026-08-15T10:00:00Z", "lot_price": 200_000.0, "customer": "C2", "region": "78"},
+        {"procurement_id": 3, "okpd_code": "27.40", "publish_date": "2026-05-01T10:00:00Z", "lot_price": 500_000.0, "customer": "C1", "region": "77"},
+        {"procurement_id": 4, "okpd_code": "27.40", "publish_date": "2025-01-01T10:00:00Z", "lot_price": 1_000_000.0, "customer": "C3", "region": "50"},
+    ]
+
+    # 30-day window keeps items 1 and 2
+    w30 = filter_by_rolling_window(tenders, window_days=30)
+    assert len(w30) == 2
+    assert {p["procurement_id"] for p in w30} == {1, 2}
+
+    # 365-day window keeps items 1, 2, 3
+    w365 = filter_by_rolling_window(tenders, window_days=365)
+    assert len(w365) == 3
+    assert {p["procurement_id"] for p in w365} == {1, 2, 3}
+
+    # Profile calculations on all
+    profiles = build_market_profiles(tenders, window_days=None)
+    p_27 = next(p for p in profiles if p.cluster_key == "OKPD_LEVEL2:27.40")
+    assert p_27.procurement_count == 4
+    assert p_27.distinct_customers == 3
+    assert p_27.distinct_regions == 3
+    assert p_27.p25_contract_value <= p_27.median_contract_value <= p_27.p75_contract_value
+
