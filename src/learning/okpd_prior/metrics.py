@@ -35,34 +35,29 @@ class ModelEvaluationMetrics:
 
 
 def compute_roc_auc(y_true: List[int], y_score: List[float]) -> float:
-    """Computes Area Under the ROC Curve without external dependencies."""
+    """Computes Area Under the ROC Curve using standard tie-safe Mann-Whitney U rank sum."""
     n = len(y_true)
     pos = sum(y_true)
     neg = n - pos
     if pos == 0 or neg == 0:
         return 0.5
 
-    # Pair items and sort by score descending
-    pairs = sorted(zip(y_score, y_true), key=lambda p: p[0], reverse=True)
-    
-    # Trapezoidal approximation
-    tp = 0
-    fp = 0
-    tp_prev = 0
-    fp_prev = 0
-    auc = 0.0
+    # Sort ascending by score and assign average ranks for ties (1-based ranks)
+    indexed_asc = sorted(enumerate(zip(y_score, y_true)), key=lambda x: x[1][0])
+    ranks = [0.0] * n
+    i = 0
+    while i < n:
+        j = i
+        while j < n and indexed_asc[j][1][0] == indexed_asc[i][1][0]:
+            j += 1
+        avg_rank = (i + 1 + j) / 2.0
+        for k in range(i, j):
+            ranks[indexed_asc[k][0]] = avg_rank
+        i = j
 
-    for score, target in pairs:
-        if target == 1:
-            tp += 1
-        else:
-            fp += 1
-            # Add trapezoid area
-            auc += (tp + tp_prev) / 2.0
-            tp_prev = tp
-            fp_prev = fp
-
-    return round(auc / (pos * neg), 4)
+    pos_rank_sum = sum(ranks[idx] for idx, y in enumerate(y_true) if y == 1)
+    u = pos_rank_sum - (pos * (pos + 1)) / 2.0
+    return round(u / (pos * neg), 4)
 
 
 def compute_pr_auc(y_true: List[int], y_score: List[float]) -> float:

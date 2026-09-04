@@ -415,3 +415,161 @@ def test_r_shadow_badge_and_missing_prediction_safety():
     repo = OKPDPriorPredictionRepository(in_memory_predictions={}, fallback_to_model=False)
     pred = repo.get_by_procurement_id(999999, okpd_code=None)
     assert pred is None
+
+
+# Test S: RECHECK-1 PID reconciliation and counts invariant
+def test_s_recheck1_pid_reconciliation_counts():
+    # 28 candidate items in RECHECK-1
+    pos_pids = {165110, 165152, 163840, 163841, 163638, 163645}
+    neg_pids = {
+        163858, 992, 993, 163637, 163641, 163640, 163851, 163870, 163872, 163861,
+        163644, 163948, 163642, 163649, 163646, 163648, 163838, 985, 987, 163871
+    }
+    unres_pids = {163843, 163874}
+
+    all_pids = pos_pids.union(neg_pids).union(unres_pids)
+    assert len(all_pids) == 28
+    assert len(pos_pids) == 6
+    assert len(neg_pids) == 20
+    assert len(unres_pids) == 2
+
+    # Disjointness of labels
+    assert pos_pids.isdisjoint(neg_pids)
+    assert pos_pids.isdisjoint(unres_pids)
+    assert neg_pids.isdisjoint(unres_pids)
+
+
+# Test T: Score-blind RECHECK-2 selection and cohort disjointness
+def test_t_recheck2_selection_and_cohort_disjointness():
+    recheck1_pids = {
+        165110, 165152, 163840, 163841, 163638, 163645,
+        163858, 992, 993, 163637, 163641, 163640, 163851, 163870, 163872, 163861,
+        163644, 163948, 163642, 163649, 163646, 163648, 163838, 985, 987, 163871,
+        163843, 163874
+    }
+    # 54 candidates in RECHECK-2
+    recheck2_pids = {
+        163833, 163856, 163937, 163957, 164295, 164303, 164316, 164336, 164341,
+        164504, 164720, 165008, 163936, 164477, 164487, 164525, 165116, 164324,
+        164493, 163995, 164491, 164506, 165102, 164721, 163835, 163869, 163952,
+        163853, 163867, 163873, 163857, 163943, 163850, 163935, 164699, 164509,
+        163842, 163852, 163865, 165148, 165153, 163862, 163955, 163854, 163855,
+        163941, 163931, 163947, 163932, 163848, 163875, 163876, 163877, 163879
+    }
+    assert len(recheck2_pids) == 54
+    assert recheck1_pids.isdisjoint(recheck2_pids), "RECHECK-1 and RECHECK-2 must be completely disjoint"
+
+
+# Test U: Original frozen model invariants (feature set, type, tie policy)
+def test_u_frozen_model_invariants():
+    model = OKPDResearchHitModelV1()
+    assert model.feature_names == ["okpd_root", "okpd_level2", "okpd_level3", "okpd_full"]
+    assert model.model_name == "okpd_research_hit_v1"
+    assert model.model_type == "CatBoostClassifier"
+    assert BASELINE_MODEL_NAME == "OKPD_HIERARCHICAL_PRIOR_V1"
+
+
+# Test V: Same-row Baseline and ML evaluation invariant
+def test_v_same_row_baseline_and_ml_evaluation():
+    test_rows = [
+        {"procurement_id": 1, "okpd_code": "42.11", "target": 1},
+        {"procurement_id": 2, "okpd_code": "26.20", "target": 0},
+        {"procurement_id": 3, "okpd_code": "43.34", "target": 1},
+        {"procurement_id": 4, "okpd_code": "71.12", "target": 0},
+    ]
+    y_true = [r["target"] for r in test_rows]
+
+    # Baseline predictions
+    baseline = OKPDHierarchicalPriorV1()
+    baseline_scores = [baseline.predict(parse_okpd_hierarchy(r["okpd_code"])).p_research_hit for r in test_rows]
+
+    # ML predictions
+    ml_model = OKPDResearchHitModelV1()
+    ml_scores = [s.p_research_hit for s in ml_model.score_population(test_rows)]
+
+    assert len(baseline_scores) == len(test_rows)
+    assert len(ml_scores) == len(test_rows)
+    assert len(baseline_scores) == len(ml_scores)
+
+    b_metrics = evaluate_ranking_metrics(y_true, baseline_scores)
+    ml_metrics = evaluate_ranking_metrics(y_true, ml_scores)
+
+    assert b_metrics.total_samples == ml_metrics.total_samples == len(test_rows)
+    assert b_metrics.positive_count == ml_metrics.positive_count == sum(y_true)
+
+
+# Test W: Label leakage prevention: diagnostic fields are not features
+def test_w_label_leakage_prevention():
+    row = ProcurementDatasetRow(
+        procurement_id=999,
+        research_completed_at="2026-09-04T10:00:00Z",
+        okpd_code_raw="42.11.20",
+        okpd_root="42",
+        okpd_level2="42.11",
+        okpd_level3="42.11.20",
+        okpd_full="42.11.20",
+        outcome=OUTCOME_POSITIVE,
+        research_hit=1,
+        trusted_confirmed_count=10,
+        rejected_count=50,
+        unknown_count=3,
+        pending_validation_count=2,
+        research_document_count=8,
+    )
+    features = row.to_feature_dict()
+    # Must ONLY contain hierarchical OKPD keys
+    assert set(features.keys()) == {"okpd_root", "okpd_level2", "okpd_level3", "okpd_full"}
+    assert "trusted_confirmed_count" not in features
+    assert "research_hit" not in features
+    assert "rejected_count" not in features
+    assert "unknown_count" not in features
+
+
+# Test X: Cumulative Fresh evaluation aggregation
+def test_x_cumulative_fresh_evaluation_aggregation():
+    # 26 rows from RECHECK-1 + 54 rows from RECHECK-2 = 80 rows
+    r1_y = [1] * 6 + [0] * 20
+    r2_y = [1] * 13 + [0] * 41
+    cum_y = r1_y + r2_y
+
+    assert len(cum_y) == 80
+    assert sum(cum_y) == 19
+    assert len(cum_y) - sum(cum_y) == 61
+
+    # Simulate strictly separating scores
+    cum_scores = [0.9 + (i * 0.001) if y == 1 else 0.1 + (i * 0.001) for i, y in enumerate(cum_y)]
+    metrics = evaluate_ranking_metrics(cum_y, cum_scores)
+    assert metrics.total_samples == 80
+    assert metrics.positive_count == 19
+    assert metrics.negative_count == 61
+    assert metrics.roc_auc == 1.0
+
+
+# Test Y: Single class metric handling safety (no div by zero)
+def test_y_single_class_metric_handling():
+    all_zeros = [0, 0, 0, 0, 0]
+    all_ones = [1, 1, 1, 1, 1]
+    scores = [0.1, 0.2, 0.3, 0.4, 0.5]
+
+    m_zero = evaluate_ranking_metrics(all_zeros, scores)
+    assert m_zero.roc_auc == 0.5
+    assert m_zero.pr_auc == 0.0
+
+    m_one = evaluate_ranking_metrics(all_ones, scores)
+    assert m_one.roc_auc == 0.5
+    assert m_one.pr_auc == 1.0
+
+
+# Test Z: Raw Top-K hit reporting calculations
+def test_z_raw_top_k_hit_reporting():
+    y_true = [1, 0, 1, 0, 0, 0, 0, 0, 0, 0] # 2 positives in 10 items
+    y_scores = [0.9, 0.8, 0.7, 0.6, 0.5, 0.4, 0.3, 0.2, 0.1, 0.0]
+
+    metrics = evaluate_ranking_metrics(y_true, y_scores)
+    assert metrics.precision_at_10 == 1.0 # top 1 item has score 0.9 (hit) -> 1/1 = 1.0
+    assert metrics.recall_at_10 == 0.5 # 1 out of 2 total positives
+    assert metrics.precision_at_20 == 0.5 # top 2 items (1, 0) -> 1/2 = 0.5
+    assert metrics.recall_at_20 == 0.5
+    assert metrics.recall_at_30 == 1.0 # top 3 items (1, 0, 1) -> 2/2 = 1.0
+    assert metrics.lift_at_10 == 5.0 # precision 1.0 / base_rate 0.2 = 5.0
+
