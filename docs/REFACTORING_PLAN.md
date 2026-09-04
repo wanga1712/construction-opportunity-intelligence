@@ -44,18 +44,15 @@ Phase 0 audit status and gate:
 
 ## PHASE 1 — CANONICAL HYDRO DATA
 
-`[!]` **BLOCKED BEFORE IMPLEMENTATION — IDENTITY_AUTHORITY_MISSING_S7_ALIAS**
+`[x]` **PHASE 1 — CANONICAL HYDRO DATA**
 
 Operator explicitly authorized Phase 1 and the Phase 0 branch was published
 normally to canonical `origin` at `aae7377d6d1b9d235ffd17f206dc08b2e121a69f`.
-The approved S13 alias was supplied and the CRM catalog preflight passed
-read-only. Deterministic local SSH-config discovery found zero blocks that
-can be proven to be the approved S7 block (`MATCHING_BLOCK_COUNT=0`). The
-required source-side catalog is therefore not inspected. Per
-`docs/PROJECT_OPERATING_RULES.md`, implementation cannot proceed against an
-assumed source schema. No Phase 1 schema, migration or code has been created.
-Resume after the exact approved S7 Host alias is available through documented
-authority; then update the Phase 1 design before implementation.
+S13 and S7 catalog preflights passed read-only through the approved aliases
+`mint-vpn` and `nyx-vpn`. Phase 1 canonical Hydro service layer, migration
+script and focused tests are complete against the verified schema. Report:
+`docs/reports/hydro_parking_leads/PHASE_1_CANONICAL_HYDRO_DATA.md`.
+Production DDL/DML and deployment were not performed. STOP before Phase 2.
 
 ## Правила ведения
 

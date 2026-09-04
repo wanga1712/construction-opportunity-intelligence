@@ -28,7 +28,7 @@ account, host, credential или key path. Запрещено пробовать
 | Host | Authority and purpose | Approved human/SSH access |
 |---|---|---|
 | S13 | Logical name `S13`; CRM, Candidate routing, Qwen/Ollama, document intelligence runtime, canonical CRM DB | primary operator `<S13_SSH_USER>`; connect via the **existing Host block** in local Windows SSH config that is already bound to this CRM host (User + IdentityFile from that block). There is **no** `Host S13` stanza. Do not invent aliases, users, or extra network setup. |
-| S7 | Logical name `S7`; source/history authority, source procurement data and source lifecycle/status | approved OS user `<S7_SSH_USER>`; connect via the existing Host block in the same local SSH config for this source host. |
+| S7 | Logical name `S7`; source/history authority, source procurement data and source lifecycle/status | approved SSH Host alias `nyx-vpn` (existing local Windows SSH config block); approved OS user remains `<S7_SSH_USER>`. |
 
 Не вводить дополнительные canonical hosts без отдельного project decision.
 
@@ -64,6 +64,9 @@ Proven local SSH config (inspected, not modified):
 - Approved S13 CRM access is the **already-existing Host block** in
   `%USERPROFILE%\.ssh\config` whose User is `<S13_SSH_USER>` and whose
   IdentityFile is the Windows SSH identity documented above.
+- Approved S7 source access is the existing Host alias `nyx-vpn` in the same
+  local SSH config; its target and identity details are intentionally not
+  repeated here.
 - Use that Host alias as written. Do not invent another username, host,
   identity file, ProxyJump, or network overlay.
 - Do not print HostName, addresses, usernames, or key contents in reports.
