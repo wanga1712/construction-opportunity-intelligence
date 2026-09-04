@@ -486,7 +486,7 @@ def load_subcategories_for_categories(
     category_codes: list[str], crm_db: Any
 ) -> dict[str, list[dict]]:
     """Batch subcategory lookup ??? single SQL query for all requested codes."""
-    codes = [str(c or "").strip() for c in (category_codes or []) if str(c or "").strip()]
+    codes = list(dict.fromkeys(str(c or "").strip() for c in (category_codes or []) if str(c or "").strip()))
     if not codes:
         return {}
     try:

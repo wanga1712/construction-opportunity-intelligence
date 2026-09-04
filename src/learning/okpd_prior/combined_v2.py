@@ -62,7 +62,7 @@ class ResearchPriorityModelV2:
             "level3": {},
             "full": {},
         }
-        self.training_global_positive_rate: float = 0.23
+        self.training_global_positive_rate: float = 0.0
         self.target_encoding_smoothing: float = 5.0
         self.target_encoding_levels: List[str] = ["root", "level2", "level3", "full"]
         self.is_fitted = False
@@ -180,7 +180,7 @@ class ResearchPriorityModelV2:
         if len(prices) != n:
             prices = [0.0 for _ in range(n)]
 
-        self.training_global_positive_rate = float(sum(y) / len(y)) if y else 0.23
+        self.training_global_positive_rate = float(sum(y) / len(y)) if y else 0.0
         hierarchies = [parse_okpd_hierarchy(c) for c in okpd_codes]
         okpd_tuples = [
             (h.okpd_root, h.okpd_level2, h.okpd_level3, h.okpd_full) for h in hierarchies
@@ -216,16 +216,19 @@ class ResearchPriorityModelV2:
                     f_e = self._get_okpd_encoded_value("full", full, fold_enc_dict, tr_mean)
                     oof_okpd_encs[vi] = (r_e, l2_e, l3_e, f_e)
         else:
-            # Fallback for very small non-splittable sample
-            full_dict = self._compute_target_encoding_dict(
-                okpd_tuples, y, self.training_global_positive_rate, self.target_encoding_smoothing
-            )
+            # Leave-one-out calculation to guarantee zero self-target leakage even for tiny non-splittable datasets
             for vi in range(n):
+                loo_tuples = [okpd_tuples[j] for j in range(n) if j != vi]
+                loo_y = [y[j] for j in range(n) if j != vi]
+                loo_mean = sum(loo_y) / len(loo_y) if loo_y else self.training_global_positive_rate
+                loo_dict = self._compute_target_encoding_dict(
+                    loo_tuples, loo_y, loo_mean, self.target_encoding_smoothing
+                )
                 root, l2, l3, full = okpd_tuples[vi]
-                r_e = self._get_okpd_encoded_value("root", root, full_dict)
-                l2_e = self._get_okpd_encoded_value("level2", l2, full_dict)
-                l3_e = self._get_okpd_encoded_value("level3", l3, full_dict)
-                f_e = self._get_okpd_encoded_value("full", full, full_dict)
+                r_e = self._get_okpd_encoded_value("root", root, loo_dict, loo_mean)
+                l2_e = self._get_okpd_encoded_value("level2", l2, loo_dict, loo_mean)
+                l3_e = self._get_okpd_encoded_value("level3", l3, loo_dict, loo_mean)
+                f_e = self._get_okpd_encoded_value("full", full, loo_dict, loo_mean)
                 oof_okpd_encs[vi] = (r_e, l2_e, l3_e, f_e)
 
         # 3. Extract training tabular features using OOF inputs
@@ -417,7 +420,8 @@ class ResearchPriorityModelV2:
         instance.gbdt = data.get("gbdt")
         instance.okpd_encodings = data.get("okpd_encodings", {})
         instance.training_global_positive_rate = float(
-            meta.get("training_global_positive_rate") or data.get("training_global_positive_rate", 0.23)
+            meta.get("training_global_positive_rate") if meta.get("training_global_positive_rate") is not None
+            else data.get("training_global_positive_rate", 0.0)
         )
         instance.target_encoding_smoothing = float(
             meta.get("target_encoding_smoothing") or data.get("target_encoding_smoothing", 5.0)

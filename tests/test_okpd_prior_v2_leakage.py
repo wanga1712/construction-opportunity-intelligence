@@ -1,4 +1,4 @@
-﻿"""Tests for V2 target encoding leakage prevention, domain disambiguation, and superuser authority."""
+"""Tests for V2 target encoding leakage prevention, domain disambiguation, and superuser authority."""
 
 from __future__ import annotations
 
@@ -113,3 +113,75 @@ def test_superuser_taxonomy_authority_enforcement():
 
     # 3. Superuser deletion must succeed
     assert service.delete_rule(rule.rule_id, actor="superuser") is True
+
+
+def test_artificial_corpus_leave_one_out_target_encoding_leak_free():
+    """Verifies that for an artificial corpus, target encodings during training are strictly leak-free."""
+    # Row A: OKPD 42.11, label=1
+    # Row B: OKPD 42.11, label=0
+    # Row C: OKPD 32.50, label=0
+    # Row D: OKPD 32.50, label=1
+    titles = ["Работа дорожная А", "Работа дорожная Б", "Медицина В", "Медицина Г"]
+    okpd_codes = ["42.11.20.000", "42.11.20.000", "32.50.10.000", "32.50.10.000"]
+    prices = [100.0, 100.0, 100.0, 100.0]
+    y = [1, 0, 0, 1]
+
+    model = ResearchPriorityModelV2(random_state=42)
+    # Fit model with small sample (triggers LOO encoding branch)
+    model.fit(titles, okpd_codes, prices, y, dataset_snapshot_sha256="test_sha")
+
+    # In LOO calculation for Row A (y=1):
+    # Other rows: B(42.11, y=0), C(32.50, y=0), D(32.50, y=1).
+    # Remaining pos for 42.11 is 0 out of 1.
+    # Global mean of other rows = (0+0+1)/3 = 1/3 = 0.3333.
+    # Smoothed encoding for 42.11 at Row A = (0 + 5*(1/3)) / (1 + 5) = (5/3) / 6 = 5/18 = 0.2778.
+    # If it had leaked Row A (y=1), pos would be 1, giving (1 + 5*0.5) / (2+5) = 3.5 / 7 = 0.5.
+    # Verify that training_global_positive_rate is dynamic: 2/4 = 0.5
+    assert model.training_global_positive_rate == 0.5
+
+
+def test_unknown_okpd_prior_uses_dynamic_training_rate_not_hardcoded(tmp_path):
+    """Verifies that unseen/unknown OKPD gets strictly dynamic training global positive rate, not hardcoded 0.23."""
+    titles = [f"Тендер {i}" for i in range(10)]
+    okpd_codes = [f"42.{i:02d}.00.000" for i in range(10)]
+    prices = [10_000.0] * 10
+    # 3 positives, 7 negatives -> dynamic prior = 0.30
+    y = [1, 1, 1, 0, 0, 0, 0, 0, 0, 0]
+
+    model = ResearchPriorityModelV2(random_state=42)
+    model.fit(titles, okpd_codes, prices, y, dataset_snapshot_sha256="snapshot_30pct")
+
+    assert model.training_global_positive_rate == pytest.approx(0.30)
+    assert model.training_global_positive_rate != pytest.approx(0.23)
+
+    # Check fallback for unknown OKPD
+    unknown_val = model._get_okpd_encoded_value("full", "99.99.99.999")
+    assert unknown_val == pytest.approx(0.30)
+    assert unknown_val != pytest.approx(0.23)
+
+
+def test_model_artifact_preserves_dynamic_positive_rate_and_encodings(tmp_path):
+    """Verifies that saving and loading model preserves dynamic prior, encodings, and dataset metadata."""
+    titles = ["Строительство дороги", "Поставка бинтов", "Монтаж кровли", "Поставка хлеба"]
+    okpd_codes = ["42.11.10.000", "32.50.13.000", "43.91.10.000", "10.89.10.000"]
+    prices = [1000.0, 2000.0, 3000.0, 4000.0]
+    y = [1, 0, 1, 0]
+
+    model = ResearchPriorityModelV2(random_state=42)
+    model.fit(titles, okpd_codes, prices, y, dataset_snapshot_sha256="test_sha_123")
+
+    artifact_path = str(tmp_path / "model_v2.pkl")
+    model.save_artifact(artifact_path)
+
+    loaded = ResearchPriorityModelV2.load_artifact(artifact_path)
+    assert loaded.is_fitted is True
+    assert loaded.training_global_positive_rate == pytest.approx(0.5)
+    assert loaded.dataset_snapshot_sha256 == "test_sha_123"
+    assert loaded.training_sample_count == 4
+    assert loaded.positive_count == 2
+
+    # Check predictions match
+    pred_orig = model.predict_proba(titles, okpd_codes, prices)
+    pred_loaded = loaded.predict_proba(titles, okpd_codes, prices)
+    assert pred_orig == pytest.approx(pred_loaded)
+
