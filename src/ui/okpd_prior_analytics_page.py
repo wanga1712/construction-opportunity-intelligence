@@ -1,10 +1,10 @@
 """Read-only diagnostics and analytics page for OKPD Prior Learning V1.
 
 Displays:
-- Training corpus statistics
+- Dynamic training corpus statistics
 - OKPD Root hierarchy distribution
-- Model quality metrics (PR-AUC, ROC-AUC, Lift@K%, Recall@K%)
-- Band performance (GOLD, SILVER, BRONZE, WOOD)
+- Baseline vs ML model quality metrics (PR-AUC, ROC-AUC, Lift@K%, Recall@K%)
+- Tie-safe band performance (GOLD, SILVER, BRONZE, WOOD)
 """
 
 from __future__ import annotations
@@ -44,7 +44,7 @@ def render_okpd_prior_analytics_page(
     
     col1, col2, col3, col4, col5 = st.columns(5)
     with col1:
-        st.metric("Всего исследованных", ds.get("total_procurements", 0))
+        st.metric("Всего исследовано", ds.get("total_procurements", 0))
     with col2:
         st.metric("Положительные (Hits)", ds.get("positive_count", 0))
     with col3:
@@ -52,27 +52,40 @@ def render_okpd_prior_analytics_page(
     with col4:
         st.metric("Исключено (Unresolved)", ds.get("unresolved_excluded_count", 0))
     with col5:
-        st.metric("Базовая конверсия (Hit Rate)", f"{ds.get('positive_rate', 0.0) * 100:.1f}%")
+        st.metric("Базовая конверсия", f"{ds.get('positive_rate', 0.0) * 100:.1f}%")
 
     st.markdown(
         f"**Snapshot SHA256:** `{report_data.get('dataset_snapshot_sha256', '—')}` · "
-        f"**Сплит:** Train={ds.get('train_rows', 0)}, Val={ds.get('val_rows', 0)}, Holdout={ds.get('holdout_rows', 0)}"
+        f"**Сплит:** Train={ds.get('train_rows', 0)} ({ds.get('train_positives', 0)} pos), "
+        f"Val={ds.get('val_rows', 0)} ({ds.get('val_positives', 0)} pos), "
+        f"Holdout={ds.get('holdout_rows', 0)} ({ds.get('holdout_positives', 0)} pos)"
     )
 
     st.divider()
 
     # 2. Model Quality Metrics
     st.markdown("### 🎯 Качество ранжирования модели (Model Quality)")
-    st.warning("⚠️ **EARLY_SHADOW_METRICS (Small Sample Warning):** Оценка проведена на раннем корпусе (32 размеченные закупки, 6 в holdout). Метрики носят предварительный исследовательский характер.")
     
+    labeled_count = ds.get("labeled_count", 0)
+    holdout_rows = ds.get("holdout_rows", 0)
+    val_rows = ds.get("val_rows", 0)
+    val_pos = ds.get("val_positives", 0)
+    holdout_pos = ds.get("holdout_positives", 0)
+
+    st.warning(
+        f"⚠️ **EARLY_SHADOW_METRICS (Small Sample Warning):** Оценка проведена на текущем корпусе "
+        f"({labeled_count} размеченных закупок; Val={val_rows} [{val_pos} пос.], Holdout={holdout_rows} [{holdout_pos} пос.]). "
+        f"Метрики носят предварительный исследовательский характер."
+    )
+
     m_metrics = report_data.get("model_metrics", {}).get("holdout") or report_data.get("model_metrics", {}).get("all", {})
     b_metrics = report_data.get("baseline_metrics", {}).get("holdout") or report_data.get("baseline_metrics", {}).get("all", {})
 
     q_col1, q_col2, q_col3, q_col4, q_col5 = st.columns(5)
     with q_col1:
-        st.metric("PR-AUC", f"{m_metrics.get('pr_auc', 0.0):.4f}")
+        st.metric("PR-AUC (ML)", f"{m_metrics.get('pr_auc', 0.0):.4f}")
     with q_col2:
-        st.metric("ROC-AUC", f"{m_metrics.get('roc_auc', 0.0):.4f}")
+        st.metric("ROC-AUC (ML)", f"{m_metrics.get('roc_auc', 0.0):.4f}")
     with q_col3:
         st.metric("Lift @ 10%", f"{m_metrics.get('lift_at_10', 1.0):.2f}x")
     with q_col4:
@@ -80,22 +93,25 @@ def render_okpd_prior_analytics_page(
     with q_col5:
         st.metric("Recall @ 30%", f"{m_metrics.get('recall_at_30', 0.0) * 100:.1f}%")
 
-    promo_status = report_data.get("production_priority_promotion", report_data.get("model_result", "INSUFFICIENT_EVALUATION_DATA"))
+    promo_status = report_data.get("production_priority_promotion", "INSUFFICIENT_EVALUATION_DATA")
     signal_status = report_data.get("signal_status", "ENCOURAGING")
+    eval_status = report_data.get("evaluation_status", "INSUFFICIENT_DATA")
     impl_status = report_data.get("implementation_status", "PASS")
     promo_reason = report_data.get("promotion_reason", "Требуется накопление большего корпуса.")
 
     st.markdown(
         f"- **Статус реализации (Implementation):** `{impl_status}`\n"
         f"- **Качество сигнала (Signal):** `{signal_status}`\n"
+        f"- **Статус выборки (Evaluation Status):** `{eval_status}`\n"
         f"- **Допуск к управлению очередью (Promotion):** `{promo_status}` ({promo_reason})"
     )
 
     st.divider()
 
     # 3. Band Performance (Medals)
-    st.markdown("### 🏅 Эффективность медальных корзин (`IN_SAMPLE_OR_MIXED_CORPUS_DIAGNOSTIC`)")
-    st.caption("ℹ️ Таблица корзин отражает полноразмерный размеченный корпус для проверки калибровки и распределения вероятностей (descriptive diagnostic), а не изолированный holdout-тест.")
+    eval_type = report_data.get("bands_evaluation_type", "IN_SAMPLE_OR_MIXED_CORPUS_DIAGNOSTIC")
+    st.markdown(f"### 🏅 Эффективность медальных корзин (`{eval_type}`)")
+    st.caption("ℹ️ Таблица корзин отражает полноразмерный размеченный корпус для проверки калибровки и распределения вероятностей (descriptive diagnostic).")
     bands = report_data.get("bands", {})
     b_counts = bands.get("counts", {})
     b_hits = bands.get("hits", {})

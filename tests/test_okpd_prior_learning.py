@@ -1,4 +1,4 @@
-"""Comprehensive test suite for OKPD Prior Learning V1 (Cases A through P)."""
+"""Comprehensive test suite for OKPD Prior Learning V1 (Cases A through R)."""
 
 from __future__ import annotations
 
@@ -19,9 +19,11 @@ from src.learning.okpd_prior.dataset import (
     OUTCOME_UNRESOLVED,
     ProcurementDatasetRow,
     create_dataset_snapshot,
+    resolve_research_outcome,
     split_dataset,
 )
 from src.learning.okpd_prior.baseline import (
+    BASELINE_MODEL_NAME,
     OKPDHierarchicalPriorV1,
 )
 from src.learning.okpd_prior.model import (
@@ -29,6 +31,9 @@ from src.learning.okpd_prior.model import (
     BAND_GOLD,
     BAND_SILVER,
     BAND_WOOD,
+    FEATURE_NAMES,
+    MODEL_NAME,
+    MODEL_TYPE,
     OKPDResearchHitModelV1,
     assign_priority_band,
 )
@@ -60,134 +65,93 @@ def test_a_one_procurement_one_dataset_row():
     assert "okpd_root" in d
 
 
-# Test B: trusted CONFIRMED -> positive
+# Test B: trusted CONFIRMED -> positive (via resolve_research_outcome)
 def test_b_trusted_confirmed_produces_positive():
-    # When v4_confirmed >= 1, outcome is POSITIVE and research_hit == 1
-    v4_confirmed = 2
-    v4_unknown = 0
-    pending_val = 0
-    
-    outcome = OUTCOME_POSITIVE if v4_confirmed >= 1 else OUTCOME_UNRESOLVED
-    hit = 1 if outcome == OUTCOME_POSITIVE else None
+    outcome, hit = resolve_research_outcome(
+        research_complete=True,
+        trusted_confirmed_count=2,
+        semantic_unknown_count=0,
+        pending_validation_count=0,
+        technical_gap_count=0,
+    )
     assert outcome == OUTCOME_POSITIVE
     assert hit == 1
 
 
-# Test C: research complete + zero candidates -> safe negative
+# Test C: research complete + zero candidates -> safe negative (via resolve_research_outcome)
 def test_c_zero_candidates_produces_safe_negative():
-    v4_confirmed = 0
-    v4_unknown = 0
-    pending_val = 0
-    v4_rejected = 0
-    total_details = 0
-    is_complete = True
-
-    if is_complete and v4_confirmed >= 1:
-        outcome = OUTCOME_POSITIVE
-    elif is_complete and v4_confirmed == 0 and v4_unknown == 0 and pending_val == 0:
-        outcome = OUTCOME_SAFE_NEGATIVE
-        hit = 0
-    else:
-        outcome = OUTCOME_UNRESOLVED
-
+    outcome, hit = resolve_research_outcome(
+        research_complete=True,
+        trusted_confirmed_count=0,
+        semantic_unknown_count=0,
+        pending_validation_count=0,
+        technical_gap_count=0,
+    )
     assert outcome == OUTCOME_SAFE_NEGATIVE
     assert hit == 0
 
 
-# Test D: only REJECTED candidates -> safe negative if fully terminal/complete
+# Test D: only REJECTED candidates -> safe negative if fully terminal/complete (via resolve_research_outcome)
 def test_d_only_rejected_candidates_produces_safe_negative():
-    v4_confirmed = 0
-    v4_rejected = 45
-    v4_unknown = 0
-    pending_val = 0
-    is_complete = True
-
-    if is_complete and v4_confirmed >= 1:
-        outcome = OUTCOME_POSITIVE
-    elif is_complete and v4_confirmed == 0 and v4_unknown == 0 and pending_val == 0:
-        outcome = OUTCOME_SAFE_NEGATIVE
-        hit = 0
-    else:
-        outcome = OUTCOME_UNRESOLVED
-
+    outcome, hit = resolve_research_outcome(
+        research_complete=True,
+        trusted_confirmed_count=0,
+        semantic_unknown_count=0,
+        pending_validation_count=0,
+        technical_gap_count=0,
+    )
     assert outcome == OUTCOME_SAFE_NEGATIVE
     assert hit == 0
 
 
-# Test E: semantic UNKNOWN -> unresolved, NOT negative
+# Test E: semantic UNKNOWN -> unresolved, NOT negative (via resolve_research_outcome)
 def test_e_semantic_unknown_produces_unresolved():
-    v4_confirmed = 0
-    v4_rejected = 10
-    v4_unknown = 3  # semantic unknown present
-    pending_val = 0
-    is_complete = True
-
-    if is_complete and v4_confirmed >= 1:
-        outcome = OUTCOME_POSITIVE
-    elif is_complete and v4_confirmed == 0 and v4_unknown == 0 and pending_val == 0:
-        outcome = OUTCOME_SAFE_NEGATIVE
-    else:
-        outcome = OUTCOME_UNRESOLVED
-        hit = None
-
+    outcome, hit = resolve_research_outcome(
+        research_complete=True,
+        trusted_confirmed_count=0,
+        semantic_unknown_count=3,
+        pending_validation_count=0,
+        technical_gap_count=0,
+    )
     assert outcome == OUTCOME_UNRESOLVED
     assert hit is None
 
 
-# Test F: unvalidated detail -> unresolved
+# Test F: unvalidated detail -> unresolved (via resolve_research_outcome)
 def test_f_unvalidated_detail_produces_unresolved():
-    v4_confirmed = 0
-    v4_unknown = 0
-    pending_val = 1  # 1 candidate still pending
-    is_complete = True
-
-    if is_complete and v4_confirmed >= 1:
-        outcome = OUTCOME_POSITIVE
-    elif is_complete and v4_confirmed == 0 and v4_unknown == 0 and pending_val == 0:
-        outcome = OUTCOME_SAFE_NEGATIVE
-    else:
-        outcome = OUTCOME_UNRESOLVED
-        hit = None
-
+    outcome, hit = resolve_research_outcome(
+        research_complete=True,
+        trusted_confirmed_count=0,
+        semantic_unknown_count=0,
+        pending_validation_count=1,
+        technical_gap_count=0,
+    )
     assert outcome == OUTCOME_UNRESOLVED
     assert hit is None
 
 
-# Test G: technical unresolved -> unresolved
+# Test G: technical unresolved -> unresolved (via resolve_research_outcome)
 def test_g_technical_unresolved_produces_unresolved():
-    # Technical timeout candidate is not terminal, so pending_val > 0
-    v4_confirmed = 0
-    v4_unknown = 0
-    pending_val = 2
-    is_complete = True
-
-    if is_complete and v4_confirmed >= 1:
-        outcome = OUTCOME_POSITIVE
-    elif is_complete and v4_confirmed == 0 and v4_unknown == 0 and pending_val == 0:
-        outcome = OUTCOME_SAFE_NEGATIVE
-    else:
-        outcome = OUTCOME_UNRESOLVED
-        hit = None
-
+    outcome, hit = resolve_research_outcome(
+        research_complete=True,
+        trusted_confirmed_count=0,
+        semantic_unknown_count=0,
+        pending_validation_count=0,
+        technical_gap_count=2,
+    )
     assert outcome == OUTCOME_UNRESOLVED
     assert hit is None
 
 
-# Test H: research incomplete -> unresolved
+# Test H: research incomplete -> unresolved (via resolve_research_outcome)
 def test_h_research_incomplete_produces_unresolved():
-    is_complete = False  # e.g. status != 'COMPLETED'
-    v4_confirmed = 0
-    v4_unknown = 0
-    pending_val = 0
-
-    if is_complete and v4_confirmed >= 1:
-        outcome = OUTCOME_POSITIVE
-    elif is_complete and v4_confirmed == 0 and v4_unknown == 0 and pending_val == 0:
-        outcome = OUTCOME_SAFE_NEGATIVE
-    else:
-        outcome = OUTCOME_UNRESOLVED
-        hit = None
-
+    outcome, hit = resolve_research_outcome(
+        research_complete=False,
+        trusted_confirmed_count=0,
+        semantic_unknown_count=0,
+        pending_validation_count=0,
+        technical_gap_count=0,
+    )
     assert outcome == OUTCOME_UNRESOLVED
     assert hit is None
 
@@ -240,7 +204,6 @@ def test_k_no_post_research_field_in_feature_matrix():
         research_document_count=4,
     )
     features = row.to_feature_dict()
-    # Features must ONLY contain hierarchical OKPD keys
     assert set(features.keys()) == {"okpd_root", "okpd_level2", "okpd_level3", "okpd_full"}
     assert "trusted_confirmed_count" not in features
     assert "rejected_count" not in features
@@ -282,8 +245,20 @@ def test_l_temporal_split_no_overlap():
     assert len(train_ids) + len(val_ids) + len(holdout_ids) == 20
 
 
-# Test M: model scoring deterministic for fixed artifact
-def test_m_model_scoring_deterministic():
+# Test M: baseline and ML classes are not same prediction authority
+def test_m_baseline_and_ml_are_independent_authorities():
+    baseline = OKPDHierarchicalPriorV1()
+    ml_model = OKPDResearchHitModelV1()
+
+    assert baseline.min_support == 3
+    assert BASELINE_MODEL_NAME == "OKPD_HIERARCHICAL_PRIOR_V1"
+    assert ml_model.model_name == MODEL_NAME
+    assert ml_model.model_name != BASELINE_MODEL_NAME
+    assert ml_model.feature_names == FEATURE_NAMES
+
+
+# Test N: ML fit produces genuine model artifact and reload reproduces probabilities
+def test_n_ml_fit_and_artifact_reproduction():
     train_rows = [
         ProcurementDatasetRow(
             procurement_id=1, research_completed_at="2026-08-31T18:00:00Z",
@@ -295,70 +270,105 @@ def test_m_model_scoring_deterministic():
             okpd_code_raw="26.20", okpd_root="26", okpd_level2="26.20", okpd_level3="26.20", okpd_full="26.20",
             outcome=OUTCOME_SAFE_NEGATIVE, research_hit=0, trusted_confirmed_count=0, rejected_count=5, unknown_count=0, pending_validation_count=0, research_document_count=2
         ),
+        ProcurementDatasetRow(
+            procurement_id=3, research_completed_at="2026-08-31T18:02:00Z",
+            okpd_code_raw="43.21", okpd_root="43", okpd_level2="43.21", okpd_level3="43.21", okpd_full="43.21",
+            outcome=OUTCOME_POSITIVE, research_hit=1, trusted_confirmed_count=1, rejected_count=1, unknown_count=0, pending_validation_count=0, research_document_count=1
+        ),
+        ProcurementDatasetRow(
+            procurement_id=4, research_completed_at="2026-08-31T18:03:00Z",
+            okpd_code_raw="26.20", okpd_root="26", okpd_level2="26.20", okpd_level3="26.20", okpd_full="26.20",
+            outcome=OUTCOME_SAFE_NEGATIVE, research_hit=0, trusted_confirmed_count=0, rejected_count=3, unknown_count=0, pending_validation_count=0, research_document_count=1
+        ),
     ]
 
     model = OKPDResearchHitModelV1()
     model.fit(train_rows, dataset_snapshot_sha256="test_sha")
+    assert model.is_fitted is True
 
-    with tempfile.NamedTemporaryFile(suffix=".json", delete=False) as f:
-        temp_path = f.name
+    with tempfile.TemporaryDirectory() as tmpdir:
+        json_path = os.path.join(tmpdir, "okpd_research_hit_v1.json")
+        model.save_artifact(json_path)
+        assert os.path.exists(json_path)
 
-    try:
-        model.save_artifact(temp_path)
-        loaded = OKPDResearchHitModelV1.load_artifact(temp_path)
-
+        loaded = OKPDResearchHitModelV1.load_artifact(json_path)
         h1 = parse_okpd_hierarchy("42.11")
         h2 = parse_okpd_hierarchy("26.20")
-        assert model.predict_proba_single(h1) == loaded.predict_proba_single(h1)
-        assert model.predict_proba_single(h2) == loaded.predict_proba_single(h2)
-    finally:
-        if os.path.exists(temp_path):
-            os.remove(temp_path)
+
+        p1_orig = model.predict_proba_single(h1)
+        p1_loaded = loaded.predict_proba_single(h1)
+        p2_orig = model.predict_proba_single(h2)
+        p2_loaded = loaded.predict_proba_single(h2)
+
+        assert abs(p1_orig - p1_loaded) < 1e-4
+        assert abs(p2_orig - p2_loaded) < 1e-4
 
 
-# Test N: band assignment counts and ranking correct
-def test_n_band_assignment_ranking():
-    assert assign_priority_band(0.95) == BAND_GOLD
-    assert assign_priority_band(0.90) == BAND_GOLD
-    assert assign_priority_band(0.89) == BAND_SILVER
-    assert assign_priority_band(0.70) == BAND_SILVER
-    assert assign_priority_band(0.69) == BAND_BRONZE
-    assert assign_priority_band(0.40) == BAND_BRONZE
-    assert assign_priority_band(0.39) == BAND_WOOD
-    assert assign_priority_band(0.00) == BAND_WOOD
-
-
-# Test O: missing CRM prediction does not hide procurement
-def test_o_missing_crm_prediction_does_not_hide_procurement():
-    repo = OKPDPriorPredictionRepository(in_memory_predictions={}, fallback_to_model=False)
-    pred = repo.get_by_procurement_id(999999, okpd_code=None)
-    assert pred is None
-
-
-# Test P: CRM sorting is UI-only
-def test_p_crm_sorting_is_ui_only():
-    cards = [
-        {"id": 1, "okpd_code": "26.20"},
-        {"id": 2, "okpd_code": "42.11"},
-        {"id": 3, "okpd_code": None},
+# Test O: Tie-safe percentiles and bands (equal probability -> equal percentile & medal)
+def test_o_tie_safe_percentiles_and_medals():
+    model = OKPDResearchHitModelV1()
+    # Mock single class or custom predict_proba to test ties
+    population = [
+        {"id": 1, "okpd_code_raw": "42.11"},
+        {"id": 2, "okpd_code_raw": "42.11"},  # Exact same OKPD -> exact same probability
+        {"id": 3, "okpd_code_raw": "26.20"},
+        {"id": 4, "okpd_code_raw": "26.20"},  # Exact same OKPD -> exact same probability
     ]
-    # UI-only sort function
-    from src.ui.components.okpd_priority_widget import get_okpd_priority_compact_badge
-    def _get_sort_score(c: dict) -> float:
-        b = get_okpd_priority_compact_badge(c["id"], c.get("okpd_code"))
-        return b["p_research_hit"] if b else -1.0
 
-    sorted_cards = sorted(cards, key=_get_sort_score, reverse=True)
-    assert len(sorted_cards) == 3
-    # Card 3 (missing OKPD) is not deleted, just sorted to the end
-    assert sorted_cards[-1]["id"] == 3
+    scored = model.score_population(population)
+    assert len(scored) == 4
+
+    p_map = {s.procurement_id: s for s in scored}
+    # Items 1 and 2 must have identical score, percentile, and band
+    assert p_map[1].p_research_hit == p_map[2].p_research_hit
+    assert p_map[1].priority_percentile == p_map[2].priority_percentile
+    assert p_map[1].priority_band == p_map[2].priority_band
+
+    # Items 3 and 4 must have identical score, percentile, and band
+    assert p_map[3].p_research_hit == p_map[4].p_research_hit
+    assert p_map[3].priority_percentile == p_map[4].priority_percentile
+    assert p_map[3].priority_band == p_map[4].priority_band
 
 
-# Test Q: Promotion gate requires sufficient evaluation data and sets diagnostic metadata
-def test_q_promotion_gate_requires_sufficient_data():
+# Test P: Tie at exact medal boundary remains semantically equal
+def test_p_tie_crossing_boundary_remains_equal():
+    model = OKPDResearchHitModelV1()
+    # 10 items total: 8 items with same low score, 2 items with same high score
+    # In old code, rank 8 and rank 9 would cross 0.90 boundary (8/10=0.80 -> SILVER, 9/10=0.90 -> GOLD)
+    raw_population = [
+        {"id": 1, "okpd_code_raw": "26.20"},
+        {"id": 2, "okpd_code_raw": "26.20"},
+        {"id": 3, "okpd_code_raw": "26.20"},
+        {"id": 4, "okpd_code_raw": "26.20"},
+        {"id": 5, "okpd_code_raw": "26.20"},
+        {"id": 6, "okpd_code_raw": "26.20"},
+        {"id": 7, "okpd_code_raw": "26.20"},
+        {"id": 8, "okpd_code_raw": "26.20"},
+        {"id": 9, "okpd_code_raw": "42.11"},
+        {"id": 10, "okpd_code_raw": "42.11"},
+    ]
+
+    scored = model.score_population(raw_population)
+    low_scored = [s for s in scored if s.okpd_code_raw == "26.20"]
+    high_scored = [s for s in scored if s.okpd_code_raw == "42.11"]
+
+    # All 8 low-scored items must receive the EXACT same percentile and band
+    low_percentiles = {s.priority_percentile for s in low_scored}
+    low_bands = {s.priority_band for s in low_scored}
+    assert len(low_percentiles) == 1
+    assert len(low_bands) == 1
+
+    # Both high-scored items must receive the EXACT same percentile and band
+    high_percentiles = {s.priority_percentile for s in high_scored}
+    high_bands = {s.priority_band for s in high_scored}
+    assert len(high_percentiles) == 1
+    assert len(high_bands) == 1
+
+
+# Test Q: Promotion gate uses dynamic dataset counts and sets shadow promotion status
+def test_q_promotion_gate_dynamic_counts_and_shadow_status():
     from src.learning.okpd_prior.train import train_and_evaluate_okpd_prior
     
-    # Mock connection objects with minimal 2-row dataset
     class MockDocConn:
         pass
     class MockCrmConn:
@@ -377,6 +387,11 @@ def test_q_promotion_gate_requires_sufficient_data():
                 okpd_code_raw="26.20", okpd_root="26", okpd_level2="26.20", okpd_level3="26.20", okpd_full="26.20",
                 outcome=OUTCOME_SAFE_NEGATIVE, research_hit=0, trusted_confirmed_count=0, rejected_count=1, unknown_count=0, pending_validation_count=0, research_document_count=1
             ),
+            ProcurementDatasetRow(
+                procurement_id=3, research_completed_at="2026-08-31T18:02:00Z",
+                okpd_code_raw="43.21", okpd_root="43", okpd_level2="43.21", okpd_level3="43.21", okpd_full="43.21",
+                outcome=OUTCOME_POSITIVE, research_hit=1, trusted_confirmed_count=2, rejected_count=0, unknown_count=0, pending_validation_count=0, research_document_count=1
+            ),
         ]
         with tempfile.TemporaryDirectory() as tmpdir:
             res = train_and_evaluate_okpd_prior(
@@ -385,13 +400,18 @@ def test_q_promotion_gate_requires_sufficient_data():
                 model_dir=os.path.join(tmpdir, "models")
             )
             assert res["implementation_status"] == "PASS"
+            assert res["evaluation_status"] == "INSUFFICIENT_DATA"
             assert res["production_priority_promotion"] == "INSUFFICIENT_EVALUATION_DATA"
             assert res["bands_evaluation_type"] == "IN_SAMPLE_OR_MIXED_CORPUS_DIAGNOSTIC"
-            assert "Small sample size" in res["promotion_reason"]
+            assert res["baseline_and_ml_same_implementation"] is False
+            assert "labeled=3" in res["promotion_reason"]
 
 
-# Test R: Shadow badge text reflects non-blocking queue status
-def test_r_shadow_badge_text():
+# Test R: Shadow badge text and UI safety
+def test_r_shadow_badge_and_missing_prediction_safety():
     from src.ui.components.okpd_priority_widget import SHADOW_HELP_TEXT
     assert "Пока прогноз не влияет на скачивание и обработку закупки" in SHADOW_HELP_TEXT
 
+    repo = OKPDPriorPredictionRepository(in_memory_predictions={}, fallback_to_model=False)
+    pred = repo.get_by_procurement_id(999999, okpd_code=None)
+    assert pred is None

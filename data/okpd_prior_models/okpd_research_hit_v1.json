@@ -1,0 +1,27 @@
+{
+  "model_name": "okpd_research_hit_v1",
+  "model_version": "v1",
+  "model_type": "CatBoostClassifier",
+  "trained_at": "2026-09-04T07:38:24.125258+00:00",
+  "dataset_snapshot_sha256": "112237b6f6393972b3ed6570938fc152a860425f9fe8362b07580eb443fcbd9a",
+  "feature_names": [
+    "okpd_root",
+    "okpd_level2",
+    "okpd_level3",
+    "okpd_full"
+  ],
+  "training_row_count": 22,
+  "positive_count": 4,
+  "negative_count": 18,
+  "hyperparameters": {
+    "iterations": 150,
+    "learning_rate": 0.03,
+    "depth": 3,
+    "loss_function": "Logloss",
+    "random_seed": 42,
+    "verbose": false
+  },
+  "fallback_prior": 0.1818,
+  "single_class_prediction": null,
+  "cbm_artifact_path": "data/okpd_prior_models\\okpd_research_hit_v1.cbm"
+}

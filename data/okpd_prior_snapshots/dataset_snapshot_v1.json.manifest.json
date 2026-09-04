@@ -1,0 +1,11 @@
+{
+  "snapshot_created_at": "2026-09-04T07:38:24.124258+00:00",
+  "snapshot_file": "data/okpd_prior_snapshots\\dataset_snapshot_v1.json",
+  "snapshot_sha256": "112237b6f6393972b3ed6570938fc152a860425f9fe8362b07580eb443fcbd9a",
+  "total_procurements": 111,
+  "positive_count": 7,
+  "safe_negative_count": 25,
+  "unresolved_excluded_count": 79,
+  "labeled_count": 32,
+  "positive_rate": 0.2188
+}
