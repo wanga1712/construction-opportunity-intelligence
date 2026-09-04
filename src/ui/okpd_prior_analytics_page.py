@@ -63,6 +63,8 @@ def render_okpd_prior_analytics_page(
 
     # 2. Model Quality Metrics
     st.markdown("### 🎯 Качество ранжирования модели (Model Quality)")
+    st.warning("⚠️ **EARLY_SHADOW_METRICS (Small Sample Warning):** Оценка проведена на раннем корпусе (32 размеченные закупки, 6 в holdout). Метрики носят предварительный исследовательский характер.")
+    
     m_metrics = report_data.get("model_metrics", {}).get("holdout") or report_data.get("model_metrics", {}).get("all", {})
     b_metrics = report_data.get("baseline_metrics", {}).get("holdout") or report_data.get("baseline_metrics", {}).get("all", {})
 
@@ -78,12 +80,22 @@ def render_okpd_prior_analytics_page(
     with q_col5:
         st.metric("Recall @ 30%", f"{m_metrics.get('recall_at_30', 0.0) * 100:.1f}%")
 
-    st.caption(f"Статус проверки качества: **{report_data.get('model_result', '—')}**")
+    promo_status = report_data.get("production_priority_promotion", report_data.get("model_result", "INSUFFICIENT_EVALUATION_DATA"))
+    signal_status = report_data.get("signal_status", "ENCOURAGING")
+    impl_status = report_data.get("implementation_status", "PASS")
+    promo_reason = report_data.get("promotion_reason", "Требуется накопление большего корпуса.")
+
+    st.markdown(
+        f"- **Статус реализации (Implementation):** `{impl_status}`\n"
+        f"- **Качество сигнала (Signal):** `{signal_status}`\n"
+        f"- **Допуск к управлению очередью (Promotion):** `{promo_status}` ({promo_reason})"
+    )
 
     st.divider()
 
     # 3. Band Performance (Medals)
-    st.markdown("### 🏅 Фактическая эффективность медальных корзин (Band Performance)")
+    st.markdown("### 🏅 Эффективность медальных корзин (`IN_SAMPLE_OR_MIXED_CORPUS_DIAGNOSTIC`)")
+    st.caption("ℹ️ Таблица корзин отражает полноразмерный размеченный корпус для проверки калибровки и распределения вероятностей (descriptive diagnostic), а не изолированный holdout-тест.")
     bands = report_data.get("bands", {})
     b_counts = bands.get("counts", {})
     b_hits = bands.get("hits", {})

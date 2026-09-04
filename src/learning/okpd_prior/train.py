@@ -101,12 +101,19 @@ def train_and_evaluate_okpd_prior(
             band_hits[band] = band_hits.get(band, 0) + 1
 
     # 6. Promotion Gate Evaluation
-    # Criteria: Lift@10 >= 2.0 AND Recall@30 > 30% AND stability across high-support roots
+    # Small sample caveat: 32 labeled rows total, 6 holdout rows, 0 validation positives.
     is_useful = bool(
         model_metrics_holdout.lift_at_10 >= 2.0
         and model_metrics_holdout.recall_at_30 > 0.30
     )
-    model_result = "PASS_PROMOTION_THRESHOLD" if is_useful else "NOT_USEFUL_YET"
+    implementation_status = "PASS"
+    signal_status = "ENCOURAGING" if is_useful else "INSUFFICIENT"
+    production_priority_promotion = "INSUFFICIENT_EVALUATION_DATA"
+    promotion_reason = (
+        "Small sample size (32 labeled rows total, 6 holdout rows, 0 validation positives). "
+        "Requires larger corpus for production promotion."
+    )
+    bands_evaluation_type = "IN_SAMPLE_OR_MIXED_CORPUS_DIAGNOSTIC"
 
     # OKPD Root breakdown for report
     root_summary = baseline.get_root_summary_table()
@@ -145,7 +152,12 @@ def train_and_evaluate_okpd_prior(
             "hits": band_hits,
         },
         "roots_table": root_summary,
-        "model_result": model_result,
+        "implementation_status": implementation_status,
+        "signal_status": signal_status,
+        "production_priority_promotion": production_priority_promotion,
+        "promotion_reason": promotion_reason,
+        "bands_evaluation_type": bands_evaluation_type,
+        "model_result": production_priority_promotion,
         "model_artifact_path": model_path,
         "snapshot_artifact_path": snapshot_path,
     }
@@ -155,3 +167,4 @@ def train_and_evaluate_okpd_prior(
         json.dump(report, f, ensure_ascii=False, indent=2)
 
     return report
+

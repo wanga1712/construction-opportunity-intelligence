@@ -80,7 +80,7 @@ def render_okpd_priority_card_block(
                 font-weight: 600;
                 padding: 2px 8px;
                 border-radius: 12px;
-            " title="{SHADOW_HELP_TEXT}">Теневой режим ℹ️</span>
+            " title="{SHADOW_HELP_TEXT}">Теневой режим · Пока не влияет на очередь ℹ️</span>
         </div>
         <div style="font-size: 12px; color: #475569; line-height: 1.5;">
             <div><b>OKPD:</b> {pred.okpd_code_raw}</div>

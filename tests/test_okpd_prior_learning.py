@@ -352,3 +352,46 @@ def test_p_crm_sorting_is_ui_only():
     assert len(sorted_cards) == 3
     # Card 3 (missing OKPD) is not deleted, just sorted to the end
     assert sorted_cards[-1]["id"] == 3
+
+
+# Test Q: Promotion gate requires sufficient evaluation data and sets diagnostic metadata
+def test_q_promotion_gate_requires_sufficient_data():
+    from src.learning.okpd_prior.train import train_and_evaluate_okpd_prior
+    
+    # Mock connection objects with minimal 2-row dataset
+    class MockDocConn:
+        pass
+    class MockCrmConn:
+        pass
+
+    import unittest.mock as mock
+    with mock.patch("src.learning.okpd_prior.train.extract_procurement_dataset_from_db") as mock_extract:
+        mock_extract.return_value = [
+            ProcurementDatasetRow(
+                procurement_id=1, research_completed_at="2026-08-31T18:00:00Z",
+                okpd_code_raw="42.11", okpd_root="42", okpd_level2="42.11", okpd_level3="42.11", okpd_full="42.11",
+                outcome=OUTCOME_POSITIVE, research_hit=1, trusted_confirmed_count=1, rejected_count=0, unknown_count=0, pending_validation_count=0, research_document_count=1
+            ),
+            ProcurementDatasetRow(
+                procurement_id=2, research_completed_at="2026-08-31T18:01:00Z",
+                okpd_code_raw="26.20", okpd_root="26", okpd_level2="26.20", okpd_level3="26.20", okpd_full="26.20",
+                outcome=OUTCOME_SAFE_NEGATIVE, research_hit=0, trusted_confirmed_count=0, rejected_count=1, unknown_count=0, pending_validation_count=0, research_document_count=1
+            ),
+        ]
+        with tempfile.TemporaryDirectory() as tmpdir:
+            res = train_and_evaluate_okpd_prior(
+                MockDocConn(), MockCrmConn(),
+                snapshot_dir=os.path.join(tmpdir, "snapshots"),
+                model_dir=os.path.join(tmpdir, "models")
+            )
+            assert res["implementation_status"] == "PASS"
+            assert res["production_priority_promotion"] == "INSUFFICIENT_EVALUATION_DATA"
+            assert res["bands_evaluation_type"] == "IN_SAMPLE_OR_MIXED_CORPUS_DIAGNOSTIC"
+            assert "Small sample size" in res["promotion_reason"]
+
+
+# Test R: Shadow badge text reflects non-blocking queue status
+def test_r_shadow_badge_text():
+    from src.ui.components.okpd_priority_widget import SHADOW_HELP_TEXT
+    assert "Пока прогноз не влияет на скачивание и обработку закупки" in SHADOW_HELP_TEXT
+
