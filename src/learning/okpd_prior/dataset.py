@@ -69,6 +69,41 @@ class ProcurementDatasetRow:
         }
 
 
+def resolve_research_outcome(
+    research_complete: bool,
+    trusted_confirmed_count: int,
+    semantic_unknown_count: int,
+    pending_validation_count: int,
+    technical_gap_count: int = 0,
+) -> Tuple[str, Optional[int]]:
+    """Pure helper resolving procurement outcome and binary target.
+
+    Contract:
+    - confirmed >= 1 -> POSITIVE (research_hit=1)
+    - complete + 0 confirmed + 0 unknown + 0 pending + 0 technical -> SAFE_NEGATIVE (research_hit=0)
+    - unknown > 0 (without confirmed) -> UNRESOLVED (research_hit=None)
+    - pending > 0 (without confirmed) -> UNRESOLVED (research_hit=None)
+    - technical gap > 0 (without confirmed) -> UNRESOLVED (research_hit=None)
+    - research incomplete (without confirmed) -> UNRESOLVED (research_hit=None)
+
+    Returns:
+        (outcome, research_hit)
+    """
+    if trusted_confirmed_count >= 1:
+        return OUTCOME_POSITIVE, 1
+
+    if not research_complete:
+        return OUTCOME_UNRESOLVED, None
+
+    if technical_gap_count > 0:
+        return OUTCOME_UNRESOLVED, None
+
+    if semantic_unknown_count == 0 and pending_validation_count == 0:
+        return OUTCOME_SAFE_NEGATIVE, 0
+
+    return OUTCOME_UNRESOLVED, None
+
+
 def extract_procurement_dataset_from_db(
     doc_conn,
     crm_conn,
@@ -172,16 +207,14 @@ def extract_procurement_dataset_from_db(
         v4_rejected = q["v4_rejected"]
         file_count = q["file_count"]
 
-        # Label resolution contract
-        if v4_confirmed >= 1:
-            outcome = OUTCOME_POSITIVE
-            research_hit = 1
-        elif v4_confirmed == 0 and v4_unknown == 0 and pending_val == 0:
-            outcome = OUTCOME_SAFE_NEGATIVE
-            research_hit = 0
-        else:
-            outcome = OUTCOME_UNRESOLVED
-            research_hit = None
+        # Label resolution contract via authoritative helper
+        outcome, research_hit = resolve_research_outcome(
+            research_complete=(q["status"] == "COMPLETED"),
+            trusted_confirmed_count=v4_confirmed,
+            semantic_unknown_count=v4_unknown,
+            pending_validation_count=pending_val,
+            technical_gap_count=0,
+        )
 
         comp_at_str = q["completed_at"].isoformat() if q["completed_at"] else None
 

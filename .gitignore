@@ -4,5 +4,12 @@ __pycache__/
 .env
 *.egg-info/
 .pytest_cache/
+catboost_info/
 
 *.py[cod]
+
+# Generated ML/Prior models and dataset snapshots
+data/okpd_prior_models/*
+!data/okpd_prior_models/.gitkeep
+data/okpd_prior_snapshots/*
+!data/okpd_prior_snapshots/.gitkeep
