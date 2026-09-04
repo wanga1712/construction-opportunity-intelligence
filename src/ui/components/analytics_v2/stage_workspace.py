@@ -153,6 +153,8 @@ def _summary(card: dict, stage: str, effective: Any, state: dict, published: boo
         st.markdown(f"🏷 **ОКПД2:** {escape(value)}", unsafe_allow_html=True)
     else:
         st.caption("ОКПД2: не указан в карточке")
+    from src.ui.components.okpd_priority_widget import render_okpd_priority_card_block
+    render_okpd_priority_card_block(card.get("id"), card.get("okpd_code"))
     if stage == "AWARDED" and card.get("contractor_name"):
         st.markdown(f"**Подрядчик / победитель:** {card['contractor_name']}")
     if state.get("is_staged_complete") or state.get("is_partial") or state.get("is_category_reviewed"):
@@ -223,6 +225,36 @@ def render_stage_workspace(
     publication = batch_publication_visibility(crm_db, [card["id"] for card in cards])
     selected_state = selected_annotation_filter or render_review_filter(all_states, session_key)
     visible = [card for card in cards if _filter_matches(page_states[card["id"]], selected_state)]
+
+    # Теневой визуальный фильтр и сортировка по приоритету исследования
+    from src.ui.components.okpd_priority_widget import get_okpd_priority_compact_badge
+    c_sort, c_filt = st.columns([3, 2])
+    with c_sort:
+        sort_by_prior = st.checkbox(
+            "Сортировать по приоритету исследования (теневой режим)",
+            key=f"ui_sort_priority_{session_key}",
+            value=False,
+        )
+    with c_filt:
+        band_filter = st.selectbox(
+            "Фильтр корзины (теневой)",
+            ["Все корзины", "GOLD", "SILVER", "BRONZE", "WOOD"],
+            key=f"ui_band_filter_{session_key}",
+            index=0,
+        )
+
+    if band_filter != "Все корзины":
+        visible = [
+            c for c in visible
+            if (get_okpd_priority_compact_badge(c["id"], c.get("okpd_code")) or {}).get("band") == band_filter
+        ]
+
+    if sort_by_prior:
+        def _get_sort_score(c: dict) -> float:
+            b = get_okpd_priority_compact_badge(c["id"], c.get("okpd_code"))
+            return b["p_research_hit"] if b else -1.0
+        visible = sorted(visible, key=_get_sort_score, reverse=True)
+
     active_key = f"active_inline_{session_key}"
     focused = st.session_state.get(session_key)
     if focused in [card["id"] for card in visible]:

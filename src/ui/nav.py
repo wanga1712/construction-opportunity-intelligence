@@ -18,6 +18,7 @@ PAGES = {
     "export_pdf": ("📄", "Выгрузка PDF"),
     "crm_profiles": ("⚙️", "Профили поиска"),
     "category_registry": ("📦", "Товарные категории"),
+    "okpd_prior_analytics": ("🔬", "Диагностика OKPD Prior V1"),
 }
 
 FUTURE_PAGES: list = []

@@ -259,6 +259,10 @@ def render_card_detail(card: dict, session_key: str = "selected_procurement_id")
             unsafe_allow_html=True,
         )
 
+        # ── ПРИОРИТЕТ ИССЛЕДОВАНИЯ (ТЕНЕВОЙ РЕЖИМ) ──
+        from src.ui.components.okpd_priority_widget import render_okpd_priority_card_block
+        render_okpd_priority_card_block(card.get("id"), card.get("okpd_code"))
+
         # ── ДРУГИЕ КАТЕГОРИИ ──
         if other_cats:
             st.markdown('<div class="crm-section-label">Другие категории объекта</div>', unsafe_allow_html=True)

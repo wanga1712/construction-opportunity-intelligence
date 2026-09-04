@@ -152,6 +152,9 @@ def _render_page(page: str, service: Optional[CompaniesService]) -> None:
         render_category_registry_page(service)
     elif page == "expert_annotation":
         render_annotation_workbench_page(service)
+    elif page == "okpd_prior_analytics":
+        from src.ui.okpd_prior_analytics_page import render_okpd_prior_analytics_page
+        render_okpd_prior_analytics_page()
     else:
         st.info("Раздел в разработке.")
 

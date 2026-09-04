@@ -38,6 +38,7 @@ PAGE_DEPENDENCY: dict[str, PageDependency] = {
     # Registry editor uses CRM DB only
     "category_registry": PageDependency.CRM_DB_ONLY,
     "expert_annotation": PageDependency.CRM_DB_ONLY,
+    "okpd_prior_analytics": PageDependency.NO_SERVICE,
 }
 
 LIGHTWEIGHT_NO_COMPANIES = frozenset(

@@ -218,6 +218,10 @@ def render_torgi_card(card: dict, idx: int) -> None:
             unsafe_allow_html=True,
         )
 
+        # ── ПРИОРИТЕТ ИССЛЕДОВАНИЯ (ТЕНЕВОЙ РЕЖИМ) ──
+        from src.ui.components.okpd_priority_widget import render_okpd_priority_card_block
+        render_okpd_priority_card_block(card.get("id"), card.get("okpd_code"))
+
         # ── ДРУГИЕ КАТЕГОРИИ ОБЪЕКТА ──
         other_cats = card.get("other_categories") or []
         if other_cats:
