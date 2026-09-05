@@ -57,6 +57,25 @@ Qwen remains shadow-only and cannot affect ordering. Report:
 `docs/reports/hydro_parking_leads/PHASE_2C_COMMERCIAL_HIERARCHY_AND_QWEN_SHADOW.md`.
 Do not start Phase 2C-B or Phase 3.
 
+## PHASE 2C-OR NETWORK EGRESS 2
+
+`[!]` S13 awg0 remains unchanged and direct OpenRouter is still blocked by
+HTTP 403. The existing Amnezia peer endpoint has no matching approved SSH
+alias, so server egress and the temporary localhost-only SOCKS tunnel cannot
+be verified without `AMNEZIA_SSH_AUTHORITY_REQUIRED`. No routes, NAT, proxy,
+CRM service or Analytics V3 files were changed. Report:
+`docs/reports/hydro_parking_leads/PHASE_2C_OR_NETWORK_EGRESS_2.md`.
+
+## PHASE 2C-OR — OPENROUTER / DEEPSEEK BAKEOFF
+
+`[!]` Provider-neutral local implementation is present, but the bounded
+OpenRouter smoke gate is blocked by HTTP 403 authentication/access failure.
+Privacy routing remains fail-closed (`data_collection=deny`, `zdr=true`,
+`require_parameters=true`); no full-100 batch or production ranking change
+was made. Report:
+`docs/reports/hydro_parking_leads/PHASE_2C_OPENROUTER_DEEPSEEK_BAKEOFF.md`.
+Do not start Phase 2C-B or Phase 3.
+
 Phase 0 audit status and gate:
 
 - Plan and WIP recorded before implementation: `YES`.

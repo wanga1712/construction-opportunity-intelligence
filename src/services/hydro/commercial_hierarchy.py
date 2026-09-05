@@ -187,19 +187,68 @@ def shadow_input_hash(payload: dict[str, Any]) -> str:
     return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
 
 
-def build_qwen_shadow_payload(entity: CommercialEntity) -> dict[str, Any]:
-    """Build verified/derived facts only; no hidden target score or raw phone."""
+def _score_value(value: Any) -> int | None:
+    if not isinstance(value, dict):
+        return None
+    try:
+        return int(value.get("score")) if value.get("score") is not None else None
+    except (TypeError, ValueError):
+        return None
+
+
+def _commercial_object_summary(row: dict[str, Any], *, include_address: bool) -> dict[str, Any]:
+    """Minimize canonical facts before they reach any assessment provider."""
+    potential = row.get("object_potential") if isinstance(row.get("object_potential"), dict) else {}
+    readiness = row.get("lead_readiness") if isinstance(row.get("lead_readiness"), dict) else {}
+    summary = {
+        "purpose": row.get("purpose"),
+        "object_type": row.get("object_type"),
+        "commercial_name": row.get("name"),
+        "area_total": row.get("area_total"),
+        "floors_underground": row.get("floors_underground"),
+        "floors_total": row.get("floors_total"),
+        "construction_finish_year": row.get("construction_finish_year"),
+        "commissioning_year": row.get("commissioning_year"),
+        "parking_type": row.get("parking_type"),
+        "technical_potential": potential,
+        "lead_readiness": readiness,
+    }
+    if include_address:
+        summary["address"] = row.get("address")
+    return {key: value for key, value in summary.items() if value not in (None, "", {})}
+
+
+def build_commercial_assessment_payload(entity: CommercialEntity) -> dict[str, Any]:
+    """Build a minimized verified/derived payload for any commercial provider."""
     if entity.management:
+        objects = [_commercial_object_summary(row, include_address=False) for row in entity.objects]
+        potential_scores = [_score_value(row.get("object_potential")) for row in entity.objects]
+        purposes = sorted({str(row.get("purpose")) for row in entity.objects if row.get("purpose")})
+        object_types = sorted({str(row.get("object_type")) for row in entity.objects if row.get("object_type")})
+        phone_available = any(bool(row.get("company_phone_exists")) for row in entity.objects)
         facts = {
             "entity_type": "COMPANY_PORTFOLIO",
-            "organization": {"name": entity.management.name, "contour": entity.layer.value, "inn": entity.management.inn, "ogrn": entity.management.ogrn},
-            "portfolio": {"object_count": len(entity.objects), "objects": list(entity.objects)},
+            "organization": {"name": entity.management.name, "contour": entity.layer.value, "inn": entity.management.inn, "ogrn": entity.management.ogrn, "phone_available": phone_available},
+            "portfolio": {
+                "object_count": len(entity.objects),
+                "strong_object_count": sum(1 for score in potential_scores if score is not None and score >= 70),
+                "underground_2plus_count": sum(1 for row in entity.objects if (row.get("floors_underground") or 0) >= 2),
+                "known_area_total": sum(float(row.get("area_total") or 0) for row in entity.objects),
+                "purpose_distribution": purposes,
+                "object_type_distribution": object_types,
+                "top_objects": sorted(objects, key=lambda row: _score_value(row.get("technical_potential")) or 0, reverse=True)[:10],
+            },
             "missing": list(entity.portfolio_score.missing_signals if entity.portfolio_score else ()),
         }
     else:
         row = entity.objects[0]
-        facts = {"entity_type": "OBJECT", "commercial_class": entity.object_class.commercial_class.value if entity.object_class else "UNKNOWN", "object": row, "missing": list(entity.object_class.missing_signals if entity.object_class else ())}
+        facts = {"entity_type": "OBJECT", "commercial_class": entity.object_class.commercial_class.value if entity.object_class else "UNKNOWN", "object": _commercial_object_summary(row, include_address=True), "missing": list(entity.object_class.missing_signals if entity.object_class else ())}
     return {"contract": PROMPT_VERSION, "facts": facts, "instruction": "Separate FACT, INFERENCE and MISSING DATA. Do not invent owner, UK, contacts, leaks, procurement or building access."}
+
+
+def build_qwen_shadow_payload(entity: CommercialEntity) -> dict[str, Any]:
+    """Backward-compatible name for the provider-neutral minimized payload."""
+    return build_commercial_assessment_payload(entity)
 
 
 def build_qwen_shadow_prompt(entity: CommercialEntity) -> str:
