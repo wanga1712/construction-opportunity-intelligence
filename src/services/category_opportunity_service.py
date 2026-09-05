@@ -62,6 +62,7 @@ class CategoryOpportunity:
     evidence_count: int = 0
     latest_confirmed_at: Optional[str] = None
     confirmed_materials: List[Dict[str, Any]] = field(default_factory=list)
+    search_phrases: List[str] = field(default_factory=list)
     confirmed_by: Optional[str] = None
     confirmed_at: Optional[str] = None
 
@@ -135,13 +136,14 @@ class CategoryOpportunityService:
                 s.quantity_unit_raw,
                 s.unit_price_value,
                 s.total_price_value,
-                s.product_relation
+                s.product_relation,
+                s.product_name_raw,
+                s.product_name_normalized
             FROM document_match_details d
             JOIN document_processing_queue q ON d.procurement_id = q.procurement_id
             LEFT JOIN structured_entities s 
                    ON d.id = s.detail_id 
-                  AND COALESCE(s.structured_fact_trust_state, 'TRUSTED_PRODUCTION') = 'TRUSTED_PRODUCTION'
-                  AND s.structured_fact_trust_state NOT IN ('DEV_EXPOSED', 'TEST_FIXTURE', 'QUALITY_REJECTED')
+                  AND s.structured_fact_trust_state = 'TRUSTED_PRODUCTION'
             WHERE d.procurement_id = ANY(%s)
               AND d.validation_status = 'CONFIRMED'
             """
@@ -175,6 +177,8 @@ class CategoryOpportunityService:
                         'unit_price_value': r[18] if len(r) > 18 else None,
                         'total_price_value': r[19] if len(r) > 19 else None,
                         'product_relation': r[20] if len(r) > 20 else None,
+                        'product_name_raw': r[21] if len(r) > 21 else None,
+                        'product_name_normalized': r[22] if len(r) > 22 else None,
                     }
 
                 grouped.setdefault(pid, {}).setdefault(cat, []).append(row_dict)
@@ -304,8 +308,10 @@ class CategoryOpportunityService:
         first = items[0]
         cat_name = CATEGORY_NAMES.get(category_code, category_code.replace("_", " ").title())
         
-        # Aggregate unique materials, distinct detail_ids and structured_entity_ids
+        # Aggregate unique materials, search phrases, distinct detail_ids and structured_entity_ids
         materials_seen: Set[str] = set()
+        search_phrases_seen: Set[str] = set()
+        search_phrases: List[str] = []
         detail_ids_seen: Set[Any] = set()
         structured_entity_ids_seen: Set[Any] = set()
         processed_value_keys: Set[Any] = set()
@@ -325,18 +331,25 @@ class CategoryOpportunityService:
             if entity_id is not None:
                 structured_entity_ids_seen.add(entity_id)
 
-            term = (it.get('matched_term') or 'Неизвестный материал').strip()
-            norm_term = term.lower()
-            if norm_term not in materials_seen:
-                materials_seen.add(norm_term)
-                confirmed_materials.append({
-                    'material_name': term,
-                    'page_or_sheet': it.get('page_or_sheet'),
-                    'row_number': it.get('row_number'),
-                    'context': f"{it.get('context_before') or ''} {it.get('context_after') or ''}".strip(),
-                    'detail_id': detail_id,
-                    'structured_entity_id': entity_id,
-                })
+            matched_term = (it.get('matched_term') or '').strip()
+            if matched_term and matched_term not in search_phrases_seen:
+                search_phrases_seen.add(matched_term)
+                search_phrases.append(matched_term)
+
+            # SEARCH_PHRASE_AS_MATERIAL = 0: Only count as material if there is a trusted structured entity
+            if entity_id is not None:
+                product_name = (it.get('product_name_raw') or it.get('product_name_normalized') or matched_term or 'Неизвестный материал').strip()
+                norm_term = product_name.lower()
+                if norm_term not in materials_seen:
+                    materials_seen.add(norm_term)
+                    confirmed_materials.append({
+                        'material_name': product_name,
+                        'page_or_sheet': it.get('page_or_sheet'),
+                        'row_number': it.get('row_number'),
+                        'context': f"{it.get('context_before') or ''} {it.get('context_after') or ''}".strip(),
+                        'detail_id': detail_id,
+                        'structured_entity_id': entity_id,
+                    })
 
             if not structured_rel and it.get('product_relation'):
                 structured_rel = it.get('product_relation')
@@ -344,7 +357,7 @@ class CategoryOpportunityService:
             # Check quantity / value from structured_entities
             qty = it.get('quantity_value')
             unit = it.get('quantity_unit_normalized') or it.get('quantity_unit_raw') or 'pcs'
-            if qty is not None:
+            if qty is not None and entity_id is not None:
                 qty_count += 1
                 if unit not in unit_map:
                     unit_map[unit] = {'unit': unit, 'quantity': 0.0, 'positions': 0}
@@ -360,10 +373,10 @@ class CategoryOpportunityService:
                 if val_key is not None:
                     processed_value_keys.add(val_key)
 
-                if val is not None:
+                if val is not None and entity_id is not None:
                     val_count += 1
                     total_val += float(val)
-                elif unit_p is not None and qty is not None:
+                elif unit_p is not None and qty is not None and entity_id is not None:
                     val_count += 1
                     total_val += float(unit_p) * float(qty)
 
@@ -437,6 +450,7 @@ class CategoryOpportunityService:
             evidence_count=ev_count,
             latest_confirmed_at=latest_confirmed,
             confirmed_materials=confirmed_materials,
+            search_phrases=search_phrases,
             confirmed_by=conf_by,
             confirmed_at=conf_at,
         )
