@@ -50,6 +50,27 @@ DEFAULT_BASE_SCORES: Dict[str, int] = {
 }
 
 
+def get_effective_service_band(row: Dict[str, Any]) -> str:
+    """Determine effective service band for DWRR queue scheduling.
+
+    Rule: DIRECT_GOODS_PRIORITY_OVERRIDE
+    IF procurement_scope_type = DIRECT_GOODS AND normalized_nmck_rub >= 50_000
+    THEN effective_service_band = GOLD
+    Otherwise, use normal research_prior_band.
+    """
+    raw_band = row.get("research_prior_band") or BAND_UNSCORED
+    scope_type = row.get("procurement_scope_type") or row.get("scope_type")
+    nmck = row.get("normalized_nmck_rub") or row.get("nmck_rub") or row.get("nmck") or 0.0
+    try:
+        nmck_val = float(nmck)
+    except (ValueError, TypeError):
+        nmck_val = 0.0
+
+    if scope_type == "DIRECT_GOODS" and nmck_val >= 50000.0:
+        return BAND_GOLD
+    return raw_band
+
+
 @dataclass
 class QueueTaskItem:
     """Representation of a task item in the document processing queue."""
@@ -308,27 +329,6 @@ class DWRRBoundedScheduler:
         target_count = len(scored_items) if limit is None else min(limit, len(scored_items))
         return self._run_dwrr(band_queues, target_count)
 
-def get_effective_service_band(row: Dict[str, Any]) -> str:
-    """Determine effective service band for DWRR queue scheduling.
-
-    Rule: DIRECT_GOODS_PRIORITY_OVERRIDE
-    IF procurement_scope_type = DIRECT_GOODS AND normalized_nmck_rub >= 50_000
-    THEN effective_service_band = GOLD
-    Otherwise, use normal research_prior_band.
-    """
-    raw_band = row.get("research_prior_band") or BAND_UNSCORED
-    scope_type = row.get("procurement_scope_type") or row.get("scope_type")
-    nmck = row.get("normalized_nmck_rub") or row.get("nmck_rub") or row.get("nmck") or 0.0
-    try:
-        nmck_val = float(nmck)
-    except (ValueError, TypeError):
-        nmck_val = 0.0
-
-    if scope_type == "DIRECT_GOODS" and nmck_val >= 50000.0:
-        return BAND_GOLD
-    return raw_band
-
-
     def select_from_candidates(
         self,
         candidates: Sequence[Dict[str, Any]],
@@ -344,9 +344,18 @@ def get_effective_service_band(row: Dict[str, Any]) -> str:
         if not candidates or batch_size <= 0:
             return []
 
+        # Deduplicate candidates by ID to guarantee POOL_DUPLICATE_IDS = 0
+        seen_ids = set()
+        dedup_candidates = []
+        for row in candidates:
+            rid = row.get("id")
+            if rid not in seen_ids:
+                seen_ids.add(rid)
+                dedup_candidates.append(row)
+
         # Map DB rows to band queues directly using effective service band
         band_queues: Dict[str, List[Dict[str, Any]]] = {b: [] for b in ALL_BANDS}
-        for row in candidates:
+        for row in dedup_candidates:
             band = get_effective_service_band(row)
             if band not in band_queues:
                 band = BAND_UNSCORED

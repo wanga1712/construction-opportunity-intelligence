@@ -68,16 +68,17 @@ class ResearchPipelineMetrics:
         return dict(rows[0])
 
     def get_fresh_outcomes(self) -> Dict[str, Any]:
-        # Based on results table. Simplified for observability.
+        # Calibration outcome measurement planned for next WIP.
         return {
-            'DEFINITIVE_TOTAL': 0,
-            'POSITIVE': 0,
-            'SAFE_NEGATIVE': 0,
-            'UNRESOLVED': 0,
-            'GOLD_N': 0, 'GOLD_HITS': 0,
-            'SILVER_N': 0, 'SILVER_HITS': 0,
-            'BRONZE_N': 0, 'BRONZE_HITS': 0,
-            'WOOD_N': 0, 'WOOD_HITS': 0,
+            'STATUS': 'NOT_IMPLEMENTED',
+            'DEFINITIVE_TOTAL': 'N/A',
+            'POSITIVE': 'N/A',
+            'SAFE_NEGATIVE': 'N/A',
+            'UNRESOLVED': 'N/A',
+            'GOLD_HIT_RATE': 'N/A',
+            'SILVER_HIT_RATE': 'N/A',
+            'BRONZE_HIT_RATE': 'N/A',
+            'WOOD_HIT_RATE': 'N/A',
         }
 
     def get_recent_results(self, limit=50) -> List[Dict[str, Any]]:

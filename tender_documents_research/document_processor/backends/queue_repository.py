@@ -182,30 +182,52 @@ class S13V2QueueRepository(QueueRepository):
 
         _GEN_FILTER = " AND (q.pipeline_generation = %s OR q.pipeline_generation IS NULL)"
 
-        # Phase A: Lock candidate pool — per-band UNION ALL.
-        band_names = ['GOLD', 'SILVER', 'BRONZE', 'WOOD']
+        # Phase A: Lock candidate pool — effective-band UNION ALL with subpool partitioning.
+        # 1. Model GOLD subpool (raw GOLD)
+        # 2. Direct Goods Override subpool (DIRECT_GOODS >= 50k, raw band != GOLD)
+        # 3. SILVER, BRONZE, WOOD, UNSCORED subqueries (excluding DIRECT_GOODS >= 50k)
         union_parts = []
         union_params: list = []
-        for bname in band_names:
-            if bname == 'GOLD':
-                band_cond = "(q.research_prior_band = %s OR (q.procurement_scope_type = 'DIRECT_GOODS' AND COALESCE(q.normalized_nmck_rub, 0) >= 50000))"
-            else:
-                band_cond = "q.research_prior_band = %s"
+
+        # Model GOLD
+        union_parts.append(f"""(
+            SELECT {_COLS}
+              FROM document_processing_queue q
+             WHERE q.status IN ('PENDING', 'PRE_RESEARCH_WAITING')
+               AND q.research_prior_band = 'GOLD'{_GEN_FILTER}{lane_filter}
+             ORDER BY {_ORDER} LIMIT %s FOR UPDATE SKIP LOCKED)""")
+        union_params.extend([self.pipeline_generation()] + lane_params + [per_band_limit])
+
+        # Direct Goods Override to GOLD (non-model-gold)
+        union_parts.append(f"""(
+            SELECT {_COLS}
+              FROM document_processing_queue q
+             WHERE q.status IN ('PENDING', 'PRE_RESEARCH_WAITING')
+               AND q.procurement_scope_type = 'DIRECT_GOODS'
+               AND COALESCE(q.normalized_nmck_rub, 0) >= 50000
+               AND (q.research_prior_band IS NULL OR q.research_prior_band != 'GOLD'){_GEN_FILTER}{lane_filter}
+             ORDER BY {_ORDER} LIMIT %s FOR UPDATE SKIP LOCKED)""")
+        union_params.extend([self.pipeline_generation()] + lane_params + [per_band_limit])
+
+        # Other bands (SILVER, BRONZE, WOOD) excluding DIRECT_GOODS >= 50k
+        for bname in ['SILVER', 'BRONZE', 'WOOD']:
             union_parts.append(f"""(
                 SELECT {_COLS}
                   FROM document_processing_queue q
                  WHERE q.status IN ('PENDING', 'PRE_RESEARCH_WAITING')
-                   AND {band_cond}{_GEN_FILTER}{lane_filter}
+                   AND q.research_prior_band = %s
+                   AND NOT (q.procurement_scope_type = 'DIRECT_GOODS' AND COALESCE(q.normalized_nmck_rub, 0) >= 50000){_GEN_FILTER}{lane_filter}
                  ORDER BY {_ORDER} LIMIT %s FOR UPDATE SKIP LOCKED)""")
             union_params.extend([bname, self.pipeline_generation()] + lane_params + [per_band_limit])
 
-        # UNSCORED / NULL band
+        # UNSCORED / NULL band excluding DIRECT_GOODS >= 50k
         union_parts.append(f"""(
             SELECT {_COLS}
               FROM document_processing_queue q
              WHERE q.status IN ('PENDING', 'PRE_RESEARCH_WAITING')
                AND (q.research_prior_band IS NULL
-                    OR q.research_prior_band NOT IN ('GOLD','SILVER','BRONZE','WOOD')){_GEN_FILTER}{lane_filter}
+                    OR q.research_prior_band NOT IN ('GOLD','SILVER','BRONZE','WOOD'))
+               AND NOT (q.procurement_scope_type = 'DIRECT_GOODS' AND COALESCE(q.normalized_nmck_rub, 0) >= 50000){_GEN_FILTER}{lane_filter}
              ORDER BY {_ORDER} LIMIT %s FOR UPDATE SKIP LOCKED)""")
         union_params.extend([self.pipeline_generation()] + lane_params + [per_band_limit])
 
@@ -216,7 +238,15 @@ class S13V2QueueRepository(QueueRepository):
         try:
             with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
                 cur.execute(select_sql, select_params)
-                pool_rows = [dict(r) for r in cur.fetchall()]
+                raw_rows = [dict(r) for r in cur.fetchall()]
+
+            # Deduplicate by ID to guarantee POOL_DUPLICATE_IDS = 0
+            seen_ids = set()
+            pool_rows = []
+            for r in raw_rows:
+                if r["id"] not in seen_ids:
+                    seen_ids.add(r["id"])
+                    pool_rows.append(r)
 
             if not pool_rows:
                 conn.commit()

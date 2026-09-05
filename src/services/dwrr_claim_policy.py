@@ -84,12 +84,13 @@ class DWRRClaimPolicy:
         selected = self._scheduler.select_from_candidates(candidates, batch_size)
         if selected:
             counters = self._scheduler.get_counters()
-            band_this = _count_bands(candidates, selected)
+            raw_this, service_this = _count_raw_and_service_bands(candidates, selected)
             logger.info(
-                "DWRR claim: selected %d/%d | this_batch=%s | lifetime=%s",
+                "DWRR claim: selected %d/%d | raw_this=%s | service_this=%s | lifetime_service=%s",
                 len(selected),
                 len(candidates),
-                band_this,
+                raw_this,
+                service_this,
                 counters,
             )
         return selected
@@ -106,14 +107,20 @@ class DWRRClaimPolicy:
         self._scheduler.reset_counters()
 
 
-def _count_bands(
+def _count_raw_and_service_bands(
     candidates: Sequence[Dict[str, Any]],
     selected_ids: Sequence[int],
-) -> Dict[str, int]:
-    """Count bands of selected IDs from candidate dicts."""
-    id_to_band = {r["id"]: (r.get("research_prior_band") or BAND_UNSCORED) for r in candidates}
-    counts: Dict[str, int] = {}
+) -> tuple[Dict[str, int], Dict[str, int]]:
+    """Count both raw model bands and effective service bands of selected IDs."""
+    from src.services.research_queue_priority import get_effective_service_band
+    id_to_raw = {r["id"]: (r.get("research_prior_band") or BAND_UNSCORED) for r in candidates}
+    id_to_service = {r["id"]: get_effective_service_band(r) for r in candidates}
+
+    raw_counts: Dict[str, int] = {}
+    service_counts: Dict[str, int] = {}
     for sid in selected_ids:
-        band = id_to_band.get(sid, BAND_UNSCORED)
-        counts[band] = counts.get(band, 0) + 1
-    return counts
+        raw_b = id_to_raw.get(sid, BAND_UNSCORED)
+        srv_b = id_to_service.get(sid, BAND_UNSCORED)
+        raw_counts[raw_b] = raw_counts.get(raw_b, 0) + 1
+        service_counts[srv_b] = service_counts.get(srv_b, 0) + 1
+    return raw_counts, service_counts
