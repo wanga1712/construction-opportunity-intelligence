@@ -9,7 +9,19 @@ from .scoring import object_potential
 _SCHEMA_CODES = {"42P01", "42703", "42883"}
 
 def _schema_error(exc: Exception) -> bool:
-    return getattr(exc, "pgcode", None) in _SCHEMA_CODES or any(token in str(exc).lower() for token in ("does not exist", "undefined table", "undefined column"))
+    seen: set[int] = set()
+    pending = [exc]
+    while pending:
+        current = pending.pop()
+        if id(current) in seen: continue
+        seen.add(id(current))
+        text = str(current).lower()
+        if getattr(current, "pgcode", None) in _SCHEMA_CODES or any(token in text for token in ("does not exist", "undefined table", "undefined column")):
+            return True
+        for name in ("__cause__", "__context__", "original_exception", "orig", "inner_exception"):
+            nested = getattr(current, name, None)
+            if isinstance(nested, BaseException): pending.append(nested)
+    return False
 
 class HydroLeadRepository:
     def __init__(self, crm_db: Any):
@@ -37,7 +49,7 @@ class HydroLeadRepository:
         if filters.get("text"): clauses.append("(coalesce(mc.name,'') || ' ' || coalesce(po.address,'') || ' ' || coalesce(po.cadastral_number,'') || ' ' || coalesce(mc.inn,'') || ' ' || coalesce(mc.ogrn,'')) ILIKE %s"); params.append(f"%{filters['text']}%")
         order = "(e.hydro_state='MERGED') ASC, COALESCE((e.object_potential->>'score')::int,0) DESC, COALESCE((e.lead_readiness->>'score')::int,0) ASC, l.id ASC"
         if sort == "potential": order = "COALESCE((e.object_potential->>'score')::int,0) DESC, l.id ASC"
-        sql = f"""SELECT l.id AS lead_id,e.lead_kind,e.hydro_state AS state,e.merged_into_lead_id,e.object_potential,e.lead_readiness,mc.name AS company_name,mc.inn AS company_inn,mc.ogrn AS company_ogrn,mc.phone AS company_phone,count(lo.parking_object_id)::int AS object_count,h.status AS source_health,h.last_success_at AS source_last_success_at FROM crm_leads l JOIN crm_hydro_lead_extensions e ON e.lead_id=l.id LEFT JOIN management_companies mc ON mc.id=e.management_company_id LEFT JOIN crm_hydro_lead_objects lo ON lo.lead_id=l.id LEFT JOIN parking_prefunnel_objects po ON po.id=lo.parking_object_id LEFT JOIN crm_hydro_source_health h ON h.source='NSPD_PARKING' WHERE {' AND '.join(clauses)} GROUP BY l.id,e.lead_kind,e.hydro_state,e.merged_into_lead_id,e.object_potential,e.lead_readiness,mc.name,mc.inn,mc.ogrn,mc.phone,h.status,h.last_success_at ORDER BY {order} LIMIT %s OFFSET %s"""
+        sql = f"""SELECT l.id AS lead_id,e.lead_kind,e.hydro_state AS state,e.merged_into_lead_id,e.object_potential,e.lead_readiness,mc.name AS company_name,mc.inn AS company_inn,NULL::text AS company_ogrn,NULL::text AS company_phone,count(lo.parking_object_id)::int AS object_count,h.status AS source_health,h.last_success_at AS source_last_success_at FROM crm_leads l JOIN crm_hydro_lead_extensions e ON e.lead_id=l.id LEFT JOIN management_companies mc ON mc.id=e.management_company_id LEFT JOIN crm_hydro_lead_objects lo ON lo.lead_id=l.id LEFT JOIN parking_prefunnel_objects po ON po.id=lo.parking_object_id LEFT JOIN crm_hydro_source_health h ON h.source='NSPD_PARKING' WHERE {' AND '.join(clauses)} GROUP BY l.id,e.lead_kind,e.hydro_state,e.merged_into_lead_id,e.object_potential,e.lead_readiness,mc.name,mc.inn,h.status,h.last_success_at ORDER BY {order} LIMIT %s OFFSET %s"""
         rows = self._query(sql, tuple(params + [max(1, min(limit, 200)), max(0, offset)]))
         if not rows: return []
         ids = [row["lead_id"] for row in rows]
@@ -61,7 +73,7 @@ class HydroLeadRepository:
         return rows
 
     def get_lead(self, lead_id: int | str) -> HydroLeadCardDTO | None:
-        rows = self._query("SELECT l.id AS lead_id,e.lead_kind,e.hydro_state AS state,e.merged_into_lead_id,e.object_potential,e.lead_readiness,mc.name AS company_name,mc.inn AS company_inn,mc.ogrn AS company_ogrn,mc.phone AS company_phone,h.status AS source_health,h.last_success_at AS source_last_success_at FROM crm_leads l JOIN crm_hydro_lead_extensions e ON e.lead_id=l.id LEFT JOIN management_companies mc ON mc.id=e.management_company_id LEFT JOIN crm_hydro_source_health h ON h.source='NSPD_PARKING' WHERE l.id=%s", (lead_id,))
+        rows = self._query("SELECT l.id AS lead_id,e.lead_kind,e.hydro_state AS state,e.merged_into_lead_id,e.object_potential,e.lead_readiness,mc.name AS company_name,mc.inn AS company_inn,NULL::text AS company_ogrn,NULL::text AS company_phone,h.status AS source_health,h.last_success_at AS source_last_success_at FROM crm_leads l JOIN crm_hydro_lead_extensions e ON e.lead_id=l.id LEFT JOIN management_companies mc ON mc.id=e.management_company_id LEFT JOIN crm_hydro_source_health h ON h.source='NSPD_PARKING' WHERE l.id=%s", (lead_id,))
         return lead_card(rows[0], self.get_lead_objects(lead_id)) if rows else None
 
     def get_source_health(self) -> list[dict[str, Any]]: return self._query("SELECT source,status,last_attempt_at,last_success_at,rows_seen,safe_error_class FROM crm_hydro_source_health ORDER BY source")

@@ -3,7 +3,7 @@ from pathlib import Path
 import ast
 
 from src.services.hydro.card_projection import lead_card, missing_facts
-from src.services.hydro.lead_repository import HydroLeadRepository
+from src.services.hydro.lead_repository import HydroLeadRepository, _schema_error
 
 def _obj(i, **kw):
     return {"object_id": i, "address": "Москва", "cadastral_number": f"77:{i}", "area_total": 1200, "floors_underground": 2, "parking_type": "UNDERGROUND", "object_potential": {"score": 90, "grade": "A", "reasons": ["area"], "version": "v1"}, **kw}
@@ -37,6 +37,20 @@ def test_schema_fallback_and_non_schema_error():
     try: HydroLeadRepository(FakeDB(error=ValueError("network down"))).list_leads()
     except ValueError: pass
     else: assert False
+
+def test_live_management_company_shape_has_optional_nulls():
+    db = FakeDB([{"lead_id": 8, "lead_kind": "COMPANY_CONTOUR", "state": "NEW", "company_name": "УК", "company_inn": "7700000000", "object_count": 1}])
+    repo = HydroLeadRepository(db)
+    card = repo.get_lead(8)
+    assert card.company_name == "УК" and card.company_inn == "7700000000"
+    assert card.company_ogrn is None and card.company_phone is None
+    assert ".ogrn" not in db.sql[0][0] and ".phone" not in db.sql[0][0]
+
+def test_wrapped_schema_error_is_detected_without_swallowing_generic_error():
+    class DatabaseQueryError(Exception):
+        def __init__(self): self.original_exception = ValueError("column mc.ogrn does not exist")
+    assert _schema_error(DatabaseQueryError())
+    assert not _schema_error(ValueError("network timeout"))
 
 def test_detail_all_objects_and_import_guard():
     db = FakeDB([{"lead_id": 4, "lead_kind": "COMPANY_CONTOUR", "state": "NEW", "object_count": 2}])
