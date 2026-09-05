@@ -27,9 +27,10 @@
 | :--- | :--- | :--- |
 | OKPD Hierarchical Empirical Prior (`OKPDHierarchicalPriorV1`) | `IMPLEMENTED` | Детерминированный эмпирический бейслайн со сглаживанием |
 | OKPD ML Classifier (`OKPDResearchHitModelV1` / CatBoost) | `IMPLEMENTED_SHADOW` | Градиентный бустинг по категориальным признакам ОКПД2 |
+| Stage 1 V2 Research Prior (`research_priority_v2`) | `IMPLEMENTED` | Семантико-иерархический классификатор с domain disambiguation |
 | Medal Display / Card & Analytics UI | `IMPLEMENTED_SHADOW` | Теневой вывод вероятностей и медалей в CRM и дашборде |
-| Production Queue Admission Control | `NOT_IMPLEMENTED` | Модели не управляют допуском закупок в очередь |
-| Bounded Quota Scheduler (WFQ / Aging) | `DESIGN_ONLY` | Архитектурная спецификация взвешенных квот очереди |
+| Production Queue Admission Control | `ADMISSION_ISOLATED` | Модели не управляют допуском (`MODEL_CONTROLS_ADMISSION=NO`) |
+| Bounded Quota Scheduler (WFQ / Aging) | `IMPLEMENTED_BOUNDED` | Взвешенные квоты WFQ ($5:3:2:1$) с динамическим старением |
 | Cost-Aware Scheduler ($\frac{P}{\mathbb{E}[\text{Cost}]}$) | `DESIGN_ONLY` | Архитектурная спецификация учета стоимости обработки |
 | Cross-Product Discovery Model (Stage 2) | `DESIGN_ONLY` | Матрицы совместной встречаемости товарных категорий |
 
