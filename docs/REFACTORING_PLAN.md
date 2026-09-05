@@ -47,6 +47,16 @@ runtime overlay and production Hydro validation passed. Corrective report:
 `docs/reports/hydro_parking_leads/PHASE_2B_PERSISTENCE_AND_ACTIVATION.md`.
 Stop before Phase 3.
 
+## PHASE 2C — COMMERCIAL HIERARCHY, UK-FIRST CARDS AND QWEN SHADOW
+
+`[~]` Deterministic four-layer commercial hierarchy and Hydro commercial
+read-model are implemented and locally verified. Production Hydro-only
+overlay is active; canonical aggregate read-model smoke passed. Offline Qwen
+shadow batch and operator review remain open before Phase 2C-A can be marked
+complete. Qwen remains shadow-only and cannot affect ordering. Report:
+`docs/reports/hydro_parking_leads/PHASE_2C_COMMERCIAL_HIERARCHY_AND_QWEN_SHADOW.md`.
+Do not start Phase 2C-B or Phase 3.
+
 Phase 0 audit status and gate:
 
 - Plan and WIP recorded before implementation: `YES`.

@@ -19,7 +19,7 @@ def render_waterproofing_page(service: ObjectsService) -> None:
     )
 
     tab_leads, tab_uk, tab_objects, tab_map, tab_pipeline, tab_fields, tab_ai = st.tabs([
-        "🔥 Лиды", "🏢 УК / контуры",
+        "🔥 Клиенты / лиды", "🏢 УК / контуры",
         "🔥 Объекты из БД",
         "🗺 Карта",
         "📍 Воронка",
