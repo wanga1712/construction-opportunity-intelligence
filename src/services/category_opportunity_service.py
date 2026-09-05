@@ -202,7 +202,7 @@ class CategoryOpportunityService:
             current_effective_medal,
             confirmed_base_medal,
             commercial_state,
-            medal_authority,
+            initial_medal_provenance,
             confirmed_by,
             confirmed_at,
             updated_at
@@ -218,7 +218,7 @@ class CategoryOpportunityService:
                 pid = r.get('procurement_id')
                 medal = r.get('current_effective_medal') or r.get('confirmed_base_medal')
                 state = r.get('commercial_state') or 'CONFIRMED'
-                auth = r.get('medal_authority') or 'MODEL_PROMOTED'
+                auth = r.get('initial_medal_provenance') or 'MODEL_PROMOTED'
                 by = r.get('confirmed_by')
                 at = str(r.get('confirmed_at') or r.get('updated_at') or '')
             elif isinstance(r, (list, tuple)) and len(r) >= 9:
