@@ -32,11 +32,12 @@ def test_multi_medal_fixture():
     """
     procurement_id = 9901
     
-    rows = []
+    doc_rows = []
     
-    # 1. Flooring (Linoleum): 8 distinct materials, total 12,450 m², commercial_medal = GOLD
+    # 1. Flooring (Linoleum): 8 distinct materials, total 12,450 m², research_prior_band = WOOD
     for i in range(1, 9):
-        rows.append({
+        doc_rows.append({
+            'detail_id': 1000 + i,
             'procurement_id': procurement_id,
             'category_code': 'flooring',
             'subcategory_code': 'linoleum',
@@ -49,19 +50,18 @@ def test_multi_medal_fixture():
             'validated_at': '2026-09-05T10:00:00',
             'procurement_scope_type': 'WORKS_WITH_EMBEDDED_PRODUCTS',
             'normalized_nmck_rub': 15000000.0,
-            'research_prior_band': 'WOOD',  # Stage 1 priority band is WOOD, but commercial medal is GOLD
-            'commercial_medal': 'GOLD',
-            'commercial_state': 'CONFIRMED',
-            'medal_authority': 'MODEL_PROMOTED',
+            'research_prior_band': 'WOOD',  # Stage 1 priority band is WOOD, commercial medal comes from authority
+            'structured_entity_id': 5000 + i,
             'quantity_value': 1556.25 if i < 8 else 1556.25,  # Total = 12450 m²
             'quantity_unit_normalized': 'm²',
             'total_price_value': 1000000.0 if i == 1 else None
         })
 
-    # 2. Lighting: 23 positions (some duplicate terms), total 180 pcs, commercial_medal = GOLD
+    # 2. Lighting: 23 positions (some duplicate terms), total 180 pcs, research_prior_band = WOOD
     for i in range(1, 24):
         term_idx = (i % 5) + 1  # 5 distinct terms across 23 positions
-        rows.append({
+        doc_rows.append({
+            'detail_id': 2000 + i,
             'procurement_id': procurement_id,
             'category_code': 'lighting',
             'subcategory_code': 'led_fixtures',
@@ -75,17 +75,16 @@ def test_multi_medal_fixture():
             'procurement_scope_type': 'WORKS_WITH_EMBEDDED_PRODUCTS',
             'normalized_nmck_rub': 15000000.0,
             'research_prior_band': 'WOOD',
-            'commercial_medal': 'GOLD',
-            'commercial_state': 'CONFIRMED',
-            'medal_authority': 'MODEL_PROMOTED',
+            'structured_entity_id': 6000 + i,
             'quantity_value': 7.826,  # 23 * 7.826 ~ 180 pcs
             'quantity_unit_normalized': 'pcs',
             'total_price_value': None
         })
 
-    # 3. Curbstone: 2 distinct materials, total 340 m, commercial_medal = WOOD
+    # 3. Curbstone: 2 distinct materials, total 340 m, research_prior_band = WOOD
     for i in range(1, 3):
-        rows.append({
+        doc_rows.append({
+            'detail_id': 3000 + i,
             'procurement_id': procurement_id,
             'category_code': 'curbstone',
             'subcategory_code': 'granite_curb',
@@ -99,34 +98,100 @@ def test_multi_medal_fixture():
             'procurement_scope_type': 'WORKS_WITH_EMBEDDED_PRODUCTS',
             'normalized_nmck_rub': 15000000.0,
             'research_prior_band': 'WOOD',
-            'commercial_medal': 'WOOD',
-            'commercial_state': 'CONFIRMED',
-            'medal_authority': 'MODEL_PROMOTED',
+            'structured_entity_id': 7000 + i,
             'quantity_value': 170.0,  # 2 * 170 = 340 m
             'quantity_unit_normalized': 'm',
             'total_price_value': None
         })
 
-    return procurement_id, rows
+    opp_rows = [
+        {
+            'procurement_id': procurement_id,
+            'commercial_category_code': 'flooring',
+            'current_effective_medal': 'GOLD',
+            'commercial_state': 'CONFIRMED',
+            'medal_authority': 'MODEL_PROMOTED',
+            'confirmed_by': 'system',
+            'confirmed_at': '2026-09-05T10:00:00'
+        },
+        {
+            'procurement_id': procurement_id,
+            'commercial_category_code': 'lighting',
+            'current_effective_medal': 'GOLD',
+            'commercial_state': 'CONFIRMED',
+            'medal_authority': 'MODEL_PROMOTED',
+            'confirmed_by': 'system',
+            'confirmed_at': '2026-09-05T10:05:00'
+        },
+        {
+            'procurement_id': procurement_id,
+            'commercial_category_code': 'curbstone',
+            'current_effective_medal': 'WOOD',
+            'commercial_state': 'CONFIRMED',
+            'medal_authority': 'MODEL_PROMOTED',
+            'confirmed_by': 'system',
+            'confirmed_at': '2026-09-05T10:10:00'
+        }
+    ]
+
+    return procurement_id, doc_rows, opp_rows
 
 
 class MockDBManager:
-    def __init__(self, rows):
-        self.rows = rows
+    def __init__(self, doc_rows=None, opp_rows=None, exp_rows=None):
+        if isinstance(doc_rows, list) and opp_rows is None and exp_rows is None:
+            # Handle single list initialization by separating document match rows and commercial authority rows
+            self.doc_rows = []
+            self.opp_rows = []
+            self.exp_rows = []
+            for r in doc_rows:
+                if 'commercial_category_code' in r or 'current_effective_medal' in r:
+                    self.opp_rows.append(dict(r))
+                elif 'commercial_medal' in r:
+                    opp_r = {
+                        'procurement_id': r['procurement_id'],
+                        'commercial_category_code': r['category_code'],
+                        'current_effective_medal': r['commercial_medal'],
+                        'commercial_state': r.get('commercial_state', 'CONFIRMED'),
+                        'medal_authority': r.get('medal_authority', 'MODEL_PROMOTED'),
+                        'confirmed_by': r.get('confirmed_by'),
+                        'confirmed_at': r.get('confirmed_at')
+                    }
+                    if not any(x['procurement_id'] == opp_r['procurement_id'] and x['commercial_category_code'] == opp_r['commercial_category_code'] for x in self.opp_rows):
+                        self.opp_rows.append(opp_r)
+                    doc_r = dict(r)
+                    doc_r.pop('commercial_medal', None)
+                    doc_r.pop('commercial_state', None)
+                    doc_r.pop('medal_authority', None)
+                    self.doc_rows.append(doc_r)
+                else:
+                    self.doc_rows.append(dict(r))
+        else:
+            self.doc_rows = list(doc_rows or [])
+            self.opp_rows = list(opp_rows or [])
+            self.exp_rows = list(exp_rows or [])
         self.query_count = 0
 
-    def execute_query(self, alias, query, params, fetch=True):
+    def execute_query(self, alias_or_sql, query_or_params, params_or_fetch=None, fetch=True):
         self.query_count += 1
+        sql_str = str(alias_or_sql) + " " + str(query_or_params)
+        params = params_or_fetch if isinstance(params_or_fetch, (list, tuple)) else (query_or_params if isinstance(query_or_params, (list, tuple)) else [])
         pids = params[0] if params else []
-        return [r for r in self.rows if r['procurement_id'] in pids]
+
+        if 'crm_procurement_category_opportunities' in sql_str:
+            return [r for r in self.opp_rows if r.get('procurement_id') in pids]
+        elif 'crm_v3_expert_annotations' in sql_str:
+            return [r for r in self.exp_rows if r.get('procurement_id') in pids]
+        else:
+            return [r for r in self.doc_rows if r.get('procurement_id') in pids]
 
 
 # --- 28 Targeted Test Cases ---
 
 def test_1_multi_medal_fixture_card_counts(test_multi_medal_fixture):
     """Test 1: Single procurement produces N=3 distinct category opportunities (MAX_MEDAL_COLLAPSE = NO)."""
-    pid, rows = test_multi_medal_fixture
-    db = MockDBManager(rows)
+    pid, doc_rows, opp_rows = test_multi_medal_fixture
+    db = MockDBManager(doc_rows, opp_rows)
     service = CategoryOpportunityService(db)
     
     opps = service.get_opportunities_for_procurement(pid)
@@ -137,8 +202,8 @@ def test_1_multi_medal_fixture_card_counts(test_multi_medal_fixture):
 
 def test_2_multi_medal_linoleum_details(test_multi_medal_fixture):
     """Test 2: Linoleum GOLD opportunity has 8 distinct materials and correct quantity."""
-    pid, rows = test_multi_medal_fixture
-    db = MockDBManager(rows)
+    pid, doc_rows, opp_rows = test_multi_medal_fixture
+    db = MockDBManager(doc_rows, opp_rows)
     service = CategoryOpportunityService(db)
     
     opps = service.get_opportunities_for_procurement(pid)
@@ -154,8 +219,8 @@ def test_2_multi_medal_linoleum_details(test_multi_medal_fixture):
 
 def test_3_multi_medal_lighting_details(test_multi_medal_fixture):
     """Test 3: Lighting GOLD opportunity has 23 positions, 5 distinct materials, 180 pcs."""
-    pid, rows = test_multi_medal_fixture
-    db = MockDBManager(rows)
+    pid, doc_rows, opp_rows = test_multi_medal_fixture
+    db = MockDBManager(doc_rows, opp_rows)
     service = CategoryOpportunityService(db)
     
     opps = service.get_opportunities_for_procurement(pid)
@@ -171,8 +236,8 @@ def test_3_multi_medal_lighting_details(test_multi_medal_fixture):
 
 def test_4_multi_medal_curbstone_details(test_multi_medal_fixture):
     """Test 4: Curbstone WOOD opportunity has 2 materials, 340 m."""
-    pid, rows = test_multi_medal_fixture
-    db = MockDBManager(rows)
+    pid, doc_rows, opp_rows = test_multi_medal_fixture
+    db = MockDBManager(doc_rows, opp_rows)
     service = CategoryOpportunityService(db)
     
     opps = service.get_opportunities_for_procurement(pid)
@@ -313,12 +378,11 @@ def test_10_potential_supply_value_not_available():
 
 def test_11_bulk_fetch_zero_n_plus_1(test_multi_medal_fixture):
     """Test 11: Bulk fetch for multiple procurements executes constant batch queries (Zero N+1 per procurement card)."""
-    pid, rows = test_multi_medal_fixture
-    # Duplicate rows for second procurement 9902
-    rows_2 = [dict(r, procurement_id=9902) for r in rows]
-    all_rows = rows + rows_2
+    pid, doc_rows, opp_rows = test_multi_medal_fixture
+    doc_rows_2 = [dict(r, procurement_id=9902) for r in doc_rows]
+    opp_rows_2 = [dict(r, procurement_id=9902) for r in opp_rows]
     
-    db = MockDBManager(all_rows)
+    db = MockDBManager(doc_rows + doc_rows_2, opp_rows + opp_rows_2)
     service = CategoryOpportunityService(db)
     
     res = service.get_opportunities_for_procurements([9901, 9902])
@@ -346,8 +410,8 @@ def test_12_streamlit_card_rendering_structure():
 
 def test_13_streamlit_filter_category(test_multi_medal_fixture):
     """Test 13: UI filtering by category returns matching subcards."""
-    pid, rows = test_multi_medal_fixture
-    db = MockDBManager(rows)
+    pid, doc_rows, opp_rows = test_multi_medal_fixture
+    db = MockDBManager(doc_rows, opp_rows)
     service = CategoryOpportunityService(db)
     opps = service.get_opportunities_for_procurement(pid)
     
@@ -358,8 +422,8 @@ def test_13_streamlit_filter_category(test_multi_medal_fixture):
 
 def test_14_streamlit_filter_medal(test_multi_medal_fixture):
     """Test 14: UI filtering by medal (GOLD only) excludes WOOD."""
-    pid, rows = test_multi_medal_fixture
-    db = MockDBManager(rows)
+    pid, doc_rows, opp_rows = test_multi_medal_fixture
+    db = MockDBManager(doc_rows, opp_rows)
     service = CategoryOpportunityService(db)
     opps = service.get_opportunities_for_procurement(pid)
     
@@ -370,8 +434,8 @@ def test_14_streamlit_filter_medal(test_multi_medal_fixture):
 
 def test_15_streamlit_filter_confirmed_only(test_multi_medal_fixture):
     """Test 15: UI filtering by confirmed commercial state."""
-    pid, rows = test_multi_medal_fixture
-    db = MockDBManager(rows)
+    pid, doc_rows, opp_rows = test_multi_medal_fixture
+    db = MockDBManager(doc_rows, opp_rows)
     service = CategoryOpportunityService(db)
     opps = service.get_opportunities_for_procurement(pid)
     
@@ -381,8 +445,8 @@ def test_15_streamlit_filter_confirmed_only(test_multi_medal_fixture):
 
 def test_16_evidence_drilldown_fields(test_multi_medal_fixture):
     """Test 16: Confirmed material evidence details contain term, page/sheet, row, context."""
-    pid, rows = test_multi_medal_fixture
-    db = MockDBManager(rows)
+    pid, doc_rows, opp_rows = test_multi_medal_fixture
+    db = MockDBManager(doc_rows, opp_rows)
     service = CategoryOpportunityService(db)
     opps = service.get_opportunities_for_procurement(pid)
     
@@ -563,13 +627,41 @@ def test_30_multi_category_direct_goods_nmck_duplication_prevented():
 
 def test_31_independent_category_medals_on_single_procurement(test_multi_medal_fixture):
     """Test 31: Verify independent category medals on procurement 9901."""
-    pid, rows = test_multi_medal_fixture
-    service = CategoryOpportunityService(MockDBManager(rows))
+    pid, doc_rows, opp_rows = test_multi_medal_fixture
+    service = CategoryOpportunityService(MockDBManager(doc_rows, opp_rows))
     opps = service.get_opportunities_for_procurement(pid)
     
     by_cat = {o.category_id: o for o in opps}
     assert by_cat['flooring'].commercial_medal == 'GOLD'
     assert by_cat['lighting'].commercial_medal == 'GOLD'
     assert by_cat['curbstone'].commercial_medal == 'WOOD'
-    # All belong to procurement 9901 where research_prior_band was WOOD
+
+
+def test_32_real_authority_integration_test(test_multi_medal_fixture):
+    """Test 32: Verify real authority integration test requirements from Section 2."""
+    pid, doc_rows, opp_rows = test_multi_medal_fixture
+    
+    # 1. Document match detail rows MUST NOT contain commercial_medal (TEST_DOCUMENT_ROWS_CONTAIN_COMMERCIAL_MEDAL = NO)
+    for r in doc_rows:
+        assert 'commercial_medal' not in r
+        assert 'commercial_state' not in r
+        assert 'medal_authority' not in r
+        
+    db = MockDBManager(doc_rows, opp_rows)
+    service = CategoryOpportunityService(db)
+    opps = service.get_opportunities_for_procurement(pid)
+    
+    # 2. Authority source rows were queried (TEST_AUTHORITY_SOURCE_ROWS = YES)
+    assert db.query_count >= 2
+    
+    # 3. Category medals resolved to GOLD / GOLD / WOOD from authority map (TEST_MIXED_MEDALS_FROM_AUTHORITY = PASS)
+    by_cat = {o.category_id: o for o in opps}
+    assert by_cat['flooring'].commercial_medal == 'GOLD'
+    assert by_cat['lighting'].commercial_medal == 'GOLD'
+    assert by_cat['curbstone'].commercial_medal == 'WOOD'
+    
+    # 4. Query status tracking verified (AUTHORITY_QUERY_ERRORS = 0)
+    assert service.last_query_status['crm_procurement_category_opportunities']['status'] in ('QUERY_OK_ROWS', 'QUERY_OK_ZERO_ROWS')
+    assert service.last_query_status['crm_v3_expert_annotations']['status'] in ('QUERY_OK_ROWS', 'QUERY_OK_ZERO_ROWS')
+    assert service.last_query_status['document_intelligence']['status'] in ('QUERY_OK_ROWS', 'QUERY_OK_ZERO_ROWS')
 

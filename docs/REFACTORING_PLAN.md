@@ -13,6 +13,10 @@
 
 ## CURRENT WIP — 2026-09-05
 
+**CRM-V3-CATEGORY-OPPORTUNITY-LIVE-AUTHORITY-AND-FACT-INTEGRITY-PROOF-1** — `[~]` **IN PROGRESS**. Scope: `AUTHORITY_QUERY_PROOF`, `REAL_AUTHORITY_INTEGRATION_TEST`, `LIVE_STRUCTURED_FACT_PROOF`, `JOIN_CARDINALITY_AUDIT`, `EVIDENCE_IDENTITY_CORRECTION_IF_REQUIRED`. Audit and proof of category commercial authority, query error tracking, mock dataset isolation per query type (`TEST_DOCUMENT_ROWS_CONTAIN_COMMERCIAL_MEDAL=NO`, `REAL_AUTHORITY_INTEGRATION_TEST=PASS`), live structured facts audit (`LIVE_QUANTITY_ROWS_GT_0=YES`), and cardinality identity audit (`JOIN_CARDINALITY_AUDITED=YES`, `EVIDENCE_DOUBLE_COUNT=0`, `VALUE_DOUBLE_COUNT=0`).
+
+## PRIOR CURRENT WIP — 2026-09-05
+
 **CRM-V3-CATEGORY-OPPORTUNITY-AUTHORITY-CORRECTION-1** — `[x]` **PASS / STOP**. Scope: `CATEGORY_COMMERCIAL_AUTHORITY_CORRECTION`, `STRUCTURED_FACT_JOIN`, `CATEGORY_QUANTITY_CORRECTION`, `CATEGORY_VALUE_CORRECTION`, `MULTI_MEDAL_LIVE_PROOF`, `DIRECT_GOODS_MULTI_CATEGORY_VALUE_SAFETY`. Corrected category commercial authority, connecting `CategoryOpportunityService` read model to `crm_procurement_category_opportunities` and `crm_v3_expert_annotations` (`CATEGORY_MEDAL_FROM_RESEARCH_PRIOR=NO`, `INDEPENDENT_CATEGORY_MEDALS=YES`), joined live `structured_entities` facts (`quantity_value`, `quantity_unit`, `unit_price`, `total_price`), eliminated hardcoded commercial state/authority (`COMMERCIAL_STATE_HARDCODED=NO`), and enforced single-category check for direct goods NMCK upper bound derivation (`MULTI_CATEGORY_DIRECT_NMCK_DUPLICATION=0`). Unit suite 51/51 PASS (local and S13 server). Executed live proof on 20 S13 procurements with 38 opportunities (`LIVE_PROOF_RESULT=PASS`). STOP after WIP.
 
 ## PRIOR CURRENT WIP — 2026-09-05

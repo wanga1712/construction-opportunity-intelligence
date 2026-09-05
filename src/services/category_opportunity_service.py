@@ -71,20 +71,31 @@ class CategoryOpportunityService:
 
     def __init__(self, db_manager: Any = None):
         self.db = db_manager
+        self.last_query_status: Dict[str, Dict[str, Any]] = {
+            'document_intelligence': {'status': 'UNEXECUTED', 'rows': 0, 'error': None},
+            'crm_procurement_category_opportunities': {'status': 'UNEXECUTED', 'rows': 0, 'error': None},
+            'crm_v3_expert_annotations': {'status': 'UNEXECUTED', 'rows': 0, 'error': None},
+        }
 
-    def _safe_exec(self, db_alias: str, sql: str, params: tuple) -> List[Any]:
+    def _safe_exec(self, query_key: str, db_alias: str, sql: str, params: tuple) -> List[Any]:
         if self.db is None:
+            self.last_query_status[query_key] = {'status': 'QUERY_OK_ZERO_ROWS', 'rows': 0, 'error': None}
             return []
         try:
-            return self.db.execute_query(db_alias, sql, params, fetch=True) or []
-        except TypeError:
             try:
-                return self.db.execute_query(sql, params) or []
-            except Exception as e:
-                logger.debug("Query fallback failed: %s", e)
-                return []
+                rows = self.db.execute_query(db_alias, sql, params, fetch=True)
+            except TypeError:
+                rows = self.db.execute_query(sql, params)
+            
+            rows_list = list(rows or [])
+            if len(rows_list) > 0:
+                self.last_query_status[query_key] = {'status': 'QUERY_OK_ROWS', 'rows': len(rows_list), 'error': None}
+            else:
+                self.last_query_status[query_key] = {'status': 'QUERY_OK_ZERO_ROWS', 'rows': 0, 'error': None}
+            return rows_list
         except Exception as e:
-            logger.debug("Error executing query on %s: %s", db_alias, e)
+            logger.error("Query error on %s (%s): %s", query_key, db_alias, e)
+            self.last_query_status[query_key] = {'status': 'QUERY_ERROR', 'rows': 0, 'error': str(e)}
             return []
 
     def get_opportunities_for_procurements(
@@ -104,6 +115,7 @@ class CategoryOpportunityService:
             # Step 1: Query match details JOIN queue LEFT JOIN structured_entities from document_intelligence
             sql = """
             SELECT 
+                d.id AS detail_id,
                 d.procurement_id,
                 d.category_code,
                 d.subcategory_code,
@@ -117,6 +129,7 @@ class CategoryOpportunityService:
                 q.procurement_scope_type,
                 q.normalized_nmck_rub,
                 q.research_prior_band,
+                s.id AS structured_entity_id,
                 s.quantity_value,
                 s.quantity_unit_normalized,
                 s.quantity_unit_raw,
@@ -129,7 +142,7 @@ class CategoryOpportunityService:
             WHERE d.procurement_id = ANY(%s)
               AND d.validation_status = 'CONFIRMED'
             """
-            rows = self._safe_exec('document_intelligence', sql, (pids,))
+            rows = self._safe_exec('document_intelligence', 'document_intelligence', sql, (pids,))
             if not rows:
                 return result
 
@@ -144,19 +157,21 @@ class CategoryOpportunityService:
                     cat = r['category_code']
                     row_dict = r
                 else:
-                    pid, cat = r[0], r[1]
+                    pid, cat = r[1], r[2]
                     row_dict = {
-                        'procurement_id': r[0], 'category_code': r[1], 'subcategory_code': r[2],
-                        'matched_term': r[3], 'page_or_sheet': r[4], 'row_number': r[5],
-                        'context_before': r[6], 'context_after': r[7], 'validation_status': r[8],
-                        'validated_at': r[9], 'procurement_scope_type': r[10],
-                        'normalized_nmck_rub': r[11], 'research_prior_band': r[12],
-                        'quantity_value': r[13] if len(r) > 13 else None,
-                        'quantity_unit_normalized': r[14] if len(r) > 14 else None,
-                        'quantity_unit_raw': r[15] if len(r) > 15 else None,
-                        'unit_price_value': r[16] if len(r) > 16 else None,
-                        'total_price_value': r[17] if len(r) > 17 else None,
-                        'product_relation': r[18] if len(r) > 18 else None,
+                        'detail_id': r[0],
+                        'procurement_id': r[1], 'category_code': r[2], 'subcategory_code': r[3],
+                        'matched_term': r[4], 'page_or_sheet': r[5], 'row_number': r[6],
+                        'context_before': r[7], 'context_after': r[8], 'validation_status': r[9],
+                        'validated_at': r[10], 'procurement_scope_type': r[11],
+                        'normalized_nmck_rub': r[12], 'research_prior_band': r[13],
+                        'structured_entity_id': r[14] if len(r) > 14 else None,
+                        'quantity_value': r[15] if len(r) > 15 else None,
+                        'quantity_unit_normalized': r[16] if len(r) > 16 else None,
+                        'quantity_unit_raw': r[17] if len(r) > 17 else None,
+                        'unit_price_value': r[18] if len(r) > 18 else None,
+                        'total_price_value': r[19] if len(r) > 19 else None,
+                        'product_relation': r[20] if len(r) > 20 else None,
                     }
 
                 grouped.setdefault(pid, {}).setdefault(cat, []).append(row_dict)
@@ -194,7 +209,7 @@ class CategoryOpportunityService:
         FROM crm_procurement_category_opportunities
         WHERE procurement_id = ANY(%s)
         """
-        rows = self._safe_exec('crm', sql_opps, (pids,))
+        rows = self._safe_exec('crm_procurement_category_opportunities', 'crm', sql_opps, (pids,))
         for r in rows:
             if isinstance(r, dict):
                 cat = r.get('commercial_category_code')
@@ -236,20 +251,22 @@ class CategoryOpportunityService:
         WHERE procurement_id = ANY(%s)
           AND is_current = TRUE
         """
-        exp_rows = self._safe_exec('crm', sql_exp, (pids,))
+        exp_rows = self._safe_exec('crm_v3_expert_annotations', 'crm', sql_exp, (pids,))
         for r in exp_rows:
             if isinstance(r, dict):
-                pid = r['procurement_id']
+                pid = r.get('procurement_id')
                 payload = r.get('payload') or {}
                 created_at = str(r.get('created_at') or '')
                 created_by = r.get('created_by')
-            else:
+            elif isinstance(r, (list, tuple)) and len(r) >= 4:
                 pid = r[0]
                 payload = r[1] or {}
                 created_at = str(r[2] or '')
                 created_by = r[3]
+            else:
+                continue
 
-            if isinstance(payload, dict):
+            if pid is not None and isinstance(payload, dict):
                 cat_medals = payload.get('category_medals') or {}
                 exp_medal = payload.get('expert_medal')
                 if exp_medal and 'category_code' in payload:
@@ -257,7 +274,7 @@ class CategoryOpportunityService:
 
                 for cat_code, med in cat_medals.items():
                     if med in ('GOLD', 'SILVER', 'BRONZE', 'WOOD'):
-                        authority_map[(pid, cat_code)] = {
+                        authority_map[(int(pid), str(cat_code))] = {
                             'medal': med,
                             'state': 'CONFIRMED',
                             'authority': 'EXPERT_ANNOTATION',
@@ -285,10 +302,13 @@ class CategoryOpportunityService:
         first = items[0]
         cat_name = CATEGORY_NAMES.get(category_code, category_code.replace("_", " ").title())
         
-        # Aggregate unique materials vs total evidence
+        # Aggregate unique materials, distinct detail_ids and structured_entity_ids
         materials_seen: Set[str] = set()
-        confirmed_materials: List[Dict[str, Any]] = []
+        detail_ids_seen: Set[Any] = set()
+        structured_entity_ids_seen: Set[Any] = set()
+        processed_value_keys: Set[Any] = set()
         
+        confirmed_materials: List[Dict[str, Any]] = []
         unit_map: Dict[str, Dict[str, Any]] = {}
         total_val = 0.0
         val_count = 0
@@ -296,6 +316,13 @@ class CategoryOpportunityService:
         structured_rel: Optional[str] = None
 
         for it in items:
+            detail_id = it.get('detail_id')
+            if detail_id is not None:
+                detail_ids_seen.add(detail_id)
+            entity_id = it.get('structured_entity_id')
+            if entity_id is not None:
+                structured_entity_ids_seen.add(entity_id)
+
             term = (it.get('matched_term') or 'Неизвестный материал').strip()
             norm_term = term.lower()
             if norm_term not in materials_seen:
@@ -304,7 +331,9 @@ class CategoryOpportunityService:
                     'material_name': term,
                     'page_or_sheet': it.get('page_or_sheet'),
                     'row_number': it.get('row_number'),
-                    'context': f"{it.get('context_before') or ''} {it.get('context_after') or ''}".strip()
+                    'context': f"{it.get('context_before') or ''} {it.get('context_after') or ''}".strip(),
+                    'detail_id': detail_id,
+                    'structured_entity_id': entity_id,
                 })
 
             if not structured_rel and it.get('product_relation'):
@@ -320,14 +349,21 @@ class CategoryOpportunityService:
                 unit_map[unit]['quantity'] += float(qty)
                 unit_map[unit]['positions'] += 1
 
+            # Prevent double-counting price totals across 1:N structured entities per detail_id
+            val_key = entity_id if entity_id is not None else detail_id
             val = it.get('total_price_value')
             unit_p = it.get('unit_price_value')
-            if val is not None:
-                val_count += 1
-                total_val += float(val)
-            elif unit_p is not None and qty is not None:
-                val_count += 1
-                total_val += float(unit_p) * float(qty)
+            
+            if val_key is None or val_key not in processed_value_keys:
+                if val_key is not None:
+                    processed_value_keys.add(val_key)
+
+                if val is not None:
+                    val_count += 1
+                    total_val += float(val)
+                elif unit_p is not None and qty is not None:
+                    val_count += 1
+                    total_val += float(unit_p) * float(qty)
 
         # Determine supply value method
         val_method = "NOT_AVAILABLE"
@@ -365,26 +401,19 @@ class CategoryOpportunityService:
             conf_by = auth_info.get('confirmed_by')
             conf_at = auth_info.get('confirmed_at')
         else:
-            # Fallback check for simulated test item entries carrying commercial authority keys
-            item_medal = first.get('current_effective_medal') or first.get('commercial_medal')
-            if item_medal in ('GOLD', 'SILVER', 'BRONZE', 'WOOD'):
-                medal = item_medal
-                state = first.get('commercial_state') or 'CONFIRMED'
-                authority = first.get('medal_authority') or 'MODEL_PROMOTED'
-                conf_by = first.get('confirmed_by')
-                conf_at = str(first.get('confirmed_at') or '')
-            else:
-                # Unannotated -> UNASSIGNED / UNCONFIRMED / UNANNOTATED
-                medal = 'UNASSIGNED'
-                state = 'UNCONFIRMED'
-                authority = 'UNANNOTATED'
-                conf_by = None
-                conf_at = None
+            # Unannotated -> UNASSIGNED / UNCONFIRMED / UNANNOTATED
+            medal = 'UNASSIGNED'
+            state = 'UNCONFIRMED'
+            authority = 'UNANNOTATED'
+            conf_by = None
+            conf_at = None
 
         if medal not in ('GOLD', 'SILVER', 'BRONZE', 'WOOD'):
             medal = 'UNASSIGNED'
 
         latest_confirmed = conf_at or str(first.get('validated_at') or '')
+        pos_count = len(detail_ids_seen) if detail_ids_seen else len(items)
+        ev_count = len(detail_ids_seen) if detail_ids_seen else len(items)
 
         return CategoryOpportunity(
             procurement_id=procurement_id,
@@ -397,13 +426,13 @@ class CategoryOpportunityService:
             medal_authority=authority,
             product_relation=rel,
             material_count=len(materials_seen),
-            position_count=len(items),
+            position_count=pos_count,
             quantities_by_unit=list(unit_map.values()),
             potential_supply_value_rub=final_val,
             potential_supply_value_method=val_method,
             facts_with_quantity=qty_count,
             facts_with_value=val_count,
-            evidence_count=len(items),
+            evidence_count=ev_count,
             latest_confirmed_at=latest_confirmed,
             confirmed_materials=confirmed_materials,
             confirmed_by=conf_by,
