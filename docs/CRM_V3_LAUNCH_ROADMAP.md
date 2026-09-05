@@ -96,18 +96,43 @@ This document outlines the roadmap for restoring performance, stabilizing queue 
 
 ---
 
-### R8: GOLD/SILVER HUNTER PRIORITY
-- **Status**: `TODO`
-- **Details**: Implement priority queueing logic utilizing Qwen blind predictions to process high-value opportunities first.
+### R8: GOLD/SILVER HUNTER PRIORITY / STAGE 1 RESEARCH PRIOR
+- **Status**: `ACTIVE_PRODUCTION_COMPLETE`
+- **Details**:
+  - `research_priority_v2` active in production.
+  - Weighted Virtual Time / Stride scheduler active for DWRR queue scheduling.
+  - WOOD exploration active.
+  - `MODEL_CONTROLS_ADMISSION=NO` enforced strictly.
+  - Direct Goods Service Override: Procurements with `procurement_scope_type = DIRECT_GOODS` and `normalized_nmck_rub >= 50,000` receive `GOLD` effective service priority. `RAW_MODEL_BAND_UNCHANGED = YES`. Status: `ACTIVE_PRODUCTION_VERIFIED`.
 
 ---
 
-### R9: HOURLY METRICS + CRM FILTERS + READ-ONLY RESULTS
-- **Status**: `TODO`
-- **Details**: Develop dashboard widgets/scripts tracking real-time queue states, and safely re-introduce read-only filters for research status and structured findings.
+### R9: OBSERVABILITY & QUEUE METRICS
+- **Status**: `PARTIAL / ACTIVE`
+- **Details**:
+  - Implemented: Raw band metrics, service band metrics, override metrics, systemd worker / queue status observability.
+  - Pending: Fresh outcome calibration metrics, category opportunity metrics.
 
 ---
 
-### R10: 24H PRODUCTION SLA RUN
+### R10: CATEGORY OPPORTUNITY / MULTI-MEDAL CRM OUTPUT
+- **Status**: `CURRENT`
+- **Details**: Developing the multi-medal commercial read model and Streamlit UI card section (`🎯 НАЙДЕНО ПОСЛЕ ИССЛЕДОВАНИЯ`). Represents 1 procurement $\to$ N confirmed commercial category opportunities (e.g. Linoleum GOLD, Lighting GOLD, Curbstone WOOD) without max-medal collapse. Includes quantity aggregation by unit, potential supply value derivation, category/medal filters, and documentary evidence drilldowns.
+
+---
+
+### R11: RESEARCH PRIORITY V3
+- **Status**: `WAITING_FOR_FRESH_DATA`
+- **Details**: Stage 1 V3 retraining will be evaluated after sufficient fresh expert annotations and confirmed research outcomes accumulate. Model retraining is deferred.
+
+---
+
+### R12: PRODUCT MARKET TAXONOMY
+- **Status**: `TODO / ARCHITECTURAL_NEXT_STAGE`
+- **Details**: Autonomous category creation and full taxonomy expansion remain an isolated, subsequent architectural stage. Existing product categories are used as-is.
+
+---
+
+### R13: 24H PRODUCTION SLA RUN
 - **Status**: `TODO`
 - **Details**: Run the complete automated pipeline for a full 24-hour cycle under production load with zero failures.

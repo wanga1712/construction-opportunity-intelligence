@@ -28,6 +28,8 @@
 | OKPD Hierarchical Empirical Prior (`OKPDHierarchicalPriorV1`) | `IMPLEMENTED` | Детерминированный эмпирический бейслайн со сглаживанием |
 | OKPD ML Classifier (`OKPDResearchHitModelV1` / CatBoost) | `FROZEN_BASELINE` | Замороженный V1 бейслайн |
 | Stage 1 V2 Research Prior (`research_priority_v2`) | `ACTIVE_PRODUCTION_S13` | Семантико-иерархический классификатор, скоринг 32,665 строк на S13 |
+| Direct Goods Priority Override | `ACTIVE_PRODUCTION_S13_VERIFIED` | Бизнес-приоритет: `DIRECT_GOODS` с НМЦК $\ge 50\,000$ руб $\to$ `effective_service_band = GOLD`. `research_prior_band` (сырая медаль модели) не меняется. |
+| Category Opportunity / Multi-Medal Output | `CURRENT / IMPLEMENTING` | Read model и UI представление коммерческих результатов закупки 1 к N (несколько категорий с раздельными медалями без max-medal collapse) |
 | Medal Display / Card & Analytics UI | `IMPLEMENTED` | Вывод вероятностей и медалей в CRM и дашборде |
 | Production Queue Admission Control | `ADMISSION_ISOLATED` | Модели не управляют допуском (`MODEL_CONTROLS_ADMISSION=NO`) |
 | Bounded Quota Scheduler (Weighted Virtual Time / Stride) | `ACTIVE_PRODUCTION_S13_VERIFIED` | Взвешенные квоты Stride scheduler ($5:3:2:1$; `virtual_time += 1/weight`, выбор `min(virtual_time)`) с динамическим старением и per-band diverse pool (UNION ALL). Класс `DWRRBoundedScheduler` — backward-compat alias. Live proof N=100: GOLD=45 (45%), SILVER=28 (28%), BRONZE=18 (18%), WOOD=9 (9%), MAX_GAP=10. |
