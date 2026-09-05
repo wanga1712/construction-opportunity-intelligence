@@ -190,8 +190,23 @@ class Stage1QueuePriorityCalculator:
         return working
 
 
-class WFQBoundedScheduler:
-    """Real Deficit Weighted Round Robin (DWRR) Bounded Queue Scheduler."""
+class DWRRBoundedScheduler:
+    """Weighted Virtual Time (Stride) Bounded Queue Scheduler.
+
+    Algorithm: each band has a persistent virtual clock. On each selection,
+    the band with the LOWEST virtual time is served and its clock advances
+    by ``1/weight``. Higher-weight bands advance more slowly and therefore
+    receive proportionally more service.
+
+    This is a Stride / Weighted Virtual Time scheduler, not classical
+    Deficit Weighted Round Robin. The class name ``DWRRBoundedScheduler``
+    and alias ``WFQBoundedScheduler`` are retained for backward
+    compatibility only.
+
+    Weights: GOLD=5, SILVER=3, BRONZE=2, WOOD=1, UNSCORED=1.
+    Expected long-run shares: GOLD ≈45.5%, SILVER ≈27.3%,
+    BRONZE ≈18.2%, WOOD ≈9.1%.
+    """
 
     def __init__(
         self,
@@ -206,6 +221,67 @@ class WFQBoundedScheduler:
             self.model_queue_priority_enabled = env_val in ("1", "true", "yes", "on")
         else:
             self.model_queue_priority_enabled = model_queue_priority_enabled
+        # Persistent DWRR state — survives across sequential claim calls
+        self._deficits: Dict[str, float] = {b: 0.0 for b in ALL_BANDS}
+        self._band_cursor: int = 0  # rotation cursor for fair band scanning
+        # Observability counters — lifetime claim counts per band
+        self._claim_counters: Dict[str, int] = {b: 0 for b in ALL_BANDS}
+
+    def get_counters(self) -> Dict[str, int]:
+        """Return lifetime DWRR claim counters per band."""
+        return dict(self._claim_counters)
+
+    def reset_counters(self) -> None:
+        """Reset lifetime claim counters."""
+        self._claim_counters = {b: 0 for b in ALL_BANDS}
+
+    def get_deficits(self) -> Dict[str, float]:
+        """Return current DWRR deficit state (for testing/diagnostics)."""
+        return dict(self._deficits)
+
+    def _run_dwrr(
+        self,
+        band_queues: Dict[str, List[QueueTaskItem]],
+        target_count: int,
+    ) -> List[QueueTaskItem]:
+        """Core Weighted Virtual Time (Stride) scheduling loop.
+
+        Each band has a virtual clock (stored in self._deficits as virtual time).
+        When an item is served from a band, its virtual clock advances by 1/weight.
+        The band with the LOWEST virtual time (most "deserving") goes next.
+
+        Produces exact weighted ratios and is trivially stateful across calls
+        since virtual times persist on the instance.
+        """
+        scheduled: List[QueueTaskItem] = []
+        max_loops = target_count + 100
+
+        for _ in range(max_loops):
+            if len(scheduled) >= target_count:
+                break
+
+            # Find the active band with the lowest virtual time
+            best_band = None
+            best_vtime = float("inf")
+            for b in ALL_BANDS:
+                if not band_queues.get(b):
+                    continue
+                if self._deficits[b] < best_vtime:
+                    best_vtime = self._deficits[b]
+                    best_band = b
+
+            if best_band is None:
+                break  # all queues empty
+
+            # Serve one item from this band
+            item = band_queues[best_band].pop(0)
+            scheduled.append(item)
+            # Advance virtual time by 1/weight (higher weight = smaller step = more service)
+            weight = self.band_weights.get(best_band, 1.0)
+            self._deficits[best_band] += 1.0 / weight
+            self._claim_counters[best_band] = self._claim_counters.get(best_band, 0) + 1
+
+        return scheduled
 
     def schedule_dwrr(
         self,
@@ -230,30 +306,70 @@ class WFQBoundedScheduler:
             band_queues[b].sort(key=lambda x: (-x.effective_priority, x.created_at, x.id))
 
         target_count = len(scored_items) if limit is None else min(limit, len(scored_items))
-        scheduled: List[QueueTaskItem] = []
-        deficits: Dict[str, float] = {b: 0.0 for b in ALL_BANDS}
+        return self._run_dwrr(band_queues, target_count)
 
-        # 3. DWRR iteration
-        max_loops = target_count * 10 + 100
-        loops = 0
-        while len(scheduled) < target_count and loops < max_loops:
-            loops += 1
-            active_any = False
-            for band in ALL_BANDS:
-                q = band_queues[band]
-                if not q:
-                    deficits[band] = 0.0
-                    continue
-                active_any = True
-                deficits[band] += self.band_weights.get(band, 1.0)
-                while deficits[band] >= 1.0 and q and len(scheduled) < target_count:
-                    item = q.pop(0)
-                    scheduled.append(item)
-                    deficits[band] -= 1.0
-            if not active_any:
+    def select_from_candidates(
+        self,
+        candidates: Sequence[Dict[str, Any]],
+        batch_size: int,
+    ) -> List[int]:
+        """Select IDs from pre-locked DB candidate rows using stateful DWRR.
+
+        This is the production entry point. Candidates are dicts with keys:
+        id, research_prior_band, research_prior_score, research_prior_effective_score.
+
+        Returns list of selected IDs (up to batch_size).
+        """
+        if not candidates or batch_size <= 0:
+            return []
+
+        # Map DB rows to band queues directly (no model scoring — already scored)
+        band_queues: Dict[str, List[Dict[str, Any]]] = {b: [] for b in ALL_BANDS}
+        for row in candidates:
+            band = row.get("research_prior_band") or BAND_UNSCORED
+            if band not in band_queues:
+                band = BAND_UNSCORED
+            band_queues[band].append(row)
+
+        # Sort within band: effective_score DESC, research_prior_score DESC, id ASC
+        for b in ALL_BANDS:
+            band_queues[b].sort(
+                key=lambda r: (
+                    -(r.get("research_prior_effective_score") or 0),
+                    -(r.get("research_prior_score") or 0),
+                    r.get("id", 0),
+                ),
+            )
+
+        # DWRR selection using virtual time (same algorithm as _run_dwrr)
+        selected_ids: List[int] = []
+        max_loops = batch_size + 100
+
+        for _ in range(max_loops):
+            if len(selected_ids) >= batch_size:
                 break
 
-        return scheduled
+            # Find the active band with the lowest virtual time
+            best_band = None
+            best_vtime = float("inf")
+            for b in ALL_BANDS:
+                if not band_queues.get(b):
+                    continue
+                if self._deficits[b] < best_vtime:
+                    best_vtime = self._deficits[b]
+                    best_band = b
+
+            if best_band is None:
+                break  # all queues empty
+
+            # Serve one item from this band
+            row = band_queues[best_band].pop(0)
+            selected_ids.append(row["id"])
+            weight = self.band_weights.get(best_band, 1.0)
+            self._deficits[best_band] += 1.0 / weight
+            self._claim_counters[best_band] = self._claim_counters.get(best_band, 0) + 1
+
+        return selected_ids
 
     def order_tasks(
         self,
@@ -352,4 +468,8 @@ class WFQBoundedScheduler:
             "starvation_detected": starvation_detected,
             "starvation_occurred": starvation_detected,
         }
+
+
+# Backward compatibility alias
+WFQBoundedScheduler = DWRRBoundedScheduler
 

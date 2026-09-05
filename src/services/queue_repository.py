@@ -135,17 +135,30 @@ LANE_RANK_SQL = """
 
 
 class S13V2QueueRepository(QueueRepository):
-    """Queue backed by local document_intelligence DB on SERVER 13."""
+    """Queue backed by local document_intelligence DB on SERVER 13.
+
+    When MODEL_QUEUE_PRIORITY_ENABLED=1, claim_batch uses a two-phase
+    approach: SQL locks a candidate pool, Python DWRR selects from it,
+    then SQL claims only the selected IDs — all within one transaction.
+    """
 
     def __init__(self, dsn: Dict[str, Any]) -> None:
         self._dsn = dsn
         self._conn: Optional[psycopg2.extensions.connection] = None
+        self._dwrr_policy: Optional[Any] = None  # lazy init
 
     def _get_conn(self) -> psycopg2.extensions.connection:
         if self._conn is None or self._conn.closed:
             self._conn = psycopg2.connect(**self._dsn)
             self._conn.autocommit = False
         return self._conn
+
+    def _get_dwrr_policy(self):
+        """Lazy-init shared DWRR policy (survives across claim calls)."""
+        if self._dwrr_policy is None:
+            from src.services.dwrr_claim_policy import DWRRClaimPolicy
+            self._dwrr_policy = DWRRClaimPolicy()
+        return self._dwrr_policy
 
     def _execute(self, sql: str, params=None, fetch: bool = False):
         conn = self._get_conn()
@@ -173,50 +186,135 @@ class S13V2QueueRepository(QueueRepository):
             lane_params = list(queue_lanes)
 
         model_priority_enabled = os.getenv("MODEL_QUEUE_PRIORITY_ENABLED", "0").lower() in ("1", "true", "yes", "on")
-        if model_priority_enabled:
-            order_by_sql = f"""
-                {LANE_RANK_SQL} ASC,
-                COALESCE(q.research_prior_effective_score, q.priority_score) DESC,
-                q.research_prior_score DESC NULLS LAST,
-                q.id ASC
-            """
-        else:
 
+        if not model_priority_enabled:
+            # Legacy path: simple SQL ORDER BY, no DWRR
             order_by_sql = f"""
                 {LANE_RANK_SQL} ASC,
                 q.priority_score DESC,
                 q.id ASC
             """
+            sql = f"""
+                UPDATE document_processing_queue
+                   SET status = 'PROCESSING',
+                       worker_id = %s,
+                       started_at = NOW(),
+                       attempt_count = attempt_count + 1
+                 WHERE id IN (
+                    SELECT q.id
+                      FROM document_processing_queue q
+                     WHERE q.status IN ('PENDING', 'PRE_RESEARCH_WAITING')
+                       {lane_filter}
+                     ORDER BY {order_by_sql}
+                     LIMIT %s
+                     FOR UPDATE SKIP LOCKED
+                 )
+             RETURNING id, procurement_id, source_table, source_id,
+                       contract_number, assessment_id, category_codes,
+                       category_context, candidate_level, candidate_score,
+                       research_action, research_depth, queue_lane, pipeline_generation,
+                       research_prior_model, research_prior_version, research_prior_score,
+                       research_prior_percentile, research_prior_band, research_prior_effective_score
+            """
+            params = [worker_id] + lane_params + [batch_size]
+            conn = self._get_conn()
+            with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+                cur.execute(sql, params)
+                rows = cur.fetchall()
+            conn.commit()
+            return [dict(r) for r in rows]
 
-        sql = f"""
-            UPDATE document_processing_queue
-               SET status = 'PROCESSING',
-                   worker_id = %s,
-                   started_at = NOW(),
-                   attempt_count = attempt_count + 1
-             WHERE id IN (
-                SELECT q.id
+        # ── Two-phase weighted claim with per-band diverse pool ──────────
+        from src.services.dwrr_claim_policy import pool_size
+
+        candidate_limit = pool_size(batch_size)
+        per_band_limit = max(candidate_limit, 20)
+
+        _COLS = """q.id, q.procurement_id, q.source_table, q.source_id,
+                   q.contract_number, q.assessment_id, q.category_codes,
+                   q.category_context, q.candidate_level, q.candidate_score,
+                   q.research_action, q.research_depth, q.queue_lane, q.pipeline_generation,
+                   q.research_prior_model, q.research_prior_version, q.research_prior_score,
+                   q.research_prior_percentile, q.research_prior_band, q.research_prior_effective_score"""
+
+        _ORDER = f"""{LANE_RANK_SQL} ASC,
+            COALESCE(q.research_prior_effective_score, q.priority_score) DESC,
+            q.research_prior_score DESC NULLS LAST,
+            q.id ASC"""
+
+        # Phase A: Lock candidate pool — per-band UNION ALL.
+        # Each band gets its own subquery with FOR UPDATE SKIP LOCKED,
+        # ensuring the pool always contains items from ALL available bands.
+        band_names = ['GOLD', 'SILVER', 'BRONZE', 'WOOD']
+        union_parts = []
+        union_params: list = []
+        for bname in band_names:
+            union_parts.append(f"""(
+                SELECT {_COLS}
                   FROM document_processing_queue q
                  WHERE q.status IN ('PENDING', 'PRE_RESEARCH_WAITING')
-                   {lane_filter}
-                 ORDER BY {order_by_sql}
-                 LIMIT %s
-                 FOR UPDATE SKIP LOCKED
-             )
-         RETURNING id, procurement_id, source_table, source_id,
-                   contract_number, assessment_id, category_codes,
-                   category_context, candidate_level, candidate_score,
-                   research_action, research_depth, queue_lane, pipeline_generation,
-                   research_prior_model, research_prior_version, research_prior_score,
-                   research_prior_percentile, research_prior_band, research_prior_effective_score
-        """
-        params = [worker_id] + lane_params + [batch_size]
+                   AND q.research_prior_band = %s{lane_filter}
+                 ORDER BY {_ORDER} LIMIT %s FOR UPDATE SKIP LOCKED)""")
+            union_params.extend([bname] + lane_params + [per_band_limit])
+
+        # UNSCORED / NULL band
+        union_parts.append(f"""(
+            SELECT {_COLS}
+              FROM document_processing_queue q
+             WHERE q.status IN ('PENDING', 'PRE_RESEARCH_WAITING')
+               AND (q.research_prior_band IS NULL
+                    OR q.research_prior_band NOT IN ('GOLD','SILVER','BRONZE','WOOD')){lane_filter}
+             ORDER BY {_ORDER} LIMIT %s FOR UPDATE SKIP LOCKED)""")
+        union_params.extend(lane_params + [per_band_limit])
+
+        select_sql = " UNION ALL ".join(union_parts)
+        select_params = union_params
+
         conn = self._get_conn()
-        with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
-            cur.execute(sql, params)
-            rows = cur.fetchall()
-        conn.commit()
-        return [dict(r) for r in rows]
+        try:
+            with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+                cur.execute(select_sql, select_params)
+                pool_rows = [dict(r) for r in cur.fetchall()]
+
+            if not pool_rows:
+                conn.commit()
+                return []
+
+            # Phase B: DWRR select
+            policy = self._get_dwrr_policy()
+            selected_ids = policy.select_from_pool(pool_rows, batch_size)
+
+            if not selected_ids:
+                conn.commit()
+                return []
+
+            # Phase C: Claim selected IDs
+            id_placeholders = ", ".join(["%s"] * len(selected_ids))
+            update_sql = f"""
+                UPDATE document_processing_queue
+                   SET status = 'PROCESSING',
+                       worker_id = %s,
+                       started_at = NOW(),
+                       attempt_count = attempt_count + 1
+                 WHERE id IN ({id_placeholders})
+             RETURNING id, procurement_id, source_table, source_id,
+                       contract_number, assessment_id, category_codes,
+                       category_context, candidate_level, candidate_score,
+                       research_action, research_depth, queue_lane, pipeline_generation,
+                       research_prior_model, research_prior_version, research_prior_score,
+                       research_prior_percentile, research_prior_band, research_prior_effective_score
+            """
+            update_params = [worker_id] + selected_ids
+            with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+                cur.execute(update_sql, update_params)
+                claimed_rows = [dict(r) for r in cur.fetchall()]
+
+            # Phase D: Commit (releases locks on unclaimed pool rows)
+            conn.commit()
+            return claimed_rows
+        except Exception:
+            conn.rollback()
+            raise
 
     def mark_no_links(self, task_id: int, reason: str) -> None:
         self._execute(

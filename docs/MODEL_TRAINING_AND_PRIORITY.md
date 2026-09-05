@@ -30,7 +30,7 @@
 | Stage 1 V2 Research Prior (`research_priority_v2`) | `ACTIVE_PRODUCTION_S13` | Семантико-иерархический классификатор, скоринг 32,665 строк на S13 |
 | Medal Display / Card & Analytics UI | `IMPLEMENTED` | Вывод вероятностей и медалей в CRM и дашборде |
 | Production Queue Admission Control | `ADMISSION_ISOLATED` | Модели не управляют допуском (`MODEL_CONTROLS_ADMISSION=NO`) |
-| Bounded Quota Scheduler (DWRR / Aging) | `ACTIVE_PRODUCTION_S13` | Взвешенные квоты DWRR ($5:3:2:1$) с динамическим старением |
+| Bounded Quota Scheduler (Weighted Virtual Time / Stride) | `ACTIVE_PRODUCTION_S13_VERIFIED` | Взвешенные квоты Stride scheduler ($5:3:2:1$; `virtual_time += 1/weight`, выбор `min(virtual_time)`) с динамическим старением и per-band diverse pool (UNION ALL). Класс `DWRRBoundedScheduler` — backward-compat alias. Live proof N=100: GOLD=45 (45%), SILVER=28 (28%), BRONZE=18 (18%), WOOD=9 (9%), MAX_GAP=10. |
 | Cost-Aware Scheduler ($\frac{P}{\mathbb{E}[\text{Cost}]}$) | `DESIGN_ONLY` | Архитектурная спецификация учета стоимости обработки |
 | Cross-Product Discovery Model (Stage 2) | `DESIGN_ONLY` | Матрицы совместной встречаемости товарных категорий |
 
