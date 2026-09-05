@@ -203,7 +203,6 @@ class CategoryOpportunityService:
             confirmed_base_medal,
             commercial_state,
             initial_medal_provenance,
-            confirmed_by,
             confirmed_at,
             updated_at
         FROM crm_procurement_category_opportunities
@@ -219,15 +218,15 @@ class CategoryOpportunityService:
                 medal = r.get('current_effective_medal') or r.get('confirmed_base_medal')
                 state = r.get('commercial_state') or 'CONFIRMED'
                 auth = r.get('initial_medal_provenance') or 'MODEL_PROMOTED'
-                by = r.get('confirmed_by')
+                by = None
                 at = str(r.get('confirmed_at') or r.get('updated_at') or '')
-            elif isinstance(r, (list, tuple)) and len(r) >= 9:
+            elif isinstance(r, (list, tuple)) and len(r) >= 8:
                 pid, cat = r[0], r[1]
                 medal = r[2] or r[3]
                 state = r[4] or 'CONFIRMED'
                 auth = r[5] or 'MODEL_PROMOTED'
-                by = r[6]
-                at = str(r[7] or r[8] or '')
+                by = None
+                at = str(r[6] or r[7] or '')
             else:
                 continue
 
