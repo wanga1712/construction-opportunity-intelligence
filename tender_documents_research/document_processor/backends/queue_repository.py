@@ -113,27 +113,43 @@ class S13V2QueueRepository(QueueRepository):
             END
         """
 
+        model_priority_enabled = os.getenv("MODEL_QUEUE_PRIORITY_ENABLED", "0").lower() in ("1", "true", "yes", "on")
+        if model_priority_enabled:
+            order_clause = f"""
+                {_LANE_RANK_SQL} ASC,
+                COALESCE(q.research_prior_effective_score, q.priority_score) DESC,
+                q.research_prior_score DESC NULLS LAST,
+                q.id ASC
+            """
+
+        else:
+            order_clause = f"""
+                {_LANE_RANK_SQL} ASC,
+                q.priority_score DESC,
+                q.id ASC
+            """
+
         sql = f"""
             UPDATE document_processing_queue
                SET status     = 'PROCESSING',
                    worker_id  = %s,
                    started_at = NOW()
              WHERE id IN (
-                 SELECT q.id
-                   FROM document_processing_queue q
-                  WHERE q.status = 'PENDING'
-                    AND q.pipeline_generation = %s
-                    {lane_filter}
-                  ORDER BY {_LANE_RANK_SQL} ASC,
-                           q.priority_score DESC,
-                           q.id ASC
+                  SELECT q.id
+                    FROM document_processing_queue q
+                   WHERE q.status IN ('PENDING', 'PRE_RESEARCH_WAITING')
+                     AND (q.pipeline_generation = %s OR q.pipeline_generation IS NULL)
+                     {lane_filter}
+                   ORDER BY {order_clause}
                   LIMIT %s
                   FOR UPDATE SKIP LOCKED
              )
          RETURNING
              id, procurement_id, source_table, source_id,
              contract_number, queue_lane, pipeline_generation,
-             research_action, research_depth, category_codes
+             research_action, research_depth, category_codes,
+             research_prior_model, research_prior_version, research_prior_score,
+             research_prior_percentile, research_prior_band, research_prior_effective_score
         """
         params = [worker_id, self.pipeline_generation()] + lane_params + [batch_size]
         conn = self._get_conn()

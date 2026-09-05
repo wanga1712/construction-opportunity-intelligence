@@ -1,0 +1,26 @@
+{
+  "model_name": "research_priority_v2",
+  "model_version": "2.0.0",
+  "git_commit": "f88bf0e26ec368f1315d34d9b7e67db1914e660d",
+  "dataset_snapshot_sha256": "5de406d1938562f9001dba2d33051d810645056b8d6587b5d2cdf81e2511c1c2",
+  "artifact_filename": "research_priority_v2_5de406d1938562f9.pkl",
+  "artifact_sha256": "d0c8e87995e9ee1545b42087352a87ba3d1aa18de1f6d9e7b4e892c6a8a5d88b",
+  "training_rows": 112,
+  "positives": 26,
+  "safe_negatives": 86,
+  "trained_at": "2026-09-05T06:51:08.717260+00:00",
+  "feature_names": [
+    "semantic_score",
+    "construction_prior",
+    "medical_risk",
+    "it_electronics_risk",
+    "furniture_risk",
+    "food_risk",
+    "works_signal",
+    "log_price",
+    "okpd_root_enc",
+    "okpd_level2_enc",
+    "okpd_level3_enc",
+    "okpd_full_enc"
+  ]
+}

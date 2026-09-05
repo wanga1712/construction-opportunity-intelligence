@@ -110,6 +110,24 @@ def _claim(
     if limit <= 0:
         return []
     params: List[object] = [worker_id, worker_id, *list(extra_params), limit]
+    model_priority_enabled = os.getenv("MODEL_QUEUE_PRIORITY_ENABLED", "0").lower() in ("1", "true", "yes", "on")
+    if model_priority_enabled:
+        order_by_clause = f"""
+            {LANE_RANK_SQL} ASC,
+            COALESCE(q.research_prior_effective_score, q.priority_score) DESC,
+            q.research_prior_score DESC NULLS LAST,
+            q.submission_end_at ASC NULLS LAST,
+            q.id ASC
+        """
+    else:
+
+        order_by_clause = f"""
+            {LANE_RANK_SQL} ASC,
+            q.priority_score DESC,
+            q.submission_end_at ASC NULLS LAST,
+            q.id ASC
+        """
+
     sql = f"""
         UPDATE document_processing_queue
         SET status     = 'processing',
@@ -122,10 +140,7 @@ def _claim(
               AND (q.worker_id IS NULL OR q.worker_id = %s)
               {where_extra}
             ORDER BY
-                {LANE_RANK_SQL} ASC,
-                q.priority_score DESC,
-                q.submission_end_at ASC NULLS LAST,
-                q.id ASC
+                {order_by_clause}
             LIMIT %s
             FOR UPDATE SKIP LOCKED
         )

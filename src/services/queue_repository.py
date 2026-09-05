@@ -172,6 +172,22 @@ class S13V2QueueRepository(QueueRepository):
             lane_filter = f" AND q.queue_lane IN ({placeholders})"
             lane_params = list(queue_lanes)
 
+        model_priority_enabled = os.getenv("MODEL_QUEUE_PRIORITY_ENABLED", "0").lower() in ("1", "true", "yes", "on")
+        if model_priority_enabled:
+            order_by_sql = f"""
+                {LANE_RANK_SQL} ASC,
+                COALESCE(q.research_prior_effective_score, q.priority_score) DESC,
+                q.research_prior_score DESC NULLS LAST,
+                q.id ASC
+            """
+        else:
+
+            order_by_sql = f"""
+                {LANE_RANK_SQL} ASC,
+                q.priority_score DESC,
+                q.id ASC
+            """
+
         sql = f"""
             UPDATE document_processing_queue
                SET status = 'PROCESSING',
@@ -181,18 +197,18 @@ class S13V2QueueRepository(QueueRepository):
              WHERE id IN (
                 SELECT q.id
                   FROM document_processing_queue q
-                 WHERE q.status = 'PENDING'
+                 WHERE q.status IN ('PENDING', 'PRE_RESEARCH_WAITING')
                    {lane_filter}
-                 ORDER BY {LANE_RANK_SQL} ASC,
-                          q.priority_score DESC,
-                          q.id ASC
+                 ORDER BY {order_by_sql}
                  LIMIT %s
                  FOR UPDATE SKIP LOCKED
              )
          RETURNING id, procurement_id, source_table, source_id,
                    contract_number, assessment_id, category_codes,
                    category_context, candidate_level, candidate_score,
-                   research_action, research_depth, queue_lane, pipeline_generation
+                   research_action, research_depth, queue_lane, pipeline_generation,
+                   research_prior_model, research_prior_version, research_prior_score,
+                   research_prior_percentile, research_prior_band, research_prior_effective_score
         """
         params = [worker_id] + lane_params + [batch_size]
         conn = self._get_conn()

@@ -13,3 +13,5 @@ data/okpd_prior_models/*
 !data/okpd_prior_models/.gitkeep
 data/okpd_prior_snapshots/*
 !data/okpd_prior_snapshots/.gitkeep
+data/models/**/*.pkl
+*.pkl

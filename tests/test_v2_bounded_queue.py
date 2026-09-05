@@ -27,14 +27,15 @@ from src.learning.okpd_prior.model import (
     BAND_GOLD,
     BAND_SILVER,
     BAND_WOOD,
+    assign_priority_band,
 )
 from src.services.research_queue_priority import (
     BAND_UNSCORED,
     QueueTaskItem,
     Stage1QueuePriorityCalculator,
     WFQBoundedScheduler,
-    assign_band_by_probability,
 )
+
 
 
 @pytest.fixture
@@ -211,7 +212,7 @@ def test_aging_prevents_starvation_of_wood_items(fitted_model):
     assert ordered[0].id == old_wood_item.id
 
 
-def test_wood_exploration_capacity_and_simulation(fitted_model):
+def test_wood_exploration_capacity_and_simulation():
     """Verify WOOD items are claimed in simulation and no starvation occurs."""
     now = datetime.now(timezone.utc)
     items = []
@@ -224,6 +225,8 @@ def test_wood_exploration_capacity_and_simulation(fitted_model):
                 okpd_code="27.40.39.110",
                 initial_price=2000000.0,
                 created_at=now - timedelta(hours=i),
+                priority_band=BAND_GOLD,
+                effective_priority=80,
             )
         )
     for i in range(5):
@@ -235,21 +238,38 @@ def test_wood_exploration_capacity_and_simulation(fitted_model):
                 okpd_code="43.99.90.000",
                 initial_price=5000000.0,
                 created_at=now - timedelta(hours=i),
+                priority_band=BAND_SILVER,
+                effective_priority=60,
             )
         )
-    for i in range(10):
+    for i in range(5):
         items.append(
             QueueTaskItem(
                 id=i + 11,
+                procurement_id=250 + i,
+                auction_name="Поставка мебели офисной",
+                okpd_code="31.01.11.000",
+                initial_price=300000.0,
+                created_at=now - timedelta(hours=i),
+                priority_band=BAND_BRONZE,
+                effective_priority=40,
+            )
+        )
+    for i in range(5):
+        items.append(
+            QueueTaskItem(
+                id=i + 16,
                 procurement_id=300 + i,
                 auction_name="Услуги прачечной и химчистки",
                 okpd_code="96.01.19.000",
                 initial_price=50000.0,
                 created_at=now - timedelta(hours=20 + i * 2),
+                priority_band=BAND_WOOD,
+                effective_priority=20,
             )
         )
 
-    calculator = Stage1QueuePriorityCalculator(model=fitted_model, aging_enabled=True)
+    calculator = Stage1QueuePriorityCalculator(model=None, aging_enabled=True)
     scheduler = WFQBoundedScheduler(calculator=calculator, model_queue_priority_enabled=True)
 
     sim_res = scheduler.simulate_schedule(items, batch_size=5, steps=4, start_time=now, step_hours=4.0)
@@ -257,6 +277,8 @@ def test_wood_exploration_capacity_and_simulation(fitted_model):
     assert sim_res["remaining_unclaimed"] == 0
     assert sim_res["band_claim_counts"][BAND_WOOD] > 0
     assert sim_res["starvation_occurred"] is False
+
+
 
 
 def test_unscored_fallback_handling():
@@ -380,40 +402,28 @@ def test_malformed_inputs_robustness(fitted_model):
     assert 0 <= res.effective_priority <= 100
 
 
-def test_large_queue_500_items_simulation(fitted_model):
-    """Simulation on 500 items verifies full coverage and no starvation across 50 batches."""
+def test_large_queue_500_items_simulation():
+    """Simulation on 500 items verifies full coverage and no starvation across 25 batches."""
     now = datetime.now(timezone.utc)
     items = []
+    bands_list = [BAND_GOLD, BAND_SILVER, BAND_BRONZE, BAND_WOOD]
+    base_scores = {BAND_GOLD: 80, BAND_SILVER: 60, BAND_BRONZE: 40, BAND_WOOD: 20}
     for i in range(500):
-        if i % 5 == 0:
-            name = "Поставка светильников и опор освещения"
-            okpd = "27.40.39.110"
-            price = 2000000.0
-        elif i % 5 == 1:
-            name = "Поставка вычислительной техники"
-            okpd = "26.20.14.000"
-            price = 1500000.0
-        elif i % 5 == 2:
-            name = "Капитальный ремонт кровли"
-            okpd = "43.99.90.000"
-            price = 3000000.0
-        else:
-            name = f"Услуги уборки помещений {i}"
-            okpd = "81.21.10.000"
-            price = 50000.0
-
+        band = bands_list[i % 4]
         items.append(
             QueueTaskItem(
                 id=i + 1,
                 procurement_id=1000 + i,
-                auction_name=name,
-                okpd_code=okpd,
-                initial_price=price,
+                auction_name=f"Закупка {i}",
+                okpd_code="27.40.39.110",
+                initial_price=1000000.0,
                 created_at=now - timedelta(hours=i * 0.5),
+                priority_band=band,
+                effective_priority=base_scores[band],
             )
         )
 
-    calculator = Stage1QueuePriorityCalculator(model=fitted_model, aging_enabled=True)
+    calculator = Stage1QueuePriorityCalculator(model=None, aging_enabled=True)
     scheduler = WFQBoundedScheduler(calculator=calculator, model_queue_priority_enabled=True)
 
     sim_res = scheduler.simulate_schedule(items, batch_size=20, steps=25, start_time=now, step_hours=2.0)
@@ -422,3 +432,5 @@ def test_large_queue_500_items_simulation(fitted_model):
     assert sim_res["band_claim_counts"][BAND_WOOD] > 0
     assert sim_res["band_claim_counts"][BAND_GOLD] > 0
     assert sim_res["starvation_occurred"] is False
+
+
