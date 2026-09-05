@@ -41,9 +41,11 @@ Target phases:
 
 ## PHASE 2A — PRODUCTION ACTIVATION AND RUNTIME VALIDATION
 
-`[~]` Persistence feeder and Phase 2 read-model corrections are implemented;
-local verification and production dry-run/rollback gates are in progress.
-Production activation and exact deployment remain pending. Stop before Phase 3.
+`[x]` Persistence feeder and Phase 2 read-model corrections are implemented;
+the authorized transfer, activation, second-run idempotency check, Hydro-only
+runtime overlay and production Hydro validation passed. Corrective report:
+`docs/reports/hydro_parking_leads/PHASE_2B_PERSISTENCE_AND_ACTIVATION.md`.
+Stop before Phase 3.
 
 Phase 0 audit status and gate:
 

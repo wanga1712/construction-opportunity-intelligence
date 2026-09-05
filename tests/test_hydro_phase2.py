@@ -46,6 +46,16 @@ def test_live_management_company_shape_has_optional_nulls():
     assert card.company_ogrn is None and card.company_phone is None
     assert ".ogrn" not in db.sql[0][0] and ".phone" not in db.sql[0][0]
 
+def test_text_search_uses_only_canonical_management_company_fields():
+    db = FakeDB([{"lead_id": 9, "lead_kind": "COMPANY_CONTOUR", "state": "NEW", "company_name": "УК", "company_inn": "7700000000", "object_count": 1}])
+    repo = HydroLeadRepository(db)
+    cards = repo.list_leads({"text": "Москва"})
+    sql = db.sql[0][0]
+    assert cards[0].company_name == "УК"
+    assert "mc.name" in sql and "mc.inn" in sql
+    assert "po.address" in sql and "po.cadastral_number" in sql
+    assert "mc.ogrn" not in sql and "mc.phone" not in sql
+
 def test_wrapped_schema_error_is_detected_without_swallowing_generic_error():
     class DatabaseQueryError(Exception):
         def __init__(self): self.original_exception = ValueError("column mc.ogrn does not exist")
