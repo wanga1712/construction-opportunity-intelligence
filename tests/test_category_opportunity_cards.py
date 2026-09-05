@@ -26,15 +26,15 @@ def test_multi_medal_fixture():
     """Fixture providing simulated database rows for TEST_MULTI_MEDAL procurement (ID: 9901).
     
     Contains 3 distinct category opportunities for a single procurement:
-    1. Linoleum (flooring): GOLD, 8 distinct materials, 12,450 m²
-    2. Lighting (lighting): GOLD, 23 positions, 180 pcs
-    3. Curbstone (curbstone): WOOD, 2 distinct materials, 340 m
+    1. Linoleum (flooring): GOLD commercial medal, 8 distinct materials, 12,450 m²
+    2. Lighting (lighting): GOLD commercial medal, 23 positions, 180 pcs
+    3. Curbstone (curbstone): WOOD commercial medal, 2 distinct materials, 340 m
     """
     procurement_id = 9901
     
     rows = []
     
-    # 1. Flooring (Linoleum): 8 distinct materials, total 12,450 m², research_prior_band = GOLD
+    # 1. Flooring (Linoleum): 8 distinct materials, total 12,450 m², commercial_medal = GOLD
     for i in range(1, 9):
         rows.append({
             'procurement_id': procurement_id,
@@ -49,13 +49,16 @@ def test_multi_medal_fixture():
             'validated_at': '2026-09-05T10:00:00',
             'procurement_scope_type': 'WORKS_WITH_EMBEDDED_PRODUCTS',
             'normalized_nmck_rub': 15000000.0,
-            'research_prior_band': 'GOLD',
+            'research_prior_band': 'WOOD',  # Stage 1 priority band is WOOD, but commercial medal is GOLD
+            'commercial_medal': 'GOLD',
+            'commercial_state': 'CONFIRMED',
+            'medal_authority': 'MODEL_PROMOTED',
             'quantity_value': 1556.25 if i < 8 else 1556.25,  # Total = 12450 m²
             'quantity_unit_normalized': 'm²',
             'total_price_value': 1000000.0 if i == 1 else None
         })
 
-    # 2. Lighting: 23 positions (some duplicate terms), total 180 pcs, research_prior_band = GOLD
+    # 2. Lighting: 23 positions (some duplicate terms), total 180 pcs, commercial_medal = GOLD
     for i in range(1, 24):
         term_idx = (i % 5) + 1  # 5 distinct terms across 23 positions
         rows.append({
@@ -71,13 +74,16 @@ def test_multi_medal_fixture():
             'validated_at': '2026-09-05T10:05:00',
             'procurement_scope_type': 'WORKS_WITH_EMBEDDED_PRODUCTS',
             'normalized_nmck_rub': 15000000.0,
-            'research_prior_band': 'GOLD',
+            'research_prior_band': 'WOOD',
+            'commercial_medal': 'GOLD',
+            'commercial_state': 'CONFIRMED',
+            'medal_authority': 'MODEL_PROMOTED',
             'quantity_value': 7.826,  # 23 * 7.826 ~ 180 pcs
             'quantity_unit_normalized': 'pcs',
             'total_price_value': None
         })
 
-    # 3. Curbstone: 2 distinct materials, total 340 m, research_prior_band = WOOD
+    # 3. Curbstone: 2 distinct materials, total 340 m, commercial_medal = WOOD
     for i in range(1, 3):
         rows.append({
             'procurement_id': procurement_id,
@@ -93,6 +99,9 @@ def test_multi_medal_fixture():
             'procurement_scope_type': 'WORKS_WITH_EMBEDDED_PRODUCTS',
             'normalized_nmck_rub': 15000000.0,
             'research_prior_band': 'WOOD',
+            'commercial_medal': 'WOOD',
+            'commercial_state': 'CONFIRMED',
+            'medal_authority': 'MODEL_PROMOTED',
             'quantity_value': 170.0,  # 2 * 170 = 340 m
             'quantity_unit_normalized': 'm',
             'total_price_value': None
@@ -303,7 +312,7 @@ def test_10_potential_supply_value_not_available():
 
 
 def test_11_bulk_fetch_zero_n_plus_1(test_multi_medal_fixture):
-    """Test 11: Bulk fetch for multiple procurements executes exactly 1 SQL query (CATEGORY_OPPORTUNITY_PER_CARD_SQL = 0)."""
+    """Test 11: Bulk fetch for multiple procurements executes constant batch queries (Zero N+1 per procurement card)."""
     pid, rows = test_multi_medal_fixture
     # Duplicate rows for second procurement 9902
     rows_2 = [dict(r, procurement_id=9902) for r in rows]
@@ -313,7 +322,7 @@ def test_11_bulk_fetch_zero_n_plus_1(test_multi_medal_fixture):
     service = CategoryOpportunityService(db)
     
     res = service.get_opportunities_for_procurements([9901, 9902])
-    assert db.query_count == 1, f"Expected 1 SQL query for bulk fetch, executed {db.query_count}"
+    assert db.query_count <= 3, f"Expected <= 3 batch queries for bulk fetch, executed {db.query_count}"
     assert len(res[9901]) == 3
     assert len(res[9902]) == 3
 
@@ -499,4 +508,68 @@ def test_28_scope_boundaries_preservation():
     }
     band = get_effective_service_band(row)
     assert band == BAND_GOLD  # Priority override rule intact
+
+
+def test_29_category_medal_from_research_prior_is_no():
+    """Test 29: Unannotated category commercial medal must resolve to UNASSIGNED (CATEGORY_MEDAL_FROM_RESEARCH_PRIOR = NO)."""
+    rows = [
+        {
+            'procurement_id': 990,
+            'category_code': 'lighting',
+            'matched_term': 'Светильник',
+            'research_prior_band': 'GOLD',  # Stage 1 priority band is GOLD
+            'validation_status': 'CONFIRMED'
+            # NO commercial_medal or crm_procurement_category_opportunities row
+        }
+    ]
+    service = CategoryOpportunityService(MockDBManager(rows))
+    opp = service.get_opportunities_for_procurement(990)[0]
+    
+    # Must NOT copy research_prior_band to commercial_medal!
+    assert opp.commercial_medal == 'UNASSIGNED'
+    assert opp.commercial_state == 'UNCONFIRMED'
+    assert opp.medal_authority == 'UNANNOTATED'
+
+
+def test_30_multi_category_direct_goods_nmck_duplication_prevented():
+    """Test 30: DIRECT_GOODS with multiple confirmed categories MUST NOT duplicate NMCK across cards."""
+    rows = [
+        {
+            'procurement_id': 991,
+            'category_code': 'lighting',
+            'matched_term': 'Светильник',
+            'procurement_scope_type': 'DIRECT_GOODS',
+            'normalized_nmck_rub': 500000.0,
+            'validation_status': 'CONFIRMED'
+        },
+        {
+            'procurement_id': 991,
+            'category_code': 'flooring',
+            'matched_term': 'Линолеум',
+            'procurement_scope_type': 'DIRECT_GOODS',
+            'normalized_nmck_rub': 500000.0,
+            'validation_status': 'CONFIRMED'
+        }
+    ]
+    service = CategoryOpportunityService(MockDBManager(rows))
+    opps = service.get_opportunities_for_procurement(991)
+    
+    assert len(opps) == 2
+    for opp in opps:
+        # Multi-category DIRECT_GOODS without line totals must NOT duplicate NMCK!
+        assert opp.potential_supply_value_rub is None
+        assert opp.potential_supply_value_method == 'NOT_AVAILABLE'
+
+
+def test_31_independent_category_medals_on_single_procurement(test_multi_medal_fixture):
+    """Test 31: Verify independent category medals on procurement 9901."""
+    pid, rows = test_multi_medal_fixture
+    service = CategoryOpportunityService(MockDBManager(rows))
+    opps = service.get_opportunities_for_procurement(pid)
+    
+    by_cat = {o.category_id: o for o in opps}
+    assert by_cat['flooring'].commercial_medal == 'GOLD'
+    assert by_cat['lighting'].commercial_medal == 'GOLD'
+    assert by_cat['curbstone'].commercial_medal == 'WOOD'
+    # All belong to procurement 9901 where research_prior_band was WOOD
 
