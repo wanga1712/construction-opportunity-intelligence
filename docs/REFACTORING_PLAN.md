@@ -41,11 +41,9 @@ Target phases:
 
 ## PHASE 2A — PRODUCTION ACTIVATION AND RUNTIME VALIDATION
 
-`[!]` Blocked after safe schema activation: baseline is healthy on port 8504,
-but Phase 1 has no production persistence feeder for the 6,810 S7 source rows.
-Rollback backup exists; exact Phase 2 deployment and data activation were not
-performed. A bounded activation writer must be implemented and reviewed before
-resuming. Stop before Phase 3.
+`[~]` Persistence feeder and Phase 2 read-model corrections are implemented;
+local verification and production dry-run/rollback gates are in progress.
+Production activation and exact deployment remain pending. Stop before Phase 3.
 
 Phase 0 audit status and gate:
 

@@ -73,6 +73,9 @@ Proven local SSH config (inspected, not modified):
 
 OPERATING_RULES_MATCH_REAL_SSH_CONFIG=YES
 
+CRM Streamlit runtime endpoint authority: port `8504` on S13. Port `8055` is
+not a CRM endpoint and must not be used as an alternative.
+
 ## Canonical databases and technical roles
 
 | Database | Endpoint | Runtime DB role | Meaning |
