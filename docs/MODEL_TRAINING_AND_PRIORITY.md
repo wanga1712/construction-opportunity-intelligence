@@ -200,3 +200,44 @@ $$\text{Efficiency Score} = \frac{P(\text{RESEARCH\_HIT})}{\mathbb{E}[\text{Rese
 - Медали `GOLD`, `SILVER`, `BRONZE` и `WOOD` показывают предварительный исследовательский приоритет.
 - Система **не отбрасывает закупки**, а формирует очередность анализа так, чтобы наиболее перспективные возможности обрабатывались в первую очередь.
 - Текущий статус индикатора: **теневой режим / калибровка** (`Теневой режим · Пока не влияет на очередь`).
+
+---
+
+## 13. Проспективная теневая оценка (Prospective Shadow Evaluation)
+
+Проспективная оценка предназначена для честного и непреднамеренного (unbiased) измерения качества обученной модели `okpd_research_hit_v1` в сравнении с эмпирическим бейслайном `OKPDHierarchicalPriorV1`.
+
+### 13.1. Принципиальная разница методологий
+
+1. **Ретроспективная диагностика (`Historical Diagnostic`) $\ne$ Проспективная оценка (`Prospective Evaluation`)**:
+   - *Ретроспективная диагностика*: Оценка на уже собранных исторических срезах (train/val/holdout сплиты исходных 32 размеченных закупок). Не позволяет доказать обобщающую способность на реальном входящем потоке из-за малого размера корпуса.
+   - *Проспективная оценка*: Оценка строго на **новых закупках**, результаты исследования которых получены **после временной отсечки исходного датасета** (`research_completed_at > prospective_cutoff`). Модель и бейслайн заморожены; никакие новые исходы не могут менять веса или эмпирические частоты до окончания bake-off.
+
+2. **Допуск к рассмотрению (`PROMOTION_REVIEW_ELIGIBLE`) $\ne$ Перевод в production (`PRODUCTION_PROMOTED`)**:
+   - `PROMOTION_REVIEW_ELIGIBLE = YES` означает лишь то, что проспективный корпус достаточен (`PROSPECTIVE_LABELED >= 100`, `PROSPECTIVE_POSITIVES >= 20`, `PROSPECTIVE_SAFE_NEGATIVES >= 50`), и модель статистически значимо превзошла бейслайн по PR_AUC и Lift@10% при сохранении Recall@30%.
+   - Включение приоритета в боевой очереди (`MODEL_CONTROLS_PRIORITY = YES`) — отдельное регламентное действие, требующее решения оператора. В рамках evaluation контура модель всегда остается `SHADOW_ONLY`.
+
+### 13.2. Неизменяемый манифест происхождения (`Prospective Origin Manifest`)
+
+Хранится в `data/okpd_prior_evaluation/prospective_origin_v1.json`:
+- `source_git_commit`: `0fcb49f8136c2bf3bbea88f7316047dabf5029c0`
+- `dataset_snapshot_sha256`: `112237b6f6393972b3ed6570938fc152a860425f9fe8362b07580eb443fcbd9a`
+- `model_artifact_sha256`, `model_metadata_sha256`
+- `prospective_cutoff`: `2026-08-31T19:54:20.149266+03:00`
+- `original_procurement_ids`: список 111 закупок (навсегда исключенных из проспективной когорты).
+
+### 13.3. Проспективный порог достаточности (Sufficiency Gate)
+
+Для выполнения оценки требуется минимальный проспективный объем:
+- `PROSPECTIVE_LABELED >= 100`
+- `PROSPECTIVE_POSITIVES >= 20`
+- `PROSPECTIVE_SAFE_NEGATIVES >= 50`
+
+При недостижении порога система выставляет:
+```text
+EVALUATION_STATUS = INSUFFICIENT_PROSPECTIVE_DATA
+PROMOTION_REVIEW_ELIGIBLE = NO
+PRODUCTION_PRIORITY_PROMOTION = NO_CHANGE
+```
+Это является ожидаемым штатным состоянием в период накопления данных.
+
