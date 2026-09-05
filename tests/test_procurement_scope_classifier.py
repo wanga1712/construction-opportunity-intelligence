@@ -1,4 +1,5 @@
 from src.learning.procurement_scope.classifier import ProcurementScopeClassifierV1, ProcurementScopeType, derive_product_relation, ProductRelation
+from src.services.research_queue_priority import get_effective_service_band, BAND_GOLD, BAND_BRONZE, BAND_WOOD
 
 def run_tests():
     clf = ProcurementScopeClassifierV1()
@@ -25,8 +26,21 @@ def run_tests():
     assert derive_product_relation(ProcurementScopeType.DESIGN_PROJECT.value) == ProductRelation.SPECIFIED_IN_PROJECT
     assert derive_product_relation(ProcurementScopeType.SERVICE_WITH_CONSUMABLES.value) == ProductRelation.CONSUMABLE_FOR_SERVICE
     assert derive_product_relation(ProcurementScopeType.MIXED.value) == ProductRelation.UNKNOWN
-    
-    print(f"Passed {passed}/{len(tests)} targeted tests")
+
+    # test DIRECT_GOODS_PRIORITY_OVERRIDE
+    # 1. DIRECT_GOODS >= 50_000 -> GOLD
+    row1 = {"procurement_scope_type": "DIRECT_GOODS", "normalized_nmck_rub": 60000, "research_prior_band": BAND_BRONZE}
+    assert get_effective_service_band(row1) == BAND_GOLD
+
+    # 2. DIRECT_GOODS < 50_000 -> normal band (BRONZE)
+    row2 = {"procurement_scope_type": "DIRECT_GOODS", "normalized_nmck_rub": 40000, "research_prior_band": BAND_BRONZE}
+    assert get_effective_service_band(row2) == BAND_BRONZE
+
+    # 3. WORKS >= 50_000 -> normal band (WOOD)
+    row3 = {"procurement_scope_type": "WORKS_WITH_EMBEDDED_PRODUCTS", "normalized_nmck_rub": 1000000, "research_prior_band": BAND_WOOD}
+    assert get_effective_service_band(row3) == BAND_WOOD
+
+    print(f"Passed {passed}/{len(tests)} targeted tests and priority override checks")
 
 if __name__ == '__main__':
     run_tests()

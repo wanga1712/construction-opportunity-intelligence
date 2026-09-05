@@ -235,7 +235,8 @@ class S13V2QueueRepository(QueueRepository):
                    q.category_context, q.candidate_level, q.candidate_score,
                    q.research_action, q.research_depth, q.queue_lane, q.pipeline_generation,
                    q.research_prior_model, q.research_prior_version, q.research_prior_score,
-                   q.research_prior_percentile, q.research_prior_band, q.research_prior_effective_score"""
+                   q.research_prior_percentile, q.research_prior_band, q.research_prior_effective_score,
+                   q.procurement_scope_type, q.normalized_nmck_rub"""
 
         _ORDER = f"""{LANE_RANK_SQL} ASC,
             COALESCE(q.research_prior_effective_score, q.priority_score) DESC,
@@ -249,11 +250,15 @@ class S13V2QueueRepository(QueueRepository):
         union_parts = []
         union_params: list = []
         for bname in band_names:
+            if bname == 'GOLD':
+                band_cond = "(q.research_prior_band = %s OR (q.procurement_scope_type = 'DIRECT_GOODS' AND COALESCE(q.normalized_nmck_rub, 0) >= 50000))"
+            else:
+                band_cond = "q.research_prior_band = %s"
             union_parts.append(f"""(
                 SELECT {_COLS}
                   FROM document_processing_queue q
                  WHERE q.status IN ('PENDING', 'PRE_RESEARCH_WAITING')
-                   AND q.research_prior_band = %s{lane_filter}
+                   AND {band_cond}{lane_filter}
                  ORDER BY {_ORDER} LIMIT %s FOR UPDATE SKIP LOCKED)""")
             union_params.extend([bname] + lane_params + [per_band_limit])
 
