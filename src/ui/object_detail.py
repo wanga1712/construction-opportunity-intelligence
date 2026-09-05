@@ -1,4 +1,4 @@
-﻿"""РџРѕР»РЅР°СЏ РєР°СЂС‚РѕС‡РєР° РѕР±СЉРµРєС‚Р° вЂ” Salesforce-РїРѕРґРѕР±РЅС‹Р№ layout."""
+"""РџРѕР»РЅР°СЏ РєР°СЂС‚РѕС‡РєР° РѕР±СЉРµРєС‚Р° вЂ” Salesforce-РїРѕРґРѕР±РЅС‹Р№ layout."""
 from __future__ import annotations
 
 import html
@@ -46,6 +46,9 @@ from src.services.tender_docs_bundle import (
 )
 from src.services.objects_service import ObjectsService
 from src.ui.object_card_format import fmt_date, is_awarded_registry
+from src.services.category_opportunity_service import CategoryOpportunityService
+from src.ui.components.category_opportunity_section import render_category_opportunity_section
+
 
 
 _SEGMENT_ICONS = {
@@ -399,7 +402,18 @@ def _render_matches_tab(detail: ObjectDetailData, object_key: str) -> None:
     ], cols=3)
 
     _section_title("Р§С‚Рѕ РЅР°Р№РґРµРЅРѕ РІ РґРѕРєСѓРјРµРЅС‚Р°С…")
+    if item.tender_id:
+        try:
+            opp_service = CategoryOpportunityService()
+            opps = opp_service.get_opportunities_for_procurement(item.tender_id)
+            if opps:
+                render_category_opportunity_section(opps, show_filters=True)
+                st.divider()
+        except Exception:
+            pass
+
     if detail.documents:
+
         st.caption(
             "РЎРѕРІРїР°РґРµРЅРёСЏ РЅР°Р№РґРµРЅС‹ РІРѕ РІРЅСѓС‚СЂРµРЅРЅРёС… С„Р°Р№Р»Р°С… Р°СЂС…РёРІРѕРІ Р·Р°РєСѓРїРєРё. "
             "РЎРєР°С‡Р°Р№С‚Рµ РґРѕРєСѓРјРµРЅС‚Р°С†РёСЋ СЃ РїР»РѕС‰Р°РґРєРё вЂ” РЅСѓР¶РЅС‹Р№ С„Р°Р№Р» РІРЅСѓС‚СЂРё."
