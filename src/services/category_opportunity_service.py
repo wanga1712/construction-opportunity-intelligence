@@ -138,7 +138,10 @@ class CategoryOpportunityService:
                 s.product_relation
             FROM document_match_details d
             JOIN document_processing_queue q ON d.procurement_id = q.procurement_id
-            LEFT JOIN structured_entities s ON d.id = s.detail_id
+            LEFT JOIN structured_entities s 
+                   ON d.id = s.detail_id 
+                  AND COALESCE(s.structured_fact_trust_state, 'TRUSTED_PRODUCTION') = 'TRUSTED_PRODUCTION'
+                  AND s.structured_fact_trust_state NOT IN ('DEV_EXPOSED', 'TEST_FIXTURE', 'QUALITY_REJECTED')
             WHERE d.procurement_id = ANY(%s)
               AND d.validation_status = 'CONFIRMED'
             """
