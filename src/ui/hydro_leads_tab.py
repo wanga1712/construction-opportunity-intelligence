@@ -14,6 +14,8 @@ def render_lead_detail(repo: HydroLeadRepository, lead_id: int | str) -> None:
     if not card: st.warning("Лид не найден."); return
     st.subheader(card.company_name or "УК НЕ ОПРЕДЕЛЕНА")
     st.caption(f"{card.lead_kind} · {card.state} · {card.object_count} объектов · источник: {card.source_health}")
+    if card.company_inn or card.company_ogrn or card.company_phone:
+        st.caption(" · ".join(x for x in (f"ИНН {card.company_inn}" if card.company_inn else None, f"ОГРН {card.company_ogrn}" if card.company_ogrn else None, card.company_phone) if x))
     if card.next_task_label: st.info(f"Следующее действие: {card.next_task_label}")
     st.write(f"Потенциал объекта: {card.potential.grade} ({card.potential.score}) · Готовность лида: {card.readiness.grade} ({card.readiness.score})")
     for obj in card.top_objects:
@@ -45,6 +47,10 @@ def render_hydro_leads_tab(crm_db) -> None:
             st.subheader(title)
             st.caption(f"{card.lead_kind} · {card.state} · {_object_caption(card)}")
             st.write(f"Потенциал: {card.potential.grade} ({card.potential.score}) · Готовность: {card.readiness.grade} ({card.readiness.score}) · источник: {card.source_health}")
+            if card.company_inn or card.company_ogrn or card.company_phone:
+                st.caption(" · ".join(x for x in (f"ИНН {card.company_inn}" if card.company_inn else None, f"ОГРН {card.company_ogrn}" if card.company_ogrn else None, card.company_phone) if x))
+            if card.source_health in ("FAILED", "PARTIAL"):
+                st.warning(f"НСПД временно недоступна. Показаны данные последней успешной синхронизации: {card.source_last_success_at or 'нет данных'}")
             if card.next_task_label: st.info(f"Следующее действие: {card.next_task_label}")
             if st.button("Открыть все объекты", key=f"hydro_lead_{card.lead_id}"): st.session_state["hydro_detail_lead_id"] = card.lead_id
     detail_id = st.session_state.get("hydro_detail_lead_id")

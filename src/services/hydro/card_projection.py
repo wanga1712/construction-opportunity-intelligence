@@ -26,6 +26,7 @@ class HydroLeadCardDTO:
     company_name: str | None
     company_inn: str | None
     company_ogrn: str | None
+    company_phone: str | None
     object_count: int
     top_objects: tuple[HydroObjectCardDTO, ...]
     potential: ScoreResult
@@ -61,4 +62,4 @@ def lead_card(row: dict[str, Any], objects: list[dict[str, Any]] | None = None) 
     default = ScoreResult(0, "D", (), (), "hydro_object_potential_v1")
     readiness = ScoreResult(0, "D", (), (), "hydro_lead_readiness_v1")
     cards = tuple(object_card(item) for item in obj_rows)
-    return HydroLeadCardDTO(row.get("lead_id", row.get("id")), str(row.get("lead_kind", "")), str(row.get("state", row.get("hydro_state", "NEW"))), row.get("company_name"), row.get("company_inn"), row.get("company_ogrn"), int(row.get("object_count", len(cards))), cards, _score(row.get("object_potential"), default), _score(row.get("lead_readiness"), readiness), str(row.get("source_health", "NEVER_SYNCED")), row.get("source_last_success_at"), row.get("merged_into_lead_id"), row.get("logical_key"))
+    return HydroLeadCardDTO(row.get("lead_id", row.get("id")), str(row.get("lead_kind", "")), str(row.get("state", row.get("hydro_state", "NEW"))), row.get("company_name"), row.get("company_inn"), row.get("company_ogrn"), row.get("company_phone"), int(row.get("object_count", len(cards))), cards, _score(row.get("object_potential"), default), _score(row.get("lead_readiness"), readiness), str(row.get("source_health", "NEVER_SYNCED")), row.get("source_last_success_at"), row.get("merged_into_lead_id"), row.get("logical_key"))
