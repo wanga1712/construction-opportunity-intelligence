@@ -1,7 +1,7 @@
 # Phase 2C-A — Commercial hierarchy and Qwen shadow
 
-Status: `IN_PROGRESS` until the shadow batch and operator review gate are
-complete. Phase 3 map work and Phase 2C-B ranking changes are not started.
+Status: `READY_FOR_OPERATOR_REVIEW`; the shadow batch is complete, but no
+Phase 2C-B ranking change is authorized. Phase 3 map work is not started.
 
 ## Canonical audit
 
@@ -102,16 +102,16 @@ changed facts produce a different hash.
 
 Shadow sample target: 25 Жилищник, 25 other UK, 25 no-UK commercial/residential,
 25 no-UK state/special/social/other, redistributed if a stratum is smaller.
-The offline batch was attempted with local `qwen2.5:7b` on S13, first
-sequentially and then with a bounded eight-worker pool. Neither attempt
-produced a completed aggregate result within the operational window; both
-were stopped and their temporary files were deleted. Therefore no Qwen score,
-channel or reason is treated as evidence in this report, and Phase 2C-A
-remains open at the shadow gate.
+The offline batch completed on S13 with local `qwen2.5:7b`. The initial
+parallel pass completed 48 records; a bounded two-worker resume retried the
+52 timeout records and completed all 100. The cache is outside the repository,
+mode 0600, and the Hydro UI reads it read-only.
 
 ```text
-QWEN_SHADOW_SAMPLE_COMPLETED=NO
-QWEN_SHADOW_RESULT_CACHE=NOT_CREATED
+QWEN_SHADOW_SAMPLE_COMPLETED=100
+QWEN_SHADOW_SAMPLE_FAILED=0
+QWEN_CHANNEL_COUNTS=FACILITY_MANAGEMENT:8, MANAGEMENT_COMPANY:59, OWNER_OPERATOR:4, PUBLIC_PROCUREMENT:24, RESEARCH_REQUIRED:2, ZHILISHNIK:3
+QWEN_SHADOW_RESULT_CACHE=READY_EXTERNAL_MODE_600
 QWEN_FACT_MUTATION=NO
 TEMP_ARTIFACTS_DELETED=YES
 ```
