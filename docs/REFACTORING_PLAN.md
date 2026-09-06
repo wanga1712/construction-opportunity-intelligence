@@ -13,7 +13,27 @@
 
 ## CURRENT WIP — 2026-09-06
 
-**CRM-V3-STRUCTURED-FACT-FINAL-TRUST-AND-PRODUCT-IDENTITY-PROOF-1** — `[x]` **PASS / STOP**. Scope: `REMOVE_MATCH_TERM_MATERIAL_FALLBACK`, `TRUST_PROMOTION_ACCOUNTING`, `CANARY_REPRODUCIBILITY`, `QUALITY_DENOMINATOR_PROOF`, `VALUE_SOURCE_EVIDENCE_PROOF`. Refactored `CategoryOpportunityService._build_opportunity()` to derive product identity strictly from `product_name_raw or product_name_normalized` without `matched_term` fallback (`MATCH_TERM_USED_AS_PRODUCT_NAME = 0`, `TRUSTED_ENTITY_WITHOUT_PRODUCT_NAME_DISPLAYED = 0`). Enforced strict `has_valid_product_identity` for numeric bindings (material, quantity, unit price, total price). Committed reproducible canonical canary script `scripts/run_structured_fact_canary.py`. Audited trust state accounting across 60 extraction runs and 14 entities on S13 (`TRUSTED_PRODUCTION=14`, `DEV_EXPOSED=0`, `MANUAL_PROOF_QUARANTINE=5`, `QUALITY_REJECTED=0`, `OTHER=0`, `SUM_CANARY_TRUST_STATES=14`). Achieved 100% precision with exact denominators (`PRODUCT_ENTITY_PRECISION=1.0000`, `DISPLAYED_PRODUCT_PRECISION=1.0000`, `QUANTITY_PRECISION=1.0000`, `UNIT_PRICE_PRECISION=1.0000`, `TOTAL_PRICE_PRECISION=1.0000`, `VALUE_WITHOUT_SOURCE_EVIDENCE=0`). Added 6 regression tests (tests 34-39) to `tests/test_category_opportunity_cards.py`. Unit test suite 59/59 PASS on local and S13 server. STOP after WIP.
+**CRM-V3-STRUCTURED-FACT-REAL-CANARY-SAFETY-AND-EVIDENCE-GATE-CORRECTION-1** — `[~]` **IN PROGRESS**. Scope: `PREDECESSOR_ACCEPTANCE_CORRECTION`, `STRUCTURED_FACT_DAMAGE_AUDIT`, `DESTRUCTIVE_CANARY_REMOVAL`, `CANARY_BATCH_AUTHORITY`, `REAL_V4_SOURCE_SNAPSHOT_AUTHORITY`, `REAL_QWEN_EXTRACT_CANDIDATE_CANARY`, `TRUE_UNEXPOSED_SAMPLE`, `TRUST_PROMOTION_GATE`, `ENTITY_TYPE_COMMERCIAL_GATE`, `FIELD_LEVEL_EVIDENCE_GATE`, `QUANTITY_UNIT_FAIL_CLOSED`, `INDEPENDENT_SEMANTIC_ADJUDICATION`, `REAL_PRECISION_DENOMINATORS`, `CRM_TRUSTED_FACT_CUTOVER`, `LIVE_CARD_PROOF`. Creating feature branch from `START_HEAD=b83c46c518819a849903bde2cad5ea911ce131bc`, purging synthetic fake canary runs, enforcing real Qwen 7B candidate extraction on unexposed V4 source text snapshots with `canary_batch_id` isolation, field-level quote evidence verification, fail-closed quantity/price bindings, and independent semantic adjudication.
+
+PREDECESSOR_REVIEW={
+  CODE_PRODUCT_IDENTITY_FIX: PASS
+  MATCH_TERM_FALLBACK_REMOVAL: PASS
+
+  CLAIMED_REAL_CANARY: INVALID
+  CLAIMED_SEMANTIC_PRECISION: INVALID
+  CLAIMED_TRUST_PROMOTION_PROOF: INVALID
+  CLAIMED_VALUE_EVIDENCE_PROOF: INVALID
+
+  ROOT_CAUSE:
+    CANARY_USED_SYNTHETIC_SOURCE_AND_SYNTHETIC_MODEL_RESPONSE
+}
+
+R4_C_STATUS=CORRECTION_REQUIRED
+READY_FOR_R4_D=NO
+
+## PRIOR CURRENT WIP — 2026-09-06
+
+**CRM-V3-STRUCTURED-FACT-FINAL-TRUST-AND-PRODUCT-IDENTITY-PROOF-1** — `[x]` **CORRECTED / RE-EVALUATED**. Scope: `REMOVE_MATCH_TERM_MATERIAL_FALLBACK`, `TRUST_PROMOTION_ACCOUNTING`, `CANARY_REPRODUCIBILITY`, `QUALITY_DENOMINATOR_PROOF`, `VALUE_SOURCE_EVIDENCE_PROOF`. Code fixes (removal of `matched_term` fallback for product name, strict valid product identity binding) were verified PASS. Predecessor canary claim re-evaluated as INVALID due to synthetic source text snapshot and synthetic model response usage in `run_structured_fact_canary.py`. Replaced by `CRM-V3-STRUCTURED-FACT-REAL-CANARY-SAFETY-AND-EVIDENCE-GATE-CORRECTION-1`.
 
 ## PRIOR CURRENT WIP — 2026-09-05
 
