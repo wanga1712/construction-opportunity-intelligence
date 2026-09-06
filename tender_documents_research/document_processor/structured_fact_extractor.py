@@ -448,6 +448,7 @@ SOURCE DOCUMENT TEXT:
             prompt_version=PROMPT_VERSION,
             model_name=self.model_name,
             status="PENDING",
+            canary_batch_id=candidate.get("canary_batch_id"),
         )
 
         # 1. Authority Pre-checks

@@ -113,7 +113,7 @@ class CategoryOpportunityService:
             return result
 
         try:
-            # Step 1: Query match details JOIN queue LEFT JOIN structured_entities from document_intelligence
+            # Step 1: Query match details JOIN queue LEFT JOIN structured_entities & evidence from document_intelligence
             sql = """
             SELECT 
                 d.id AS detail_id,
@@ -138,12 +138,27 @@ class CategoryOpportunityService:
                 s.total_price_value,
                 s.product_relation,
                 s.product_name_raw,
-                s.product_name_normalized
+                s.product_name_normalized,
+                s.entity_type,
+                COALESCE(e.has_product_name_evidence, FALSE) AS has_product_name_evidence,
+                COALESCE(e.has_quantity_evidence, FALSE) AS has_quantity_evidence,
+                COALESCE(e.has_unit_price_evidence, FALSE) AS has_unit_price_evidence,
+                COALESCE(e.has_total_price_evidence, FALSE) AS has_total_price_evidence
             FROM document_match_details d
             JOIN document_processing_queue q ON d.procurement_id = q.procurement_id
             LEFT JOIN structured_entities s 
                    ON d.id = s.detail_id 
                   AND s.structured_fact_trust_state = 'TRUSTED_PRODUCTION'
+            LEFT JOIN (
+                SELECT 
+                    entity_id,
+                    BOOL_OR(field_name = 'product_name') AS has_product_name_evidence,
+                    BOOL_OR(field_name = 'quantity') AS has_quantity_evidence,
+                    BOOL_OR(field_name = 'unit_price') AS has_unit_price_evidence,
+                    BOOL_OR(field_name = 'total_price') AS has_total_price_evidence
+                FROM structured_entity_field_evidence
+                GROUP BY entity_id
+            ) e ON s.id = e.entity_id
             WHERE d.procurement_id = ANY(%s)
               AND d.validation_status = 'CONFIRMED'
             """
@@ -179,6 +194,11 @@ class CategoryOpportunityService:
                         'product_relation': r[20] if len(r) > 20 else None,
                         'product_name_raw': r[21] if len(r) > 21 else None,
                         'product_name_normalized': r[22] if len(r) > 22 else None,
+                        'entity_type': r[23] if len(r) > 23 else 'PRODUCT',
+                        'has_product_name_evidence': r[24] if len(r) > 24 else True,
+                        'has_quantity_evidence': r[25] if len(r) > 25 else True,
+                        'has_unit_price_evidence': r[26] if len(r) > 26 else True,
+                        'has_total_price_evidence': r[27] if len(r) > 27 else True,
                     }
 
                 grouped.setdefault(pid, {}).setdefault(cat, []).append(row_dict)
@@ -321,6 +341,7 @@ class CategoryOpportunityService:
         total_val = 0.0
         val_count = 0
         qty_count = 0
+        val_is_derived = False
         structured_rel: Optional[str] = None
 
         for it in items:
@@ -341,8 +362,19 @@ class CategoryOpportunityService:
             norm_p = (it.get('product_name_normalized') or '').strip()
             product_name = raw_p or norm_p
 
-            # VALID_PRODUCT_IDENTITY = trusted entity AND non-empty product_name
-            has_valid_product_identity = (entity_id is not None) and bool(product_name)
+            # Commercial Entity Gate & Field Evidence Verification
+            entity_type = str(it.get('entity_type') or 'PRODUCT').strip().upper()
+            is_commercial_entity = entity_type in ('PRODUCT', 'MATERIAL', 'EQUIPMENT', 'GOODS')
+
+            if 'has_product_name_evidence' in it:
+                has_pn_ev = bool(it['has_product_name_evidence'])
+            elif 'has_source_evidence' in it:
+                has_pn_ev = bool(it['has_source_evidence'])
+            else:
+                has_pn_ev = True
+
+            # VALID_COMMERCIAL_PRODUCT_IDENTITY = trusted entity AND commercial entity_type AND non-empty product_name AND product_name evidence
+            has_valid_product_identity = (entity_id is not None) and is_commercial_entity and bool(product_name) and has_pn_ev
 
             if has_valid_product_identity:
                 norm_term = product_name.lower()
@@ -357,31 +389,53 @@ class CategoryOpportunityService:
                         'structured_entity_id': entity_id,
                     })
 
-                # Check quantity from structured_entities ONLY when valid product identity is present
+                # Check quantity from structured_entities ONLY when valid product identity and quantity evidence are present
                 qty = it.get('quantity_value')
-                unit = it.get('quantity_unit_normalized') or it.get('quantity_unit_raw') or 'pcs'
-                if qty is not None:
+                if 'has_quantity_evidence' in it:
+                    has_qty_ev = bool(it['has_quantity_evidence'])
+                elif 'has_source_evidence' in it:
+                    has_qty_ev = bool(it['has_source_evidence'])
+                else:
+                    has_qty_ev = True
+
+                unit = it.get('quantity_unit_normalized') or it.get('quantity_unit_raw')
+                # NO default 'pcs'! If unit missing, QUANTITY_FOR_AGGREGATION = NO
+                if qty is not None and has_qty_ev and unit:
                     qty_count += 1
                     if unit not in unit_map:
                         unit_map[unit] = {'unit': unit, 'quantity': 0.0, 'positions': 0}
                     unit_map[unit]['quantity'] += float(qty)
                     unit_map[unit]['positions'] += 1
 
-                # Check price totals from structured_entities ONLY when valid product identity and source evidence are present
-                has_source_evidence = it.get('has_source_evidence', True)
+                # Check price totals from structured_entities ONLY when valid product identity and price evidence are present
+                if 'has_total_price_evidence' in it:
+                    has_tprice_ev = bool(it['has_total_price_evidence'])
+                elif 'has_source_evidence' in it:
+                    has_tprice_ev = bool(it['has_source_evidence'])
+                else:
+                    has_tprice_ev = True
+
+                if 'has_unit_price_evidence' in it:
+                    has_uprice_ev = bool(it['has_unit_price_evidence'])
+                elif 'has_source_evidence' in it:
+                    has_uprice_ev = bool(it['has_source_evidence'])
+                else:
+                    has_uprice_ev = True
+
                 val_key = entity_id
                 val = it.get('total_price_value')
                 unit_p = it.get('unit_price_value')
                 
-                if has_source_evidence and val_key is not None and val_key not in processed_value_keys:
+                if val_key is not None and val_key not in processed_value_keys:
                     processed_value_keys.add(val_key)
 
-                    if val is not None:
+                    if val is not None and has_tprice_ev:
                         val_count += 1
                         total_val += float(val)
-                    elif unit_p is not None and qty is not None:
+                    elif unit_p is not None and qty is not None and has_uprice_ev and has_qty_ev:
                         val_count += 1
                         total_val += float(unit_p) * float(qty)
+                        val_is_derived = True
 
             if not structured_rel and it.get('product_relation'):
                 structured_rel = it.get('product_relation')
@@ -391,7 +445,7 @@ class CategoryOpportunityService:
         final_val = None
         if val_count > 0:
             final_val = total_val
-            val_method = "EXPLICIT_LINE_TOTAL"
+            val_method = "DERIVED_QUANTITY_X_UNIT_PRICE" if val_is_derived else "EXPLICIT_LINE_TOTAL"
         else:
             scope = first.get('procurement_scope_type')
             nmck = first.get('normalized_nmck_rub')

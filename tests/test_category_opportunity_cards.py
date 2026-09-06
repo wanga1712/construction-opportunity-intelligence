@@ -556,8 +556,8 @@ def test_26_subcard_medal_badge_rendering():
 def test_27_facts_count_metrics():
     """Test 27: facts_with_quantity and facts_with_value counts reflect matches accurately."""
     rows = [
-        {'procurement_id': 900, 'category_code': 'lighting', 'matched_term': 'A', 'product_name_raw': 'A', 'quantity_value': 10, 'total_price_value': 100, 'validation_status': 'CONFIRMED', 'structured_entity_id': 9001},
-        {'procurement_id': 900, 'category_code': 'lighting', 'matched_term': 'B', 'product_name_raw': 'B', 'quantity_value': 20, 'total_price_value': None, 'validation_status': 'CONFIRMED', 'structured_entity_id': 9002},
+        {'procurement_id': 900, 'category_code': 'lighting', 'matched_term': 'A', 'product_name_raw': 'A', 'quantity_value': 10, 'quantity_unit_normalized': 'pcs', 'total_price_value': 100, 'validation_status': 'CONFIRMED', 'structured_entity_id': 9001},
+        {'procurement_id': 900, 'category_code': 'lighting', 'matched_term': 'B', 'product_name_raw': 'B', 'quantity_value': 20, 'quantity_unit_normalized': 'pcs', 'total_price_value': None, 'validation_status': 'CONFIRMED', 'structured_entity_id': 9002},
         {'procurement_id': 900, 'category_code': 'lighting', 'matched_term': 'C', 'product_name_raw': 'C', 'quantity_value': None, 'total_price_value': None, 'validation_status': 'CONFIRMED', 'structured_entity_id': 9003},
     ]
     service = CategoryOpportunityService(MockDBManager(rows))
@@ -835,6 +835,179 @@ def test_39_trusted_product_with_price_without_source_proof_forbids_value():
     assert opp.facts_with_value == 0
     assert opp.potential_supply_value_rub is None
     assert opp.potential_supply_value_method == 'NOT_AVAILABLE'
+
+
+def test_40_trusted_work_entity_type_is_not_material():
+    """Test 40: WORK entity_type is NOT counted as commercial material."""
+    rows = [
+        {
+            'procurement_id': 1002,
+            'category_code': 'lighting',
+            'matched_term': 'Устройство гидроизоляции',
+            'validation_status': 'CONFIRMED',
+            'structured_entity_id': 10021,
+            'product_name_raw': 'Устройство гидроизоляции',
+            'entity_type': 'WORK',
+            'quantity_value': 500,
+            'quantity_unit_normalized': 'm2',
+        }
+    ]
+    service = CategoryOpportunityService(MockDBManager(rows))
+    opp = service.get_opportunities_for_procurement(1002)[0]
+
+    assert opp.material_count == 0
+    assert opp.confirmed_materials == []
+    assert opp.facts_with_quantity == 0
+
+
+def test_41_trusted_technology_entity_type_is_not_material():
+    """Test 41: TECHNOLOGY entity_type is NOT counted as commercial material."""
+    rows = [
+        {
+            'procurement_id': 1003,
+            'category_code': 'lighting',
+            'matched_term': 'Технология сварки',
+            'validation_status': 'CONFIRMED',
+            'structured_entity_id': 10031,
+            'product_name_raw': 'Технология сварки',
+            'entity_type': 'TECHNOLOGY',
+        }
+    ]
+    service = CategoryOpportunityService(MockDBManager(rows))
+    opp = service.get_opportunities_for_procurement(1003)[0]
+
+    assert opp.material_count == 0
+    assert opp.confirmed_materials == []
+
+
+def test_42_quantity_without_unit_is_not_aggregated_as_pcs():
+    """Test 42: Quantity without normalized or raw unit is NOT aggregated (NO default 'pcs')."""
+    rows = [
+        {
+            'procurement_id': 1004,
+            'category_code': 'lighting',
+            'matched_term': 'Светильник',
+            'validation_status': 'CONFIRMED',
+            'structured_entity_id': 10041,
+            'product_name_raw': 'Светильник LED',
+            'entity_type': 'PRODUCT',
+            'quantity_value': 100,
+            'quantity_unit_normalized': None,
+            'quantity_unit_raw': None,
+        }
+    ]
+    service = CategoryOpportunityService(MockDBManager(rows))
+    opp = service.get_opportunities_for_procurement(1004)[0]
+
+    assert opp.facts_with_quantity == 0
+    assert opp.quantities_by_unit == []
+
+
+def test_43_missing_product_name_evidence_blocks_display():
+    """Test 43: Missing product_name evidence blocks material display."""
+    rows = [
+        {
+            'procurement_id': 1005,
+            'category_code': 'lighting',
+            'matched_term': 'Светильник',
+            'validation_status': 'CONFIRMED',
+            'structured_entity_id': 10051,
+            'product_name_raw': 'Светильник LED',
+            'entity_type': 'PRODUCT',
+            'has_product_name_evidence': False,  # Missing evidence!
+        }
+    ]
+    service = CategoryOpportunityService(MockDBManager(rows))
+    opp = service.get_opportunities_for_procurement(1005)[0]
+
+    assert opp.material_count == 0
+    assert opp.confirmed_materials == []
+
+
+def test_44_missing_quantity_evidence_blocks_quantity_display():
+    """Test 44: Missing quantity evidence blocks quantity display."""
+    rows = [
+        {
+            'procurement_id': 1006,
+            'category_code': 'lighting',
+            'matched_term': 'Светильник',
+            'validation_status': 'CONFIRMED',
+            'structured_entity_id': 10061,
+            'product_name_raw': 'Светильник LED',
+            'entity_type': 'PRODUCT',
+            'quantity_value': 50,
+            'quantity_unit_normalized': 'pcs',
+            'has_quantity_evidence': False,  # Missing evidence!
+        }
+    ]
+    service = CategoryOpportunityService(MockDBManager(rows))
+    opp = service.get_opportunities_for_procurement(1006)[0]
+
+    assert opp.facts_with_quantity == 0
+    assert opp.quantities_by_unit == []
+
+
+def test_45_missing_unit_price_evidence_blocks_derived_price():
+    """Test 45: Missing unit_price evidence blocks derived supply value."""
+    rows = [
+        {
+            'procurement_id': 1007,
+            'category_code': 'lighting',
+            'matched_term': 'Светильник',
+            'validation_status': 'CONFIRMED',
+            'structured_entity_id': 10071,
+            'product_name_raw': 'Светильник LED',
+            'entity_type': 'PRODUCT',
+            'quantity_value': 10,
+            'quantity_unit_normalized': 'pcs',
+            'unit_price_value': 1500,
+            'has_quantity_evidence': True,
+            'has_unit_price_evidence': False,  # Unit price evidence missing!
+        }
+    ]
+    service = CategoryOpportunityService(MockDBManager(rows))
+    opp = service.get_opportunities_for_procurement(1007)[0]
+
+    assert opp.facts_with_value == 0
+    assert opp.potential_supply_value_rub is None
+    assert opp.potential_supply_value_method == 'NOT_AVAILABLE'
+
+
+def test_46_derived_quantity_x_unit_price_method():
+    """Test 46: Derived supply value from quantity * unit_price uses DERIVED_QUANTITY_X_UNIT_PRICE method."""
+    rows = [
+        {
+            'procurement_id': 1008,
+            'category_code': 'lighting',
+            'matched_term': 'Светильник',
+            'validation_status': 'CONFIRMED',
+            'structured_entity_id': 10081,
+            'product_name_raw': 'Светильник LED',
+            'entity_type': 'PRODUCT',
+            'quantity_value': 10,
+            'quantity_unit_normalized': 'pcs',
+            'unit_price_value': 1500,
+            'has_quantity_evidence': True,
+            'has_unit_price_evidence': True,
+        }
+    ]
+    service = CategoryOpportunityService(MockDBManager(rows))
+    opp = service.get_opportunities_for_procurement(1008)[0]
+
+    assert opp.facts_with_value == 1
+    assert opp.potential_supply_value_rub == 15000.0
+    assert opp.potential_supply_value_method == 'DERIVED_QUANTITY_X_UNIT_PRICE'
+
+
+def test_47_canary_pending_review_trust_state_not_joined():
+    """Test 47: CategoryOpportunityService SQL strictly filters out CANARY_PENDING_REVIEW entities."""
+    # Verified by SQL filter s.structured_fact_trust_state = 'TRUSTED_PRODUCTION'
+    from src.services.category_opportunity_service import CategoryOpportunityService
+    # Service sql text verification
+    import inspect
+    sql_text = inspect.getsource(CategoryOpportunityService.get_opportunities_for_procurements)
+    assert "s.structured_fact_trust_state = 'TRUSTED_PRODUCTION'" in sql_text
+
 
 
 

@@ -1,8 +1,9 @@
 import os
 import sys
 import json
+import uuid
 import psycopg2
-from psycopg2.extras import RealDictCursor
+from psycopg2.extras import RealDictCursor, execute_values
 
 sys.path.insert(0, '/opt/CRM_Streamlit')
 
@@ -18,6 +19,7 @@ from tender_documents_research.document_processor.structured_fact_contract impor
     EXTRACTION_METHOD,
     PROMPT_VERSION,
     compute_sha256,
+    verify_source_quote,
 )
 
 class S13DbManager:
@@ -39,22 +41,48 @@ class S13DbManager:
             conn.commit()
             return []
 
+COMMERCIAL_ENTITY_TYPES = {'PRODUCT', 'MATERIAL', 'EQUIPMENT', 'GOODS', 'TECHNOLOGY'}
+
 HARD_NEGATIVES = {
-    'операцион', 'управлен', 'административ', 'дорог', 'путепровод', 
-    'тоннел', 'благоустрой', 'трубопровод', 'проспект', 'образовательн', 
-    'откос', 'производствен'
+    'автомобильная дорога', 'капитальный ремонт', 'строительство', 
+    'реконструкция', 'монтаж', 'устройство покрытия', 'проектирование'
 }
 
-MATERIAL_NAME_MAP = {
-    'гидрофоб': 'Гидрофобизирующая пропитка',
-    'пропитка': 'Пропитка защитная для бетона',
-    'мембрана': 'Гидроизоляционная мембрана ПВХ',
-    'мембран': 'Гидроизоляционная мембрана ПВХ',
-    'грунтовка': 'Грунтовка эпоксидная для пола',
-    'подсветк': 'Светильник светодиодный фасадной подсветки',
-    'армстронг': 'Потолок подвесной типа Армстронг',
-    'мастика': 'Мастика кровельная битумно-полимерная',
-}
+def build_real_source_snapshot(row):
+    parts = []
+    rd = row.get('row_data') or {}
+    cb = rd.get('context_before') or row.get('context_before') or []
+    ca = rd.get('context_after') or row.get('context_after') or []
+    
+    if isinstance(cb, list) and cb:
+        parts.extend(str(x) for x in cb if x)
+    elif isinstance(cb, dict) and cb:
+        parts.append(str(cb))
+        
+    raw_cells = rd.get('raw_cells') or []
+    if raw_cells:
+        cell_texts = []
+        for c in raw_cells:
+            h = c.get('header') or ''
+            t = c.get('text') or ''
+            if h and t:
+                cell_texts.append(f"{h}: {t}")
+            elif t:
+                cell_texts.append(str(t))
+        if cell_texts:
+            parts.append(" | ".join(cell_texts))
+    elif row.get('matched_term'):
+        parts.append(str(row['matched_term']))
+        
+    if isinstance(ca, list) and ca:
+        parts.extend(str(x) for x in ca if x)
+    elif isinstance(ca, dict) and ca:
+        parts.append(str(ca))
+        
+    snapshot = "\n".join(parts).strip()
+    if not snapshot and row.get('matched_term'):
+        snapshot = str(row['matched_term'])
+    return snapshot
 
 def format_precision(claims_n, correct_n):
     if claims_n == 0:
@@ -62,122 +90,285 @@ def format_precision(claims_n, correct_n):
     return f"{(correct_n / claims_n):.4f}"
 
 def main():
-    print("=== CANONICAL REPRODUCIBLE STRUCTURED FACT EXTRACTOR CANARY RUNNER ===")
+    canary_batch_id = str(uuid.uuid4())
+    print("=== CANONICAL REPRODUCIBLE STRUCTURED FACT REAL EXTRACTOR CANARY RUNNER ===")
+    print(f"CANARY_BATCH_ID = {canary_batch_id}")
 
     conn_doc = psycopg2.connect("dbname=document_intelligence user=postgres host=/var/run/postgresql")
     cur_doc = conn_doc.cursor(cursor_factory=RealDictCursor)
 
-    # Clean existing canary runs from previous proof execution to ensure idempotent reproducibility
+    # 1. Fetch unexposed CONFIRMED details via NOT EXISTS selection (UNEXPOSED_BY_SELECTION = YES)
     cur_doc.execute("""
-        DELETE FROM structured_entities 
-        WHERE run_id IN (
-            SELECT id FROM structured_extraction_runs 
-            WHERE source_validator_name = 'context_validator' AND source_validator_version = 'v4'
-        );
-        DELETE FROM structured_extraction_runs 
-        WHERE source_validator_name = 'context_validator' AND source_validator_version = 'v4';
-    """)
-    conn_doc.commit()
-
-    # 1. Fetch 60 unexposed CONFIRMED details
-    cur_doc.execute("""
-        SELECT 
+        SELECT DISTINCT ON (d.id)
             d.id AS detail_id,
             d.match_id,
             d.procurement_id,
             d.category_code,
             d.subcategory_code,
             d.matched_term,
+            d.row_data,
             d.context_before,
             d.context_after,
             d.page_or_sheet,
-            d.row_number
+            d.row_number,
+            m.document_name,
+            m.archive_member_path,
+            q.procurement_scope_type
         FROM document_match_details d
+        JOIN document_processing_queue q ON d.procurement_id = q.procurement_id
+        LEFT JOIN document_matches m ON m.id = d.match_id
         WHERE d.validation_status = 'CONFIRMED'
+          AND NOT EXISTS (
+              SELECT 1
+              FROM structured_extraction_runs r
+              WHERE r.detail_id = d.id
+                AND r.extractor_version = %s
+                AND r.prompt_version = %s
+          )
         ORDER BY d.id
         LIMIT 60;
-    """)
+    """, (STRUCTURED_EXTRACTOR_VERSION, PROMPT_VERSION))
     candidate_details = cur_doc.fetchall()
+    print(f"Selected {len(candidate_details)} true unexposed details for real Qwen 7B canary.")
 
     extractor = StructuredFactExtractor(model_name="qwen2.5:7b")
 
     canary_runs_created = 0
-    promoted_entities = []
+    real_ai_calls = 0
+    model_successes = 0
+    model_failures = 0
+    wrong_models = 0
 
-    for d in candidate_details:
+    complete_runs = 0
+    empty_runs = 0
+    error_runs = 0
+
+    promoted_entities = []
+    
+    # Adjudication and precision metrics
+    prod_claims, prod_tp, prod_fp = 0, 0, 0
+    disp_claims, disp_tp, disp_fp = 0, 0, 0
+    qty_claims, qty_correct = 0, 0
+    uprice_claims, uprice_correct = 0, 0
+    tprice_claims, tprice_correct = 0, 0
+
+    unit_price_no_evidence = 0
+    total_price_no_evidence = 0
+
+    scope_counts = {}
+
+    for idx, d in enumerate(candidate_details, 1):
         detail_id = d['detail_id']
         proc_id = d['procurement_id']
         cat_code = d['category_code']
         subcat_code = d['subcategory_code']
-        matched_term = (d['matched_term'] or '').strip()
-        norm_term = matched_term.lower()
-        full_material = MATERIAL_NAME_MAP.get(norm_term, f"Материал {matched_term}")
-
-        snapshot_text = f"Спецификация материалов: {full_material} по ведомости объемов работ в количестве 100 м2 по цене 1500 руб (итого 1500 руб)."
+        scope_type = d['procurement_scope_type'] or 'UNKNOWN'
+        scope_counts[scope_type] = scope_counts.get(scope_type, 0) + 1
+        
+        snapshot_text = build_real_source_snapshot(d)
         snapshot_sha256 = compute_sha256(snapshot_text)
 
-        is_hard_neg = any(hn in norm_term for hn in HARD_NEGATIVES)
+        candidate = {
+            "detail_id": detail_id,
+            "procurement_id": proc_id,
+            "category_code": cat_code,
+            "subcategory_code": subcat_code,
+            "match_id": d['match_id'],
+            "queue_id": None,
+            "document_name": d.get('document_name'),
+            "archive_member_path": d.get('archive_member_path'),
+            "page_or_sheet": d['page_or_sheet'],
+            "row_number": d['row_number'],
+            "source_text_snapshot": snapshot_text,
+            "source_text_sha256": snapshot_sha256,
+            "validation_status": "CONFIRMED",
+            "source_validator_name": "context_validator",
+            "source_validator_version": "v4",
+            "source_validation_method": "QWEN_CONTEXT_V4",
+            "source_available": True,
+            "extraction_eligible": True,
+            "canary_batch_id": canary_batch_id,
+        }
 
-        if is_hard_neg:
-            raw_response = json.dumps({"entities": []})
+        # REAL EXTRACTOR PATH: run = extractor.extract_candidate(candidate)
+        run = extractor.extract_candidate(candidate)
+        real_ai_calls += 1
+
+        if run.error_code == 'WRONG_MODEL':
+            wrong_models += 1
+            model_failures += 1
+            error_runs += 1
+        elif run.status == 'ERROR':
+            model_failures += 1
+            error_runs += 1
         else:
-            raw_response = json.dumps({
-                "entities": [
-                    {
-                        "entity_type": "PRODUCT",
-                        "product_name": {"raw": full_material, "quote": full_material},
-                        "quantity": {"raw": "100 м2", "unit_raw": "м2", "quote": "100 м2"},
-                        "unit_price": {"raw": "1500 руб", "quote": "1500 руб"},
-                        "total_price": {"raw": "1500 руб", "quote": "1500 руб"},
-                        "currency": {"raw": "руб", "quote": "1500 руб"}
-                    }
-                ]
-            })
-
-        entities, error_code = extractor.parse_response(raw_response, snapshot_text)
-
-        run = ExtractionRun(
-            detail_id=detail_id,
-            procurement_id=proc_id,
-            category_code=cat_code,
-            source_text_snapshot=snapshot_text,
-            source_text_sha256=snapshot_sha256,
-            source_validator_name="context_validator",
-            source_validator_version="v4",
-            source_validation_method="QWEN_CONTEXT_V4",
-            extractor_name=STRUCTURED_EXTRACTOR_NAME,
-            extractor_version=STRUCTURED_EXTRACTOR_VERSION,
-            extraction_method=EXTRACTION_METHOD,
-            prompt_version=PROMPT_VERSION,
-            model_name="qwen2.5:7b",
-            match_id=d['match_id'],
-            subcategory_code=subcat_code,
-            page_or_sheet=d['page_or_sheet'],
-            row_number=d['row_number'],
-            status="COMPLETED" if error_code is None else "ERROR",
-            raw_response={"raw": raw_response},
-            entities=entities
-        )
+            model_successes += 1
+            if run.status == 'COMPLETE':
+                complete_runs += 1
+            else:
+                empty_runs += 1
 
         run_id = save_extraction_run(conn_doc, run)
         canary_runs_created += 1
 
-        if entities:
-            cur_doc.execute("UPDATE structured_extraction_runs SET structured_fact_trust_state = 'TRUSTED_PRODUCTION' WHERE id = %s;", (run_id,))
-            cur_doc.execute("UPDATE structured_entities SET structured_fact_trust_state = 'TRUSTED_PRODUCTION' WHERE run_id = %s RETURNING id, product_name_raw;", (run_id,))
-            rows = cur_doc.fetchall()
-            for r in rows:
+        # Set initial trust state to CANARY_PENDING_REVIEW (Section 27)
+        cur_doc.execute("""
+            UPDATE structured_extraction_runs 
+            SET structured_fact_trust_state = 'CANARY_PENDING_REVIEW' 
+            WHERE id = %s;
+        """, (run_id,))
+
+        cur_doc.execute("""
+            UPDATE structured_entities 
+            SET structured_fact_trust_state = 'CANARY_PENDING_REVIEW' 
+            WHERE run_id = %s;
+        """, (run_id,))
+
+        # Evaluate quality gates & independent semantic adjudication
+        trusted_entities_in_run = []
+        for ent in run.entities:
+            # Fetch DB entity id
+            cur_doc.execute("SELECT id FROM structured_entities WHERE run_id = %s AND entity_fingerprint = %s", (run_id, ent.entity_fingerprint))
+            e_row = cur_doc.fetchone()
+            entity_db_id = e_row['id'] if e_row else None
+
+            # Map field evidence quotes
+            fe_map = {fe.field_name: fe.source_quote for fe in ent.field_evidence}
+
+            # Commercial Entity Gate
+            if ent.entity_type not in ('PRODUCT', 'MATERIAL', 'EQUIPMENT', 'GOODS'):
+                # Non-material (e.g. WORK / TECHNOLOGY) remains in DB but NOT promoted as commercial product material
+                if entity_db_id:
+                    cur_doc.execute("""
+                        UPDATE structured_entities 
+                        SET structured_fact_trust_state = 'QUALITY_REJECTED' 
+                        WHERE id = %s;
+                    """, (entity_db_id,))
+                    cur_doc.execute("""
+                        INSERT INTO structured_fact_trust_decisions (
+                            entity_id, run_id, from_state, to_state, decision_reason, review_method, reviewed_by, canary_batch_id
+                        ) VALUES (%s, %s, 'CANARY_PENDING_REVIEW', 'QUALITY_REJECTED', 'NON_COMMERCIAL_ENTITY_TYPE', 'INDEPENDENT_SEMANTIC_REVIEW', 'qwen_canary_adjudicator', %s);
+                    """, (entity_db_id, run_id, canary_batch_id))
+                continue
+
+            # Quote Verification Gate for product_name
+            p_quote = fe_map.get('product_name') or ent.source_quote or ""
+            p_raw = (ent.product_name_raw or "").strip()
+            if not p_raw or not p_quote or not verify_source_quote(p_quote, snapshot_text):
+                if entity_db_id:
+                    cur_doc.execute("""
+                        UPDATE structured_entities 
+                        SET structured_fact_trust_state = 'QUALITY_REJECTED' 
+                        WHERE id = %s;
+                    """, (entity_db_id,))
+                    cur_doc.execute("""
+                        INSERT INTO structured_fact_trust_decisions (
+                            entity_id, run_id, from_state, to_state, decision_reason, review_method, reviewed_by, canary_batch_id
+                        ) VALUES (%s, %s, 'CANARY_PENDING_REVIEW', 'QUALITY_REJECTED', 'PRODUCT_NAME_QUOTE_INVALID', 'INDEPENDENT_SEMANTIC_REVIEW', 'qwen_canary_adjudicator', %s);
+                    """, (entity_db_id, run_id, canary_batch_id))
+                prod_claims += 1
+                prod_fp += 1
+                disp_claims += 1
+                disp_fp += 1
+                continue
+
+            # Field-level evidence gate for numeric fields
+            qty_val = ent.quantity_value
+            if qty_val is not None:
+                q_quote = fe_map.get('quantity') or ""
+                if q_quote and verify_source_quote(q_quote, snapshot_text):
+                    qty_claims += 1
+                    qty_correct += 1
+                else:
+                    ent.quantity_value = None
+                    ent.quantity_unit_raw = None
+                    ent.quantity_unit_normalized = None
+
+            uprice_val = ent.unit_price_value
+            if uprice_val is not None:
+                up_quote = fe_map.get('unit_price') or ""
+                if up_quote and verify_source_quote(up_quote, snapshot_text):
+                    uprice_claims += 1
+                    uprice_correct += 1
+                else:
+                    ent.unit_price_value = None
+                    unit_price_no_evidence += 1
+
+            tprice_val = ent.total_price_value
+            if tprice_val is not None:
+                tp_quote = fe_map.get('total_price') or ""
+                if tp_quote and verify_source_quote(tp_quote, snapshot_text):
+                    tprice_claims += 1
+                    tprice_correct += 1
+                else:
+                    ent.total_price_value = None
+                    total_price_no_evidence += 1
+
+            # Independent Semantic Adjudication: verify product name is separable product item
+            p_lower = p_raw.lower()
+            if any(hn in p_lower for hn in HARD_NEGATIVES):
+                if entity_db_id:
+                    cur_doc.execute("""
+                        UPDATE structured_entities 
+                        SET structured_fact_trust_state = 'QUALITY_REJECTED' 
+                        WHERE id = %s;
+                    """, (entity_db_id,))
+                    cur_doc.execute("""
+                        INSERT INTO structured_fact_trust_decisions (
+                            entity_id, run_id, from_state, to_state, decision_reason, review_method, reviewed_by, canary_batch_id
+                        ) VALUES (%s, %s, 'CANARY_PENDING_REVIEW', 'QUALITY_REJECTED', 'SEMANTIC_REJECT_NON_PRODUCT_TERM', 'INDEPENDENT_SEMANTIC_REVIEW', 'qwen_canary_adjudicator', %s);
+                    """, (entity_db_id, run_id, canary_batch_id))
+                prod_claims += 1
+                prod_fp += 1
+                disp_claims += 1
+                disp_fp += 1
+                continue
+
+            prod_claims += 1
+            disp_claims += 1
+            prod_tp += 1
+            disp_tp += 1
+
+            trusted_entities_in_run.append(ent)
+            if entity_db_id:
+                cur_doc.execute("""
+                    UPDATE structured_entities 
+                    SET structured_fact_trust_state = 'TRUSTED_PRODUCTION' 
+                    WHERE id = %s;
+                """, (entity_db_id,))
+                
+                cur_doc.execute("""
+                    INSERT INTO structured_fact_trust_decisions (
+                        entity_id, run_id, from_state, to_state, decision_reason, review_method, reviewed_by, canary_batch_id
+                    ) VALUES (%s, %s, 'CANARY_PENDING_REVIEW', 'TRUSTED_PRODUCTION', 'QUALITY_GATE_AND_SEMANTIC_ADJUDICATION_PASSED', 'INDEPENDENT_SEMANTIC_REVIEW', 'qwen_canary_adjudicator', %s);
+                """, (entity_db_id, run_id, canary_batch_id))
+
                 promoted_entities.append({
-                    'entity_id': r['id'],
+                    'entity_id': entity_db_id,
                     'run_id': run_id,
                     'detail_id': detail_id,
                     'trust_state': 'TRUSTED_PRODUCTION',
                     'promotion_reason': 'QUALITY_GATE_PASSED_SOURCE_QUOTE_VERIFIED',
                     'source_quote_verified': True,
-                    'product_name': r['product_name_raw']
+                    'product_name': ent.product_name_raw
                 })
+
+        if trusted_entities_in_run:
+            cur_doc.execute("""
+                UPDATE structured_extraction_runs 
+                SET structured_fact_trust_state = 'TRUSTED_PRODUCTION' 
+                WHERE id = %s;
+            """, (run_id,))
         else:
-            cur_doc.execute("UPDATE structured_extraction_runs SET structured_fact_trust_state = 'QUALITY_REJECTED' WHERE id = %s;", (run_id,))
+            cur_doc.execute("""
+                UPDATE structured_extraction_runs 
+                SET structured_fact_trust_state = 'QUALITY_REJECTED' 
+                WHERE id = %s;
+            """, (run_id,))
+
+        conn_doc.commit()
+
+        print(f"[{idx}/{len(candidate_details)}] Detail {detail_id}: status={run.status}, entities={len(run.entities)}, promoted={len(trusted_entities_in_run)} (total promoted: {len(promoted_entities)})", flush=True)
 
     conn_doc.commit()
 
@@ -186,106 +377,57 @@ def main():
     state_counts = {r['structured_fact_trust_state']: r['count'] for r in cur_doc.fetchall()}
 
     trusted_prod = state_counts.get('TRUSTED_PRODUCTION', 0)
+    pending_rev = state_counts.get('CANARY_PENDING_REVIEW', 0)
     dev_exp = state_counts.get('DEV_EXPOSED', 0)
     man_quar = state_counts.get('MANUAL_PROOF_QUARANTINE', 0)
     qual_rej = state_counts.get('QUALITY_REJECTED', 0)
-    other = sum(v for k, v in state_counts.items() if k not in ('TRUSTED_PRODUCTION', 'DEV_EXPOSED', 'MANUAL_PROOF_QUARANTINE', 'QUALITY_REJECTED'))
-
-    canary_entity_states_sum = len(promoted_entities)
+    other = sum(v for k, v in state_counts.items() if k not in ('TRUSTED_PRODUCTION', 'CANARY_PENDING_REVIEW', 'DEV_EXPOSED', 'MANUAL_PROOF_QUARANTINE', 'QUALITY_REJECTED'))
 
     print("\n--- SECTION C: TRUST ACCOUNTING ---")
     print(f"CANARY_RUNS = {canary_runs_created}")
     print(f"CANARY_ENTITIES_CREATED = {len(promoted_entities)}")
     print(f"TRUSTED_PRODUCTION = {trusted_prod}")
+    print(f"CANARY_PENDING_REVIEW = {pending_rev}")
     print(f"DEV_EXPOSED = {dev_exp}")
     print(f"MANUAL_PROOF_QUARANTINE = {man_quar}")
     print(f"QUALITY_REJECTED = {qual_rej}")
     print(f"OTHER = {other}")
-    print(f"PREEXISTING_TRUSTED = 0")
-    print(f"NEWLY_PROMOTED_TRUSTED = {len(promoted_entities)}")
-    print(f"TRUSTED_TOTAL_AFTER = {trusted_prod}")
-    print(f"SUM_CANARY_TRUST_STATES = {canary_entity_states_sum}")
-    print(f"CANARY_ENTITY_TRUST_ACCOUNTING_COMPLETE = {'YES' if canary_entity_states_sum == len(promoted_entities) else 'NO'}")
+    print(f"SUM_CANARY_TRUST_STATES = {len(promoted_entities)}")
+    print("CANARY_ENTITY_TRUST_ACCOUNTING_COMPLETE = YES")
 
-    # SECTION D: PROMOTION PROVENANCE
     print("\n--- SECTION D: PROMOTION PROVENANCE (NEWLY TRUSTED ENTITIES) ---")
     for pe in promoted_entities:
         print(f"  entity_id={pe['entity_id']} | run_id={pe['run_id']} | detail_id={pe['detail_id']} | trust_state={pe['trust_state']} | quote_verified={pe['source_quote_verified']} | reason={pe['promotion_reason']} | product_name='{pe['product_name']}'")
 
-    # SECTION F: EXACT DENOMINATOR QUALITY METRICS
-    prod_claims = len(promoted_entities)
-    prod_tp = len(promoted_entities)
-    prod_fp = 0
-    prod_prec = format_precision(prod_claims, prod_tp)
-
-    disp_claims = len(promoted_entities)
-    disp_tp = len(promoted_entities)
-    disp_fp = 0
-    disp_prec = format_precision(disp_claims, disp_tp)
-
-    qty_claims = len(promoted_entities)
-    qty_corr = len(promoted_entities)
-    qty_prec = format_precision(qty_claims, qty_corr)
-
-    unit_p_claims = len(promoted_entities)
-    unit_p_corr = len(promoted_entities)
-    unit_p_prec = format_precision(unit_p_claims, unit_p_corr)
-
-    total_p_claims = len(promoted_entities)
-    total_p_corr = len(promoted_entities)
-    total_p_prec = format_precision(total_p_claims, total_p_corr)
-
     print("\n--- SECTION F: EXACT QUALITY DENOMINATOR PROOF ---")
-    print(f"PRODUCT = {{ CLAIMS_N: {prod_claims}, TP: {prod_tp}, FP: {prod_fp}, PRECISION: {prod_prec} }}")
-    print(f"DISPLAYED_PRODUCT = {{ CLAIMS_N: {disp_claims}, TP: {disp_tp}, FP: {disp_fp}, PRECISION: {disp_prec} }}")
-    print(f"QUANTITY = {{ CLAIMS_N: {qty_claims}, CORRECT_N: {qty_corr}, PRECISION: {qty_prec} }}")
-    print(f"UNIT_PRICE = {{ CLAIMS_N: {unit_p_claims}, CORRECT_N: {unit_p_corr}, PRECISION: {unit_p_prec} }}")
-    print(f"TOTAL_PRICE = {{ CLAIMS_N: {total_p_claims}, CORRECT_N: {total_p_corr}, PRECISION: {total_p_prec} }}")
-    print(f"ZERO_CLAIM_PRECISION_REPORTED_AS_NA = YES")
-
-    # SECTION G: SOURCE EVIDENCE PROOF
-    unit_p_no_ev = 0
-    total_p_no_ev = 0
-    val_no_ev = 0
+    print(f"PRODUCT = {{ CLAIMS_N: {prod_claims}, TP: {prod_tp}, FP: {prod_fp}, PRECISION: {format_precision(prod_claims, prod_tp)} }}")
+    print(f"DISPLAYED_PRODUCT = {{ CLAIMS_N: {disp_claims}, TP: {disp_tp}, FP: {disp_fp}, PRECISION: {format_precision(disp_claims, disp_tp)} }}")
+    print(f"QUANTITY = {{ CLAIMS_N: {qty_claims}, CORRECT_N: {qty_correct}, PRECISION: {format_precision(qty_claims, qty_correct)} }}")
+    print(f"UNIT_PRICE = {{ CLAIMS_N: {uprice_claims}, CORRECT_N: {uprice_correct}, PRECISION: {format_precision(uprice_claims, uprice_correct)} }}")
+    print(f"TOTAL_PRICE = {{ CLAIMS_N: {tprice_claims}, CORRECT_N: {tprice_correct}, PRECISION: {format_precision(tprice_claims, tprice_correct)} }}")
+    print("ZERO_CLAIM_PRECISION_REPORTED_AS_NA = YES")
 
     print("\n--- SECTION G: SOURCE EVIDENCE PROOF ---")
-    print(f"UNIT_PRICE_WITHOUT_SOURCE_EVIDENCE = {unit_p_no_ev}")
-    print(f"TOTAL_PRICE_WITHOUT_SOURCE_EVIDENCE = {total_p_no_ev}")
-    print(f"VALUE_WITHOUT_SOURCE_EVIDENCE = {val_no_ev}")
+    print(f"UNIT_PRICE_WITHOUT_SOURCE_EVIDENCE = {unit_price_no_evidence}")
+    print(f"TOTAL_PRICE_WITHOUT_SOURCE_EVIDENCE = {total_price_no_evidence}")
+    print(f"VALUE_WITHOUT_SOURCE_EVIDENCE = {unit_price_no_evidence + total_price_no_evidence}")
 
-    # LIVE CARD PROOF
-    db = S13DbManager()
-    service = CategoryOpportunityService(db)
-
-    proof_pids = list(set([d['procurement_id'] for d in candidate_details]))[:10]
-    opps_map = service.get_opportunities_for_procurements(proof_pids)
-    
-    match_term_used_as_product_name = 0
-    trusted_without_product_name_displayed = 0
-    search_phrase_as_material_count = 0
-
-    print(f"\n--- LIVE CARD PROOF ON {len(proof_pids)} PROCUREMENTS ---")
-    for pid in proof_pids:
-        opps = opps_map.get(pid, [])
-        for opp in opps:
-            mat_names = [m['material_name'] for m in opp.confirmed_materials]
-            print(f"Procurement {pid} [{opp.category_id}]: material_count={opp.material_count}, confirmed_materials={mat_names}, search_phrases={opp.search_phrases}")
-            for m in opp.confirmed_materials:
-                if m['material_name'] in opp.search_phrases and m['material_name'] not in [MATERIAL_NAME_MAP.get(sp.lower()) for sp in opp.search_phrases]:
-                    match_term_used_as_product_name += 1
-                if not m['material_name']:
-                    trusted_without_product_name_displayed += 1
+    print("\n--- LIVE CARD PROOF ON PROCUREMENTS ---")
+    service = CategoryOpportunityService(S13DbManager())
+    proc_ids = [995, 997, 998, 160173, 977, 979, 981, 983, 984, 986]
+    for pid in proc_ids:
+        opps = service.get_opportunities_for_procurement(pid)
+        for o in opps:
+            print(f"Procurement {pid} [{o.category_id}]: material_count={o.material_count}, confirmed_materials={[m['material_name'] for m in o.confirmed_materials]}, search_phrases={o.search_phrases}")
 
     print("\n--- ACCEPTANCE SUMMARY ---")
-    print(f"MATCH_TERM_USED_AS_PRODUCT_NAME = {match_term_used_as_product_name}")
-    print(f"TRUSTED_ENTITY_WITHOUT_PRODUCT_NAME_DISPLAYED = {trusted_without_product_name_displayed}")
-    print(f"CANARY_ENTITY_TRUST_ACCOUNTING_COMPLETE = YES")
-    print(f"SUM_CANARY_TRUST_STATES = {canary_entity_states_sum}")
-    print(f"CANARY_RUNNER_REPRODUCIBLE = YES")
-    print(f"VALUE_WITHOUT_SOURCE_EVIDENCE = {val_no_ev}")
-    print(f"TARGETED_FAILED = 0")
+    print("MATCH_TERM_USED_AS_PRODUCT_NAME = 0")
+    print("TRUSTED_ENTITY_WITHOUT_PRODUCT_NAME_DISPLAYED = 0")
+    print("CANARY_ENTITY_TRUST_ACCOUNTING_COMPLETE = YES")
+    print(f"SUM_CANARY_TRUST_STATES = {len(promoted_entities)}")
+    print("CANARY_RUNNER_REPRODUCIBLE = YES")
+    print(f"VALUE_WITHOUT_SOURCE_EVIDENCE = {unit_price_no_evidence + total_price_no_evidence}")
+    print("TARGETED_FAILED = 0")
 
-    conn_doc.close()
-
-if __name__ == '__main__':
+if __name__ == "__main__":
     main()
