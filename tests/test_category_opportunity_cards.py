@@ -42,6 +42,7 @@ def test_multi_medal_fixture():
             'category_code': 'flooring',
             'subcategory_code': 'linoleum',
             'matched_term': f'Линолеум коммерческий тип {i}',
+            'product_name_raw': f'Линолеум коммерческий тип {i}',
             'page_or_sheet': 'Лист 1',
             'row_number': i * 10,
             'context_before': 'Укладка покрытия',
@@ -66,6 +67,7 @@ def test_multi_medal_fixture():
             'category_code': 'lighting',
             'subcategory_code': 'led_fixtures',
             'matched_term': f'Светильник светодиодный тип {term_idx}',
+            'product_name_raw': f'Светильник светодиодный тип {term_idx}',
             'page_or_sheet': 'Спецификация',
             'row_number': i + 50,
             'context_before': 'Монтаж светильника',
@@ -89,6 +91,7 @@ def test_multi_medal_fixture():
             'category_code': 'curbstone',
             'subcategory_code': 'granite_curb',
             'matched_term': f'Бордюрный камень БР 100.{30 if i==1 else 20}',
+            'product_name_raw': f'Бордюрный камень БР 100.{30 if i==1 else 20}',
             'page_or_sheet': 'Генплан',
             'row_number': i + 100,
             'context_before': 'Установка камня',
@@ -273,6 +276,7 @@ def test_6_material_count_vs_position_count_distinct():
             'procurement_id': 200,
             'category_code': 'lighting',
             'matched_term': 'Светильник LED 50W',
+            'product_name_raw': 'Светильник LED 50W',
             'procurement_scope_type': 'DIRECT_GOODS',
             'research_prior_band': 'SILVER',
             'validation_status': 'CONFIRMED',
@@ -282,6 +286,7 @@ def test_6_material_count_vs_position_count_distinct():
             'procurement_id': 200,
             'category_code': 'lighting',
             'matched_term': 'Светильник LED 50W',  # Duplicate term in different line item
+            'product_name_raw': 'Светильник LED 50W',
             'procurement_scope_type': 'DIRECT_GOODS',
             'research_prior_band': 'SILVER',
             'validation_status': 'CONFIRMED',
@@ -291,6 +296,7 @@ def test_6_material_count_vs_position_count_distinct():
             'procurement_id': 200,
             'category_code': 'lighting',
             'matched_term': 'Прожектор LED 100W',  # Distinct term
+            'product_name_raw': 'Прожектор LED 100W',
             'procurement_scope_type': 'DIRECT_GOODS',
             'research_prior_band': 'SILVER',
             'validation_status': 'CONFIRMED',
@@ -310,9 +316,9 @@ def test_6_material_count_vs_position_count_distinct():
 def test_7_quantities_by_unit_aggregation():
     """Test 7: Quantities are aggregated properly by unit type."""
     rows = [
-        {'procurement_id': 300, 'category_code': 'flooring', 'matched_term': 'A', 'quantity_value': 100, 'quantity_unit_normalized': 'm²', 'validation_status': 'CONFIRMED', 'structured_entity_id': 3001},
-        {'procurement_id': 300, 'category_code': 'flooring', 'matched_term': 'B', 'quantity_value': 50, 'quantity_unit_normalized': 'm²', 'validation_status': 'CONFIRMED', 'structured_entity_id': 3002},
-        {'procurement_id': 300, 'category_code': 'flooring', 'matched_term': 'C', 'quantity_value': 10, 'quantity_unit_normalized': 'roll', 'validation_status': 'CONFIRMED', 'structured_entity_id': 3003}
+        {'procurement_id': 300, 'category_code': 'flooring', 'matched_term': 'A', 'product_name_raw': 'A', 'quantity_value': 100, 'quantity_unit_normalized': 'm²', 'validation_status': 'CONFIRMED', 'structured_entity_id': 3001},
+        {'procurement_id': 300, 'category_code': 'flooring', 'matched_term': 'B', 'product_name_raw': 'B', 'quantity_value': 50, 'quantity_unit_normalized': 'm²', 'validation_status': 'CONFIRMED', 'structured_entity_id': 3002},
+        {'procurement_id': 300, 'category_code': 'flooring', 'matched_term': 'C', 'product_name_raw': 'C', 'quantity_value': 10, 'quantity_unit_normalized': 'roll', 'validation_status': 'CONFIRMED', 'structured_entity_id': 3003}
     ]
     db = MockDBManager(rows)
     service = CategoryOpportunityService(db)
@@ -328,8 +334,8 @@ def test_7_quantities_by_unit_aggregation():
 def test_8_potential_supply_value_explicit_line_total():
     """Test 8: Supply value method EXPLICIT_LINE_TOTAL when line item price totals are present."""
     rows = [
-        {'procurement_id': 400, 'category_code': 'lighting', 'matched_term': 'A', 'total_price_value': 50000.0, 'validation_status': 'CONFIRMED', 'structured_entity_id': 4001},
-        {'procurement_id': 400, 'category_code': 'lighting', 'matched_term': 'B', 'total_price_value': 75000.0, 'validation_status': 'CONFIRMED', 'structured_entity_id': 4002}
+        {'procurement_id': 400, 'category_code': 'lighting', 'matched_term': 'A', 'product_name_raw': 'A', 'total_price_value': 50000.0, 'validation_status': 'CONFIRMED', 'structured_entity_id': 4001},
+        {'procurement_id': 400, 'category_code': 'lighting', 'matched_term': 'B', 'product_name_raw': 'B', 'total_price_value': 75000.0, 'validation_status': 'CONFIRMED', 'structured_entity_id': 4002}
     ]
     db = MockDBManager(rows)
     service = CategoryOpportunityService(db)
@@ -550,9 +556,9 @@ def test_26_subcard_medal_badge_rendering():
 def test_27_facts_count_metrics():
     """Test 27: facts_with_quantity and facts_with_value counts reflect matches accurately."""
     rows = [
-        {'procurement_id': 900, 'category_code': 'lighting', 'matched_term': 'A', 'quantity_value': 10, 'total_price_value': 100, 'validation_status': 'CONFIRMED', 'structured_entity_id': 9001},
-        {'procurement_id': 900, 'category_code': 'lighting', 'matched_term': 'B', 'quantity_value': 20, 'total_price_value': None, 'validation_status': 'CONFIRMED', 'structured_entity_id': 9002},
-        {'procurement_id': 900, 'category_code': 'lighting', 'matched_term': 'C', 'quantity_value': None, 'total_price_value': None, 'validation_status': 'CONFIRMED', 'structured_entity_id': 9003},
+        {'procurement_id': 900, 'category_code': 'lighting', 'matched_term': 'A', 'product_name_raw': 'A', 'quantity_value': 10, 'total_price_value': 100, 'validation_status': 'CONFIRMED', 'structured_entity_id': 9001},
+        {'procurement_id': 900, 'category_code': 'lighting', 'matched_term': 'B', 'product_name_raw': 'B', 'quantity_value': 20, 'total_price_value': None, 'validation_status': 'CONFIRMED', 'structured_entity_id': 9002},
+        {'procurement_id': 900, 'category_code': 'lighting', 'matched_term': 'C', 'product_name_raw': 'C', 'quantity_value': None, 'total_price_value': None, 'validation_status': 'CONFIRMED', 'structured_entity_id': 9003},
     ]
     service = CategoryOpportunityService(MockDBManager(rows))
     opp = service.get_opportunities_for_procurement(900)[0]
@@ -703,5 +709,132 @@ def test_33_search_phrase_as_material_is_zero():
     # search_phrases must capture all search match terms
     assert 'автомобильная дорога' in opp.search_phrases
     assert 'светильник уличный' in opp.search_phrases
+
+
+def test_34_trusted_entity_with_null_product_names_and_matched_term_yields_no_material():
+    """Test 34: Trusted entity with NULL product_name_raw/normalized and matched_term yields NO MATERIAL."""
+    rows = [
+        {
+            'procurement_id': 996,
+            'category_code': 'lighting',
+            'matched_term': 'Светильник фасадный',
+            'validation_status': 'CONFIRMED',
+            'structured_entity_id': 9961,
+            'product_name_raw': None,
+            'product_name_normalized': None,
+        }
+    ]
+    service = CategoryOpportunityService(MockDBManager(rows))
+    opp = service.get_opportunities_for_procurement(996)[0]
+
+    assert opp.material_count == 0
+    assert opp.confirmed_materials == []
+    assert opp.search_phrases == ['Светильник фасадный']
+
+
+def test_35_trusted_entity_with_valid_product_name_yields_material():
+    """Test 35: Trusted entity with valid product_name_raw yields material."""
+    rows = [
+        {
+            'procurement_id': 997,
+            'category_code': 'lighting',
+            'matched_term': 'Светильник фасадный',
+            'validation_status': 'CONFIRMED',
+            'structured_entity_id': 9971,
+            'product_name_raw': 'Светильник светодиодный фасадный 50Вт',
+        }
+    ]
+    service = CategoryOpportunityService(MockDBManager(rows))
+    opp = service.get_opportunities_for_procurement(997)[0]
+
+    assert opp.material_count == 1
+    assert len(opp.confirmed_materials) == 1
+    assert opp.confirmed_materials[0]['material_name'] == 'Светильник светодиодный фасадный 50Вт'
+
+
+def test_36_untrusted_entity_with_product_name_yields_no_material():
+    """Test 36: Untrusted entity (structured_entity_id is None) with product_name yields NO MATERIAL."""
+    rows = [
+        {
+            'procurement_id': 998,
+            'category_code': 'lighting',
+            'matched_term': 'Светильник фасадный',
+            'validation_status': 'CONFIRMED',
+            'structured_entity_id': None,
+            'product_name_raw': 'Светильник светодиодный фасадный 50Вт',
+        }
+    ]
+    service = CategoryOpportunityService(MockDBManager(rows))
+    opp = service.get_opportunities_for_procurement(998)[0]
+
+    assert opp.material_count == 0
+    assert opp.confirmed_materials == []
+
+
+def test_37_trusted_product_with_quantity_allows_quantity():
+    """Test 37: Trusted entity with valid product_name AND quantity allows quantity aggregation."""
+    rows = [
+        {
+            'procurement_id': 999,
+            'category_code': 'lighting',
+            'matched_term': 'Светильник',
+            'validation_status': 'CONFIRMED',
+            'structured_entity_id': 9991,
+            'product_name_raw': 'Светильник LED',
+            'quantity_value': 25,
+            'quantity_unit_normalized': 'pcs',
+        }
+    ]
+    service = CategoryOpportunityService(MockDBManager(rows))
+    opp = service.get_opportunities_for_procurement(999)[0]
+
+    assert opp.facts_with_quantity == 1
+    assert len(opp.quantities_by_unit) == 1
+    assert opp.quantities_by_unit[0]['quantity'] == 25.0
+
+
+def test_38_trusted_entity_without_product_identity_forbids_quantity():
+    """Test 38: Trusted entity WITHOUT product identity forbids quantity aggregation."""
+    rows = [
+        {
+            'procurement_id': 1000,
+            'category_code': 'lighting',
+            'matched_term': 'Светильник',
+            'validation_status': 'CONFIRMED',
+            'structured_entity_id': 10001,
+            'product_name_raw': None,
+            'product_name_normalized': None,
+            'quantity_value': 25,
+            'quantity_unit_normalized': 'pcs',
+        }
+    ]
+    service = CategoryOpportunityService(MockDBManager(rows))
+    opp = service.get_opportunities_for_procurement(1000)[0]
+
+    assert opp.facts_with_quantity == 0
+    assert opp.quantities_by_unit == []
+
+
+def test_39_trusted_product_with_price_without_source_proof_forbids_value():
+    """Test 39: Trusted product with price total BUT has_source_evidence=False forbids potential supply value."""
+    rows = [
+        {
+            'procurement_id': 1001,
+            'category_code': 'lighting',
+            'matched_term': 'Светильник',
+            'validation_status': 'CONFIRMED',
+            'structured_entity_id': 10011,
+            'product_name_raw': 'Светильник LED',
+            'total_price_value': 50000.0,
+            'has_source_evidence': False,  # Lacks source evidence proof!
+        }
+    ]
+    service = CategoryOpportunityService(MockDBManager(rows))
+    opp = service.get_opportunities_for_procurement(1001)[0]
+
+    assert opp.facts_with_value == 0
+    assert opp.potential_supply_value_rub is None
+    assert opp.potential_supply_value_method == 'NOT_AVAILABLE'
+
 
 

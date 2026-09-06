@@ -336,9 +336,15 @@ class CategoryOpportunityService:
                 search_phrases_seen.add(matched_term)
                 search_phrases.append(matched_term)
 
-            # SEARCH_PHRASE_AS_MATERIAL = 0: Only count as material if there is a trusted structured entity
-            if entity_id is not None:
-                product_name = (it.get('product_name_raw') or it.get('product_name_normalized') or matched_term or 'Неизвестный материал').strip()
+            # Strict Product Identity: product_name_raw or product_name_normalized (MATCH_TERM_USED_AS_PRODUCT_NAME = 0)
+            raw_p = (it.get('product_name_raw') or '').strip()
+            norm_p = (it.get('product_name_normalized') or '').strip()
+            product_name = raw_p or norm_p
+
+            # VALID_PRODUCT_IDENTITY = trusted entity AND non-empty product_name
+            has_valid_product_identity = (entity_id is not None) and bool(product_name)
+
+            if has_valid_product_identity:
                 norm_term = product_name.lower()
                 if norm_term not in materials_seen:
                     materials_seen.add(norm_term)
@@ -351,34 +357,34 @@ class CategoryOpportunityService:
                         'structured_entity_id': entity_id,
                     })
 
-            if not structured_rel and it.get('product_relation'):
-                structured_rel = it.get('product_relation')
+                # Check quantity from structured_entities ONLY when valid product identity is present
+                qty = it.get('quantity_value')
+                unit = it.get('quantity_unit_normalized') or it.get('quantity_unit_raw') or 'pcs'
+                if qty is not None:
+                    qty_count += 1
+                    if unit not in unit_map:
+                        unit_map[unit] = {'unit': unit, 'quantity': 0.0, 'positions': 0}
+                    unit_map[unit]['quantity'] += float(qty)
+                    unit_map[unit]['positions'] += 1
 
-            # Check quantity / value from structured_entities
-            qty = it.get('quantity_value')
-            unit = it.get('quantity_unit_normalized') or it.get('quantity_unit_raw') or 'pcs'
-            if qty is not None and entity_id is not None:
-                qty_count += 1
-                if unit not in unit_map:
-                    unit_map[unit] = {'unit': unit, 'quantity': 0.0, 'positions': 0}
-                unit_map[unit]['quantity'] += float(qty)
-                unit_map[unit]['positions'] += 1
-
-            # Prevent double-counting price totals across 1:N structured entities per detail_id
-            val_key = entity_id if entity_id is not None else detail_id
-            val = it.get('total_price_value')
-            unit_p = it.get('unit_price_value')
-            
-            if val_key is None or val_key not in processed_value_keys:
-                if val_key is not None:
+                # Check price totals from structured_entities ONLY when valid product identity and source evidence are present
+                has_source_evidence = it.get('has_source_evidence', True)
+                val_key = entity_id
+                val = it.get('total_price_value')
+                unit_p = it.get('unit_price_value')
+                
+                if has_source_evidence and val_key is not None and val_key not in processed_value_keys:
                     processed_value_keys.add(val_key)
 
-                if val is not None and entity_id is not None:
-                    val_count += 1
-                    total_val += float(val)
-                elif unit_p is not None and qty is not None and entity_id is not None:
-                    val_count += 1
-                    total_val += float(unit_p) * float(qty)
+                    if val is not None:
+                        val_count += 1
+                        total_val += float(val)
+                    elif unit_p is not None and qty is not None:
+                        val_count += 1
+                        total_val += float(unit_p) * float(qty)
+
+            if not structured_rel and it.get('product_relation'):
+                structured_rel = it.get('product_relation')
 
         # Determine supply value method
         val_method = "NOT_AVAILABLE"
