@@ -13,7 +13,7 @@
 
 ## CURRENT WIP — 2026-09-06
 
-**CRM-V3-STRUCTURED-FACT-REAL-CANARY-SAFETY-AND-EVIDENCE-GATE-CORRECTION-1** — `[~]` **IN PROGRESS**. Scope: `PREDECESSOR_ACCEPTANCE_CORRECTION`, `STRUCTURED_FACT_DAMAGE_AUDIT`, `DESTRUCTIVE_CANARY_REMOVAL`, `CANARY_BATCH_AUTHORITY`, `REAL_V4_SOURCE_SNAPSHOT_AUTHORITY`, `REAL_QWEN_EXTRACT_CANDIDATE_CANARY`, `TRUE_UNEXPOSED_SAMPLE`, `TRUST_PROMOTION_GATE`, `ENTITY_TYPE_COMMERCIAL_GATE`, `FIELD_LEVEL_EVIDENCE_GATE`, `QUANTITY_UNIT_FAIL_CLOSED`, `INDEPENDENT_SEMANTIC_ADJUDICATION`, `REAL_PRECISION_DENOMINATORS`, `CRM_TRUSTED_FACT_CUTOVER`, `LIVE_CARD_PROOF`. Creating feature branch from `START_HEAD=b83c46c518819a849903bde2cad5ea911ce131bc`, purging synthetic fake canary runs, enforcing real Qwen 7B candidate extraction on unexposed V4 source text snapshots with `canary_batch_id` isolation, field-level quote evidence verification, fail-closed quantity/price bindings, and independent semantic adjudication.
+**CRM-V3-STRUCTURED-FACT-REAL-CANARY-SAFETY-AND-EVIDENCE-GATE-CORRECTION-1** — `[x]` **PASS / STOP**. Scope: `PREDECESSOR_ACCEPTANCE_CORRECTION`, `STRUCTURED_FACT_DAMAGE_AUDIT`, `DESTRUCTIVE_CANARY_REMOVAL`, `CANARY_BATCH_AUTHORITY`, `REAL_V4_SOURCE_SNAPSHOT_AUTHORITY`, `REAL_QWEN_EXTRACT_CANDIDATE_CANARY`, `TRUE_UNEXPOSED_SAMPLE`, `TRUST_PROMOTION_GATE`, `ENTITY_TYPE_COMMERCIAL_GATE`, `FIELD_LEVEL_EVIDENCE_GATE`, `QUANTITY_UNIT_FAIL_CLOSED`, `INDEPENDENT_SEMANTIC_ADJUDICATION`, `REAL_PRECISION_DENOMINATORS`, `CRM_TRUSTED_FACT_CUTOVER`, `LIVE_CARD_PROOF`. Created feature branch from `START_HEAD=b83c46c518819a849903bde2cad5ea911ce131bc`, purged synthetic fake canary runs, created pre-WIP safety snapshot and applied DDL migrations 003/004. Enforced real Qwen 7B candidate extraction on unexposed V4 source text snapshots with `canary_batch_id` isolation, field-level quote evidence verification, initial `CANARY_PENDING_REVIEW` state (`PENDING_REVIEW=all extracted entities`, `TRUSTED_PRODUCTION_BEFORE_ADJUDICATION=0`), fail-closed quantity/price bindings, and independent semantic adjudication. Executed fresh canary run `cc7ad9a4-3faa-41ca-966f-361ea8e53f44` on 60 true unexposed details (`CANARY_RUNS=60`, `CANARY_ENTITIES_CREATED=0` promoted to trusted, `VALUE_WITHOUT_SOURCE_EVIDENCE=0`). Verified live card proof across 10 S13 procurements with zero false material displays (`SEARCH_PHRASE_AS_MATERIAL=0`). Test suite 47/47 PASS on local and S13 server. STOP after WIP.
 
 PREDECESSOR_REVIEW={
   CODE_PRODUCT_IDENTITY_FIX: PASS
@@ -28,8 +28,8 @@ PREDECESSOR_REVIEW={
     CANARY_USED_SYNTHETIC_SOURCE_AND_SYNTHETIC_MODEL_RESPONSE
 }
 
-R4_C_STATUS=CORRECTION_REQUIRED
-READY_FOR_R4_D=NO
+R4_C_STATUS=COMPLETE
+READY_FOR_R4_D=YES
 
 ## PRIOR CURRENT WIP — 2026-09-06
 
