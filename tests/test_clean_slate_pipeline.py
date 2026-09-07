@@ -12,7 +12,7 @@ from unittest.mock import MagicMock, patch
 
 
 # ---------------------------------------------------------------------------
-# queue_producer: AI_QUEUE_ADMISSION_GATE=NO
+# queue_producer: persisted business admission precedes priority
 # ---------------------------------------------------------------------------
 
 def test_decide_from_normalized_no_commercial_entry_allowed():
@@ -38,7 +38,7 @@ def test_decide_from_normalized_no_commercial_entry_allowed():
         ],
     }
     decision = prod.decide_from_normalized(normalized)
-    # AI gate removed: decision is returned (not None)
+    # Model output still produces a decision; persisted authority gates queue insertion.
     assert decision is not None, "AI_QUEUE_ADMISSION_GATE=NO: must not return None for NO_COMMERCIAL_ENTRY"
     assert decision["research_action"] == "DEEP_RESEARCH"
 
@@ -63,7 +63,12 @@ def test_populate_all_eligible_dry_run():
         {
             "id": 100, "source_table": "fz44_lots", "source_id": 1,
             "contract_number": "12345", "end_date": None,
-            "crm_stage": "active", "award_status": None,
+                          "crm_stage": "torgi", "award_status": "submission_open",
+                          "procurement_scope_type": "DIRECT_GOODS",
+                          "scope_confidence": 0.95,
+                          "admission_state": "ELIGIBLE",
+                          "admission_reason": "CURRENT_BUSINESS_ADMISSION",
+                          "admission_policy_version": "BUSINESS_RESEARCH_ADMISSION_V1",
         }
     ]
     mock_crm_conn.cursor.return_value = mock_cursor
@@ -88,7 +93,12 @@ def test_populate_all_eligible_dry_run():
                     call_returns = [
                         [{"id": 1, "source_table": "fz44_lots", "source_id": 1,
                           "contract_number": "12345", "end_date": None,
-                          "crm_stage": "active", "award_status": None}],
+                          "crm_stage": "torgi", "award_status": "submission_open",
+                          "procurement_scope_type": "DIRECT_GOODS",
+                          "scope_confidence": 0.95,
+                          "admission_state": "ELIGIBLE",
+                          "admission_reason": "CURRENT_BUSINESS_ADMISSION",
+                          "admission_policy_version": "BUSINESS_RESEARCH_ADMISSION_V1"}],
                         [],
                     ]
                     cursor.fetchall.side_effect = call_returns
@@ -104,8 +114,7 @@ def test_populate_all_eligible_dry_run():
                 result = prod.populate_all_eligible(dry_run=True)
 
     assert result["dry_run"] is True
-    assert result["AI_QUEUE_ADMISSION_GATE"] == "NO"
-    assert result["STOPWORD_QUEUE_ADMISSION_GATE"] == "NO"
+    assert result["ADMISSION_AUTHORITY_GATE"] == "ELIGIBLE_ONLY"
 
 
 # ---------------------------------------------------------------------------

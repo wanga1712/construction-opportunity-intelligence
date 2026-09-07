@@ -15,6 +15,7 @@ from typing import Any, Dict, List, Optional, Sequence
 
 import psycopg2
 import psycopg2.extras
+from tender_documents_research.document_processor.admission_policy import admission_claim_sql
 
 PIPELINE_S13V2 = "S13_V2"
 PIPELINE_LEGACY = "LEGACY"
@@ -178,11 +179,11 @@ class S13V2QueueRepository(QueueRepository):
         batch_size: int,
         queue_lanes: Optional[Sequence[str]] = None,
     ) -> List[Dict[str, Any]]:
-        lane_filter = ""
+        lane_filter = admission_claim_sql("q")
         lane_params: list = []
         if queue_lanes:
             placeholders = ", ".join(["%s"] * len(queue_lanes))
-            lane_filter = f" AND q.queue_lane IN ({placeholders})"
+            lane_filter += f" AND q.queue_lane IN ({placeholders})"
             lane_params = list(queue_lanes)
 
         model_priority_enabled = os.getenv("MODEL_QUEUE_PRIORITY_ENABLED", "0").lower() in ("1", "true", "yes", "on")

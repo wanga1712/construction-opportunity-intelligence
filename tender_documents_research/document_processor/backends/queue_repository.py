@@ -11,6 +11,7 @@ from typing import Any, Dict, List, Optional, Sequence
 import psycopg2
 import psycopg2.extras
 from database_work.database_connection import DatabaseManager
+from document_processor.admission_policy import admission_claim_sql
 
 PIPELINE_S13V2 = "S13_V2"
 
@@ -141,6 +142,7 @@ class S13V2QueueRepository(QueueRepository):
                       SELECT q.id
                         FROM document_processing_queue q
                        WHERE q.status IN ('PENDING', 'PRE_RESEARCH_WAITING')
+                         {admission_claim_sql('q')}
                          AND (q.pipeline_generation = %s OR q.pipeline_generation IS NULL)
                          {lane_filter}
                        ORDER BY {order_clause}
@@ -180,7 +182,10 @@ class S13V2QueueRepository(QueueRepository):
             q.research_prior_score DESC NULLS LAST,
             q.id ASC"""
 
-        _GEN_FILTER = " AND (q.pipeline_generation = %s OR q.pipeline_generation IS NULL)"
+        _GEN_FILTER = (
+            " AND (q.pipeline_generation = %s OR q.pipeline_generation IS NULL)"
+            + admission_claim_sql("q")
+        )
 
         # Phase A: Lock candidate pool — effective-band UNION ALL with subpool partitioning.
         # 1. Model GOLD subpool (raw GOLD)
@@ -558,4 +563,3 @@ class LegacyQueueRepository(QueueRepository):
         """
         rows = self.db.execute_query(self.db_alias, sql, fetch=True) or []
         return int(rows[0][0]) if rows else 0
-

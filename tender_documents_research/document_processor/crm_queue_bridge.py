@@ -20,6 +20,7 @@ from datetime import date, datetime, timezone
 from typing import Optional
 
 from .queue_priority_calculator import PriorityInput, QueuePriorityCalculator
+from .admission_policy import authority_allows_queue
 
 REQUIRED_WORKDAYS_DEFAULT = 2
 
@@ -65,11 +66,20 @@ def _business_days_until(target) -> Optional[int]:
 
 
 class CrmQueueBridge:
-    def __init__(self, db, logger, required_workdays: int = REQUIRED_WORKDAYS_DEFAULT):
+    def __init__(
+        self,
+        db,
+        logger,
+        required_workdays: int = REQUIRED_WORKDAYS_DEFAULT,
+        admission_lookup=None,
+    ):
         self.db = db
         self.logger = logger
         self.required_workdays = required_workdays
         self.calc = QueuePriorityCalculator()
+        # The worker cannot import src; callers inject a CRM authority lookup.
+        # No lookup means fail-closed rather than bypassing business admission.
+        self.admission_lookup = admission_lookup
 
     # ------------------------------------------------------------------
     # Public entry point
@@ -91,6 +101,9 @@ class CrmQueueBridge:
 
         inserted = updated = skipped = 0
         for c in candidates:
+            if not authority_allows_queue(c.get("authority")):
+                skipped += 1
+                continue
             if c["contract_number"] is None:
                 continue  # не сопоставлено
             action = self._upsert(c)
@@ -164,7 +177,7 @@ class CrmQueueBridge:
                 submission_end_at = None
                 initial_price     = None
 
-            candidates.append({
+            candidate = {
                 "cache_id":         cache_id,
                 "table_source":     table_source,
                 "source_id":        source_id,
@@ -173,7 +186,13 @@ class CrmQueueBridge:
                 "contract_number":  contract_number,
                 "submission_end_at": submission_end_at,
                 "initial_price":    int(initial_price) if initial_price else None,
-            })
+            }
+            candidate["authority"] = (
+                self.admission_lookup(candidate)
+                if self.admission_lookup is not None
+                else None
+            )
+            candidates.append(candidate)
         return candidates
 
     # ------------------------------------------------------------------
@@ -244,6 +263,8 @@ class CrmQueueBridge:
         return bool(rows)
 
     def _upsert(self, c: dict) -> str:
+        if not authority_allows_queue(c.get("authority")):
+            return "skipped"
         contract_number   = c["contract_number"]
         table_source      = c["table_source"]
         submission_end_at = c["submission_end_at"]

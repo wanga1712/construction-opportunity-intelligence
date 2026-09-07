@@ -11,6 +11,7 @@ from typing import Any, Dict, List, Optional, Sequence
 
 import psycopg2
 import psycopg2.extras
+from document_processor.admission_policy import admission_claim_sql
 
 PIPELINE_S13V2 = "S13_V2"
 
@@ -73,6 +74,7 @@ class S13V2QueueBackend:
                    FROM document_processing_queue q
                   WHERE q.status = 'PENDING'
                     AND (q.next_attempt_at IS NULL OR q.next_attempt_at <= NOW())
+                    {admission_claim_sql('q')}
                     {lane_filter}
                   ORDER BY {_LANE_RANK_SQL} ASC,
                            q.priority_score DESC,

@@ -206,9 +206,8 @@ class CommercialRoutingV3QueueProducer:
         }
 
     # ------------------------------------------------------------------
-    # STEP 3/4: Exhaustive population — AI_QUEUE_ADMISSION_GATE=NO
-    # Eligibility = deterministic (has links + not terminal crm_stage).
-    # Model output NOT consulted. Every eligible procurement enters queue.
+    # STEP 3/4: V4 population from the persisted business authority.
+    # Stage1 priority is applied only after admission_state=ELIGIBLE.
     # ------------------------------------------------------------------
 
     _TERMINAL_STAGES = frozenset([
@@ -223,16 +222,14 @@ class CommercialRoutingV3QueueProducer:
         max_total: int = 0,
         dry_run: bool = False,
     ) -> Dict[str, Any]:
-        """Queue ALL lifecycle-eligible procurements from CRM.
+        """Queue current, authority-admitted procurements from CRM.
 
         Eligibility criteria (deterministic, no AI):
-          - Has document links (count_document_links > 0)
-          - crm_stage not in terminal/excluded list
+          - current CRM open/awarded lifecycle
+          - scope authority with admission_state=ELIGIBLE
           - Not already queued for this pipeline_generation
 
-        AI_QUEUE_ADMISSION_GATE=NO
-        STOPWORD_QUEUE_ADMISSION_GATE=NO
-        Every eligible procurement enters queue at lane=open_active, priority=50.
+        The model controls ordering only; it does not control admission.
         """
         from src.services.commercial_routing_v3.document_links import batch_count_document_links
         from src.services.commercial_routing_v3.okpd_priors import (
@@ -269,11 +266,17 @@ class CommercialRoutingV3QueueProducer:
                     cur.execute(
                         """
                         SELECT p.id, p.source_table, p.source_id, p.contract_number,
-                               p.end_date, p.crm_stage, p.award_status, p.okpd_code
+                               p.end_date, p.crm_stage, p.award_status, p.okpd_code,
+                               a.procurement_scope_type, a.scope_confidence,
+                               a.admission_state, a.admission_reason,
+                               a.admission_policy_version
                         FROM crm_procurements p
-                        WHERE p.crm_stage NOT IN (
-                            'cancelled', 'failed', 'closed', 'rejected',
-                            'archived', 'no_winner', 'suspended', 'razygranye'
+                        JOIN crm_procurement_scope_authority a
+                          ON a.procurement_id = p.id
+                         AND a.admission_state = 'ELIGIBLE'
+                        WHERE (
+                            (p.crm_stage = 'torgi' AND p.award_status = 'submission_open')
+                            OR p.crm_stage = 'razygranye'
                         )
                         ORDER BY p.id
                         LIMIT %s OFFSET %s
@@ -316,7 +319,10 @@ class CommercialRoutingV3QueueProducer:
                                 status = "NO_LINKS"
                                 category_context = {
                                     "populate_method": "EXHAUSTIVE_ALL_ELIGIBLE",
-                                    "AI_QUEUE_ADMISSION_GATE": "NO",
+                                    "admission_state": proc["admission_state"],
+                                    "admission_reason": proc["admission_reason"],
+                                    "admission_policy_version": proc["admission_policy_version"],
+                                    "procurement_scope_type": proc["procurement_scope_type"],
                                     "link_count": 0,
                                     "exclusion_reason": "NO_CANONICAL_DOCUMENTS",
                                 }
@@ -325,7 +331,10 @@ class CommercialRoutingV3QueueProducer:
                                 status = "PRE_RESEARCH_WAITING"
                                 category_context = {
                                     "populate_method": "EXHAUSTIVE_ALL_ELIGIBLE",
-                                    "AI_QUEUE_ADMISSION_GATE": "NO",
+                                    "admission_state": proc["admission_state"],
+                                    "admission_reason": proc["admission_reason"],
+                                    "admission_policy_version": proc["admission_policy_version"],
+                                    "procurement_scope_type": proc["procurement_scope_type"],
                                     "link_count": lc,
                                 }
                                 dispatchable = True
@@ -403,8 +412,7 @@ class CommercialRoutingV3QueueProducer:
 
         return {
             "pipeline": PIPELINE_GENERATION,
-            "AI_QUEUE_ADMISSION_GATE": "NO",
-            "STOPWORD_QUEUE_ADMISSION_GATE": "NO",
+            "ADMISSION_AUTHORITY_GATE": "ELIGIBLE_ONLY",
             "inserted": inserted,
             "updated": updated,
             "skipped_already_active": skipped_already_active,
@@ -438,6 +446,17 @@ class CommercialRoutingV3QueueProducer:
         proc = procurement or self._load_procurement(procurement_id)
         if not proc:
             return {"action": "error", "procurement_id": procurement_id, "reason": "PROC_NOT_FOUND"}
+
+        # Persisted scope authority is the single business admission source.
+        # Missing authority is deliberately not recoverable from model output.
+        if proc.get("admission_state") != "ELIGIBLE":
+            return {
+                "action": "analytics_only",
+                "status": proc.get("admission_state") or "HOLD",
+                "dispatchable": False,
+                "reason": "SCOPE_AUTHORITY_NOT_ELIGIBLE",
+                "procurement_id": procurement_id,
+            }
 
         decision = apply_current_opportunity_authority(
             decision, self._load_current_opportunities(procurement_id)
@@ -493,6 +512,10 @@ class CommercialRoutingV3QueueProducer:
                 "link_count": link_count,
                 "document_priority_formula": DOCUMENT_PRIORITY_FORMULA,
                 "category_fair_share_policy": CATEGORY_FAIR_SHARE_POLICY,
+                "admission_state": proc.get("admission_state"),
+                "admission_reason": proc.get("admission_reason"),
+                "admission_policy_version": proc.get("admission_policy_version"),
+                "procurement_scope_type": proc.get("procurement_scope_type"),
             },
             "candidate_level": decision.get("candidate_medal"),
             "candidate_score": None,
@@ -654,9 +677,14 @@ class CommercialRoutingV3QueueProducer:
             with crm.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
                 cur.execute(
                     """
-                    SELECT id, source_table, source_id, contract_number, end_date,
-                           auction_name, okpd_code, crm_stage, award_status
-                    FROM crm_procurements WHERE id = %s
+                    SELECT p.id, p.source_table, p.source_id, p.contract_number, p.end_date,
+                           p.auction_name, p.okpd_code, p.crm_stage, p.award_status,
+                           a.procurement_scope_type, a.scope_confidence,
+                           a.admission_state, a.admission_reason,
+                           a.admission_policy_version
+                    FROM crm_procurements p
+                    LEFT JOIN crm_procurement_scope_authority a ON a.procurement_id = p.id
+                    WHERE p.id = %s
                     """,
                     (procurement_id,),
                 )
@@ -675,9 +703,13 @@ class CommercialRoutingV3QueueProducer:
                            a.status AS assessment_status,
                            p.source_table, p.source_id, p.contract_number, p.end_date,
                            p.auction_name, p.okpd_code, p.crm_stage, p.award_status,
+                           sa.procurement_scope_type, sa.scope_confidence,
+                           sa.admission_state, sa.admission_reason,
+                           sa.admission_policy_version,
                            p.ai_assessment_status
                     FROM procurement_ai_assessments a
                     JOIN crm_procurements p ON p.id = a.procurement_id
+                    LEFT JOIN crm_procurement_scope_authority sa ON sa.procurement_id = p.id
                     WHERE a.procurement_id = %s
                       AND a.is_current = TRUE
                       AND a.is_stale = FALSE
