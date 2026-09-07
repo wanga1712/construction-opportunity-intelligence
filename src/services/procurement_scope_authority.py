@@ -12,7 +12,7 @@ from datetime import datetime, timezone
 from typing import Any, Iterable, Mapping
 
 from src.learning.procurement_scope.classifier import ProcurementScopeClassifierV1
-from src.services.procurement_research_admission import evaluate_admission, lifecycle_for
+from src.services.procurement_research_admission import evaluate_admission
 
 
 @dataclass(frozen=True)
@@ -26,11 +26,13 @@ class ScopeAuthority:
     scope_evidence: dict[str, Any]
     admission_state: str
     admission_reason: str
-    evaluated_at: datetime
+    scope_evaluated_at: datetime
+    admission_policy_version: str
+    admission_evaluated_at: datetime
 
     def as_record(self) -> dict[str, Any]:
         record = asdict(self)
-        record["evaluated_at"] = self.evaluated_at
+        record["scope_evaluated_at"] = self.scope_evaluated_at
         return record
 
 
@@ -60,7 +62,9 @@ def classify_procurement(row: Mapping[str, Any], *, classifier: ProcurementScope
         scope_evidence=evidence,
         admission_state=admission.state,
         admission_reason=admission.reason,
-        evaluated_at=datetime.now(timezone.utc),
+        scope_evaluated_at=datetime.now(timezone.utc),
+        admission_policy_version=admission.policy_version,
+        admission_evaluated_at=datetime.now(timezone.utc),
     )
 
 
@@ -89,8 +93,9 @@ def materialize_scope_authority(crm_db: Any, rows: Iterable[Mapping[str, Any]], 
                     procurement_id, source_lifecycle, procurement_scope_type,
                     scope_confidence, scope_method, scope_version,
                     scope_evidence, admission_state, admission_reason,
-                    scope_evaluated_at, updated_at
-                ) VALUES (%s,%s,%s,%s,%s,%s,%s::jsonb,%s,%s,%s,NOW())
+                    scope_evaluated_at, admission_policy_version,
+                    admission_evaluated_at, updated_at
+                ) VALUES (%s,%s,%s,%s,%s,%s,%s::jsonb,%s,%s,%s,%s,%s,NOW())
                 ON CONFLICT (procurement_id) DO UPDATE SET
                     source_lifecycle = EXCLUDED.source_lifecycle,
                     procurement_scope_type = EXCLUDED.procurement_scope_type,
@@ -101,6 +106,8 @@ def materialize_scope_authority(crm_db: Any, rows: Iterable[Mapping[str, Any]], 
                     admission_state = EXCLUDED.admission_state,
                     admission_reason = EXCLUDED.admission_reason,
                     scope_evaluated_at = EXCLUDED.scope_evaluated_at,
+                    admission_policy_version = EXCLUDED.admission_policy_version,
+                    admission_evaluated_at = EXCLUDED.admission_evaluated_at,
                     updated_at = NOW()
                 """,
                 (
@@ -113,7 +120,9 @@ def materialize_scope_authority(crm_db: Any, rows: Iterable[Mapping[str, Any]], 
                     json.dumps(authority.scope_evidence, ensure_ascii=False),
                     authority.admission_state,
                     authority.admission_reason,
-                    authority.evaluated_at,
+                    authority.scope_evaluated_at,
+                    authority.admission_policy_version,
+                    authority.admission_evaluated_at,
                 ),
             )
     connection.commit()

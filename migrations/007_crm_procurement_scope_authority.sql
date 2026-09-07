@@ -13,6 +13,8 @@ CREATE TABLE IF NOT EXISTS crm_procurement_scope_authority (
     admission_state TEXT NOT NULL,
     admission_reason TEXT NOT NULL,
     scope_evaluated_at TIMESTAMPTZ NOT NULL,
+    admission_policy_version TEXT NOT NULL,
+    admission_evaluated_at TIMESTAMPTZ NOT NULL,
     updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     CHECK (procurement_scope_type IN (
         'DIRECT_GOODS',

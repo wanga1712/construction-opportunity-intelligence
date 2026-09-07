@@ -6,6 +6,8 @@ from typing import Any, Mapping
 
 from src.learning.procurement_scope.classifier import ProcurementScopeType
 
+ADMISSION_POLICY_VERSION = "BUSINESS_RESEARCH_ADMISSION_V1"
+
 
 @dataclass(frozen=True)
 class ResearchAdmission:
@@ -13,11 +15,14 @@ class ResearchAdmission:
     scope_type: str
     state: str
     reason: str
+    policy_version: str = ADMISSION_POLICY_VERSION
 
 
 def lifecycle_for(procurement: Mapping[str, Any]) -> str:
     stage = str(procurement.get("crm_stage") or "").lower()
     award = str(procurement.get("award_status") or "").lower()
+    if stage in {"cancelled", "canceled"} or award in {"cancelled", "canceled"}:
+        return "CANCELLED"
     if stage == "torgi" and award == "submission_open":
         return "OPEN"
     if stage == "razygranye" or award == "awarded":
@@ -32,6 +37,8 @@ def evaluate_admission(procurement: Mapping[str, Any], scope_type: str) -> Resea
     scope = str(scope_type or ProcurementScopeType.UNKNOWN.value)
     if lifecycle == "WAITING_AWARD":
         return ResearchAdmission(lifecycle, scope, "HOLD", "WAITING_FOR_AWARD")
+    if lifecycle == "CANCELLED":
+        return ResearchAdmission(lifecycle, scope, "EXCLUDED", "CANCELLED")
     if lifecycle == "UNKNOWN_LIFECYCLE":
         return ResearchAdmission(lifecycle, scope, "HOLD", "UNKNOWN_LIFECYCLE")
     if scope == ProcurementScopeType.UNKNOWN.value:

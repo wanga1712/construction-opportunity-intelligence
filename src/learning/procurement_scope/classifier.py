@@ -50,6 +50,7 @@ _PRODUCT_OKPD_PREFIXES = (
     "20.", "21.", "22.", "23.", "24.", "25.", "26.", "27.",
     "28.", "29.", "30.", "31.", "32.",
 )
+_UNSUPPORTED_SCOPE_RE = re.compile(r"ремонт|работ[аы]|проект|устройств\w*\s+сло", re.I)
 
 
 class ProcurementScopeClassifierV1:
@@ -97,10 +98,21 @@ class ProcurementScopeClassifierV1:
         if has_service and not has_supply:
             return self._out(ProcurementScopeType.PURE_SERVICE, 0.90, "TITLE_PRE_RESEARCH", "explicit_service")
         if has_supply and (has_product or product_okpd):
-            return self._out(ProcurementScopeType.DIRECT_GOODS, 0.95, "TITLE+OKPD_PRE_RESEARCH", "explicit_supply+product_evidence")
+            return self._out(ProcurementScopeType.DIRECT_GOODS, 0.95, "TITLE+OKPD_PRE_RESEARCH", "explicit_supply+product_evidence", okpd)
         if has_product and product_okpd and not (has_work or has_design or has_service):
-            return self._out(ProcurementScopeType.DIRECT_GOODS, 0.90, "SUBJECT+OKPD_PRE_RESEARCH", "product_subject+product_okpd")
-        return self._out(ProcurementScopeType.UNKNOWN, 0.0, "PRE_RESEARCH_FAIL_CLOSED", "insufficient_pre_research_evidence")
+            return self._out(ProcurementScopeType.DIRECT_GOODS, 0.90, "SUBJECT+OKPD_PRE_RESEARCH", "product_subject+product_okpd", okpd)
+        signal_count = sum(
+            (has_supply, has_work, has_design, has_service, has_install, has_consumable, has_product)
+        )
+        if not title:
+            unknown_reason = "missing_title_or_subject"
+        elif signal_count > 1:
+            unknown_reason = "ambiguous_scope_signals"
+        elif _UNSUPPORTED_SCOPE_RE.search(text):
+            unknown_reason = "unsupported_pre_research_pattern"
+        else:
+            unknown_reason = "insufficient_pre_research_evidence"
+        return self._out(ProcurementScopeType.UNKNOWN, 0.0, "PRE_RESEARCH_FAIL_CLOSED", unknown_reason, okpd)
 
     @staticmethod
     def _title(metadata: Dict[str, Any]) -> str:
@@ -110,13 +122,27 @@ class ProcurementScopeClassifierV1:
                 return value
         return ""
 
-    def _out(self, scope: ProcurementScopeType, confidence: float, method: str, reason: str) -> dict:
+    def _out(
+        self,
+        scope: ProcurementScopeType,
+        confidence: float,
+        method: str,
+        reason: str,
+        okpd_codes_used: List[str] | None = None,
+    ) -> dict:
+        matched_signal_types = [part for part in reason.split("+") if part]
         return {
             "procurement_scope_type": scope.value,
             "scope_confidence": confidence,
             "scope_method": method,
             "scope_model_or_rule_version": f"{self.model}:{self.version}",
-            "scope_evidence": {"reason": reason, "post_research_feature_count": 0},
+            "scope_evidence": {
+                "rule_id": f"{method}:{reason}",
+                "reason": reason,
+                "matched_signal_types": matched_signal_types,
+                "okpd_codes_used": list(okpd_codes_used or []),
+                "post_research_feature_count": 0,
+            },
             "procurement_scope_confidence": confidence,
             "procurement_scope_source": method,
             "procurement_scope_reason": reason,
