@@ -1,11 +1,15 @@
 """DB-backed one-detail smoke for Phase A; never applies trust."""
 
 import sys
+from pathlib import Path
 
 import psycopg2
 from psycopg2.extras import RealDictCursor
 
-from scripts.run_structured_fact_canary import main as run_extract_phase
+project_root = Path(__file__).resolve().parent.parent
+sys.path.insert(0, str(project_root))
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from run_structured_fact_canary import main as run_extract_phase
 
 
 def main():
