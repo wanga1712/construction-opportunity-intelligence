@@ -1,0 +1,18 @@
+{
+  "snapshot_rows": 9720,
+  "snapshot_unique_procurements": 9720,
+  "input_snapshot_sha256": "cfbcadbb8c741526e6563e8e2825ff9230952f56c2ee65625abf89803ac237ca",
+  "input_fields": [
+    "procurement_id",
+    "contract_number",
+    "crm_stage",
+    "award_status",
+    "title",
+    "auction_name",
+    "subject",
+    "purchase_object",
+    "lot_item_names",
+    "okpd_codes"
+  ],
+  "post_research_fields_included": false
+}
