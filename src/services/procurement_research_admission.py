@@ -11,7 +11,7 @@ from tender_documents_research.document_processor.admission_policy import (
     ADMISSION_HOLD,
 )
 
-ADMISSION_POLICY_VERSION = "BUSINESS_RESEARCH_ADMISSION_V1"
+ADMISSION_POLICY_VERSION = "BUSINESS_RESEARCH_ADMISSION_V2"
 
 
 @dataclass(frozen=True)
@@ -48,8 +48,13 @@ def evaluate_admission(procurement: Mapping[str, Any], scope_type: str) -> Resea
         return ResearchAdmission(lifecycle, scope, ADMISSION_HOLD, "UNKNOWN_LIFECYCLE")
     if scope == ProcurementScopeType.UNKNOWN.value:
         return ResearchAdmission(lifecycle, scope, ADMISSION_HOLD, "UNKNOWN_SCOPE")
-    if scope == ProcurementScopeType.PURE_SERVICE.value:
-        return ResearchAdmission(lifecycle, scope, ADMISSION_EXCLUDED, "PURE_SERVICE")
+    if scope in {
+        ProcurementScopeType.EQUIPMENT_AND_INSTALLATION.value,
+        ProcurementScopeType.SERVICE_WITH_CONSUMABLES.value,
+        ProcurementScopeType.PURE_SERVICE.value,
+        ProcurementScopeType.MIXED.value,
+    }:
+        return ResearchAdmission(lifecycle, scope, ADMISSION_HOLD, "POLICY_UNDECIDED")
     if lifecycle == "AWARDED" and scope == ProcurementScopeType.DIRECT_GOODS.value:
         return ResearchAdmission(lifecycle, scope, ADMISSION_EXCLUDED, "AWARDED_DIRECT_GOODS")
     return ResearchAdmission(lifecycle, scope, ADMISSION_ELIGIBLE, "CURRENT_BUSINESS_ADMISSION")

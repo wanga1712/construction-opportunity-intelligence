@@ -46,6 +46,25 @@ Canonical research identity is now `(normalized_source_family, normalized_notice
 
 The canonical identity key is persisted in `category_context` for traceability. Lookup prefers that key and falls back to a normalized SQL projection for legacy rows, so it does not require the current lifecycle `source_table`. Check-plus-insert is protected by a PostgreSQL transaction advisory lock on the canonical key. Local direct assertions cover 44-FZ and 223-FZ lifecycle identity, status precedence, `NO_LINKS`, and the absence of generation-only dedup.
 
+## CRM Authority Bootstrap And Live Read-Only Reconciliation
+
+Migration 007 was preflighted and applied only to the canonical CRM database through the approved PostgreSQL DDL route. The document database, queue, workers, and downloads were not touched.
+
+- `TARGET_DB=crm`
+- `TABLE_EXISTS_BEFORE=NO`
+- `CRM_PROCUREMENTS_FK_TARGET=VALID`
+- `MIGRATION_NUMBER_COLLISION=NO`
+- `DDL_ROLE_AUTHORITY=PROVEN`
+- `TABLE_EXISTS_AFTER=YES`
+
+Admission policy is now `BUSINESS_RESEARCH_ADMISSION_V2`. Only `DIRECT_GOODS` in OPEN, `WORKS_WITH_EMBEDDED_PRODUCTS`, and `DESIGN_PROJECT` are eligible. `EQUIPMENT_AND_INSTALLATION`, `SERVICE_WITH_CONSUMABLES`, `PURE_SERVICE`, and `MIXED` are `HOLD/POLICY_UNDECIDED`; UNKNOWN is `HOLD/UNKNOWN_SCOPE`; awarded direct goods are excluded.
+
+The current CRM+active-OKPD snapshot materialized exactly `9720` authority rows, with `0` duplicate procurement IDs and one manifest hash. Accounting is `ELIGIBLE=5035`, `EXCLUDED=1130`, `HOLD_UNKNOWN=3358`, `HOLD_POLICY_UNDECIDED=229`; total `9720`.
+
+Read-only research disposition across all queue generations found: `PROCESSING=0`, `PENDING=2956`, `COMPLETED_REUSABLE=13`, `FAILED_PARTIAL_RETRY=2`, `NO_LINKS_RETRY=20`, `NO_LINKS_DEFERRED=0`, `NEVER_RESEARCHED=2044`. The invariant is exact: `0+2956+13+2+20+0+2044=5035`. Resource workload is `NEW_RESEARCH_REQUIRED=2066`, `REUSED_EXISTING=13`, `ACTIVE_ALREADY=2956`, `DEFERRED=0`.
+
+Completed authority is proven for 110 of 111 completed queue rows: each has a completed processing result and completed downloaded files. One completed queue row has download evidence but no successful result row and remains an explicit legacy-gap/partial candidate; it was not redownloaded. Cross-lifecycle eligible matches are currently `44_FZ=0`, `223_FZ=0`. No queue mutation or worker release was performed.
+
 ## P5 S13 Deployment Boundary
 
 Read-only S13 audit:
