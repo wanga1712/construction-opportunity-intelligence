@@ -1,6 +1,11 @@
+"""Fail-closed procurement scope classification before document research."""
+from __future__ import annotations
+
+import re
+from datetime import datetime, timezone
 from enum import Enum
-from datetime import datetime
-from typing import Dict, Any, List
+from typing import Any, Dict, List
+
 
 class ProcurementScopeType(Enum):
     DIRECT_GOODS = "DIRECT_GOODS"
@@ -12,6 +17,7 @@ class ProcurementScopeType(Enum):
     MIXED = "MIXED"
     UNKNOWN = "UNKNOWN"
 
+
 class ProductRelation(Enum):
     PRIMARY_SUBJECT = "PRIMARY_SUBJECT"
     EMBEDDED_IN_WORKS = "EMBEDDED_IN_WORKS"
@@ -21,71 +27,104 @@ class ProductRelation(Enum):
     INCIDENTAL = "INCIDENTAL"
     UNKNOWN = "UNKNOWN"
 
+
+_SUPPLY_RE = re.compile(r"поставк|приобретени|закупк\w*\s+товар", re.I)
+_WORK_RE = re.compile(
+    r"строительств|реконструкц|капитальн\w*\s+ремонт|текущ\w*\s+ремонт|"
+    r"устройств\w+\s+(дорог|сет|полотн)|выполнени\w*\s+работ", re.I
+)
+_DESIGN_RE = re.compile(
+    r"проектн\w*\s+документац|разработк\w*\s+проект|проектирован|"
+    r"инженерн\w*\s+изыскани|рабоч\w*\s+документац", re.I
+)
+_SERVICE_RE = re.compile(
+    r"оказани\w*\s+услуг|техническ\w*\s+обслужив|обслужив|уборк|диагностик", re.I
+)
+_INSTALL_RE = re.compile(r"монтаж|пусконалад|установк", re.I)
+_CONSUMABLE_RE = re.compile(r"материал|расходн|комплектующ", re.I)
+_PRODUCT_RE = re.compile(
+    r"линолеум|ламп|светильник|компьютер|сервер|принтер|кабел|"
+    r"оборудован|покрыти\w*\s+пола|плитк|материал", re.I
+)
+_PRODUCT_OKPD_PREFIXES = (
+    "20.", "21.", "22.", "23.", "24.", "25.", "26.", "27.",
+    "28.", "29.", "30.", "31.", "32.",
+)
+
+
 class ProcurementScopeClassifierV1:
-    def __init__(self):
-        self.version = "1.0"
-        self.model = "hybrid_rules_v1"
-        
-        # High confidence goods OKPD prefixes (20, 22, 23, 24, 25, 26, 27, 28)
-        self.goods_okpd = ('20', '21', '22', '23', '24', '25', '26', '27', '28', '29', '30', '31', '32')
-        # High confidence works
-        self.works_okpd = ('41', '42', '43')
-        # High confidence design
-        self.design_okpd = ('71', '71.1', '71.11', '71.12')
+    """Classify procurement scope from pre-research metadata only."""
+
+    version = "1.1"
+    model = "pre_research_rules_v1"
 
     def classify(self, title: str, okpd_codes: List[str]) -> dict:
-        title = str(title).lower()
-        codes = [str(c) for c in okpd_codes] if okpd_codes else []
-        
-        # 1. High confidence explicit Title signals + Works
-        is_construction = any(w in title for w in ['строительств', 'реконструкци', 'капитальный ремонт', 'текущий ремонт', 'устройство', 'монтаж', 'выполнение работ'])
-        is_design = any(w in title for w in ['проектн', 'проектировани', 'пир', 'изыскания', 'рабочая документация'])
-        is_supply = any(w in title for w in ['поставка', 'приобретение', 'закупка товара', 'поставка оборудования'])
-        is_service = any(w in title for w in ['оказание услуг', 'обслуживание', 'техническое обслуживание', 'уборка', 'диагностика'])
-        
-        has_installation = 'монтаж' in title and ('поставка' in title or 'оборудовани' in title)
-        has_consumables = is_service and any(w in title for w in ['материал', 'расходн'])
+        return self.classify_procurement({"title": title, "okpd_codes": okpd_codes})
 
-        if has_installation:
-            return self._out(ProcurementScopeType.EQUIPMENT_AND_INSTALLATION, 0.95, "RULE_HIGH_CONFIDENCE", "Title contains supply and installation explicitly")
-            
-        if is_design:
-            return self._out(ProcurementScopeType.DESIGN_PROJECT, 0.95, "RULE_HIGH_CONFIDENCE", "Title explicitly indicates design/project")
-            
-        if is_construction:
-            return self._out(ProcurementScopeType.WORKS_WITH_EMBEDDED_PRODUCTS, 0.95, "RULE_HIGH_CONFIDENCE", "Title explicitly indicates construction/repair works")
-            
-        if has_consumables:
-            return self._out(ProcurementScopeType.SERVICE_WITH_CONSUMABLES, 0.90, "RULE_HIGH_CONFIDENCE", "Title implies service with materials")
-            
-        if is_service and not is_supply:
-            return self._out(ProcurementScopeType.PURE_SERVICE, 0.90, "RULE_HIGH_CONFIDENCE", "Title explicitly indicates service only")
-            
-        if is_supply and not is_construction and not is_design:
-            return self._out(ProcurementScopeType.DIRECT_GOODS, 0.95, "RULE_HIGH_CONFIDENCE", "Title explicitly indicates direct goods supply")
+    def classify_procurement(self, metadata: Dict[str, Any]) -> dict:
+        title = self._title(metadata)
+        okpd = [str(code).strip() for code in metadata.get("okpd_codes") or [] if code]
+        text = " ".join(
+            str(metadata.get(key) or "")
+            for key in (
+                "title",
+                "auction_name",
+                "subject",
+                "purchase_object",
+                "lot_item_names",
+            )
+        ).strip()
+        lower = text.lower()
+        has_supply = bool(_SUPPLY_RE.search(text))
+        has_work = bool(_WORK_RE.search(text))
+        has_design = bool(_DESIGN_RE.search(text))
+        has_service = bool(_SERVICE_RE.search(text))
+        has_install = bool(_INSTALL_RE.search(text))
+        has_consumable = bool(_CONSUMABLE_RE.search(text))
+        has_product = bool(_PRODUCT_RE.search(text))
+        product_okpd = any(code.startswith(_PRODUCT_OKPD_PREFIXES) for code in okpd)
 
-        # 2. OKPD fallbacks
-        if any(c.startswith(self.works_okpd) for c in codes):
-            return self._out(ProcurementScopeType.WORKS_WITH_EMBEDDED_PRODUCTS, 0.85, "RULE_HIGH_CONFIDENCE", "OKPD strongly implies works")
-            
-        if any(c.startswith(self.design_okpd) for c in codes):
-            return self._out(ProcurementScopeType.DESIGN_PROJECT, 0.85, "RULE_HIGH_CONFIDENCE", "OKPD strongly implies design")
-            
-        if any(c.startswith(self.goods_okpd) for c in codes):
-            return self._out(ProcurementScopeType.DIRECT_GOODS, 0.85, "RULE_HIGH_CONFIDENCE", "OKPD strongly implies goods")
-            
-        return self._out(ProcurementScopeType.UNKNOWN, 0.0, "RULE_HIGH_CONFIDENCE", "Ambiguous evidence")
+        if has_design and has_work and has_supply:
+            return self._out(ProcurementScopeType.MIXED, 0.80, "TITLE_PRE_RESEARCH", "design+works+supply")
+        if has_supply and has_install and ("оборудован" in lower or product_okpd):
+            return self._out(ProcurementScopeType.EQUIPMENT_AND_INSTALLATION, 0.95, "TITLE_PRE_RESEARCH", "supply+installation")
+        if has_design:
+            return self._out(ProcurementScopeType.DESIGN_PROJECT, 0.95, "TITLE_PRE_RESEARCH", "explicit_design")
+        if has_work:
+            return self._out(ProcurementScopeType.WORKS_WITH_EMBEDDED_PRODUCTS, 0.95, "TITLE_PRE_RESEARCH", "explicit_works")
+        if has_service and has_consumable:
+            return self._out(ProcurementScopeType.SERVICE_WITH_CONSUMABLES, 0.90, "TITLE_PRE_RESEARCH", "service+consumables")
+        if has_service and not has_supply:
+            return self._out(ProcurementScopeType.PURE_SERVICE, 0.90, "TITLE_PRE_RESEARCH", "explicit_service")
+        if has_supply and (has_product or product_okpd):
+            return self._out(ProcurementScopeType.DIRECT_GOODS, 0.95, "TITLE+OKPD_PRE_RESEARCH", "explicit_supply+product_evidence")
+        if has_product and product_okpd and not (has_work or has_design or has_service):
+            return self._out(ProcurementScopeType.DIRECT_GOODS, 0.90, "SUBJECT+OKPD_PRE_RESEARCH", "product_subject+product_okpd")
+        return self._out(ProcurementScopeType.UNKNOWN, 0.0, "PRE_RESEARCH_FAIL_CLOSED", "insufficient_pre_research_evidence")
 
-    def _out(self, scope_type: ProcurementScopeType, conf: float, source: str, reason: str):
+    @staticmethod
+    def _title(metadata: Dict[str, Any]) -> str:
+        for key in ("title", "auction_name", "subject", "purchase_object"):
+            value = str(metadata.get(key) or "").strip()
+            if value:
+                return value
+        return ""
+
+    def _out(self, scope: ProcurementScopeType, confidence: float, method: str, reason: str) -> dict:
         return {
-            'procurement_scope_type': scope_type.value,
-            'procurement_scope_confidence': conf,
-            'procurement_scope_source': source,
-            'procurement_scope_reason': reason,
-            'procurement_scope_model': self.model,
-            'procurement_scope_version': self.version,
-            'procurement_scope_scored_at': datetime.now().isoformat()
+            "procurement_scope_type": scope.value,
+            "scope_confidence": confidence,
+            "scope_method": method,
+            "scope_model_or_rule_version": f"{self.model}:{self.version}",
+            "scope_evidence": {"reason": reason, "post_research_feature_count": 0},
+            "procurement_scope_confidence": confidence,
+            "procurement_scope_source": method,
+            "procurement_scope_reason": reason,
+            "procurement_scope_model": self.model,
+            "procurement_scope_version": self.version,
+            "procurement_scope_scored_at": datetime.now(timezone.utc).isoformat(),
         }
+
 
 def derive_product_relation(scope_type_val: str) -> ProductRelation:
     mapping = {
@@ -96,6 +135,6 @@ def derive_product_relation(scope_type_val: str) -> ProductRelation:
         ProcurementScopeType.SERVICE_WITH_CONSUMABLES.value: ProductRelation.CONSUMABLE_FOR_SERVICE,
         ProcurementScopeType.PURE_SERVICE.value: ProductRelation.INCIDENTAL,
         ProcurementScopeType.MIXED.value: ProductRelation.UNKNOWN,
-        ProcurementScopeType.UNKNOWN.value: ProductRelation.UNKNOWN
+        ProcurementScopeType.UNKNOWN.value: ProductRelation.UNKNOWN,
     }
     return mapping.get(scope_type_val, ProductRelation.UNKNOWN)

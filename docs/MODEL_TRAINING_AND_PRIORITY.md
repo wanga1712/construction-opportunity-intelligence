@@ -204,3 +204,42 @@ $$\text{Efficiency Score} = \frac{P(\text{RESEARCH\_HIT})}{\mathbb{E}[\text{Rese
 - Медали `GOLD`, `SILVER`, `BRONZE` и `WOOD` показывают предварительный исследовательский приоритет.
 - Система **не отбрасывает закупки**, а формирует очередность анализа так, чтобы наиболее перспективные возможности обрабатывались в первую очередь.
 - Текущий статус индикатора: **теневой режим / калибровка** (`Теневой режим · Пока не влияет на очередь`).
+
+---
+
+## 13. Procurement Scope и admission до исследования
+
+Stage 1 определяет только исследовательский приоритет. Он не является
+разрешением на постановку закупки в primary document queue. До скачивания и
+парсинга применяется единый procurement-grain scope authority:
+
+```text
+CRM current lifecycle + pre-research metadata
+    -> procurement scope authority (1 row per procurement)
+    -> business admission: ELIGIBLE | EXCLUDED | HOLD
+    -> Stage 1 priority / scheduler
+```
+
+Канонические scope-типы: `DIRECT_GOODS`, `WORKS_WITH_EMBEDDED_PRODUCTS`,
+`DESIGN_PROJECT`, `EQUIPMENT_AND_INSTALLATION`, `SERVICE_WITH_CONSUMABLES`,
+`PURE_SERVICE`, `MIXED`, `UNKNOWN`.
+
+Правила безопасности:
+
+- `UNKNOWN` всегда `HOLD`; недостаток сигналов нельзя превращать в товарный
+  допуск ради увеличения coverage.
+- `torgi + submission_closed_waiting_award` всегда `HOLD` до перехода
+  lifecycle.
+- `AWARDED + DIRECT_GOODS` и `PURE_SERVICE` являются `EXCLUDED`.
+- `AWARDED` works/design/equipment/service-with-consumables/mixed остаются
+  допустимыми по бизнес-матрице.
+- OKPD сам по себе не является доказательством `DIRECT_GOODS`.
+- Scope authority использует только title/subject, OKPD, закон, NMCK,
+  lifecycle, registry metadata и lot/item names. `POST_RESEARCH_FEATURE_COUNT`
+  обязан быть `0`.
+- Медаль и raw/effective Stage 1 score не могут воскресить `EXCLUDED` или
+  `HOLD`.
+
+Перцентиль и medal рассчитываются на одной строке на procurement, а не на
+category-opportunity observations. Переобучение модели для применения этого
+admission gate не требуется.

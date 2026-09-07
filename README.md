@@ -91,7 +91,14 @@ $$\text{Вход}: [\text{Title Text, OKPD Hierarchy, Domain Disambiguation Sign
 
 ### Приоритет не равен фильтрации
 
-Модель **никогда не должна безусловно исключать закупку из обработки**.
+Stage 1 model priority сам по себе **никогда не является business admission**.
+Перед primary document research действует procurement-grain scope authority.
+Она fail-closed классифицирует текущие CRM+OKPD procurements и отделяет
+`ELIGIBLE` от `EXCLUDED` и `HOLD`.
+
+`AWARDED + DIRECT_GOODS` и `PURE_SERVICE` не попадают в primary research,
+`UNKNOWN` и waiting-award остаются в `HOLD`. Raw/effective medal не может
+отменить это решение. Legacy backlog не изменяется автоматически.
 
 Все детерминированные `TARGET` закупки сохраняют гарантированное полное покрытие (`eventual coverage`):
 - `GOLD` обрабатывается преимущественно раньше `SILVER`,
