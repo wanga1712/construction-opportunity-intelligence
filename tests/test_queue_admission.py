@@ -19,6 +19,8 @@ from tender_documents_research.document_processor.dwrr_claim_policy import (
 )
 from tender_documents_research.document_processor.research_dedup import (
     canonical_research_identity,
+    canonical_identity_sql,
+    normalize_source_family,
     research_disposition,
 )
 from src.learning.procurement_scope.classifier import ProcurementScopeType
@@ -169,19 +171,71 @@ def test_research_identity_is_notice_scoped_to_source_family():
     assert first.key != other_family.key
 
 
+def test_supported_lifecycle_tables_normalize_to_one_family():
+    assert normalize_source_family("reestr_contract_44_fz") == "44_FZ"
+    assert normalize_source_family("reestr_contract_44_fz_awarded") == "44_FZ"
+    assert normalize_source_family("reestr_contract_223_fz") == "223_FZ"
+    assert normalize_source_family("reestr_contract_223_fz_awarded") == "223_FZ"
+    assert canonical_research_identity(
+        source_family="reestr_contract_44_fz",
+        notice_number="N123",
+        procurement_id=10,
+    ).key == canonical_research_identity(
+        source_family="reestr_contract_44_fz_awarded",
+        notice_number="N123",
+        procurement_id=20,
+    ).key
+    assert canonical_research_identity(
+        source_family="reestr_contract_223_fz",
+        notice_number="N123",
+        procurement_id=30,
+    ).key != "44_FZ:N123"
+    assert canonical_research_identity(
+        source_family="reestr_contract_223_fz",
+        notice_number="N223",
+        procurement_id=31,
+    ).key == canonical_research_identity(
+        source_family="reestr_contract_223_fz_awarded",
+        notice_number="N223",
+        procurement_id=32,
+    ).key
+
+
 def test_research_disposition_preserves_existing_research_precedence():
     assert research_disposition([{"status": "PROCESSING"}]) == "DO_NOT_ENQUEUE_DUPLICATE_PROCESSING"
     assert research_disposition([{"status": "PENDING"}]) == "DO_NOT_ENQUEUE_DUPLICATE_PENDING"
     assert research_disposition([{"status": "COMPLETED", "successful_parse": True}]) == "REUSE_EXISTING_RESEARCH"
-    assert research_disposition([{"status": "COMPLETED", "successful_parse": False}]) == "RETRY_EXISTING_IDENTITY"
+    assert research_disposition([{"status": "PARTIAL"}]) == "RETRY_EXISTING_IDENTITY"
     assert research_disposition([{"status": "FAILED"}]) == "RETRY_EXISTING_IDENTITY"
     assert research_disposition([{"status": "FAILED"}, {"status": "PENDING"}]) == "DO_NOT_ENQUEUE_DUPLICATE_PENDING"
+    assert research_disposition([{"status": "NO_LINKS"}], canonical_links_available=False) == "DO_NOT_RETRY_NO_LINKS"
+    assert research_disposition([{"status": "NO_LINKS"}], canonical_links_available=True) == "RETRY_EXISTING_IDENTITY"
 
 
 def test_research_dedup_is_not_generation_only():
     source = Path("src/services/commercial_routing_v3/queue_producer.py").read_text(encoding="utf-8")
     producer = source[source.index("    def _upsert_queue_task"):]
-    assert "q.source_table = %s" in producer
-    assert "q.contract_number = %s" in producer
+    assert "canonical_identity_sql(\"q\")" in producer
+    assert "q.source_table = %s" not in producer
     assert "document_processing_results" in producer
     assert "pipeline_generation = %s" not in producer
+    assert "pg_advisory_xact_lock" in producer
+    assert "research_identity_key" in producer
+
+
+def test_lifecycle_statuses_have_required_reuse_and_retry_semantics():
+    identity_open = canonical_research_identity(
+        source_family="reestr_contract_44_fz",
+        notice_number="N123",
+        procurement_id=101,
+    )
+    identity_awarded = canonical_research_identity(
+        source_family="reestr_contract_44_fz_awarded",
+        notice_number="N123",
+        procurement_id=202,
+    )
+    assert identity_open.key == identity_awarded.key
+    assert research_disposition([{"status": "COMPLETED", "successful_parse": True}]) == "REUSE_EXISTING_RESEARCH"
+    assert research_disposition([{"status": "PROCESSING"}]) == "DO_NOT_ENQUEUE_DUPLICATE_PROCESSING"
+    assert research_disposition([{"status": "PARTIAL"}]) == "RETRY_EXISTING_IDENTITY"
+    assert canonical_identity_sql("q").count("source_table") == 1

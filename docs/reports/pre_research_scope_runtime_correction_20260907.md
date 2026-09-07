@@ -35,14 +35,16 @@ The worker-safe implementation is `tender_documents_research/document_processor/
 
 ## P6 Research Dedup Precedence
 
-Canonical research identity is now `(source_table, contract_number)` within the source family, with `procurement_id` used only when no notice number exists. The producer checks all generations, not only `S13_V4_EXHAUSTIVE_CONTEXT`, and applies this precedence:
+Canonical research identity is now `(normalized_source_family, normalized_notice_number)`, with `procurement_id` used only when no notice number exists. Audited supported registry variants normalize to `44_FZ` or `223_FZ`; unsupported legacy variants fail closed. The producer checks all generations and lifecycle table variants, not only `S13_V4_EXHAUSTIVE_CONTEXT`, and applies this precedence:
 
 - `PROCESSING` or pending identity: do not enqueue a duplicate.
 - successful `COMPLETED`: reuse the existing research row; do not download or parse again.
-- `FAILED`, `PARTIAL`, `NO_LINKS`, or unsuccessful `COMPLETED`: retry the existing canonical identity rather than inserting a second job.
+- `FAILED` or `PARTIAL`: retry the existing canonical identity rather than inserting a second job.
+- `NO_LINKS`: do not retry until current canonical links exist; then retry the same identity.
+- Old `COMPLETED` rows without successful result evidence are interpreted as `PARTIAL` during lookup, not as a normal terminal state.
 - lifecycle changes, including OPEN -> AWARDED, retain the same identity and existing research attachment.
 
-The canonical identity key is persisted in `category_context` for traceability. Local direct assertions cover source-family scoping, lifecycle duplicate identity, status precedence, and the absence of generation-only dedup.
+The canonical identity key is persisted in `category_context` for traceability. Lookup prefers that key and falls back to a normalized SQL projection for legacy rows, so it does not require the current lifecycle `source_table`. Check-plus-insert is protected by a PostgreSQL transaction advisory lock on the canonical key. Local direct assertions cover 44-FZ and 223-FZ lifecycle identity, status precedence, `NO_LINKS`, and the absence of generation-only dedup.
 
 ## P5 S13 Deployment Boundary
 

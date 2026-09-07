@@ -29,6 +29,7 @@ from src.services.commercial_routing_v3.document_lane_authority import (
 )
 from tender_documents_research.document_processor.research_dedup import (
     canonical_research_identity,
+    canonical_identity_sql,
     research_disposition,
 )
 
@@ -390,8 +391,17 @@ class CommercialRoutingV3QueueProducer:
                             if dry_run:
                                 with doc_conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as check_cur:
                                     check_cur.execute(
-                                        """
-                                        SELECT q.status,
+                                        f"""
+                                        SELECT CASE
+                                                   WHEN q.status = 'COMPLETED'
+                                                    AND NOT EXISTS (
+                                                        SELECT 1
+                                                          FROM document_processing_results r2
+                                                         WHERE r2.queue_id = q.id
+                                                           AND r2.status = 'COMPLETED'
+                                                    ) THEN 'PARTIAL'
+                                                   ELSE q.status
+                                               END AS status,
                                                EXISTS (
                                                    SELECT 1
                                                      FROM document_processing_results r
@@ -399,14 +409,17 @@ class CommercialRoutingV3QueueProducer:
                                                       AND r.status = 'COMPLETED'
                                                ) AS successful_parse
                                          FROM document_processing_queue q
-                                         WHERE (q.source_table = %s AND q.contract_number = %s)
+                                         WHERE {canonical_identity_sql("q")} = %s
                                             OR (q.contract_number IS NULL AND q.procurement_id = %s)
-                                         ORDER BY q.id
+                                         ORDER BY successful_parse DESC, q.id
                                         """,
-                                        (task["source_table"], task["contract_number"], task["procurement_id"]),
+                                        (identity.key, task["procurement_id"]),
                                     )
                                     existing = check_cur.fetchall()
-                                    disposition = research_disposition(existing)
+                                    disposition = research_disposition(
+                                        existing,
+                                        canonical_links_available=bool(task["category_context"].get("link_count")),
+                                    )
                                     if disposition == "NEW_RESEARCH_ALLOWED":
                                         action = "inserted"
                                     elif disposition == "RETRY_EXISTING_IDENTITY":
@@ -811,8 +824,19 @@ class CommercialRoutingV3QueueProducer:
         )
 
     def _upsert_queue_task(self, task: Dict[str, Any], *, status: str = "PRE_RESEARCH_WAITING", last_error: Optional[str] = None, conn: Optional[Any] = None) -> Dict[str, Any]:
-        sql_check = """
-            SELECT q.id, q.status, q.research_depth,
+        sql_check = f"""
+            SELECT q.id,
+                   CASE
+                       WHEN q.status = 'COMPLETED'
+                        AND NOT EXISTS (
+                            SELECT 1
+                              FROM document_processing_results r2
+                             WHERE r2.queue_id = q.id
+                               AND r2.status = 'COMPLETED'
+                        ) THEN 'PARTIAL'
+                       ELSE q.status
+                   END AS status,
+                   q.research_depth,
                    EXISTS (
                        SELECT 1
                          FROM document_processing_results r
@@ -820,9 +844,9 @@ class CommercialRoutingV3QueueProducer:
                           AND r.status = 'COMPLETED'
                    ) AS successful_parse
              FROM document_processing_queue q
-             WHERE (q.source_table = %s AND q.contract_number = %s)
+             WHERE {canonical_identity_sql("q")} = %s
                 OR (q.contract_number IS NULL AND q.procurement_id = %s)
-             ORDER BY q.id
+             ORDER BY successful_parse DESC, q.id
         """
         sql_insert = """
             INSERT INTO document_processing_queue
@@ -862,18 +886,31 @@ class CommercialRoutingV3QueueProducer:
             should_close = True
         try:
             with doc.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+                identity = task.get("research_identity_key") or canonical_research_identity(
+                    source_family=task["source_table"],
+                    notice_number=task["contract_number"],
+                    procurement_id=task["procurement_id"],
+                ).key
+                cur.execute(
+                    "SELECT pg_advisory_xact_lock(hashtextextended(%s, 0))",
+                    (identity,),
+                )
                 cur.execute(
                     sql_check,
-                    (task["source_table"], task["contract_number"], task["procurement_id"]),
+                    (identity, task["procurement_id"]),
                 )
                 existing_rows = cur.fetchall()
-                disposition = research_disposition(existing_rows)
+                disposition = research_disposition(
+                    existing_rows,
+                    canonical_links_available=bool(task.get("category_context", {}).get("link_count")),
+                )
                 existing = existing_rows[0] if existing_rows else None
                 if disposition == "REUSE_EXISTING_RESEARCH":
                     return {"action": "reused_existing_research", "queue_id": existing["id"], **task}
                 if disposition in {
                     "DO_NOT_ENQUEUE_DUPLICATE_PROCESSING",
                     "DO_NOT_ENQUEUE_DUPLICATE_PENDING",
+                    "DO_NOT_RETRY_NO_LINKS",
                 }:
                     return {
                         "action": "skipped_already_active",
