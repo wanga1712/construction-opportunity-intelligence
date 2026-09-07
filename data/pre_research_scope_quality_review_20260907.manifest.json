@@ -1,0 +1,25 @@
+{
+  "review_artifact_sha256": "2adc091388bb82d8dafa56c5f7a58494aa3fe4721e015761a46974c03792a1d3",
+  "reviewed_rows": 146,
+  "review_method": "bounded_source_only_manual_review_with_persisted_row_level_artifact",
+  "reviewed_at": "2026-09-07",
+  "scope_bucket_counts": {
+    "DESIGN_PROJECT": 10,
+    "DIRECT_GOODS": 50,
+    "EQUIPMENT_AND_INSTALLATION": 10,
+    "MIXED": 25,
+    "PURE_SERVICE": 10,
+    "SERVICE_WITH_CONSUMABLES": 1,
+    "UNKNOWN": 20,
+    "WORKS_WITH_EMBEDDED_PRODUCTS": 20
+  },
+  "correct": 127,
+  "incorrect": 19,
+  "underclassified_unknown": 19,
+  "false_exclusions": 0,
+  "false_eligible": 0,
+  "false_eligible_rate": "0/146=0%",
+  "classifier_version": "ProcurementScopeClassifierV1:1.1",
+  "snapshot_sha256": "cfbcadbb8c741526e6563e8e2825ff9230952f56c2ee65625abf89803ac237ca",
+  "admission_policy_version": "BUSINESS_RESEARCH_ADMISSION_V1"
+}

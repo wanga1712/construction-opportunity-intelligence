@@ -82,6 +82,7 @@ Policy gates are fail-closed: awarded direct goods are excluded, pure service is
 ## Quality Review Artifact
 
 Formal row-level review artifact: `data/pre_research_scope_quality_review_20260907.jsonl`.
+Sanitized provenance manifest: `data/pre_research_scope_quality_review_20260907.manifest.json`.
 
 - Reviewed rows: `146`
 - Correct: `127`
@@ -92,14 +93,16 @@ Formal row-level review artifact: `data/pre_research_scope_quality_review_202609
 
 The 19 findings are undercoverage findings, mainly unsupported work/install/direct-product patterns classified as `UNKNOWN`; they are not evidence to materialize authority or release the worker. The review is bounded and source-only, not a production-wide adjudication.
 
+The manifest records the SHA256 of the retained local row-level artifact without publishing its procurement metadata.
+
 ## Verification and Remaining Gates
 
 - Pure classifier/admission assertions and compile checks: pass.
 - Legacy learning test: blocked locally because the declared `requirements-learning.txt` environment is not available with `scikit-learn`; production packages were not modified.
+- Exact environment blocker: isolated `.venv_learning_wip` creation succeeded, but `pip install -r requirements-learning.txt` failed on `catboost>=1.2.0` with Windows `WinError 10051` (no network route), followed by `No matching distribution found`; no local wheel cache was available.
 - Authority materialization: not run.
 - Queue wiring/central-path proof: not complete.
 - Migration execution: not run.
 - Worker release/download: not run.
 
 `READY_FOR_V4_WORKER_RESTORE=NO`.
-
