@@ -63,7 +63,12 @@ def reconcile_active_queue_rows(
             desired_state = str(authority.get("admission_state") or ADMISSION_HOLD)
             desired_reason = str(authority.get("admission_reason") or "AUTHORITY_MISSING")
             desired_version = str(authority.get("admission_policy_version") or ADMISSION_POLICY_VERSION)
-            desired_evaluated_at = authority.get("admission_evaluated_at")
+            evaluated_at = authority.get("admission_evaluated_at")
+            desired_evaluated_at = (
+                evaluated_at.isoformat()
+                if hasattr(evaluated_at, "isoformat")
+                else evaluated_at
+            )
             desired_scope_version = authority.get("scope_version")
 
         context = deepcopy(row.get("category_context") or {})
