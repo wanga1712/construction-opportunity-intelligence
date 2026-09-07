@@ -363,15 +363,13 @@ class CategoryOpportunityService:
             product_name = raw_p or norm_p
 
             # Commercial Entity Gate & Field Evidence Verification
-            entity_type = str(it.get('entity_type') or 'PRODUCT').strip().upper()
-            is_commercial_entity = entity_type in ('PRODUCT', 'MATERIAL', 'EQUIPMENT', 'GOODS')
+            entity_type = str(it.get('entity_type') or 'UNKNOWN').strip().upper()
+            is_commercial_entity = entity_type in ('PRODUCT', 'MATERIAL', 'EQUIPMENT')
 
             if 'has_product_name_evidence' in it:
                 has_pn_ev = bool(it['has_product_name_evidence'])
-            elif 'has_source_evidence' in it:
-                has_pn_ev = bool(it['has_source_evidence'])
             else:
-                has_pn_ev = True
+                has_pn_ev = False
 
             # VALID_COMMERCIAL_PRODUCT_IDENTITY = trusted entity AND commercial entity_type AND non-empty product_name AND product_name evidence
             has_valid_product_identity = (entity_id is not None) and is_commercial_entity and bool(product_name) and has_pn_ev
@@ -393,10 +391,8 @@ class CategoryOpportunityService:
                 qty = it.get('quantity_value')
                 if 'has_quantity_evidence' in it:
                     has_qty_ev = bool(it['has_quantity_evidence'])
-                elif 'has_source_evidence' in it:
-                    has_qty_ev = bool(it['has_source_evidence'])
                 else:
-                    has_qty_ev = True
+                    has_qty_ev = False
 
                 unit = it.get('quantity_unit_normalized') or it.get('quantity_unit_raw')
                 # NO default 'pcs'! If unit missing, QUANTITY_FOR_AGGREGATION = NO
@@ -410,17 +406,13 @@ class CategoryOpportunityService:
                 # Check price totals from structured_entities ONLY when valid product identity and price evidence are present
                 if 'has_total_price_evidence' in it:
                     has_tprice_ev = bool(it['has_total_price_evidence'])
-                elif 'has_source_evidence' in it:
-                    has_tprice_ev = bool(it['has_source_evidence'])
                 else:
-                    has_tprice_ev = True
+                    has_tprice_ev = False
 
                 if 'has_unit_price_evidence' in it:
                     has_uprice_ev = bool(it['has_unit_price_evidence'])
-                elif 'has_source_evidence' in it:
-                    has_uprice_ev = bool(it['has_source_evidence'])
                 else:
-                    has_uprice_ev = True
+                    has_uprice_ev = False
 
                 val_key = entity_id
                 val = it.get('total_price_value')

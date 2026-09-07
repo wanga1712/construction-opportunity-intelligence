@@ -1,6 +1,7 @@
 import sys
 import json
 import uuid
+import argparse
 import psycopg2
 from psycopg2.extras import RealDictCursor
 
@@ -63,7 +64,7 @@ def format_precision(claims_n, correct_n):
         return "N/A"
     return f"{(correct_n / claims_n):.4f}"
 
-def main():
+def main(limit=INITIAL_CANARY_N):
     canary_batch_id = str(uuid.uuid4())
     print("=== CANONICAL REPRODUCIBLE STRUCTURED FACT REAL EXTRACTOR CANARY RUNNER ===")
     print(f"CANARY_BATCH_ID = {canary_batch_id}")
@@ -86,6 +87,7 @@ def main():
                 d.context_after,
                 d.page_or_sheet,
                 d.row_number,
+                d.validation_status,
                 d.validator_name AS source_validator_name,
                 d.validator_version AS source_validator_version,
                 d.validation_method AS source_validation_method,
@@ -111,7 +113,7 @@ def main():
         FROM candidates
         ORDER BY sampling_cohort, category_code, detail_id
         LIMIT %s;
-    """, (STRUCTURED_EXTRACTOR_VERSION, PROMPT_VERSION, min(INITIAL_CANARY_N, MAX_CANARY_N)))
+    """, (STRUCTURED_EXTRACTOR_VERSION, PROMPT_VERSION, min(limit, MAX_CANARY_N)))
     candidate_details = cur_doc.fetchall()
     print(f"Selected {len(candidate_details)} true unexposed details for real Qwen 7B canary.")
 
@@ -221,152 +223,24 @@ def main():
             WHERE run_id = %s;
         """, (run_id,))
 
-        # Quote checks are evidence metrics only. They never create a semantic verdict.
-        trusted_entities_in_run = []
-        for ent in run.entities:
-            # Fetch DB entity id
-            cur_doc.execute("SELECT id FROM structured_entities WHERE run_id = %s AND entity_fingerprint = %s", (run_id, ent.entity_fingerprint))
-            e_row = cur_doc.fetchone()
-            entity_db_id = e_row['id'] if e_row else None
-
-            # Map field evidence quotes
-            fe_map = {fe.field_name: fe.source_quote for fe in ent.field_evidence}
-
-            # Commercial Entity Gate
-            if ent.entity_type not in COMMERCIAL_ENTITY_TYPES:
-                continue
-
-            # Quote Verification Gate for product_name
-            p_quote = fe_map.get('product_name') or ent.source_quote or ""
-            p_raw = (ent.product_name_raw or "").strip()
-            product_quote_claims += 1
-            if not p_raw or not p_quote or not verify_source_quote(p_quote, snapshot_text):
-                continue
-            product_quote_valid += 1
-
-            # Field-level evidence gate for numeric fields
-            qty_val = ent.quantity_value
-            if qty_val is not None:
-                quantity_quote_claims += 1
-                q_quote = fe_map.get('quantity') or ""
-                if q_quote and verify_source_quote(q_quote, snapshot_text):
-                    quantity_quote_valid += 1
-                else:
-                    ent.quantity_value = None
-                    ent.quantity_unit_raw = None
-                    ent.quantity_unit_normalized = None
-
-            uprice_val = ent.unit_price_value
-            if uprice_val is not None:
-                unit_price_quote_claims += 1
-                up_quote = fe_map.get('unit_price') or ""
-                if up_quote and verify_source_quote(up_quote, snapshot_text):
-                    unit_price_quote_valid += 1
-                else:
-                    ent.unit_price_value = None
-                    unit_price_no_evidence += 1
-
-            tprice_val = ent.total_price_value
-            if tprice_val is not None:
-                total_price_quote_claims += 1
-                tp_quote = fe_map.get('total_price') or ""
-                if tp_quote and verify_source_quote(tp_quote, snapshot_text):
-                    total_price_quote_valid += 1
-                else:
-                    ent.total_price_value = None
-                    total_price_no_evidence += 1
-
-            cur_doc.execute("""
-                SELECT verdict, commercial_type_valid, product_evidence_valid,
-                       quantity_product_bound, unit_price_evidence_valid,
-                       total_price_evidence_valid, adjudication_method
-                FROM structured_fact_semantic_adjudications
-                WHERE entity_id = %s AND run_id = %s AND canary_batch_id = %s
-                ORDER BY created_at DESC, id DESC
-                LIMIT 1;
-            """, (entity_db_id, run_id, canary_batch_id))
-            adjudication = cur_doc.fetchone()
-            verdict = adjudication_metric_verdict(adjudication)
-            if verdict is None:
-                # No semantic metric and no trust promotion without an independent record.
-                continue
-
-            prod_claims += 1
-            disp_claims += 1
-            if ent.quantity_value is not None:
-                qty_claims += 1
-                qty_correct += int(adjudication.get('quantity_product_bound') is True)
-            if ent.unit_price_value is not None:
-                uprice_claims += 1
-                uprice_correct += int(adjudication.get('unit_price_evidence_valid') is True)
-            if ent.total_price_value is not None:
-                tprice_claims += 1
-                tprice_correct += int(adjudication.get('total_price_evidence_valid') is True)
-            if verdict == 'PRODUCT_CORRECT' and adjudication_allows_trust(adjudication):
-                prod_tp += 1
-                disp_tp += 1
-                trusted_entities_in_run.append(ent)
-                cur_doc.execute("""
-                    UPDATE structured_entities 
-                    SET structured_fact_trust_state = 'TRUSTED_PRODUCTION' 
-                    WHERE id = %s;
-                """, (entity_db_id,))
-                
-                cur_doc.execute("""
-                    INSERT INTO structured_fact_trust_decisions (
-                        entity_id, run_id, from_state, to_state, decision_reason, review_method, reviewed_by, canary_batch_id
-                    ) VALUES (%s, %s, 'CANARY_PENDING_REVIEW', 'TRUSTED_PRODUCTION', 'QUALITY_GATE_AND_SEMANTIC_ADJUDICATION_PASSED', 'INDEPENDENT_SEMANTIC_REVIEW', 'qwen_canary_adjudicator', %s);
-                    """, (entity_db_id, run_id, canary_batch_id))
-
-                promoted_entities.append({
-                    'entity_id': entity_db_id,
-                    'run_id': run_id,
-                    'detail_id': detail_id,
-                    'trust_state': 'TRUSTED_PRODUCTION',
-                    'promotion_reason': 'QUALITY_GATE_PASSED_SOURCE_QUOTE_VERIFIED',
-                    'source_quote_verified': True,
-                    'product_name': ent.product_name_raw
-                })
-            else:
-                prod_fp += 1
-                disp_fp += 1
-                cur_doc.execute("""
-                    UPDATE structured_entities
-                    SET structured_fact_trust_state = 'QUALITY_REJECTED'
-                    WHERE id = %s;
-                """, (entity_db_id,))
-                cur_doc.execute("""
-                    INSERT INTO structured_fact_trust_decisions (
-                        entity_id, run_id, from_state, to_state, decision_reason,
-                        review_method, reviewed_by, canary_batch_id
-                    ) VALUES (%s, %s, 'CANARY_PENDING_REVIEW', 'QUALITY_REJECTED', %s,
-                              'INDEPENDENT_SEMANTIC_REVIEW', %s, %s);
-                """, (
-                    entity_db_id,
-                    run_id,
-                    verdict,
-                    adjudication.get('adjudicated_by'),
-                    canary_batch_id,
-                ))
-
-        if trusted_entities_in_run:
-            cur_doc.execute("""
-                UPDATE structured_extraction_runs 
-                SET structured_fact_trust_state = 'TRUSTED_PRODUCTION' 
-                WHERE id = %s;
-            """, (run_id,))
-        else:
-            cur_doc.execute("""
-                UPDATE structured_extraction_runs 
-                SET structured_fact_trust_state = 'QUALITY_REJECTED' 
-                WHERE id = %s;
-            """, (run_id,))
-
         conn_doc.commit()
 
-        print(f"[{idx}/{len(candidate_details)}] Detail {detail_id}: status={run.status}, entities={len(run.entities)}, promoted={len(trusted_entities_in_run)} (total promoted: {len(promoted_entities)})", flush=True)
+        print(f"[{idx}/{len(candidate_details)}] Detail {detail_id}: status={run.status}, entities={len(run.entities)}, trust_state=CANARY_PENDING_REVIEW", flush=True)
 
     conn_doc.commit()
+
+    print("PHASE_A_EXTRACT_COMPLETE = YES")
+    print(f"PHASE_A_RUNS = {canary_runs_created}")
+    print(f"PHASE_A_MODEL_CALL_ATTEMPTED = {model_call_attempted}")
+    print("TRUSTED_PRODUCTION_BEFORE_REVIEW = 0")
+    print("QUALITY_REJECTED_BEFORE_REVIEW = 0")
+    print("NO_ADJUDICATION_AUTO_REJECT = 0")
+    conn_doc.close()
+    return {
+        "batch_id": canary_batch_id,
+        "runs": canary_runs_created,
+        "model_call_attempted": model_call_attempted,
+    }
 
     # SECTION C: TRUST ACCOUNTING
     cur_doc.execute("SELECT structured_fact_trust_state, count(*) FROM structured_entities GROUP BY structured_fact_trust_state;")
@@ -476,5 +350,145 @@ def main():
     print(f"VALUE_WITHOUT_SOURCE_EVIDENCE = {unit_price_no_evidence + total_price_no_evidence}")
     print("TARGETED_FAILED = 0")
 
+
+def phase_b_adjudicate(batch_id, adjudications_path):
+    """Persist externally produced independent verdicts without changing trust."""
+    with open(adjudications_path, encoding="utf-8") as handle:
+        records = json.load(handle)
+    if not isinstance(records, list):
+        raise ValueError("adjudications file must contain a JSON list")
+
+    conn_doc = psycopg2.connect("dbname=document_intelligence user=postgres host=/var/run/postgresql")
+    try:
+        with conn_doc.cursor() as cur:
+            for record in records:
+                if record.get("canary_batch_id") != batch_id:
+                    raise ValueError("adjudication batch mismatch")
+                if record.get("adjudication_method") != "INDEPENDENT_SEMANTIC_REVIEW":
+                    raise ValueError("adjudication_method must be INDEPENDENT_SEMANTIC_REVIEW")
+                cur.execute("""
+                    INSERT INTO structured_fact_semantic_adjudications (
+                        entity_id, run_id, canary_batch_id, verdict,
+                        commercial_type_valid, product_evidence_valid,
+                        quantity_product_bound, unit_price_evidence_valid,
+                        total_price_evidence_valid, adjudicated_by,
+                        adjudication_method, source_quote, notes
+                    ) VALUES (
+                        %(entity_id)s, %(run_id)s, %(canary_batch_id)s, %(verdict)s,
+                        %(commercial_type_valid)s, %(product_evidence_valid)s,
+                        %(quantity_product_bound)s, %(unit_price_evidence_valid)s,
+                        %(total_price_evidence_valid)s, %(adjudicated_by)s,
+                        %(adjudication_method)s, %(source_quote)s, %(notes)s
+                    )
+                """, record)
+        conn_doc.commit()
+    finally:
+        conn_doc.close()
+    print(f"PHASE_B_ADJUDICATE_COMPLETE = YES")
+    print(f"PHASE_B_RECORDS_WRITTEN = {len(records)}")
+    print("PHASE_B_TRUST_MUTATION = 0")
+
+
+def phase_c_apply_trust(batch_id):
+    """Apply trust only from independent records; missing review stays pending."""
+    conn_doc = psycopg2.connect("dbname=document_intelligence user=postgres host=/var/run/postgresql")
+    trusted = rejected = pending = 0
+    try:
+        with conn_doc.cursor(cursor_factory=RealDictCursor) as cur:
+            cur.execute("""
+                SELECT e.id AS entity_id, e.run_id, e.entity_type,
+                       e.quantity_value, e.unit_price_value, e.total_price_value
+                FROM structured_entities e
+                JOIN structured_extraction_runs r ON r.id = e.run_id
+                WHERE r.canary_batch_id = %s
+            """, (batch_id,))
+            entities = cur.fetchall()
+            for entity in entities:
+                cur.execute("""
+                    SELECT verdict, commercial_type_valid, product_evidence_valid,
+                           adjudication_method, adjudicated_by
+                    FROM structured_fact_semantic_adjudications
+                    WHERE entity_id = %s AND run_id = %s AND canary_batch_id = %s
+                    ORDER BY created_at DESC, id DESC
+                    LIMIT 1
+                """, (entity['entity_id'], entity['run_id'], batch_id))
+                record = cur.fetchone()
+                verdict = adjudication_metric_verdict(record)
+                if verdict is None:
+                    pending += 1
+                    continue
+                if (
+                    verdict == 'PRODUCT_CORRECT'
+                    and entity['entity_type'] in COMMERCIAL_ENTITY_TYPES
+                    and adjudication_allows_trust(record)
+                ):
+                    cur.execute("""
+                        UPDATE structured_entities
+                        SET structured_fact_trust_state = 'TRUSTED_PRODUCTION'
+                        WHERE id = %s
+                    """, (entity['entity_id'],))
+                    cur.execute("""
+                        INSERT INTO structured_fact_trust_decisions (
+                            entity_id, run_id, from_state, to_state, decision_reason,
+                            review_method, reviewed_by, canary_batch_id
+                        ) VALUES (%s, %s, 'CANARY_PENDING_REVIEW', 'TRUSTED_PRODUCTION',
+                                  'INDEPENDENT_SEMANTIC_REVIEW_PASSED',
+                                  'INDEPENDENT_SEMANTIC_REVIEW', %s, %s)
+                    """, (entity['entity_id'], entity['run_id'], record['adjudicated_by'], batch_id))
+                    trusted += 1
+                else:
+                    cur.execute("""
+                        UPDATE structured_entities
+                        SET structured_fact_trust_state = 'QUALITY_REJECTED'
+                        WHERE id = %s
+                    """, (entity['entity_id'],))
+                    cur.execute("""
+                        INSERT INTO structured_fact_trust_decisions (
+                            entity_id, run_id, from_state, to_state, decision_reason,
+                            review_method, reviewed_by, canary_batch_id
+                        ) VALUES (%s, %s, 'CANARY_PENDING_REVIEW', 'QUALITY_REJECTED',
+                                  %s, 'INDEPENDENT_SEMANTIC_REVIEW', %s, %s)
+                    """, (entity['entity_id'], entity['run_id'], verdict, record['adjudicated_by'], batch_id))
+                    rejected += 1
+
+            cur.execute("""
+                UPDATE structured_extraction_runs r
+                SET structured_fact_trust_state = CASE
+                    WHEN EXISTS (
+                        SELECT 1 FROM structured_entities e
+                        WHERE e.run_id = r.id AND e.structured_fact_trust_state = 'CANARY_PENDING_REVIEW'
+                    ) THEN 'CANARY_PENDING_REVIEW'
+                    WHEN EXISTS (
+                        SELECT 1 FROM structured_entities e
+                        WHERE e.run_id = r.id AND e.structured_fact_trust_state = 'TRUSTED_PRODUCTION'
+                    ) THEN 'TRUSTED_PRODUCTION'
+                    ELSE 'QUALITY_REJECTED'
+                END
+                WHERE r.canary_batch_id = %s
+            """, (batch_id,))
+        conn_doc.commit()
+    finally:
+        conn_doc.close()
+    print("PHASE_C_APPLY_TRUST_COMPLETE = YES")
+    print(f"PHASE_C_TRUSTED = {trusted}")
+    print(f"PHASE_C_REJECTED = {rejected}")
+    print(f"PHASE_C_PENDING_NO_ADJUDICATION = {pending}")
+
+
 if __name__ == "__main__":
-    main()
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--phase", choices=("extract", "adjudicate", "apply-trust"), default="extract")
+    parser.add_argument("--limit", type=int, default=INITIAL_CANARY_N)
+    parser.add_argument("--batch-id")
+    parser.add_argument("--adjudications")
+    args = parser.parse_args()
+    if args.phase == "extract":
+        main(limit=args.limit)
+    elif args.phase == "adjudicate":
+        if not args.batch_id or not args.adjudications:
+            parser.error("--phase adjudicate requires --batch-id and --adjudications")
+        phase_b_adjudicate(args.batch_id, args.adjudications)
+    else:
+        if not args.batch_id:
+            parser.error("--phase apply-trust requires --batch-id")
+        phase_c_apply_trust(args.batch_id)

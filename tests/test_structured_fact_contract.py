@@ -69,7 +69,10 @@ def test_semantic_adjudication_is_independent_and_fail_closed():
 
 
 def test_missing_entity_type_and_evidence_are_fail_closed():
-    assert "else 'PRODUCT'" not in open("src/services/category_opportunity_service.py", encoding="utf-8").read()
+    service_text = open("src/services/category_opportunity_service.py", encoding="utf-8").read()
+    assert "else 'PRODUCT'" not in service_text
+    assert "has_source_evidence" not in service_text
+    assert "('PRODUCT', 'MATERIAL', 'EQUIPMENT', 'GOODS')" not in service_text
     assert "DEFAULT 'PRODUCT'" not in open("src/migrations/crm_v4_structured_fact_schema_1.sql", encoding="utf-8").read()
     assert adjudication_allows_trust({
         "verdict": "PRODUCT_CORRECT",
@@ -77,6 +80,15 @@ def test_missing_entity_type_and_evidence_are_fail_closed():
         "product_evidence_valid": False,
         "adjudication_method": "INDEPENDENT_SEMANTIC_REVIEW",
     }) is False
+
+
+def test_canary_phase_gates_are_explicit():
+    script = open("scripts/run_structured_fact_canary.py", encoding="utf-8").read()
+    assert "PHASE_A_EXTRACT_COMPLETE = YES" in script
+    assert "phase_b_adjudicate" in script
+    assert "phase_c_apply_trust" in script
+    assert "NO_ADJUDICATION_AUTO_REJECT = 0" in script
+    assert "d.validation_status" in script
 
 # 1. Numeric Parser Unit Tests
 def test_numeric_parser_formats():
