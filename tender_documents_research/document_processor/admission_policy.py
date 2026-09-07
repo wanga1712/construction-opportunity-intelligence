@@ -7,6 +7,7 @@ from typing import Any, Mapping
 ADMISSION_ELIGIBLE = "ELIGIBLE"
 ADMISSION_EXCLUDED = "EXCLUDED"
 ADMISSION_HOLD = "HOLD"
+ADMISSION_POLICY_VERSION = "BUSINESS_RESEARCH_ADMISSION_V1"
 
 
 def authority_allows_queue(authority: Mapping[str, Any] | None) -> bool:
@@ -29,5 +30,9 @@ def admission_claim_sql(alias: str = "q") -> str:
     return (
         f" AND COALESCE({alias}.category_context->>'admission_state', "
         f"{alias}.category_context->'admission'->>'admission_state') = 'ELIGIBLE'"
+        f" AND COALESCE({alias}.category_context->>'admission_policy_version', "
+        f"{alias}.category_context->'admission'->>'policy_version') = '"
+        f"{ADMISSION_POLICY_VERSION}'"
+        f" AND COALESCE({alias}.category_context->>'admission_evaluated_at', "
+        f"{alias}.category_context->'admission'->>'admission_evaluated_at') IS NOT NULL"
     )
-

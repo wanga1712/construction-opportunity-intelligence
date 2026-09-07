@@ -157,7 +157,7 @@ class S13V2QueueRepository(QueueRepository):
     def _get_dwrr_policy(self):
         """Lazy-init shared DWRR policy (survives across claim calls)."""
         if self._dwrr_policy is None:
-            from src.services.dwrr_claim_policy import DWRRClaimPolicy
+            from tender_documents_research.document_processor.dwrr_claim_policy import DWRRClaimPolicy
             self._dwrr_policy = DWRRClaimPolicy()
         return self._dwrr_policy
 
@@ -226,7 +226,7 @@ class S13V2QueueRepository(QueueRepository):
             return [dict(r) for r in rows]
 
         # ── Two-phase weighted claim with per-band diverse pool ──────────
-        from src.services.dwrr_claim_policy import pool_size
+        from tender_documents_research.document_processor.dwrr_claim_policy import pool_size
 
         candidate_limit = pool_size(batch_size)
         per_band_limit = max(candidate_limit, 20)

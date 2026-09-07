@@ -27,6 +27,10 @@ from src.services.commercial_routing_v3.research_queue_lifecycle import (
 from src.services.commercial_routing_v3.document_lane_authority import (
     apply_current_opportunity_authority,
 )
+from tender_documents_research.document_processor.research_dedup import (
+    canonical_research_identity,
+    research_disposition,
+)
 
 logger = logging.getLogger("commercial_routing_v3.queue_producer")
 
@@ -43,6 +47,19 @@ _DOC_ENV_FILES = (
     "/etc/tender-docs-db.env",
     "/opt/tender_documents_research/.env",
 )
+
+
+def _document_dsn_from_env() -> dict[str, Any]:
+    """Build the document DB DSN only from the document credential authority."""
+    return {
+        "host": os.getenv("S13_DOCUMENT_DB_HOST")
+        if os.getenv("S13_DOCUMENT_DB_HOST") not in (None, "", "S7")
+        else "127.0.0.1",
+        "port": int(os.getenv("S13_DOCUMENT_DB_PORT") or "5432"),
+        "dbname": "document_intelligence",
+        "user": os.getenv("S13_DOCUMENT_DB_USER") or "",
+        "password": os.getenv("S13_DOCUMENT_DB_PASSWORD") or "",
+    }
 
 
 def _load_doc_env() -> None:
@@ -107,19 +124,7 @@ class CommercialRoutingV3QueueProducer:
     def __init__(self, *, enabled: bool = True) -> None:
         self.enabled = enabled
         # S13 local document_intelligence via CRM app role (never S7 tender-docs DB_*).
-        self._doc_dsn = {
-            "host": os.getenv("S13_DOCUMENT_DB_HOST")
-            if os.getenv("S13_DOCUMENT_DB_HOST") not in (None, "", "S7")
-            else "127.0.0.1",
-            "port": int(
-                os.getenv("S13_DOCUMENT_DB_PORT")
-                or os.getenv("CRM_DB_PORT")
-                or "5432"
-            ),
-            "dbname": "document_intelligence",
-            "user": os.getenv("CRM_DB_USER") or "crm_app",
-            "password": os.getenv("CRM_DB_PASSWORD") or "",
-        }
+        self._doc_dsn = _document_dsn_from_env()
         self._crm_dsn = {
             "host": os.getenv("CRM_DB_HOST"),
             "port": int(os.getenv("CRM_DB_PORT", "5432")),
@@ -269,7 +274,8 @@ class CommercialRoutingV3QueueProducer:
                                p.end_date, p.crm_stage, p.award_status, p.okpd_code,
                                a.procurement_scope_type, a.scope_confidence,
                                a.admission_state, a.admission_reason,
-                               a.admission_policy_version
+                               a.admission_policy_version, a.admission_evaluated_at,
+                               a.scope_version, a.source_lifecycle
                         FROM crm_procurements p
                         JOIN crm_procurement_scope_authority a
                           ON a.procurement_id = p.id
@@ -322,6 +328,11 @@ class CommercialRoutingV3QueueProducer:
                                     "admission_state": proc["admission_state"],
                                     "admission_reason": proc["admission_reason"],
                                     "admission_policy_version": proc["admission_policy_version"],
+                                    "admission_evaluated_at": (
+                                        proc["admission_evaluated_at"].isoformat()
+                                        if proc["admission_evaluated_at"] is not None else None
+                                    ),
+                                    "authority_scope_version": proc["scope_version"],
                                     "procurement_scope_type": proc["procurement_scope_type"],
                                     "link_count": 0,
                                     "exclusion_reason": "NO_CANONICAL_DOCUMENTS",
@@ -334,6 +345,11 @@ class CommercialRoutingV3QueueProducer:
                                     "admission_state": proc["admission_state"],
                                     "admission_reason": proc["admission_reason"],
                                     "admission_policy_version": proc["admission_policy_version"],
+                                    "admission_evaluated_at": (
+                                        proc["admission_evaluated_at"].isoformat()
+                                        if proc["admission_evaluated_at"] is not None else None
+                                    ),
+                                    "authority_scope_version": proc["scope_version"],
                                     "procurement_scope_type": proc["procurement_scope_type"],
                                     "link_count": lc,
                                 }
@@ -355,26 +371,50 @@ class CommercialRoutingV3QueueProducer:
                                 "candidate_score": None,
                                 "research_action": ResearchAction.DEEP_RESEARCH.value,
                                 "research_depth": "highest",
-                                "queue_lane": "open_active",
+                                "queue_lane": (
+                                    "awarded_recent"
+                                    if proc["source_lifecycle"] == "AWARDED"
+                                    else "open_active"
+                                ),
                                 "priority_score": 50,
                                 "dispatchable": dispatchable,
                             }
+                            identity = canonical_research_identity(
+                                source_family=task["source_table"],
+                                notice_number=task["contract_number"],
+                                procurement_id=task["procurement_id"],
+                            )
+                            task["research_identity_key"] = identity.key
+                            category_context["research_identity_key"] = identity.key
 
                             if dry_run:
                                 with doc_conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as check_cur:
                                     check_cur.execute(
-                                        "SELECT status FROM document_processing_queue WHERE procurement_id = %s AND pipeline_generation = %s",
-                                        (pid, PIPELINE_GENERATION)
+                                        """
+                                        SELECT q.status,
+                                               EXISTS (
+                                                   SELECT 1
+                                                     FROM document_processing_results r
+                                                    WHERE r.queue_id = q.id
+                                                      AND r.status = 'COMPLETED'
+                                               ) AS successful_parse
+                                         FROM document_processing_queue q
+                                         WHERE (q.source_table = %s AND q.contract_number = %s)
+                                            OR (q.contract_number IS NULL AND q.procurement_id = %s)
+                                         ORDER BY q.id
+                                        """,
+                                        (task["source_table"], task["contract_number"], task["procurement_id"]),
                                     )
-                                    existing = check_cur.fetchone()
-                                    if existing is None:
+                                    existing = check_cur.fetchall()
+                                    disposition = research_disposition(existing)
+                                    if disposition == "NEW_RESEARCH_ALLOWED":
                                         action = "inserted"
+                                    elif disposition == "RETRY_EXISTING_IDENTITY":
+                                        action = "updated"
+                                    elif disposition == "REUSE_EXISTING_RESEARCH":
+                                        action = "reused_existing_research"
                                     else:
-                                        existing_status = existing.get("status")
-                                        if existing_status in ("PENDING", "PROCESSING", "COMPLETED", "FAILED", "NO_LINKS"):
-                                            action = "skipped_already_active"
-                                        else:
-                                            action = "updated"
+                                        action = "skipped_already_active"
                             else:
                                 result = self._upsert_queue_task(task, status=status, conn=doc_conn)
                                 action = result.get("action")
@@ -391,7 +431,7 @@ class CommercialRoutingV3QueueProducer:
                                     no_links_updated += 1
                                 else:
                                     target_waiting_updated += 1
-                            elif action == "skipped_already_active":
+                            elif action in ("skipped_already_active", "reused_existing_research"):
                                 skipped_already_active += 1
                         except Exception as exc:
                             errors += 1
@@ -491,8 +531,8 @@ class CommercialRoutingV3QueueProducer:
         track_u = str(track or "").upper()
         action_u = str(decision.get("research_action") or "").upper()
 
-        # AI_QUEUE_ADMISSION_GATE=NO: NO_COMMERCIAL_ENTRY, SKIP, WOOD do NOT gate queue insertion.
-        # Only hard lifecycle states (HOLD/CLOSED via admission) and zero-links block executable status.
+        # Persisted business admission gates queue insertion; model signals only
+        # determine ordering after the authority check above.
 
         task = {
             "procurement_id": procurement_id,
@@ -515,13 +555,22 @@ class CommercialRoutingV3QueueProducer:
                 "admission_state": proc.get("admission_state"),
                 "admission_reason": proc.get("admission_reason"),
                 "admission_policy_version": proc.get("admission_policy_version"),
+                "admission_evaluated_at": (
+                    proc["admission_evaluated_at"].isoformat()
+                    if proc.get("admission_evaluated_at") is not None else None
+                ),
+                "authority_scope_version": proc.get("scope_version"),
                 "procurement_scope_type": proc.get("procurement_scope_type"),
             },
             "candidate_level": decision.get("candidate_medal"),
             "candidate_score": None,
             "research_action": decision.get("research_action"),
             "research_depth": decision.get("research_depth"),
-            "queue_lane": admission.research_lane or decision.get("queue_lane"),
+            "queue_lane": (
+                "awarded_recent"
+                if proc.get("source_lifecycle") == "AWARDED"
+                else admission.research_lane or decision.get("queue_lane")
+            ),
             "priority_score": admission.research_priority or decision.get("priority_score") or 0,
             "queue_state": admission.queue_state,
             "research_lane": admission.research_lane,
@@ -681,7 +730,8 @@ class CommercialRoutingV3QueueProducer:
                            p.auction_name, p.okpd_code, p.crm_stage, p.award_status,
                            a.procurement_scope_type, a.scope_confidence,
                            a.admission_state, a.admission_reason,
-                           a.admission_policy_version
+                           a.admission_policy_version, a.admission_evaluated_at,
+                           a.scope_version, a.source_lifecycle
                     FROM crm_procurements p
                     LEFT JOIN crm_procurement_scope_authority a ON a.procurement_id = p.id
                     WHERE p.id = %s
@@ -705,7 +755,8 @@ class CommercialRoutingV3QueueProducer:
                            p.auction_name, p.okpd_code, p.crm_stage, p.award_status,
                            sa.procurement_scope_type, sa.scope_confidence,
                            sa.admission_state, sa.admission_reason,
-                           sa.admission_policy_version,
+                           sa.admission_policy_version, sa.admission_evaluated_at,
+                           sa.scope_version, sa.source_lifecycle,
                            p.ai_assessment_status
                     FROM procurement_ai_assessments a
                     JOIN crm_procurements p ON p.id = a.procurement_id
@@ -761,8 +812,17 @@ class CommercialRoutingV3QueueProducer:
 
     def _upsert_queue_task(self, task: Dict[str, Any], *, status: str = "PRE_RESEARCH_WAITING", last_error: Optional[str] = None, conn: Optional[Any] = None) -> Dict[str, Any]:
         sql_check = """
-            SELECT id, status, research_depth FROM document_processing_queue
-            WHERE procurement_id = %s AND pipeline_generation = %s
+            SELECT q.id, q.status, q.research_depth,
+                   EXISTS (
+                       SELECT 1
+                         FROM document_processing_results r
+                        WHERE r.queue_id = q.id
+                          AND r.status = 'COMPLETED'
+                   ) AS successful_parse
+             FROM document_processing_queue q
+             WHERE (q.source_table = %s AND q.contract_number = %s)
+                OR (q.contract_number IS NULL AND q.procurement_id = %s)
+             ORDER BY q.id
         """
         sql_insert = """
             INSERT INTO document_processing_queue
@@ -802,13 +862,27 @@ class CommercialRoutingV3QueueProducer:
             should_close = True
         try:
             with doc.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
-                cur.execute(sql_check, (task["procurement_id"], PIPELINE_GENERATION))
-                existing = cur.fetchone()
-                if existing is not None:
-                    existing_status = existing.get("status")
-                    if existing_status in ("PENDING", "PROCESSING", "COMPLETED", "FAILED", "NO_LINKS"):
-                        return {"action": "skipped_already_active", "queue_id": existing["id"], "status": existing_status, **task}
+                cur.execute(
+                    sql_check,
+                    (task["source_table"], task["contract_number"], task["procurement_id"]),
+                )
+                existing_rows = cur.fetchall()
+                disposition = research_disposition(existing_rows)
+                existing = existing_rows[0] if existing_rows else None
+                if disposition == "REUSE_EXISTING_RESEARCH":
+                    return {"action": "reused_existing_research", "queue_id": existing["id"], **task}
+                if disposition in {
+                    "DO_NOT_ENQUEUE_DUPLICATE_PROCESSING",
+                    "DO_NOT_ENQUEUE_DUPLICATE_PENDING",
+                }:
+                    return {
+                        "action": "skipped_already_active",
+                        "queue_id": existing["id"] if existing else None,
+                        "status": existing.get("status") if existing else None,
+                        **task,
+                    }
 
+                if existing is not None and disposition == "RETRY_EXISTING_IDENTITY":
                     cur.execute(
                         sql_update,
                         (

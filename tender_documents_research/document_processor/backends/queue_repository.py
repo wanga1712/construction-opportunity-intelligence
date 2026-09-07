@@ -12,6 +12,11 @@ import psycopg2
 import psycopg2.extras
 from database_work.database_connection import DatabaseManager
 from document_processor.admission_policy import admission_claim_sql
+from document_processor.admission_reconciliation import (
+    MAX_ADMISSION_STALENESS_BEFORE_CLAIM,
+    load_current_authority,
+    reconcile_active_queue_rows,
+)
 
 PIPELINE_S13V2 = "S13_V2"
 
@@ -70,11 +75,17 @@ class S13V2QueueRepository(QueueRepository):
     approach: SQL locks a candidate pool, Python DWRR selects from it,
     then SQL claims only the selected IDs — all within one transaction.
     """
-    def __init__(self, dsn: Dict[str, Any], pipeline_generation: str = PIPELINE_S13V2) -> None:
+    def __init__(
+        self,
+        dsn: Dict[str, Any],
+        pipeline_generation: str = PIPELINE_S13V2,
+        authority_loader=load_current_authority,
+    ) -> None:
         self._dsn = dsn
         self._conn: Optional[psycopg2.extensions.connection] = None
         self._pipeline_generation = pipeline_generation
         self._dwrr_policy: Optional[Any] = None  # lazy init
+        self._authority_loader = authority_loader
 
     def _get_conn(self) -> psycopg2.extensions.connection:
         if self._conn is None or self._conn.closed:
@@ -85,7 +96,7 @@ class S13V2QueueRepository(QueueRepository):
     def _get_dwrr_policy(self):
         """Lazy-init shared DWRR policy (survives across claim calls)."""
         if self._dwrr_policy is None:
-            from src.services.dwrr_claim_policy import DWRRClaimPolicy
+            from document_processor.dwrr_claim_policy import DWRRClaimPolicy
             self._dwrr_policy = DWRRClaimPolicy()
         return self._dwrr_policy
 
@@ -100,6 +111,8 @@ class S13V2QueueRepository(QueueRepository):
         force_table: Optional[str] = None,
         queue_lanes: Optional[Sequence[str]] = None,
     ) -> List[Dict[str, Any]]:
+        if not self.reconcile_active_admission():
+            return []
         lane_filter = ""
         lane_params: List[Any] = []
         if queue_lanes:
@@ -165,7 +178,7 @@ class S13V2QueueRepository(QueueRepository):
             return self._adapt_rows(rows)
 
         # ── Two-phase weighted claim with per-band diverse pool ──────────
-        from src.services.dwrr_claim_policy import pool_size
+        from document_processor.dwrr_claim_policy import pool_size
 
         candidate_limit = pool_size(batch_size)
         per_band_limit = max(candidate_limit, 20)
@@ -287,10 +300,44 @@ class S13V2QueueRepository(QueueRepository):
 
             # Phase D: Commit (releases locks on unclaimed pool rows)
             conn.commit()
-            return self._adapt_rows(claimed_rows)
         except Exception:
             conn.rollback()
             raise
+        return self._adapt_rows(claimed_rows)
+
+    def reconcile_active_admission(self) -> bool:
+        """Refresh active admission metadata immediately before every claim."""
+        conn = self._get_conn()
+        try:
+            with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+                cur.execute(
+                    """
+                    SELECT id, procurement_id, status, category_context
+                    FROM document_processing_queue
+                    WHERE status IN ('PENDING', 'PRE_RESEARCH_WAITING', 'pending')
+                      AND (pipeline_generation = %s OR pipeline_generation IS NULL)
+                    """,
+                    (self.pipeline_generation(),),
+                )
+                rows = [dict(row) for row in cur.fetchall()]
+            authorities = self._authority_loader([int(row["procurement_id"]) for row in rows])
+            changes = reconcile_active_queue_rows(rows, authorities)
+            with conn.cursor() as cur:
+                for change in changes:
+                    cur.execute(
+                        """
+                        UPDATE document_processing_queue
+                           SET category_context = %s
+                         WHERE id = %s
+                           AND status IN ('PENDING', 'PRE_RESEARCH_WAITING', 'pending')
+                        """,
+                        (psycopg2.extras.Json(change["category_context"]), change["queue_id"]),
+                    )
+            conn.commit()
+            return True
+        except Exception:
+            conn.rollback()
+            return False
 
     @staticmethod
     def _adapt_rows(rows) -> List[Dict[str, Any]]:
