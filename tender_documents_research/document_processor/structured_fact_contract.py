@@ -260,6 +260,8 @@ class ExtractionRun:
     error_code: Optional[str] = None
     error_message: Optional[str] = None
     canary_batch_id: Optional[str] = None
+    source_available: bool = False
+    extraction_eligible: bool = False
     entities: List[StructuredEntity] = field(default_factory=list)
 
     def __post_init__(self):

@@ -87,14 +87,15 @@ def save_extraction_run(conn, run: ExtractionRun) -> int:
                     page_or_sheet, row_number, source_text_snapshot, source_text_sha256,
                     source_validator_name, source_validator_version, source_validation_method,
                     extractor_name, extractor_version, extraction_method, prompt_version,
-                    model_name, status, raw_response, error_code, error_message, canary_batch_id, completed_at
+                    model_name, status, raw_response, error_code, error_message, canary_batch_id, completed_at,
+                    source_available, extraction_eligible
                 ) VALUES (
                     %s, %s, %s, %s,
                     %s, %s, %s, %s,
                     %s, %s, %s, %s,
                     %s, %s, %s,
                     %s, %s, %s, %s,
-                    %s, %s, %s, %s, %s, %s, NOW()
+                    %s, %s, %s, %s, %s, %s, NOW(), %s, %s
                 )
                 RETURNING id
             """, (
@@ -105,7 +106,8 @@ def save_extraction_run(conn, run: ExtractionRun) -> int:
                 run.extractor_name, run.extractor_version, run.extraction_method, run.prompt_version,
                 run.model_name, run.status,
                 psycopg2.extras.Json(run.raw_response) if run.raw_response is not None else None,
-                run.error_code, run.error_message, run.canary_batch_id
+                run.error_code, run.error_message, run.canary_batch_id,
+                run.source_available, run.extraction_eligible
             ))
             run_id = cur.fetchone()["id"]
 

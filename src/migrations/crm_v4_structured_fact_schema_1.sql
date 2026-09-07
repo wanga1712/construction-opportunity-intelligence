@@ -43,7 +43,7 @@ CREATE TABLE IF NOT EXISTS structured_entities (
     category_code VARCHAR(100) NOT NULL,
     subcategory_code VARCHAR(100),
     entity_fingerprint VARCHAR(64) NOT NULL,
-    entity_type VARCHAR(50) NOT NULL DEFAULT 'PRODUCT',
+    entity_type VARCHAR(50) NOT NULL DEFAULT 'UNKNOWN',
     manufacturer_raw TEXT,
     manufacturer_normalized TEXT,
     brand_raw TEXT,

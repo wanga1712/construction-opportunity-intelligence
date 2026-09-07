@@ -46,6 +46,37 @@ from tender_documents_research.document_processor.r4_input_selector import (
     get_r4_input_candidates,
     build_r4_source_snapshot,
 )
+from tender_documents_research.document_processor.structured_fact_adjudication import (
+    adjudication_allows_trust,
+    adjudication_metric_verdict,
+)
+
+
+def test_semantic_adjudication_is_independent_and_fail_closed():
+    assert adjudication_metric_verdict(None) is None
+    assert adjudication_allows_trust(None) is False
+    record = {
+        "verdict": "PRODUCT_CORRECT",
+        "commercial_type_valid": True,
+        "product_evidence_valid": True,
+        "adjudication_method": "INDEPENDENT_SEMANTIC_REVIEW",
+    }
+    assert adjudication_metric_verdict(record) == "PRODUCT_CORRECT"
+    assert adjudication_allows_trust(record) is True
+    record["adjudication_method"] = "QUOTE_VERIFICATION_ONLY"
+    assert adjudication_metric_verdict(record) is None
+    assert adjudication_allows_trust(record) is False
+
+
+def test_missing_entity_type_and_evidence_are_fail_closed():
+    assert "else 'PRODUCT'" not in open("src/services/category_opportunity_service.py", encoding="utf-8").read()
+    assert "DEFAULT 'PRODUCT'" not in open("src/migrations/crm_v4_structured_fact_schema_1.sql", encoding="utf-8").read()
+    assert adjudication_allows_trust({
+        "verdict": "PRODUCT_CORRECT",
+        "commercial_type_valid": True,
+        "product_evidence_valid": False,
+        "adjudication_method": "INDEPENDENT_SEMANTIC_REVIEW",
+    }) is False
 
 # 1. Numeric Parser Unit Tests
 def test_numeric_parser_formats():

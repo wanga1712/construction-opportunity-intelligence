@@ -194,7 +194,7 @@ class CategoryOpportunityService:
                         'product_relation': r[20] if len(r) > 20 else None,
                         'product_name_raw': r[21] if len(r) > 21 else None,
                         'product_name_normalized': r[22] if len(r) > 22 else None,
-                        'entity_type': r[23] if len(r) > 23 else 'PRODUCT',
+                        'entity_type': r[23] if len(r) > 23 else 'UNKNOWN',
                         'has_product_name_evidence': r[24] if len(r) > 24 else True,
                         'has_quantity_evidence': r[25] if len(r) > 25 else True,
                         'has_unit_price_evidence': r[26] if len(r) > 26 else True,
