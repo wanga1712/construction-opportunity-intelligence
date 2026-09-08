@@ -82,7 +82,7 @@ def render_dashboard_header() -> None:
         import psycopg2
         from src.services.crm_db_runtime import require_crm_db_connect_kwargs
         kwargs = dict(require_crm_db_connect_kwargs())
-        kwargs["dbname"] = "tender_monitor"
+        kwargs["dbname"] = "document_intelligence"
         kwargs["connect_timeout"] = 5
         return psycopg2.connect(**kwargs)
 
