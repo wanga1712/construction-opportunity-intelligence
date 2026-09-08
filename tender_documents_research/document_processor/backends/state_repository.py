@@ -4,12 +4,25 @@ from __future__ import annotations
 
 import logging
 import threading
+from functools import wraps
 from abc import ABC, abstractmethod
 from typing import Optional, Tuple
 
 from document_processor.processed_registry import ProcessedRegistry
 
 StatusRow = Tuple[str]
+
+
+def _rollback_on_error(method):
+    """Reset a reused psycopg2 connection before propagating a DB failure."""
+    @wraps(method)
+    def wrapped(self, *args, **kwargs):
+        try:
+            return method(self, *args, **kwargs)
+        except Exception:
+            self._get_conn().rollback()
+            raise
+    return wrapped
 
 
 class ProcessingStateRepository(ABC):
@@ -135,6 +148,7 @@ class S13V2StateRepository(ProcessingStateRepository):
             cur.execute(sql, params)
             return cur.fetchone()
 
+    @_rollback_on_error
     def ensure_download_file(self, queue_id, procurement_id, table_source, url, url_hash, file_name, source_id=None,
                              canonical_source_document_id=None, physical_download_key=None):
         if procurement_id is None:
@@ -187,6 +201,7 @@ class S13V2StateRepository(ProcessingStateRepository):
                 )
         conn.commit()
 
+    @_rollback_on_error
     def get_file_status(self, procurement_id, table_source, file_name, url_hash):
         del procurement_id, table_source, file_name
         if not url_hash:
@@ -197,6 +212,7 @@ class S13V2StateRepository(ProcessingStateRepository):
         )
         return (row[0], row[1]) if row else None
 
+    @_rollback_on_error
     def mark_file_status(self, procurement_id, table_source, file_name, url_hash, status, worker_id=None):
         del procurement_id, table_source, file_name
         if not url_hash:
@@ -212,6 +228,7 @@ class S13V2StateRepository(ProcessingStateRepository):
                 raise RuntimeError(f"S13 document_files row missing for url_hash={url_hash}")
         conn.commit()
 
+    @_rollback_on_error
     def finalize_download_status(self, procurement_id, table_source, file_name, url_hash, success, error_message=None, local_path=None):
         path_obj = None
         if local_path:
@@ -240,6 +257,7 @@ class S13V2StateRepository(ProcessingStateRepository):
                 self.logger.warning(f"S13 document_files row missing for url_hash={url_hash} or file_name={file_name}")
         conn.commit()
 
+    @_rollback_on_error
     def record_download_attempt(self, queue_id, procurement_id, source_url, url_hash, attempt_number, result, error_class=None, http_status=None, bytes_received=None, duration_ms=None):
         conn = self._get_conn()
         with conn.cursor() as cur:
@@ -283,6 +301,7 @@ class S13V2StateRepository(ProcessingStateRepository):
         )
         return (row[0],) if row else None
 
+    @_rollback_on_error
     def finalize_processing_status(self, procurement_id, table_source, file_name, is_interesting, error_message=None):
         del table_source, is_interesting
         conn = self._get_conn()

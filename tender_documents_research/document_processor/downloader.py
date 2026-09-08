@@ -1,4 +1,5 @@
 import os
+import hashlib
 import re
 import shutil
 import time
@@ -195,6 +196,13 @@ class Downloader:
         else:
             return f"https://zakupki.gov.ru/223/contract/public/contract/view/general-information.html?regNumber={contract_number}"
 
+    @staticmethod
+    def _child_url_hash(parent_url_hash: str, child_path: Path, task_dir: Path) -> str:
+        """Give extracted members stable identities without pretending they have URLs."""
+        relative = child_path.relative_to(task_dir).as_posix()
+        material = f"{parent_url_hash}\0{relative}".encode("utf-8")
+        return hashlib.sha256(material).hexdigest()
+
     def download_and_extract_legacy(self, task_id: int, links: List[Tuple[str, Optional[str]]], registry_type: Optional[str] = None, contract_number: Optional[str] = None, table_source: Optional[str] = None) -> List[Path]:
         res = self.download_and_extract(task_id, links, registry_type, contract_number, table_source)
         return res.files
@@ -246,20 +254,20 @@ class Downloader:
                 canonical_id = item[2] if len(item) > 2 else None
                 phys_key = item[3] if len(item) > 3 else None
 
-                futures.append(executor.submit(
+                futures.append((executor.submit(
                     self._process_single_link,
                     task_id, task_dir, url, db_file_name,
                     tender_id, table_source, remote_dir, safe_prefix, resolved_source_id,
                     canonical_id, phys_key
-                ))
+                ), url))
 
-            for future in futures:
+            for future, source_url in futures:
                 try:
                     result_files, failure, canonical_id, phys_key, u_hash = future.result()
                     if result_files:
                         raw_files.extend(result_files)
                         for f_path in result_files:
-                            file_identity_map[f_path.name] = (canonical_id, phys_key, u_hash)
+                            file_identity_map[str(f_path)] = (canonical_id, phys_key, u_hash, source_url)
                     if failure:
                         failures.append(failure)
                 except Exception as exc:
@@ -270,7 +278,7 @@ class Downloader:
         # Этап 2: распаковка архивов ПОСЛЕ того как все части скачаны
         files: List[Path] = []
         for f in raw_files:
-            canonical_id, phys_key, u_hash = file_identity_map.get(f.name, (None, None, None))
+            canonical_id, phys_key, u_hash, parent_url = file_identity_map.get(str(f), (None, None, None, None))
             if self.archive_extractor.is_archive(f):
                 extracted = self.archive_extractor.extract_recursive(f, task_dir)
                 if extracted:
@@ -282,14 +290,15 @@ class Downloader:
                         )
                         # Записываем mapping для каждого распакованного из архива файла
                         for child in extracted:
+                            child_hash = self._child_url_hash(u_hash, child, task_dir)
                             self.state_repo.ensure_download_file(
-                                task_id, tender_id, table_source, url="", url_hash=None, file_name=child.name,
+                                task_id, tender_id, table_source, url=parent_url, url_hash=child_hash, file_name=child.name,
                                 source_id=resolved_source_id,
                                 canonical_source_document_id=canonical_id,
                                 physical_download_key=phys_key
                             )
                             self.state_repo.finalize_download_status(
-                                tender_id, table_source, child.name, None, True, None, local_path=child
+                                tender_id, table_source, child.name, child_hash, True, None, local_path=child
                             )
                 else:
                     error_message = f"archive extraction failed: {f.name}"

@@ -1,5 +1,9 @@
 # План рефакторинга CRM Streamlit
 
+## CURRENT WIP — 2026-09-08
+
+**S13-V4-BATCH-10-CORRECTION-1** — `[~]` **IN PROGRESS**. Scope: forensic classification of failed controlled batch rows; deterministic archive-child identity and DB rollback safety; DWRR PostgreSQL claim correction. No admission, Stage1, downloader network logic, parser, V4 semantics, schema, S7, or batch-20 changes.
+
 Живой документ проекта. Он является источником истины для последовательности рефакторинга и фактически выполненных работ.
 
 ## Правила ведения
