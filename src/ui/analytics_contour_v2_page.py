@@ -3,10 +3,8 @@ from __future__ import annotations
 
 import streamlit as st
 
-from src.ui.components.analytics_v2.analytics_expander import render_charts
+from src.ui.components.analytics_v2.dashboard_header import render_dashboard_header
 from src.ui.components.analytics_v2.header import render_header
-from src.ui.components.analytics_v2.kpi_row import render_kpi_row
-from src.ui.components.analytics_v2.limits import render_limits
 from src.ui.components.analytics_v2.mock_data import CARDS
 from src.ui.components.analytics_v2.quick_filters import render_quick_filters
 from src.ui.components.analytics_v2.tabs_lazy_dispatch import render_tabs
@@ -33,17 +31,14 @@ _STICKY_CSS = """
 
 
 def render_analytics_contour_v2_page(service) -> None:
-    """Шапка → KPI → Лимит → Три графика → [Фильтры | Рабочая область]."""
+    """Шапка → Dashboard KPI (factual) → [Фильтры | Рабочая область]."""
     st.session_state["analytics_v2_cards"] = CARDS
 
     st.markdown(_STICKY_CSS, unsafe_allow_html=True)
 
-    st.caption("CRM build: f910bd3+fix-torgi-lifecycle")
+    st.caption("CRM build: analytics-v2-ui-rebuild-1")
     render_header()
-    render_kpi_row()
-    render_limits()
-    st.divider()
-    render_charts()
+    render_dashboard_header()
     st.divider()
 
     left, right = st.columns([1, 3], gap="medium")
