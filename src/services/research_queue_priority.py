@@ -17,18 +17,25 @@ import json
 import math
 import os
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Sequence, Tuple
+from typing import TYPE_CHECKING, Any, Dict, List, Optional, Sequence, Tuple
 
-import numpy as np
+if TYPE_CHECKING:
+    from src.learning.okpd_prior.combined_v2 import ResearchPriorityModelV2
 
-from src.learning.okpd_prior.combined_v2 import ResearchPriorityModelV2
-from src.learning.okpd_prior.model import (
-    BAND_BRONZE,
-    BAND_GOLD,
-    BAND_SILVER,
-    BAND_WOOD,
-    assign_priority_band,
-)
+BAND_GOLD = "GOLD"
+BAND_SILVER = "SILVER"
+BAND_BRONZE = "BRONZE"
+BAND_WOOD = "WOOD"
+
+
+def assign_priority_band(percentile: float) -> str:
+    if percentile >= 0.90:
+        return BAND_GOLD
+    if percentile >= 0.70:
+        return BAND_SILVER
+    if percentile >= 0.40:
+        return BAND_BRONZE
+    return BAND_WOOD
 
 BAND_UNSCORED = "UNSCORED"
 ALL_BANDS: Tuple[str, ...] = (BAND_GOLD, BAND_SILVER, BAND_BRONZE, BAND_WOOD, BAND_UNSCORED)
@@ -97,6 +104,8 @@ class QueueTaskItem:
 
 def load_production_model(model_dir: Optional[str] = None) -> Optional[ResearchPriorityModelV2]:
     """Loads production ResearchPriorityModelV2 from manifest and artifact."""
+    from src.learning.okpd_prior.combined_v2 import ResearchPriorityModelV2
+
     if model_dir is None:
         candidates = [
             Path("data/models/research_priority_v2"),
@@ -174,6 +183,9 @@ class Stage1QueuePriorityCalculator:
             if it.priority_band not in (BAND_GOLD, BAND_SILVER, BAND_BRONZE, BAND_WOOD)
         ]
         if need_scoring and self.model is not None and getattr(self.model, "is_fitted", False):
+            import numpy as np
+            from src.learning.okpd_prior.model import assign_priority_band
+
             titles = [it.auction_name or "" for it in need_scoring]
             okpds = [it.okpd_code or "" for it in need_scoring]
             prices = [float(it.initial_price or 0.0) for it in need_scoring]
