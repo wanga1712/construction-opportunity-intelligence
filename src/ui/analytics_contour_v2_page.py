@@ -36,7 +36,7 @@ def render_analytics_contour_v2_page(service) -> None:
 
     st.markdown(_STICKY_CSS, unsafe_allow_html=True)
 
-    st.caption("CRM build: analytics-v2-ui-rebuild-1")
+    st.caption("CRM build: 53075f6+analytics-v2-ui-rebuild")
     render_header()
     render_dashboard_header()
     st.divider()
