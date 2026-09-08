@@ -3,6 +3,15 @@
 > **Canonical hosts, operators, SSH/DB/service identities and access rules:**
 > [docs/PROJECT_OPERATING_RULES.md](docs/PROJECT_OPERATING_RULES.md).
 > **Refactoring & launch plan:** [docs/REFACTORING_PLAN.md](docs/REFACTORING_PLAN.md) / [docs/CRM_V3_LAUNCH_ROADMAP.md](docs/CRM_V3_LAUNCH_ROADMAP.md).
+> **Analytics Contour V2 UI rebuild:** [docs/ANALYTICS_CONTOUR_V2_UI_REBUILD_PLAN.md](docs/ANALYTICS_CONTOUR_V2_UI_REBUILD_PLAN.md).
+>
+> ### UI Contract (краткий)
+>
+> Dashboard «Аналитический контур V2» отображает фактические KPI из БД:
+> массив 44-ФЗ/223-ФЗ × торги/разыгранные, новые за 24ч (rolling,
+> `crm_created_at`), статус документального pipeline, и медальную
+> transition matrix по category opportunity (не по закупке).
+> `research_prior_band` не является коммерческой медалью.
 
 ---
 
