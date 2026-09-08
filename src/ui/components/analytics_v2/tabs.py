@@ -19,7 +19,7 @@ from src.ui.components.analytics_v2.stage_workspace import (
 _SESSION_TORGI    = "selected_torgi_id"
 _SESSION_KOMISSIA = "selected_komissia_id"
 _SESSION_RAZYGR   = "selected_razygr_id"
-_PAGE_SIZE = 25
+_PAGE_SIZE = 20
 FARTHEST_DEADLINE_FIRST = "FARTHEST_DEADLINE_FIRST"
 NEAREST_DEADLINE_FIRST = "NEAREST_DEADLINE_FIRST"
 DEADLINE_SORT_LABELS = {

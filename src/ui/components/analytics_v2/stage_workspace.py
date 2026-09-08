@@ -28,7 +28,7 @@ from src.services.expert_medal_stage import BRONZE, GOLD, SILVER, WOOD
 from src.services.source_contour import resolve_source_contour
 from src.ui.components.analytics_v2.card_trust import fmt_date, fmt_price
 
-SECTIONS = ("Обзор", "Модель / Категории", "Документы", "История", "Экспертная разметка")
+SECTIONS = ("Сводка", "Возможности", "Документы", "Участники", "История", "ИИ / эксперт")
 FILTERS = (
     ("ALL", "Все"),
     (UNREVIEWED, "Не проверено"),
@@ -108,57 +108,81 @@ def _render_structured_result(state: dict) -> None:
         st.markdown(f"{label}: **{escape(str(value))}**", unsafe_allow_html=True)
 
 
-def _summary(card: dict, stage: str, effective: Any, state: dict, published: bool) -> None:
+def _summary(card: dict, stage: str, effective: Any, state: dict, published: bool,
+             opps: list | None = None, evidence: dict | None = None,
+             entities: dict | None = None) -> None:
     amount, amount_label = _amount(card, stage)
     deadline, deadline_label = _deadline(card, stage)
-    medal = _clean(getattr(effective, "best_candidate_level", None) if effective else None)
-    business = _clean(getattr(effective, "business_relevance", None) if effective else None)
-    ai = _clean(getattr(effective, "ai_status", None) if effective else None) or "UNASSESSED"
-    chips = [MEDAL_LABELS.get(medal, medal) if medal else None, *_human_chips(state),
-             AI_LABELS.get(ai, f"🤖 {ai}"), BUSINESS_LABELS.get(business) if business else None,
-             "✓ Опубликовано в CRM" if published else "Не опубликовано менеджерам"]
-    # Do not surface model proposed_object as human truth chips.
-    chips.extend(filter(None, [f"📎 {card.get('file_count')} документов" if card.get("file_count") else None,
-                               f"🔎 {card.get('match_count')} совпадений" if card.get("match_count") else None,
-                               f"✅ {card.get('evidence_count')} подтверждений" if card.get("evidence_count") else None]))
-    st.markdown(" ".join(f"`{escape(str(chip))}`" for chip in chips if chip))
+    contour = resolve_source_contour(card.get("source_table"))
+
+    # ── Status line: [law] [stage] [region] [deadline] ───────────
+    law_label = contour.get("card_primary", "")
+    region = card.get("delivery_region") or ""
+    dl_text = fmt_date(deadline) if deadline else ""
+    status_chips = [c for c in [law_label, contour.get("card_secondary", ""),
+                                region, f"до {dl_text}" if dl_text else ""] if c]
+    st.markdown(" ".join(f"`{escape(c)}`" for c in status_chips))
+
+    # ── Title ────────────────────────────────────────────────────
     st.markdown(
-        f"<div style='font-size:24px;font-weight:680;line-height:1.3;margin:.35rem 0 .6rem;overflow-wrap:anywhere'>"
+        f"<div style='font-size:22px;font-weight:680;line-height:1.3;"
+        f"margin:.2rem 0 .4rem;overflow-wrap:anywhere'>"
         f"{escape(card.get('auction_name') or 'Закупка без названия')}</div>",
         unsafe_allow_html=True,
     )
-    contour = resolve_source_contour(card.get("source_table"))
-    facts = (
-        ("💰", fmt_price(amount), amount_label),
-        ("📅", fmt_date(deadline), deadline_label),
-        ("📜", contour["card_primary"], contour["card_secondary"]),
-    )
-    st.markdown(
-        "<div style='display:grid;grid-template-columns:repeat(auto-fit,minmax(min(145px,100%),1fr));gap:10px;width:100%'>"
-        + "".join(
-            f"<div style='min-width:0'><b style='font-size:20px;white-space:nowrap'>{icon} {escape(str(value))}</b>"
-            f"<br><small>{escape(label)}</small></div>"
-            for icon, value, label in facts
-        )
-        + "</div>",
-        unsafe_allow_html=True,
-    )
-    st.markdown(
-        f"🏢 {escape(str(card.get('customer') or '—'))} &nbsp;&nbsp; "
-        f"📍 {escape(str(card.get('delivery_region') or '—'))}",
-        unsafe_allow_html=True,
-    )
+
+    # ── Money (prominent) ────────────────────────────────────────
+    price_html = fmt_price(amount) if amount else "—"
+    if stage == "AWARDED" and card.get("initial_price") and card.get("final_contract_price"):
+        nmck = card["initial_price"]
+        final = card["final_contract_price"]
+        try:
+            nmck_f, final_f = float(nmck), float(final)
+            if nmck_f > 0 and final_f < nmck_f:
+                pct = (1 - final_f / nmck_f) * 100
+                st.markdown(
+                    f"<div style='margin:.1rem 0'>"
+                    f"<b style='font-size:22px'>КОНТРАКТ {fmt_price(final)}</b>"
+                    f"<br><span style='color:#888;font-size:0.85em'>"
+                    f"НМЦК {fmt_price(nmck)} · снижение {pct:.1f}%</span></div>",
+                    unsafe_allow_html=True,
+                )
+            else:
+                st.markdown(f"<b style='font-size:22px'>{price_html}</b>"
+                            f"<br><span style='color:#888;font-size:0.85em'>"
+                            f"{amount_label}</span>", unsafe_allow_html=True)
+        except (ValueError, TypeError):
+            st.markdown(f"<b style='font-size:22px'>{price_html}</b>"
+                        f"<br><span style='color:#888;font-size:0.85em'>"
+                        f"{amount_label}</span>", unsafe_allow_html=True)
+    else:
+        st.markdown(f"<b style='font-size:22px'>{price_html}</b>"
+                    f"<br><span style='color:#888;font-size:0.85em'>"
+                    f"{amount_label}</span>", unsafe_allow_html=True)
+
+    # ── Customer ─────────────────────────────────────────────────
+    customer = card.get("customer")
+    if customer:
+        st.caption(f"🏢 {customer}")
+
+    # ── Category opportunities (commercial assessment) ───────────
+    if opps:
+        from src.ui.components.analytics_v2.card_opportunities import render_card_opportunities
+        render_card_opportunities(card["id"], opps, evidence or {}, entities or {})
+
+    # ── OKPD2 (secondary metadata) ───────────────────────────────
     value = format_okpd_preview(card)
     if value:
-        st.markdown(f"🏷 **ОКПД2:** {escape(value)}", unsafe_allow_html=True)
-    else:
-        st.caption("ОКПД2: не указан в карточке")
-    from src.ui.components.okpd_priority_widget import render_okpd_priority_card_block
-    render_okpd_priority_card_block(card.get("id"), card.get("okpd_code"))
+        st.caption(f"ОКПД2 {escape(value)}")
+
+    # ── Contractor (for awarded) ─────────────────────────────────
     if stage == "AWARDED" and card.get("contractor_name"):
-        st.markdown(f"**Подрядчик / победитель:** {card['contractor_name']}")
+        st.caption(f"Подрядчик: {card['contractor_name']}")
+
+    # ── Structured annotation result (if reviewed) ───────────────
     if state.get("is_staged_complete") or state.get("is_partial") or state.get("is_category_reviewed"):
         _render_structured_result(state)
+
 
 
 def _source_actions(card: dict) -> None:
@@ -259,11 +283,43 @@ def render_stage_workspace(
     focused = st.session_state.get(session_key)
     if focused in [card["id"] for card in visible]:
         st.session_state[active_key] = focused
-        st.session_state[f"inline_card_tab_{focused}"] = "Экспертная разметка"
+        st.session_state[f"inline_card_tab_{focused}"] = "ИИ / эксперт"
+
+    # ── Batch load category opportunities + evidence (no N+1) ────
+    page_ids = [card["id"] for card in visible]
+    from src.ui.components.analytics_v2.card_opportunities import (
+        batch_load_evidence_preview,
+        batch_load_opportunities,
+        batch_load_structured_entities,
+    )
+    opp_map = batch_load_opportunities(page_ids, crm_db)
+
+    # Evidence/entities only loaded if there are opportunities to annotate
+    ev_map: dict = {}
+    ent_map: dict = {}
+    if opp_map:
+        def _doc_connect():
+            import psycopg2
+            from src.services.crm_db_runtime import require_crm_db_connect_kwargs
+            kw = dict(require_crm_db_connect_kwargs())
+            kw["dbname"] = "document_intelligence"
+            kw["connect_timeout"] = 5
+            return psycopg2.connect(**kw)
+
+        try:
+            ev_map = batch_load_evidence_preview(page_ids, _doc_connect)
+            ent_map = batch_load_structured_entities(page_ids, _doc_connect)
+        except Exception:
+            pass
+
     for card in visible:
         pid = card["id"]
         with st.container(border=True):
-            _summary(card, stage, (effective_map or {}).get(pid), page_states[pid], publication.get(pid, False))
+            _summary(card, stage, (effective_map or {}).get(pid), page_states[pid],
+                     publication.get(pid, False),
+                     opps=opp_map.get(pid),
+                     evidence=ev_map,
+                     entities=ent_map)
             _source_actions(card)
             _render_first_decision_gate(pid, page_states[pid], active_key, card=card, session_key=session_key)
             section_labels = list(SECTIONS)
@@ -278,9 +334,10 @@ def render_stage_workspace(
                 args=(active_key, pid),
             )
             canonical_section = "Документы" if section.startswith("Документы") else section
-            if canonical_section != "Обзор" and st.session_state.get(active_key) == pid:
+            if canonical_section != "Сводка" and st.session_state.get(active_key) == pid:
                 _render_expensive_section(pid, canonical_section)
     return "INLINE"
+
 
 
 def render_review_filter(states: dict[int, dict], session_key: str, *, on_change=None) -> str:

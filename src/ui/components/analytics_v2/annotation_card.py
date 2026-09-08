@@ -489,7 +489,8 @@ def render_annotation_section(
             existing_annotation=existing_annotation,
         )
         return
-    if section == "Модель / Категории":
+    # Map new tab names to handlers
+    if section in ("Модель / Категории", "Возможности"):
         _render_ai_block(assessment)
         _render_business_block(assessment)
         _render_category_verdicts(procurement_id, assessment, categories, cat_codes, cat_labels)
@@ -503,10 +504,24 @@ def render_annotation_section(
     if section == "История":
         render_history(card_view["history"])
         return
+    if section == "Участники":
+        st.markdown("##### Участники закупки")
+        st.markdown(f"**Заказчик:** {header.get('customer') or '—'}")
+        if header.get("contractor_name"):
+            st.markdown(f"**Подрядчик / победитель:** {header['contractor_name']}")
+            if header.get("contractor_inn"):
+                st.caption(f"ИНН: {header['contractor_inn']}")
+        st.markdown(f"**Регион поставки:** {header.get('delivery_region') or '—'}")
+        return
+    # "ИИ / эксперт" or "Экспертная разметка" — fall through to full expert form
     expert_obj_types = collect_expert_object_types(crm_db)
     expert_stages = collect_expert_work_stages(crm_db)
     expert_subtypes = collect_expert_object_subtypes(crm_db)
-    st.markdown("##### Расширенная разметка")
+    # AI block first
+    _render_ai_block(assessment)
+    _render_business_block(assessment)
+    st.divider()
+    st.markdown("##### Экспертная разметка")
     _render_guided_positive(procurement_id, assessment, categories, crm_db,
                             expert_obj_types, expert_subtypes, expert_stages, show_actions=False)
     _render_review_contract(procurement_id, card_view["documents"])
@@ -522,6 +537,7 @@ def render_annotation_section(
     if save or save_next:
         payload = _build_workbench_payload(procurement_id, assessment, created_by)
         _persist(procurement_id, payload, assessment, created_by, crm_db, save_and_next=save_next)
+
 
 
 def _render_ai_block(assessment: dict | None) -> None:
