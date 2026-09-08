@@ -1,24 +1,22 @@
-"""Dashboard header — factual KPI rows and medal transition chart.
+"""Dashboard header — factual KPI summary, compact layout.
 
-Renders 4 metric rows + transition chart/matrix, replacing mock_data KPIs.
-All data comes from analytics_dashboard_kpi_service.load_dashboard_kpi().
+Renders procurement inventory, new arrivals, document pipeline status,
+and commercial assessment quality in a single viewport-friendly header.
+All data from analytics_dashboard_kpi_service.load_dashboard_kpi().
 
-Rows
-----
-1. Array counts: 44-ФЗ/223-ФЗ × Идут торги / Разыгранные
-2. New in 24h (rolling via crm_created_at)
-3. Document pipeline: В ОЧЕРЕДИ / ПАРСИТСЯ / ОБРАБОТАНО / ОТКЛОНЕНО
-4. Medal decisions: ✓ ПОДТВЕРЖДЕНА / ↓ ПОНИЖЕНА / ↑ ПОВЫШЕНА
-
-Chart
------
-100% stacked horizontal bars: preliminary → final medal breakdown
-4×4 transition matrix table below
+Semantic rules
+--------------
+- Medal SAME/DOWN/UP compares candidate_initial_medal vs current_effective_medal.
+  This does NOT prove document or expert confirmation.
+- "ЗАВЕРШЕНО" = document_processing_queue status COMPLETED.
+  Does not automatically confirm a commercial medal.
+- SOURCE_GAP: MEDAL_DOCUMENT_PROVENANCE — no factual link between medal
+  transitions and document processing completion in current schema.
 """
 
 from __future__ import annotations
 
-from typing import Any, Optional
+from typing import Any
 
 import streamlit as st
 
@@ -44,15 +42,27 @@ _MEDAL_EMOJI = {
     "WOOD": "🪵",
 }
 
+# ── Compact CSS ───────────────────────────────────────────────────────────
 
-# ── DB wrapper (matches tabs.py / card_processing.py pattern) ─────────────
+_COMPACT_CSS = """
+<style>
+div[data-testid="stMetric"] {
+    padding: 0.25rem 0;
+}
+div[data-testid="stMetric"] label {
+    font-size: 0.78rem;
+}
+div[data-testid="stMetric"] [data-testid="stMetricValue"] {
+    font-size: 1.3rem;
+}
+</style>
+"""
+
+
+# ── DB wrapper ────────────────────────────────────────────────────────────
 
 class _CrmDBWrapper:
-    """Minimal DB wrapper providing execute_query() for the KPI service.
-
-    Uses psycopg2 directly via require_crm_db_connect_kwargs(),
-    matching the existing pattern in tabs.py and card_processing.py.
-    """
+    """Minimal DB wrapper providing execute_query() for the KPI service."""
 
     def execute_query(self, sql: str, params: Any = None, **kw) -> list:
         import psycopg2
@@ -71,11 +81,7 @@ class _CrmDBWrapper:
 # ── Main entry point ─────────────────────────────────────────────────────
 
 def render_dashboard_header() -> None:
-    """Render the full dashboard header with factual KPIs.
-
-    DB connections are created internally using the same pattern as tabs.py
-    and card_processing.py (require_crm_db_connect_kwargs).
-    """
+    """Render the full dashboard header — compact, semantically correct."""
     crm_db = _CrmDBWrapper()
 
     def _doc_connect():
@@ -88,90 +94,114 @@ def render_dashboard_header() -> None:
 
     kpi = load_dashboard_kpi(crm_db, doc_db_connect=_doc_connect)
 
+    st.markdown(_COMPACT_CSS, unsafe_allow_html=True)
+    _render_inventory(kpi)
+    _render_pipeline_strip(kpi)
+    _render_assessment(kpi)
 
-    _render_array_row(kpi)
-    _render_new_24h_row(kpi)
-    st.divider()
-    _render_pipeline_row(kpi)
-    st.divider()
-    _render_medal_row(kpi)
-    _render_transition_chart(kpi)
-    _render_transition_matrix(kpi)
-
-    # Query diagnostics (collapsed)
-    with st.expander("📊 Диагностика запросов", expanded=False):
+    with st.expander("🔍 Диагностика", expanded=False):
         st.caption(
             f"Запросов: {kpi.query_count} · "
             f"Время: {kpi.query_time_ms:.0f} мс · "
-            f"SOURCE_GAP: {', '.join(kpi.source_gaps) if kpi.source_gaps else 'нет'}"
+            f"SOURCE_GAP: {', '.join(kpi.source_gaps) if kpi.source_gaps else '—'}"
         )
 
 
-# ── Row 1: Array counts ──────────────────────────────────────────────────
+# ── Section 1: Procurement inventory + new arrivals ──────────────────────
 
-def _render_array_row(kpi: DashboardKPI) -> None:
-    """4 metrics: 44-ФЗ/223-ФЗ × torgi/razygranye."""
+def _fmt(n: int) -> str:
+    return f"{n:,}".replace(",", " ")
+
+
+def _render_inventory(kpi: DashboardKPI) -> None:
+    """Procurement counts and 24h new arrivals in compact layout."""
     st.markdown("##### Массив закупок")
+
     c1, c2, c3, c4 = st.columns(4)
-    c1.metric("44-ФЗ · Идут торги", f"{kpi.array.fz44_torgi:,}".replace(",", " "))
-    c2.metric("223-ФЗ · Идут торги", f"{kpi.array.fz223_torgi:,}".replace(",", " "))
-    c3.metric("44-ФЗ · Разыгранные", f"{kpi.array.fz44_razygranye:,}".replace(",", " "))
-    c4.metric("223-ФЗ · Разыгранные", f"{kpi.array.fz223_razygranye:,}".replace(",", " "))
+    c1.metric("44-ФЗ · Торги", _fmt(kpi.array.fz44_torgi))
+    c2.metric("223-ФЗ · Торги", _fmt(kpi.array.fz223_torgi))
+    c3.metric("44-ФЗ · Разыгранные", _fmt(kpi.array.fz44_razygranye))
+    c4.metric("223-ФЗ · Разыгранные", _fmt(kpi.array.fz223_razygranye))
 
-
-# ── Row 2: New in 24h ────────────────────────────────────────────────────
-
-def _render_new_24h_row(kpi: DashboardKPI) -> None:
-    """New procurements in rolling 24h window."""
-    ts_label = ""
+    # New 24h — secondary compact row, scoped to procurement arrivals only
+    ts = ""
     if kpi.last_sync_at is not None:
-        ts_label = kpi.last_sync_at.strftime("%Y-%m-%d %H:%M MSK")
+        ts = kpi.last_sync_at.strftime(" · %d.%m %H:%M")
+    total_new = (
+        kpi.new_24h.fz44_torgi + kpi.new_24h.fz223_torgi
+        + kpi.new_24h.fz44_razygranye + kpi.new_24h.fz223_razygranye
+    )
+    parts = []
+    if kpi.new_24h.fz44_torgi:
+        parts.append(f"44-ФЗ торги: +{kpi.new_24h.fz44_torgi}")
+    if kpi.new_24h.fz223_torgi:
+        parts.append(f"223-ФЗ торги: +{kpi.new_24h.fz223_torgi}")
+    if kpi.new_24h.fz44_razygranye:
+        parts.append(f"44-ФЗ разыгр.: +{kpi.new_24h.fz44_razygranye}")
+    if kpi.new_24h.fz223_razygranye:
+        parts.append(f"223-ФЗ разыгр.: +{kpi.new_24h.fz223_razygranye}")
+    detail = " · ".join(parts) if parts else "нет новых"
+    st.caption(f"Новые за 24 ч (поступление закупок): **+{total_new}** — {detail}{ts}")
 
-    st.markdown(f"##### Новые за последние 24 часа {'· ' + ts_label if ts_label else ''}")
+
+# ── Section 2: Document pipeline — horizontal strip ──────────────────────
+
+def _render_pipeline_strip(kpi: DashboardKPI) -> None:
+    """Document pipeline as compact horizontal process strip."""
+    st.markdown("##### Документальный конвейер")
+    st.caption("Статус обработки документов по закупкам (все периоды)")
+
+    p = kpi.pipeline
     c1, c2, c3, c4 = st.columns(4)
-    c1.metric("44-ФЗ · Идут торги", kpi.new_24h.fz44_torgi)
-    c2.metric("223-ФЗ · Идут торги", kpi.new_24h.fz223_torgi)
-    c3.metric("44-ФЗ · Разыгранные", kpi.new_24h.fz44_razygranye)
-    c4.metric("223-ФЗ · Разыгранные", kpi.new_24h.fz223_razygranye)
+    c1.metric("В очереди", _fmt(p.queued))
+    c2.metric("Обрабатывается", p.processing)
+    c3.metric(
+        "Завершено",
+        p.processed,
+        help=(
+            "Количество записей document_processing_queue "
+            "со статусом COMPLETED. Не означает автоматически "
+            "подтверждение коммерческой медали."
+        ),
+    )
+    tech = p.failed + p.no_links
+    c4.metric(
+        "Ошибки / нет документов",
+        tech,
+        help=f"FAILED: {p.failed} · NO_LINKS: {p.no_links}",
+    )
 
 
-# ── Row 3: Document pipeline ─────────────────────────────────────────────
+# ── Section 3: Commercial assessment quality ─────────────────────────────
 
-def _render_pipeline_row(kpi: DashboardKPI) -> None:
-    """Document processing queue status counts."""
-    st.markdown("##### Документальный pipeline")
-    c1, c2, c3, c4 = st.columns(4)
-    c1.metric("В ОЧЕРЕДИ", f"{kpi.pipeline.queued:,}".replace(",", " "))
-    c2.metric("ПАРСИТСЯ", kpi.pipeline.processing)
-    c3.metric("ОБРАБОТАНО", kpi.pipeline.processed)
-
-    # ОТКЛОНЕНО is SOURCE_GAP — show technical failure counts instead
-    failed_total = kpi.pipeline.failed + kpi.pipeline.no_links
-    if kpi.pipeline.rejected_available:
-        c4.metric("ОТКЛОНЕНО", failed_total)
-    else:
-        c4.metric(
-            "Ошибки / Нет ссылок",
-            failed_total,
-            help="ОТКЛОНЕНО = SOURCE_GAP: в pipeline нет статуса «документы не подтвердили "
-                 "коммерческую возможность». Показаны FAILED + NO_LINKS.",
-        )
-
-
-# ── Row 4: Medal decisions ───────────────────────────────────────────────
-
-def _render_medal_row(kpi: DashboardKPI) -> None:
-    """Medal transition summary: SAME / DOWN / UP."""
+def _render_assessment(kpi: DashboardKPI) -> None:
+    """Medal transition summary, chart, and matrix."""
     md = kpi.medals
-    st.markdown("##### Медальные решения (по category opportunity)")
+
+    st.markdown("##### Изменение коммерческой оценки")
+    st.caption("Считается по коммерческим категориям закупок")
+
+    # Three compact counters
     c1, c2, c3 = st.columns(3)
 
-    def _fmt(count: int, pct: float) -> str:
-        return f"{count}  ({pct:.1f}%)"
+    def _mpct(count: int, pct: float) -> str:
+        return f"{count}  ({pct:.0f}%)"
 
-    c1.metric("✓ ПОДТВЕРЖДЕНА", _fmt(md.same, md.same_pct()))
-    c2.metric("↓ ПОНИЖЕНА", _fmt(md.down, md.down_pct()))
-    c3.metric("↑ ПОВЫШЕНА", _fmt(md.up, md.up_pct()))
+    c1.metric(
+        "Без изменения",
+        _mpct(md.same, md.same_pct()),
+        help="Начальная и текущая коммерческая оценка совпадают",
+    )
+    c2.metric(
+        "↓ Понижена",
+        _mpct(md.down, md.down_pct()),
+        help="Текущая оценка ниже начальной",
+    )
+    c3.metric(
+        "↑ Повышена",
+        _mpct(md.up, md.up_pct()),
+        help="Текущая оценка выше начальной",
+    )
 
     if md.rejected > 0:
         st.caption(f"Отклонено (вне матрицы): {md.rejected}")
@@ -179,22 +209,28 @@ def _render_medal_row(kpi: DashboardKPI) -> None:
     # Invariant check
     if md.total_decided > 0 and not md.invariant_pass:
         st.warning(
-            f"⚠️ Transition invariant FAIL: "
+            f"⚠️ Invariant FAIL: "
             f"SAME({md.same}) + DOWN({md.down}) + UP({md.up}) = {md.total_decided} "
-            f"≠ matrix_sum({md.matrix_sum})"
+            f"≠ matrix({md.matrix_sum})"
         )
+
+    # Transition chart — compact
+    _render_transition_chart(kpi)
+
+    # Matrix — collapsed by default
+    if md.total_decided > 0:
+        with st.expander("Матрица переходов (4×4)", expanded=False):
+            _render_transition_matrix(kpi)
 
 
 # ── Chart: Stacked horizontal bars ───────────────────────────────────────
 
 def _render_transition_chart(kpi: DashboardKPI) -> None:
-    """100% stacked horizontal bar chart of medal transitions."""
+    """Compact 100% stacked horizontal bar chart of medal transitions."""
     md = kpi.medals
     grid = md.matrix_grid()
 
-    # Check if there's any data
     if md.total_decided == 0:
-        st.info("Нет данных для графика переходов медалей.")
         return
 
     try:
@@ -229,88 +265,67 @@ def _render_transition_chart(kpi: DashboardKPI) -> None:
 
         fig.update_layout(
             barmode="stack",
-            title="Переходы медалей (100%)",
             xaxis_title="% от начального уровня",
-            yaxis_title="Начальная медаль",
-            height=250,
-            margin=dict(l=0, r=0, t=40, b=30),
-            legend=dict(orientation="h", y=-0.15),
+            height=180,
+            margin=dict(l=0, r=0, t=8, b=24),
+            legend=dict(orientation="h", y=-0.25, font=dict(size=11)),
             xaxis=dict(range=[0, 100], dtick=25),
+            showlegend=True,
         )
 
         st.plotly_chart(fig, use_container_width=True)
     except ImportError:
-        st.warning("Plotly не установлен — график переходов недоступен.")
+        st.caption("Plotly не установлен — график недоступен.")
 
 
 # ── 4×4 Transition matrix table ──────────────────────────────────────────
 
 def _render_transition_matrix(kpi: DashboardKPI) -> None:
-    """Exact 4×4 transition matrix as an HTML table."""
+    """Exact 4×4 transition matrix as a compact HTML table."""
     md = kpi.medals
     grid = md.matrix_grid()
 
     if md.total_decided == 0:
         return
 
-    st.markdown("##### Точная матрица переходов")
+    s = "border:1px solid #ddd;padding:4px;text-align:center;font-size:13px;"
+    html = [f'<table style="width:100%;border-collapse:collapse;">']
 
-    # Build HTML table
-    html = ['<table style="width:100%; border-collapse:collapse; font-size:14px;">']
-
-    # Header row
+    # Header
     html.append("<tr>")
-    html.append('<th style="border:1px solid #ddd; padding:6px; background:#f5f5f5;">↓ Начальная \\ Итоговая →</th>')
+    html.append(f'<th style="{s}background:#f5f5f5;">↓ Нач. \\ Итог. →</th>')
     for f in MEDAL_RANK:
-        color = _MEDAL_COLORS.get(f, "#888")
-        html.append(
-            f'<th style="border:1px solid #ddd; padding:6px; background:{color}20; '
-            f'text-align:center;">{_MEDAL_EMOJI.get(f, "")} {f}</th>'
-        )
-    html.append('<th style="border:1px solid #ddd; padding:6px; background:#f5f5f5; text-align:center;">Σ</th>')
+        c = _MEDAL_COLORS.get(f, "#888")
+        html.append(f'<th style="{s}background:{c}20;">{_MEDAL_EMOJI.get(f, "")} {f}</th>')
+    html.append(f'<th style="{s}background:#f5f5f5;">Σ</th>')
     html.append("</tr>")
 
-    # Data rows
+    # Rows
     for p in MEDAL_RANK:
-        row_total = sum(grid[(p, f)] for f in MEDAL_RANK)
+        row_t = sum(grid[(p, f)] for f in MEDAL_RANK)
+        c = _MEDAL_COLORS.get(p, "#888")
         html.append("<tr>")
-        color = _MEDAL_COLORS.get(p, "#888")
-        html.append(
-            f'<td style="border:1px solid #ddd; padding:6px; background:{color}20; '
-            f'font-weight:bold;">{_MEDAL_EMOJI.get(p, "")} {p}</td>'
-        )
+        html.append(f'<td style="{s}background:{c}20;font-weight:bold;">'
+                     f'{_MEDAL_EMOJI.get(p, "")} {p}</td>')
         for f in MEDAL_RANK:
-            val = grid[(p, f)]
-            cell_style = "border:1px solid #ddd; padding:6px; text-align:center;"
-            if p == f and val > 0:
-                cell_style += " font-weight:bold; background:#e8f5e9;"
-            elif val > 0:
-                cell_style += " background:#fff3e0;"
-            html.append(f'<td style="{cell_style}">{val if val > 0 else "—"}</td>')
-        html.append(
-            f'<td style="border:1px solid #ddd; padding:6px; text-align:center; '
-            f'font-weight:bold;">{row_total}</td>'
-        )
+            v = grid[(p, f)]
+            bg = ""
+            if p == f and v > 0:
+                bg = "background:#e8f5e9;font-weight:bold;"
+            elif v > 0:
+                bg = "background:#fff3e0;"
+            html.append(f'<td style="{s}{bg}">{v if v > 0 else "—"}</td>')
+        html.append(f'<td style="{s}font-weight:bold;">{row_t}</td>')
         html.append("</tr>")
 
-    # Footer: column totals
+    # Footer
     html.append("<tr>")
-    html.append(
-        '<td style="border:1px solid #ddd; padding:6px; background:#f5f5f5; '
-        'font-weight:bold;">Σ</td>'
-    )
+    html.append(f'<td style="{s}background:#f5f5f5;font-weight:bold;">Σ</td>')
     for f in MEDAL_RANK:
-        col_total = sum(grid[(p, f)] for p in MEDAL_RANK)
-        html.append(
-            f'<td style="border:1px solid #ddd; padding:6px; text-align:center; '
-            f'background:#f5f5f5; font-weight:bold;">{col_total}</td>'
-        )
-    grand_total = sum(grid[(p, f)] for p in MEDAL_RANK for f in MEDAL_RANK)
-    html.append(
-        f'<td style="border:1px solid #ddd; padding:6px; text-align:center; '
-        f'background:#e3f2fd; font-weight:bold;">{grand_total}</td>'
-    )
-    html.append("</tr>")
+        ct = sum(grid[(p, f)] for p in MEDAL_RANK)
+        html.append(f'<td style="{s}background:#f5f5f5;font-weight:bold;">{ct}</td>')
+    gt = sum(grid[(p, f)] for p in MEDAL_RANK for f in MEDAL_RANK)
+    html.append(f'<td style="{s}background:#e3f2fd;font-weight:bold;">{gt}</td>')
+    html.append("</tr></table>")
 
-    html.append("</table>")
     st.markdown("".join(html), unsafe_allow_html=True)
