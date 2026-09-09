@@ -1,6 +1,10 @@
 # План рефакторинга CRM Streamlit
 
-## CURRENT WIP — 2026-09-08
+## CURRENT WIP — 2026-09-09
+
+**CRM-ANALYTICS-V2-DASHBOARD-COMPACT-VISUAL-REDESIGN-1** — `[x]` **PASS / STOP**. Scope: visual redesign of Analytics Contour V2 dashboard header (`src/ui/components/analytics_v2/dashboard_header.py`). Introduced bounded content width (1220px max, centered), compact KPI cards (minmax(180px, 1fr) width, 82px height), horizontal process strip for document pipeline with subtle separators, 3 compact commercial assessment cards (SAME, DOWN, UP), removed 100% stacked medal bar chart from main screen, moved detailed non-zero transitions and 4x4 matrix under collapsed expanders. Total header height reduced to ~420px. Unit tests: 110 passed (8 new compact tests in `tests/test_analytics_dashboard_compact_redesign.py` + 102 existing tests). Commits: `7a75734`. All hard gates respected (`KPI_SQL_CHANGED=NO`, `KPI_SEMANTICS_CHANGED=NO`, `MODEL_CHANGED=NO`, `PARSER_CHANGED=NO`, `QUEUE_CHANGED=NO`, `DB_MUTATED=NO`, `CARD_WORKSPACE_CHANGED=NO`). STOP after WIP.
+
+## PRIOR CURRENT WIP — 2026-09-08
 
 **S13-V4-BATCH-10-CORRECTION-1** — `[~]` **IN PROGRESS**. Scope: forensic classification of failed controlled batch rows; deterministic archive-child identity and DB rollback safety; DWRR PostgreSQL claim correction. No admission, Stage1, downloader network logic, parser, V4 semantics, schema, S7, or batch-20 changes.
 
