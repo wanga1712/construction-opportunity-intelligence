@@ -131,34 +131,48 @@ def _summary(card: dict, stage: str, effective: Any, state: dict, published: boo
         unsafe_allow_html=True,
     )
 
-    # ── Money (prominent) ────────────────────────────────────────
+    # ── Money + EIS link (side by side) ────────────────────────────
+    from src.services.procurement_identity import resolve_procurement_link
+    link_view = resolve_procurement_link(
+        source_table=card.get("source_table"),
+        contract_number=card.get("contract_number"),
+        tender_link=card.get("tender_link"),
+    )
     price_html = fmt_price(amount) if amount else "—"
-    if stage == "AWARDED" and card.get("initial_price") and card.get("final_contract_price"):
-        nmck = card["initial_price"]
-        final = card["final_contract_price"]
-        try:
-            nmck_f, final_f = float(nmck), float(final)
-            if nmck_f > 0 and final_f < nmck_f:
-                pct = (1 - final_f / nmck_f) * 100
-                st.markdown(
-                    f"<div style='margin:.1rem 0'>"
-                    f"<b style='font-size:22px'>КОНТРАКТ {fmt_price(final)}</b>"
-                    f"<br><span style='color:#888;font-size:0.85em'>"
-                    f"НМЦК {fmt_price(nmck)} · снижение {pct:.1f}%</span></div>",
-                    unsafe_allow_html=True,
-                )
-            else:
+    col_money, col_link = st.columns([3, 1])
+    with col_money:
+        if stage == "AWARDED" and card.get("initial_price") and card.get("final_contract_price"):
+            nmck = card["initial_price"]
+            final = card["final_contract_price"]
+            try:
+                nmck_f, final_f = float(nmck), float(final)
+                if nmck_f > 0 and final_f < nmck_f:
+                    pct = (1 - final_f / nmck_f) * 100
+                    st.markdown(
+                        f"<div style='margin:.1rem 0'>"
+                        f"<b style='font-size:22px'>КОНТРАКТ {fmt_price(final)}</b>"
+                        f"<br><span style='color:#888;font-size:0.85em'>"
+                        f"НМЦК {fmt_price(nmck)} · снижение {pct:.1f}%</span></div>",
+                        unsafe_allow_html=True,
+                    )
+                else:
+                    st.markdown(f"<b style='font-size:22px'>{price_html}</b>"
+                                f"<br><span style='color:#888;font-size:0.85em'>"
+                                f"{amount_label}</span>", unsafe_allow_html=True)
+            except (ValueError, TypeError):
                 st.markdown(f"<b style='font-size:22px'>{price_html}</b>"
                             f"<br><span style='color:#888;font-size:0.85em'>"
                             f"{amount_label}</span>", unsafe_allow_html=True)
-        except (ValueError, TypeError):
+        else:
             st.markdown(f"<b style='font-size:22px'>{price_html}</b>"
                         f"<br><span style='color:#888;font-size:0.85em'>"
                         f"{amount_label}</span>", unsafe_allow_html=True)
-    else:
-        st.markdown(f"<b style='font-size:22px'>{price_html}</b>"
-                    f"<br><span style='color:#888;font-size:0.85em'>"
-                    f"{amount_label}</span>", unsafe_allow_html=True)
+    with col_link:
+        if link_view.render_direct_link and link_view.public_url:
+            st.link_button("Закупка ЕИС ↗", link_view.public_url)
+        elif link_view.caption:
+            st.caption(link_view.caption)
+
 
     # ── Customer ─────────────────────────────────────────────────
     customer = card.get("customer")
@@ -320,7 +334,9 @@ def render_stage_workspace(
                      opps=opp_map.get(pid),
                      evidence=ev_map,
                      entities=ent_map)
-            _source_actions(card)
+            # Procurement number as lightweight caption (EIS link is inline with money)
+            if card.get("contract_number"):
+                st.caption(f"№ {card['contract_number']}")
             _render_first_decision_gate(pid, page_states[pid], active_key, card=card, session_key=session_key)
             section_labels = list(SECTIONS)
             section_labels[2] = f"Документы · {card.get('file_count') or 0}"
