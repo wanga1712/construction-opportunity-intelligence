@@ -173,16 +173,19 @@ _COMPACT_DASHBOARD_CSS = """
 # ── DB wrapper ────────────────────────────────────────────────────────────
 
 class _CrmDBWrapper:
-    """Minimal DB wrapper providing execute_query() for the KPI service."""
+    """Minimal DB wrapper providing execute_query() for the KPI service with timeout."""
 
     def execute_query(self, sql: str, params: Any = None, **kw) -> list:
         import psycopg2
         from psycopg2.extras import RealDictCursor
         from src.services.crm_db_runtime import require_crm_db_connect_kwargs
 
-        conn = psycopg2.connect(**require_crm_db_connect_kwargs())
+        conn_kwargs = dict(require_crm_db_connect_kwargs())
+        conn_kwargs["connect_timeout"] = 3
+        conn = psycopg2.connect(**conn_kwargs)
         try:
             with conn.cursor(cursor_factory=RealDictCursor) as cur:
+                cur.execute("SET statement_timeout = 3000")
                 cur.execute(sql, params or ())
                 return cur.fetchall()
         finally:
@@ -195,10 +198,11 @@ def _fmt(n: int) -> str:
     return f"{n:,}".replace(",", " ")
 
 
-# ── Main entry point ─────────────────────────────────────────────────────
+# ── Cached Loader ────────────────────────────────────────────────────────
 
-def render_dashboard_header() -> None:
-    """Render the full dashboard header — compact visual redesign."""
+@st.cache_data(ttl=60, show_spinner=False)
+def _load_cached_dashboard_kpi() -> DashboardKPI:
+    """Load KPI snapshot with bounded query timeout (cached for 60s)."""
     crm_db = _CrmDBWrapper()
 
     def _doc_connect():
@@ -206,25 +210,45 @@ def render_dashboard_header() -> None:
         from src.services.crm_db_runtime import require_crm_db_connect_kwargs
         kwargs = dict(require_crm_db_connect_kwargs())
         kwargs["dbname"] = "document_intelligence"
-        kwargs["connect_timeout"] = 5
-        return psycopg2.connect(**kwargs)
+        kwargs["connect_timeout"] = 3
+        conn = psycopg2.connect(**kwargs)
+        with conn.cursor() as cur:
+            cur.execute("SET statement_timeout = 3000")
+        return conn
 
-    kpi = load_dashboard_kpi(crm_db, doc_db_connect=_doc_connect)
+    return load_dashboard_kpi(crm_db, doc_db_connect=_doc_connect)
+
+
+# ── Main entry point ─────────────────────────────────────────────────────
+
+def render_dashboard_header() -> None:
+    """Render the full dashboard header — compact visual redesign.
+
+    Fail-safe and non-blocking: never raises or breaks page render.
+    """
+    try:
+        kpi = _load_cached_dashboard_kpi()
+    except Exception as e:
+        kpi = DashboardKPI()
+        kpi.source_gaps.append(f"KPI_UNAVAILABLE: {e}")
 
     st.markdown(_COMPACT_DASHBOARD_CSS, unsafe_allow_html=True)
 
     # Wrap in centered bounded container
     st.markdown("<div class='v2-dashboard-wrap'>", unsafe_allow_html=True)
-    _render_inventory(kpi)
-    _render_pipeline_strip(kpi)
-    _render_assessment(kpi)
+    try:
+        _render_inventory(kpi)
+        _render_pipeline_strip(kpi)
+        _render_assessment(kpi)
 
-    with st.expander("🔍 Диагностика", expanded=False):
-        st.caption(
-            f"Запросов: {kpi.query_count} · "
-            f"Время: {kpi.query_time_ms:.0f} мс · "
-            f"SOURCE_GAP: {', '.join(kpi.source_gaps) if kpi.source_gaps else '—'}"
-        )
+        with st.expander("🔍 Диагностика", expanded=False):
+            st.caption(
+                f"Запросов: {kpi.query_count} · "
+                f"Время: {kpi.query_time_ms:.0f} мс · "
+                f"SOURCE_GAP: {', '.join(kpi.source_gaps) if kpi.source_gaps else '—'}"
+            )
+    except Exception as render_err:
+        st.caption(f"⚠️ Ошибка отображения шапки KPI: {render_err}")
     st.markdown("</div>", unsafe_allow_html=True)
 
 

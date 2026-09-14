@@ -33,6 +33,7 @@ def render_tabs() -> None:
     stage = st.radio(
         "Раздел",
         options=_STAGES,
+        index=2,
         horizontal=True,
         key="analytics_v2_active_stage",
         label_visibility="collapsed",
