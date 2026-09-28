@@ -1,6 +1,193 @@
-# План рефакторинга CRM Streamlit
+## CURRENT WIP — 2026-09-28
 
-## CURRENT WIP — 2026-09-09
+**ANALYTICS-V2-PRODUCTION-MAINTENANCE-1** (Phase 6.3) — `[x]` **PASS / STOP**. Scope: закрыть два доказанных остаточных дефекта после восстановления live-flow (Phase 6.1/6.2), не меняя работающую production-архитектуру.
+- **Дефект 1 — Shadow/Qwen на мёртвых закупках.** `crm-v3-shadow-predictor` бесконечно прогонял `PRE_RESEARCH_WAITING` (9 265 строк) через Qwen, включая 9 175 неактуальных legacy-строк бэкфилла `DEEP_RESEARCH` от 2026-08-31 (`created_at` = 2026-08-31), до 3 попыток на строку.
+  - Классификация бэклога по канонической authority (`submission_window.is_actionable_submission_window`, `MIN_REMAINING_SUBMISSION_DAYS=2`), без изобретения своего определения активности: `CLOSED_WAITING` 7 429, `NON_TORGI_STAGE` 1 177, `EXPIRED_WINDOW_LT2D` 569, `LIVE_ACTIONABLE` 90 (88 в live-lane `id>=148687`).
+  - `QUEUE_PROCUREMENT_ID_AUTHORITY = crm_procurements.id`: 9 265/9 265 совпадений; join по `source_id` даёт лишь 692. Смешивание CRM ID / S7 reestr ID / source ID исключено.
+  - `QUEUE_ALLOWED_STATUSES` = `PENDING, PROCESSING, COMPLETED, FAILED, NO_LINKS, PRE_RESEARCH_WAITING` (CHECK не менялся). `SHADOW_ALLOWED_TRANSITIONS` = `PRE_RESEARCH_WAITING → PENDING` (`release_pre_research_queue`, SUCCESS/FAILED) для живой обработки.
+  - В `src/services/commercial_routing_v3/shadow_predictor.py` добавлен детерминированный eligibility-gate **перед** model call (`classify_shadow_eligibility`) и детерминированный терминальный skip (`skip_non_actionable_queue_row`) в существующий статус `NO_LINKS` с reason `NON_ACTIONABLE_SKIP:<CLASS>`. Новый статус не вводился, массовый `UPDATE` вслепую не выполнялся, история (`documents`, `evidence`, `crm_v3_model_inference_runs`) не удалялась.
+  - PENDING как цель skip-перехода **отвергнут**: doc-claim идёт `ORDER BY lane_rank, priority_score DESC, id ASC`, поэтому сброс 9 175 старых строк в `PENDING` вытеснил бы live-lane. Queue ORDER BY не менялся.
+  - Live-приоритет сохранён: `ORDER BY id DESC` по-прежнему берёт свежие строки первыми — за час все 58 Qwen-вызовов ушли в `LIVE_ACTIONABLE`, в `NON_ACTIONABLE` — **0**.
+- **Дефект 2 — systemd 203/EXEC.** `crm-v3-analytics-refresh.service` и `crm-objects-index-rebuild.service` (оба `Type=oneshot`) стартовали из несуществующего `/opt/CRM_Streamlit/.venv/bin/python`. Фактический production interpreter — `/opt/CRM_Streamlit/.venv313/bin/python` (Python 3.13.14). Оба unit-файла переведены на `.venv313`, `systemctl daemon-reload`, каждый job выполнен один раз: `ExecMainStatus=0`, `203/EXEC=0`. Фальшивый `.venv` не создавался.
+- **Проверки.** `tests/test_phase63_shadow_eligibility_gate.py` — **10 тестов PASS** (граница окна, expired, awarded, closed, non-torgi, commission, missing lifecycle, unknown award status); `py_compile` local+prod OK; md5 prod == local (`7d8e671791ba72b0dc3a932dfe612991`). Control batch: 20 historical строк → `HISTORICAL_CONTROL_SKIPPED=20`, `HISTORICAL_CONTROL_QWEN=0`; детерминированный drain 300 строк за 15 s (0 Qwen-вызовов); 320/320 пропущенных строк подтверждены как неактивные (`wrongly_skipped_actionable=0`).
+- **Подтверждение автоматического drain:** когда live-lane опустел (`PRE_RESEARCH_WAITING` с `id>=148687` = 0), `crm-v3-shadow-predictor` сам начал детерминированно пропускать legacy-бэклог (`Skipped non-actionable queue row 147174 (procurement 159652): NON_ACTIONABLE_SUBMISSION_CLOSED`). На момент фиксации: 1 097 пропусков (835 SUBMISSION_CLOSED / 216 NON_TORGI_STAGE / 46 WINDOW_LT2D), `PRE_RESEARCH_WAITING` 9 265 → 8 080, `NO_LINKS` → 2 151, live-lane = 0; Qwen-вызовов по неактивным — по-прежнему 0 (всего 92, все LIVE).
+- **Регрессия.** `CRM_SYNC` success (`inserted=725, updated=292167, errors=0`, свежая запись `2026-09-28 12:45:08`), 7 × `tender-docs-daemon*` active, `crm-second-pass-worker` active, `CURRENT_V2_ACTIVE_SECOND_PASS=16`, `crm-streamlit` HTTP 200, `NEW_QUEUE_ROWS_1H=0` при отсутствии новых eligible закупок (`admitted_count=0` в фидере).
+- **Frozen Authorities Preserved:** Qwen model, First Pass formula, Second Pass v2 prompt/model, MODEL_MEDAL, category medals, effective medal/time decay, CRM authority hierarchy, queue claim order, S7 OKPD admission — не изменялись (mtime `second_pass_service.py` 2026-09-24, `submission_window.py`/`s13_queue.py` 2026-09-05).
+- **Отклонения / неблокирующие дефекты (отдельный maintenance WIP):** `procurement_ai_assessments.completed_at` не заполняется новейшим v2-результатам (9 из 16 текущих активных имеют только `projected_at`) → telemetry authority = `COALESCE(completed_at, projected_at)`; `AVG_SHADOW_SECONDS` не измеряется, т.к. в `crm_v3_model_inference_runs` нет `started_at`/`finished_at`; `max(crm_created_at)` по `crm_procurements` не индексируется и не укладывается в таймаут; noncanonical исторические category-результаты (новых после fix: 0).
+
+**WATERPROOFING-UK-CRM-RUNTIME-1** — `[x]` **PASS**. Scope: поднять модуль гидроизоляции внутри общей CRM на рабочей машине и устранить дефекты, выявленные при первом запуске на живых данных.
+- **Окружение:** локальный `.env` (git-ignored) направлен на узел `s7` (`100.80.226.124`), где доступны `nspd_parking`, `crm`, `radar_domrf`, `tender_monitor`; `10.0.0.7` из `../nspd_parking_parser/.env` недоступен, поэтому `PARKING_DB_*` переопределены явно. `CRM_SOURCE_ROOT` / `NSPD_SOURCE_ROOT` указывают на соседние проекты.
+- **Запуск:** Streamlit поднят на `http://127.0.0.1:8502`, страница `💧 Гидроизоляция` открывается на экране `🔷 CRM-канбан УК`.
+- **Дефект 1 (пустой главный экран):** срез доски по умолчанию был `УК в работе`, поэтому до внесения контуров главный экран показывал пустую доску. Теперь при пустой воронке доска стартует на срезе `Все УК из базы` (`_render_filters(..., has_work=...)`), а после появления контуров возвращается к `УК в работе`.
+- **Дефект 2 (неуникальные ключи карточек):** `build_card()` для УК без сохранённого состояния возвращал `key = ""`, из-за чего все карточки доски получали один Streamlit widget-key и доска падала с `There are multiple elements with the same key`. Идентичность контура вынесена в `waterproofing_crm.contour_key()`, `build_card()` выводит ключ из строки БД, `waterproofing_contour.contour_key()` делегирует туда же.
+- **Проверки:** `py_compile` и `pyflakes` чисто; `tests/test_waterproofing_uk_crm.py` — **36 тестов PASS** (добавлены `test_build_card_derives_key_from_row_when_state_is_absent`, `test_build_card_keys_stay_unique_across_contour_rows`); live-подключение к БД вернуло 217 УК; Streamlit AppTest подтвердил рендер канбана (100 карточек, 0 исключений), открытие разных карточек УК (6 вложенных секций) и сквозной сценарий «Взять УК из базы в работу» → контур появляется на доске.
+- **Frozen Authorities Preserved:** `src/ui/nav.py`, роуты `app_bootstrap.py` / `src/services/app.py`, аналитика V2/V3, S7/S13 transport и AI-контур документов не изменялись.
+
+**WATERPROOFING-UK-CRM-KANBAN-1** — `[x]` **PASS / STOP**. Scope: перевести модуль гидроизоляции из объектного интерфейса в классическую CRM-систему, где главная сущность — управляющая компания (УК), а объекты вложены в карточку УК. Главный экран — канбан УК по 11 этапам воронки продажи; карта объектов понижена до вторичного экрана.
+- **Единый источник воронки (`src/services/waterproofing_crm.py`, 293 строки):** `CRM_STAGES` — 11 этапов в порядке, заданном заказчиком; `CLOSED_STAGES = (Отложено / отказ,)`; `STAGE_DEFAULT_ACTIONS` и `STAGE_TOUCH_DAYS` задают следующее действие и каденцию касания для каждого этапа.
+  - `normalize_stage()` канонизирует этап и бесшовно мигрирует значения старого объектного контура: `Секретарь / общий телефон найден` → `Секретарь / диспетчер`, `Запрошен начальник эксплуатации` → `Секретарь / диспетчер`, `Контакт эксплуатации получен` → `Найден тех. контакт`, `Первая встреча проведена` → `Встреча назначена`, `Выбран объект для обследования` → `Обследование назначено`, `Сделка / ТКП по объекту` → `КП / техрешение`.
+  - `build_card()` собирает карточку УК из строки БД и сохранённого состояния; `kanban_columns()`, `sort_cards()` (просрочка → ближайшее касание → приоритет → название) и `board_kpis()` формируют главный экран.
+  - `parse_amount()`/`format_amount()` понимают свободный ввод (`4,2 млн` → `4.2 млн ₽`); `overdue_days()`/`is_overdue()` не считают просрочкой закрытые этапы; приоритет по умолчанию — эвристика по портфелю (`default_priority()`) с ручным переопределением менеджером.
+- **Состояние контура (`src/services/waterproofing_contour.py`):** дублирующий список этапов удалён (`CONTOUR_STAGES = CRM_STAGES`); добавлены append-only `merge_contour_state()`, `load_contour_history()`, `latest_contour_state()` поверх `data/waterproofing/contour_states.jsonl`, где каждое касание наследует поля предыдущего и не теряет историю.
+- **Главный экран (`src/ui/waterproofing_kanban_tab.py`, 200 строк):** KPI-строка (контуров, объектов, с подземными этажами, с тех. контактом, просрочено, сумма), фильтры (подземные этажи, приоритет, поиск, только просрочка, ответственный) и срез «УК в работе» / «Все УК из базы»; intake-блок «Взять УК из базы в работу»; доска из 11 колонок. Карточка на доске показывает все 12 требуемых полей (название, ИНН/ОГРН, телефон, объектов, объектов с подземными этажами, потенциальная сумма, приоритет Gold/Silver/Bronze, текущий этап, следующее действие, дата касания, наличие тех. контакта, ответственный, признак просрочки) и открывает подробную карточку УК.
+- **Карточка УК (`src/ui/waterproofing_uk_tab.py`):** сводка, форма CRM-статуса (этап, следующее действие, дата касания, ответственный, приоритет, потенциальная сумма, тех. контакт, секретарь, комментарий), таблица контактов и вложенные секции (`src/ui/waterproofing_uk_activity.py`): объекты этой УК (карта по тогглу + таблица), история касаний, обследования, КП, документы и AI-рекомендации (`ask_contour_ai` с детерминированным fallback-скриптом звонка).
+- **Навигация (`src/ui/waterproofing_page.py`):** первый экран — `🔷 CRM-канбан УК`, карта объектов — второй; `render_pipeline_tab()` (`src/ui/waterproofing_meta_tabs.py`) показывает воронку УК из 11 этапов рядом с портфелями и объектными этапами.
+- **Проверки:** `tests/test_waterproofing_uk_crm.py` — 36 тестов PASS (этапы и legacy-алиасы, приоритеты, суммы, даты, просрочка, `build_card`, группировка доски, KPI, персистентность контура через `monkeypatch` на `_STATE_PATH`). Headless smoke-тест Streamlit (канбан + карточка УК) проходит без ошибок; `compileall` и `pyflakes` по изменённым файлам чисто.
+- **Отклонения и решения:**
+  - `fetch_uk_summary()` в `src/services/map_export.py` дополнен колонкой `ge1_floors` (`COUNT(CASE WHEN co.floors_underground >= 1 THEN 1 END)`) — канбану требуется «количество объектов с подземными этажами».
+  - `scripts/production_reconciliation_audit.py`: запись `src/ui/waterproofing_uk_tab.py` в `HOST_LOCAL_FILES` оставлена без изменений. Классификатор описывает дрейф между прод-хостом и canonical Git, а не локальный контент; при рефакторинге не удалено ни одного host/operator-значения. Скрипт — разовый диагностический инструмент и в CI/тестах не используется, поэтому обновление не требуется.
+  - Ключ роутинга `waterproofing` (`src/ui/nav.py`) и порядок роутов в `src/ui/app_bootstrap.py` / `src/services/app.py` не изменялись, `tests/test_app_bootstrap_relocation.py` проходит.
+- **Frozen Authorities Preserved:** AI-контур документов, S7/S13 transport, Second Pass, очередь и аналитика V2 не затронуты.
+
+**WATERPROOFING-UK-CRM-PROD-DEPLOY-1** — `[x]` **PASS**. Scope: доставить УК-канбан гидроизоляции на основной продовый адрес `http://100.113.185.90:8504/` (S13) вместо локального запуска `127.0.0.1:8502`.
+- **Предпроверка дрейфа:** продовое дерево `/opt/CRM_Streamlit` (ветка `CRM-V3-CATEGORY-OPPORTUNITY-CARDS-AND-MULTI-MEDAL-OUTPUT-1`, HEAD `0d40c637`) грязное, история расходится с локальной, поэтому вместо `git push` выполнена точечная доставка файлов; резервные копии заменяемых файлов — `/opt/backups/hydro_uk_crm_20260928/`.
+- **Сверка перед заменой:** `git diff --no-index` прод ↔ локально по `waterproofing_contour.py`, `map_export.py`, `waterproofing_meta_tabs.py`, `waterproofing_page.py`, `waterproofing_uk_tab.py` — все расхождения являются правками этого WIP, продовых эксклюзивных изменений нет; `waterproofing_objects_tab.py`, `waterproofing_map_tab.py`, `waterproofing_process.py`, `waterproofing_scoring.py`, `waterproofing_ai_context.py` идентичны.
+- **Доставлено (scp):** новые `src/services/waterproofing_crm.py`, `src/ui/waterproofing_kanban_tab.py`, `src/ui/waterproofing_uk_activity.py`, `tests/test_waterproofing_uk_crm.py`; изменённые `src/services/waterproofing_contour.py`, `src/services/map_export.py`, `src/ui/waterproofing_uk_tab.py`, `src/ui/waterproofing_page.py`, `src/ui/waterproofing_meta_tabs.py`.
+- **Ссылки проверены:** единственный потребитель `waterproofing_contour` — заменяемый `waterproofing_uk_tab.py`; `render_uk_tab` больше никем не вызывается, роут идёт через `render_waterproofing_page` из `src/ui/app_bootstrap.py` и `src/services/app.py`; `fetch_uk_summary` используется также `src/ui/customers_page.py`, изменение аддитивно (новая колонка `ge1_floors`).
+- **Проверки на S13:** `py_compile` продовым `.venv313` — OK; `pytest tests/test_waterproofing_uk_crm.py` — 36 passed; живой прогон на продовой БД: 217 УК, 332 объекта, все в колонке «Контур найден» (сохранённых контуров 0); Streamlit AppTest с продовым `PYTHONPATH=/opt/CRM_Streamlit:/opt/pythonProject89` — канбан отрисован, 100 карточек, открытие карточки УК без исключений, 6 вложенных секций.
+- **Перезапуск:** `sudo systemctl restart crm-streamlit.service` → `active`, `http://100.113.185.90:8504/_stcore/health` = `200 / ok`.
+- **Наблюдения (вне scope):** пакет `modules` доступен в проде только через `PYTHONPATH` systemd-юнита (`/opt/pythonProject89`), в дереве репозитория его нет. В логах сервиса остаётся ранее существовавшая ошибка другой страницы — `ModuleNotFoundError: src.ui.components.analytics_v2.card_opportunities` (аналитический контур V2, вкладка торгов), к гидроизоляции не относится. Продовые `src/ui/hydro_leads_tab.py` и `src/services/hydro/*` — не подключённый WIP другого направления, доставка их не касалась.
+- **Frozen Authorities Preserved:** AI-контур документов, S7/S13 transport, Second Pass, очередь и аналитика V2 не затронуты.
+
+## PRIOR CURRENT WIP — 2026-09-24
+
+**ANALYTICS-V2-SECOND-PASS-PRODUCTION-ROLLOUT-1** (Phase 6) — `[x]` **PASS / STOP**. Scope: transition Second Pass AI and document intelligence into continuous automated production process on Server 13.
+- **Authority Hierarchy Implemented:**
+  $$\text{EXPERT} > \text{SECOND PASS MODEL} > \text{PRELIMINARY (First Pass)} > \text{UNASSESSED}$$
+  - Expert Confirmed (`is_confirmed = TRUE` with `expert_medal`): `BASE_MEDAL = EXPERT_MEDAL`, Authority = `EXPERT`.
+  - Second Pass Evaluated (when expert unconfirmed): `BASE_MEDAL = MODEL_MEDAL`, Authority = `SECOND_PASS_MODEL`.
+  - Preliminary (First Pass fallback): `BASE_MEDAL = PRELIMINARY_MEDAL`, Authority = `PRELIMINARY`.
+  - Unassessed: `BASE_MEDAL = UNASSESSED`, Authority = `UNASSESSED`.
+- **Dynamic Effective Medal:** Applied frozen deadline time-decay schedule to `BASE_MEDAL` ($>14$d: 0, $8..14$d: -1, $4..7$d: -2, $2..3$d: -3, $0..<2$d: WOOD, $<0$d: CLOSED).
+- **Continuous Daemon on S13:**
+  - Script: `/opt/CRM_Streamlit/scripts/run_second_pass_worker.py` with `QWEN_WORKERS=1` sequential inference.
+  - Systemd Service: `crm-second-pass-worker.service` enabled and active (`Loaded: loaded; enabled; preset: enabled; Active: active (running)`). Automatically starts on S13 boot.
+  - Automated trigger: completed document download/extraction + `evidence_count > 0` and unassessed Second Pass.
+  - Duplicate guard: prompt hash fingerprinting prevents duplicate inferences.
+- **CRM UI Presentation:**
+  - 3-tier assessment badges in card summary: `⚡ Сейчас: [EFFECTIVE_MEDAL] (decay -X)`, `🎯 Базовая: [BASE_MEDAL] (AUTHORITY)`, `🤖 По документам: [MODEL_MEDAL]`, `⚡ Предварительно: [PRELIMINARY_MEDAL]`, `✓ Эксперт: [STATUS]`.
+  - Category findings expander in card: displays all 14 canonical categories (`category_evaluations`) and extracted materials/quantities (`found_facts`).
+  - Distinct filters in `torgi_filters.py`: `effective_medal`, `model_medal`, `preliminary_medal`, `expert_status`, `object_family`, search, hide expired.
+- **Live Verification on S13:**
+  - 20 unit tests PASS on local and S13 (`tests/test_effective_medal_authority.py`, `tests/test_effective_medal_time_decay.py`, `tests/test_torgi_priority_sorting.py`, `tests/test_second_pass_service.py`).
+  - Acceptance script verified 554 active cards: `AUTHORITY_BREAKDOWN`: `PRELIMINARY: 221`, `SECOND_PASS_MODEL: 4+ (growing)`, `UNASSESSED: 329`.
+  - Streamlit UI healthy (HTTP 200 on port 8504).
+  - Ollama Qwen 2.5:7b stable (GPU VRAM 4,648 MiB / 6,144 MiB, 75%).
+- **Frozen Authorities Preserved:** First Pass scoring formula, OKPD priors, queue ordering, time-decay table, document pipeline, S7 transport, and expert annotations 100% immutable (`EXPERT_FIELDS_MUTATED = NO`).
+
+## PRIOR CURRENT WIP — 2026-09-24
+
+**ANALYTICS-V2-SECOND-PASS-CATEGORY-SEMANTICS-1** (Phase 5.3) — `[x]` **PASS / STOP**. Scope: eliminate proven semantic false positives, enforce strict category semantic guardrails across all 14 canonical categories (`_CATEGORY_SEMANTIC_PATTERNS`), implement deterministic Commercial Scope Guard for non-construction commodities, and re-evaluate exact 24 regression batch + 5 negative controls + 2 special cases on S13.
+
+- **Problem 1 Resolution (`CRM_ID=165114`):** Eliminated flooring false positive from *"Обратная засыпка"*. `flooring` downgraded to `WOOD` (Score 20); `waterproofing` confirmed at `SILVER` (Score 85) with validated fact *"полимерная гидроизоляция"*.
+- **Problem 2 Resolution (`CRM_ID=40983`):** Eliminated waterproofing false positive from mineral wool thermal insulation (*"маты минераловатные"*). `waterproofing` downgraded to `WOOD` (Score 20); overall tender downgraded to `WOOD` (Score 40).
+- **Out-of-Scope Negative Controls (`163861`, `163870`, `163872`, `121216`):** Commercial Scope Guard confirmed 0 positive canonical construction categories and strictly clamped overall medals to `WOOD` (Score 40).
+- **Regression Batch Proof Metrics ($N=24$):**
+  - `UNSUPPORTED_FINDINGS = 0` (14 supported, 0 unsupported).
+  - `FINDINGS_WITH_SOURCE_TRACE = 14/14 (100%)`, `FINDINGS_WITHOUT_SOURCE_TRACE = 0`.
+  - `CATEGORY_GOLD_WEAK_EVIDENCE = 0`.
+  - `CATEGORY_POSITIVE_MEDAL_WITHOUT_EVIDENCE = 0`.
+  - `POSITIVE_CATEGORY_RESULTS_WITHOUT_TRACE = 0`.
+  - Overall == Strongest Category Alignment: 19/24 (**79.2%**, 5 conflicts analyzed).
+- **Frozen Authorities Preserved:** All models (`qwen2.5:7b`), First Pass scoring, CRM sorting, queue claim order, and document downloader untouched. STOP after Phase 5.3.
+
+## PRIOR CURRENT WIP — 2026-09-24
+
+**ANALYTICS-V2-SECOND-PASS-CALIBRATION-1** (Phase 5.2) — `[x]` **PASS / STOP**. Scope: tighten Second Pass evidence contract and prompt (`v3_second_pass_evidence_7b_v2`), enforce canonical category taxonomy from `crm_product_categories` (14 active categories), separate discrete `found_facts` from `category_evaluations`, enforce `category_model_medal`, `category_model_score`, `category_reason`, `category_evidence_refs`, prove zero unsupported findings (`UNSUPPORTED_FINDINGS = 0`), and evaluate category alignment across regression batch ($N=24$), negative controls ($N=5$), and special audit cases ($N=2$).
+- **Forensic Diagnosis of Phase 5.1 Unsupported Findings ($N=6$):**
+  1. `CRM_ID=127854`: empty product name `""` from administrative notice $\to$ `PROMPT_TOO_PERMISSIVE` + `MODEL_GENERALIZATION`.
+  2. `CRM_ID=83383`: empty product name `""` from road description $\to$ `PROMPT_TOO_PERMISSIVE` + `MODEL_GENERALIZATION`.
+  3. `CRM_ID=9441`: `"Грунтовочный состав"` from nested dictionary formatting $\to$ `EVIDENCE_SELECTOR_ERROR` / `PARSER_NORMALIZATION`.
+  4. `CRM_ID=40983`: `"вытяжные вентиляционные шахты"` hallucinated from water piping snippet $\to$ `MODEL_GENERALIZATION`.
+  5. `CRM_ID=22679`: `"оконные заполнения"` with quote `"толщина 2 мм"` from tender title $\to$ `MODEL_GENERALIZATION` / `PROMPT_TOO_PERMISSIVE`.
+  6. `CRM_ID=163638`: `"акрилат"` from dictionary snippet header $\to$ `PROMPT_TOO_PERMISSIVE`.
+- **Implemented Service & Prompt Upgrades (`v3_second_pass_evidence_7b_v2`):**
+  - Canonical taxonomy grounding: 14 canonical categories (`lighting`, `waterproofing`, `flooring`, `composites`, `computers`, `drainage_water_management`, `structural_reinforcement`, `composite_structures`, `bridge_road_infrastructure`, `external_utility_networks`, `concrete_materials`, `cable_support_systems`, `waterproofing_concrete_repair`, `curbstone`).
+  - Added strict evidence corpus grounding in `parse_second_pass_json()` and `normalize_category_code()`.
+  - Enforced strict category invariants: `CATEGORY_POSITIVE_MEDAL_WITHOUT_EVIDENCE = 0`, `CATEGORY_GOLD_WEAK_EVIDENCE = 0`, `POSITIVE_CATEGORY_RESULTS_WITHOUT_TRACE = 0`.
+- **Regression Batch Results on Exact 24 Procurements:**
+  - `UNSUPPORTED_FINDINGS = 0` (15 supported, 0 unsupported — 100% reduction in unsupported findings).
+  - `FINDINGS_WITH_SOURCE_TRACE = 15/15` (100%), `FINDINGS_WITHOUT_SOURCE_TRACE = 0`.
+  - `CATEGORY_GOLD_WEAK_EVIDENCE = 0`.
+  - `CATEGORY_POSITIVE_MEDAL_WITHOUT_EVIDENCE = 0`.
+  - `POSITIVE_CATEGORY_RESULTS_WITHOUT_TRACE = 0`.
+  - Category Alignment: 16/24 exact match between `OVERALL_MODEL_MEDAL` and `STRONGEST_CATEGORY_MEDAL` (66.7%), 8 conflicts analyzed.
+- **Frozen Authorities Preserved:** All models, First Pass scoring, CRM sorting, queue claim order, and document downloader untouched. STOP after Phase 5.2.
+
+## PRIOR CURRENT WIP — 2026-09-22
+
+**ANALYTICS-V2-SECOND-PASS-QUALITY-GATE-1** (Phase 5.1) — `[x]` **PASS (AUDIT) / RECOMMENDATION: SECOND_PASS_CALIBRATION_REQUIRED**. Scope: comprehensive diagnostic quality and evidence validation of Second Pass AI on S13 without code, prompt, or schema modifications (`MODE=READ_ONLY+BOUNDED_INFERENCE`).
+- **Forensic Case Audits:**
+  - `CRM_ID=165114` (№ 32515285171, 223-FZ): Qwen correctly excluded administrative boilerplate (*"Требования к участникам"*, *"Наименование Заказчика"*) under `commercial_exclusions`, while generating 2 confirmed `found_facts` from civil engineering estimate items (*"Обратная засыпка"*, $2,320.21\text{ m}^3$ at $1,435.89\text{ руб}$ and $1,507.10\text{ m}^3$ at $1,562.54\text{ руб}$) supporting `MODEL_MEDAL = GOLD` (Score 89).
+  - `CRM_ID=78763` (№ 0134200000124004928, 44-FZ): Operational road maintenance contract produced 0 line-item product facts in `found_facts` (ongoing continuous maintenance rather than discrete BOM), but generated 7 valid `evidence_refs` supporting `lighting`, `flooring`, and `drainage_water_management` relevance (`MODEL_MEDAL = SILVER`, Score 60).
+- **Stratified Control Batch ($N=24$):** Evaluated across 24 procurements (6 GOLD, 6 SILVER, 6 BRONZE, 3 WOOD, 3 UNASSESSED) covering 44-FZ / 223-FZ and multiple object families:
+  - Model Output: `GOLD = 5`, `SILVER = 5`, `BRONZE = 9`, `WOOD = 5`.
+  - Preliminary $\to$ Model Transitions: Prelim GOLD $\to$ 0 G, 2 S, 1 B, 3 W (successfully demoted when documents showed administrative/software text); Prelim BRONZE $\to$ 2 G, 1 S, 2 B, 1 W (promoted when estimates contained large piping/waterproofing scopes).
+- **Negative / WOOD Controls ($N=5$):** 4/5 assigned BRONZE/WOOD (`MODEL_OVERPOSITIVE = NO`).
+- **Quality Gates:** `GOLD_WITH_STRONG_EVIDENCE = 5/5` (0 weak GOLD), `FINDINGS_WITH_SOURCE_TRACE = 29/29` (100%), `SUPPORTED_FINDINGS = 23/29`, `UNSUPPORTED_FINDINGS = 6/29` (due to generalized naming in table rows), `POSSIBLE_MEMORY_LEAK = NO` (RAM reclaimed to 7,547 MiB). Latency: average $67.07\text{s}$, P90 $84.76\text{s}$.
+- **Frozen Authorities Preserved:** All models, prompts, CRM sorting, queue claim order, and First Pass untouched. STOP after Phase 5.1.
+
+## PRIOR CURRENT WIP — 2026-09-22
+
+**ANALYTICS-V2-SECOND-PASS-AI-1** (Phase 5) — `[x]` **PASS / STOP**. Scope: create true Second Pass AI evaluation utilizing extracted document evidence and text content (`document_match_details`, `document_files`), Qwen 2.5:7b (`prompt_version = 'v3_second_pass_evidence_7b_v1'`), structured fact extraction and commercial exclusions, model medal assignment (`GOLD`, `SILVER`, `BRONZE`, `WOOD`), database persistence (`crm_v3_model_inference_runs`, `procurement_ai_assessments`, `crm_v3_product_findings`), and strict expert annotation immutability (`EXPERT_FIELDS_MUTATED = NO`).
+- **Implemented Service:** `src/services/second_pass_service.py` (345 lines):
+  - `extract_evidence_snippets()`: extracts top 15 high-scoring unique evidence snippets with product names, quantities, and prices from `document_intelligence`.
+  - `build_second_pass_prompt()`: constructs evidence-grounded structured prompt for Qwen 2.5:7b.
+  - `parse_second_pass_json()`: robust parsing with JSON recovery and schema validation.
+  - `persist_second_pass()`: persists full prompt/response to `crm_v3_model_inference_runs`, creates versioned record in `procurement_ai_assessments`, and registers extracted product facts in `crm_v3_product_findings`.
+- **Automated Tests:** `tests/test_second_pass_service.py` (3/3 unit tests PASS on local and S13).
+- **Production Acceptance Gates Verified on S13:**
+  - Gate 1 (1 Procurement E2E Trace): Control procurement `165114` (№ `32515285171`, 223-FZ) with 20 files and 2,452 evidence details evaluated to `MODEL_MEDAL = GOLD`, `model_score = 89`, 2 found facts, 3 evidence references; run ID 2722 persisted; expert annotations unmutated (`EXPERT_FIELDS_MUTATED = NO`).
+  - Gate 2 (20-Procurement Controlled Batch): 20/20 procurements processed with 0 AI errors, 0 DB errors (`GOLD = 7`, `SILVER = 9`, `BRONZE = 4`, `WOOD = 0`). Mean latency $134.33\text{s}$, P50 $134.26\text{s}$, P90 $187.47\text{s}$; average tokens input $2482.7$, output $648.1$; GPU VRAM stable at 4,668 MiB / 6,144 MiB.
+- **Frozen Authorities Preserved:** First Pass scoring formula, medal calibration, effective medal time decay, CRM sorting/filters, S7/stunnel, document pipeline, and worker claim order 100% untouched. STOP after Phase 5.
+
+## PRIOR CURRENT WIP — 2026-09-22
+
+**ANALYTICS-V2-DOCUMENT-PIPELINE-RESTORE-1** (Phase 4) — `[x]` **PASS / STOP**. Scope: restore complete technical document pipeline health on S13 (`document_processing_queue` $\to$ claim $\to$ EIS HTTPS download $\to$ local staging $\to$ deduplication $\to$ DB registration $\to$ processing $\to$ evidence $\to$ `COMPLETED`).
+- **Forensic Diagnosis of Previous Failures:** Analyzed 1,750 failed queue tasks on S13:
+  1. 80.8% (1,415 failures): `uq_canonical_source_file_gen` unique constraint violation on `document_files` when extracted child archive files inherited the parent archive's `canonical_source_document_id`.
+  2. 13.2% (232 failures): `document_files_download_status_check` constraint violation when parser status `'UNSUPPORTED'` (for `.xls` files) was assigned to `document_files.download_status` (which only allows `PENDING, COMPLETED, FAILED, SKIPPED`).
+- **Implemented Bounded Pipeline Fixes:**
+  - `tender_documents_research/document_processor/downloader.py`: explicitly set `canonical_source_document_id=None` for extracted child files from archives.
+  - `tender_documents_research/document_processor/backends/state_repository.py`: defensively nullified `canonical_source_document_id` if already claimed by another `url_hash`.
+  - `tender_documents_research/document_processor/backends/s13_persistence.py`: cleanly mapped document parser results to valid `download_status` (`COMPLETED` for unsupported parsed formats).
+- **Automated Tests:** Added 3 regression unit tests in `tests/test_document_pipeline_dedup_and_status.py` (3/3 PASS on local and S13).
+- **Production Acceptance Gates Verified on S13:**
+  - Gate 1 (1 Procurement E2E): Task 120677 (Procurement 131313 with nested RAR archives) processed end-to-end to `COMPLETED` with 4 document files and 2 matches registered.
+  - Gate 2 (20-Procurement Controlled Batch): 20/20 procurements processed to `COMPLETED` with 0 failures and 0 DB errors.
+  - Gate 3 (Bounded Worker Run $\ge 50$ Tasks): Continuous daemon run processed 51 procurements with 100% success rate (`tasks_completed = 51`, `tasks_failed = 0`, `total_files = 329`, `files_downloaded = 328`, `total_results = 313`, `total_matches = 3389`).
+- **Frozen Authorities Preserved:** First Pass scoring, medal calibration, time decay, CRM sort/filters, S7/stunnel transport, and claim order untouched. No Second Pass model/Qwen expansion. Service active and healthy (`tender-docs-daemon-open.service` active, PID 127160). STOP after Phase 4.
+
+## PRIOR CURRENT WIP — 2026-09-22
+
+**ANALYTICS-V2-EFFECTIVE-MEDAL-TIME-DECAY-1** (Phase 3.2) — `[x]` **PASS / STOP**. Scope: implement dynamic commercial opportunity rating (`effective_medal`, `effective_medal_rank`, `deadline_decay_steps`, `days_to_deadline`) with time decay based on submission deadline, while keeping source medals (`preliminary_medal`, `expert_medal`, `candidate_medal`) 100% immutable.
+- **Base Medal Authority:** if expert confirmed (`is_confirmed = TRUE` with `expert_medal`), `base_medal = expert_medal` (authority: EXPERT); else `base_medal = preliminary_medal` (authority: PRELIMINARY).
+- **Time Decay Schedule:** $>14$d $\to$ 0 decay steps; $8..14$d $\to$ 1 step; $4..7$d $\to$ 2 steps; $2..3$d $\to$ 3 steps; $0..<2$d $\to$ WOOD (forced); $<0$d $\to$ CLOSED. Downgrades follow GOLD $\to$ SILVER $\to$ BRONZE $\to$ WOOD (never below WOOD).
+- **CRM Priority Sort:** Active non-expired first $\to$ `effective_medal` rank (GOLD $\to$ SILVER $\to$ BRONZE $\to$ WOOD $\to$ UNASSESSED $\to$ CLOSED) $\to$ `is_confirmed` tie-breaker $\to$ `priority_score DESC` $\to$ `end_date ASC NULLS LAST` $\to$ `initial_price DESC` $\to$ `id DESC`.
+- **UI Card Badges & Filters:** Added primary badge `Сейчас: [EFFECTIVE_MEDAL]` (with decay steps info) and secondary badges `Базовая: [BASE_MEDAL]`, `Эксперт: [STATUS]`; separated effective medal filter pills and base medal filter.
+- **Verification on S13:** All 7 unit tests PASS in `tests/test_effective_medal_time_decay.py`. Acceptance script `scripts/verify_effective_medal_acceptance.py` verified on 982 active actionable tenders: Base Medals: GOLD 36, SILVER 14, BRONZE 282, WOOD 3, UNASSESSED 647; Effective Medals: GOLD 3, SILVER 4, BRONZE 43, WOOD 285, UNASSESSED 647. Top 50 cards: `TOP50_EXPIRED = 0`, strictly monotonic effective medal rank (GOLD 3, SILVER 4, BRONZE 43). Source medals immutable. `crm-streamlit.service` active and healthy (HTTP 200 on port 8504). STOP after Phase 3.2; next phase: `PHASE_4_DOCUMENT_PIPELINE_RESTORE`.
+
+## PRIOR CURRENT WIP — 2026-09-22
+
+**ANALYTICS-V2-CRM-SORT-FILTER-CONSISTENCY-1** (Phase 3.1) — `[x]` **PASS / STOP**. Scope: resolve sort and filter authority contradictions in Analytics Contour V2 «Идут торги». Unified workset evaluation under single authority (`FirstPassService` + `source_contour` + expert annotations) with in-memory caching and deterministic sorting. Proved exact reconciliation across all dimensions on 982 active actionable tenders: `TIER_ORDER_VIOLATIONS = 0` (Top 50 strictly monotonic), `TOP50_EXPIRED = 0`. Filters match DB aggregations with 100% exact equality: Gold (36/36), Silver (14/14), Bronze (282/282), Wood (3/3), Unassessed (647/647), Social (122/122), Commercial (291/291), Direct Supply (222/222), Other (347/347), 44-FZ (633/633), 223-FZ (349/349), 615-PP (0/0). Reconciled 982 visible count from 2,419 non-expired (`actionable_submission_sql` requires `end_date >= CURRENT_DATE + 2 days`, filtering 1,437 tenders with $<2$ days). All unit tests PASS (13/13). S13 service active and healthy (`crm-streamlit` HTTP 200 on port 8504). STOP after Phase 3.1; next phase: `PHASE_4_DOCUMENT_PIPELINE_RESTORE`.
+
+## PRIOR CURRENT WIP — 2026-09-22
+
+**ANALYTICS-V2-CRM-PRIORITY-FILTERS-1** (Phase 3) — `[x]` **PASS / STOP**. Scope: implement tiered priority sorting and multidimensional filtering in Analytics Contour V2 «Идут торги». Pushed 4-tier default hierarchy into SQL `ORDER BY` before `LIMIT/OFFSET` pagination: Tier 1 (Expert Confirmed `is_confirmed = TRUE` by `expert_medal` GOLD $\to$ SILVER $\to$ BRONZE $\to$ WOOD), Tier 2 (First Pass Preliminary by `preliminary_medal` GOLD $\to$ SILVER $\to$ BRONZE $\to$ WOOD $\to$ UNASSESSED), Tier 3 (Unassessed / Low Priority), Tier 4 (Expired / Closed-Waiting `award_status = 'submission_closed_waiting_award'` or `end_date < NOW()` sunk to the bottom). Secondary sort within tier: `priority_score DESC` $\to$ `end_date ASC NULLS LAST` $\to$ `initial_price DESC` $\to$ `id DESC`. Implemented filter toolbar (`torgi_filters.py` 72 lines) supporting Preliminary Medal, Expert Status, Object Family (Social, Commercial, Direct Supply), Region, Search Query, and Hide Expired toggle (default True). Extracted SQL workset logic into `src/services/torgi_workset_service.py` (263 lines, $\le 300$). Enhanced card badges to separate Preliminary Medal and Expert Badge, with safe deadline countdown (`fmt_deadline_countdown`, zero negative days). Audited Top 50 default view on S13: `TOP50_EXPIRED = 0` (100% active non-expired tenders), 1 Tier 1, 8 Tier 2, 41 Tier 3, 0 Tier 4; query latency 84.85 ms ($< 500\text{ ms}$). All 16 unit tests PASS on local and S13 (`tests/test_torgi_priority_sorting.py` 7/7 PASS, `tests/test_first_pass_service.py` 9/9 PASS). Service active and healthy (`crm-streamlit` HTTP 200 on port 8504). STOP after Phase 3; do not start Phase 4 without explicit user request.
+
+## PRIOR CURRENT WIP — 2026-09-21
+
+**ANALYTICS-V2-ACTIVE-QUEUE-HYGIENE-1** (Phase 2.2) — `[x]` **PASS / STOP**. Scope: audit active queue expiry distribution, prove why average priority score was 3.88 (25,760 expired active queue rows evaluated with `priority_score = 0` vs 2,186 non-expired rows with mean `49.89`), reconcile stale `crm_stage = 'torgi'` and `award_status = 'submission_open'` rows to `submission_closed_waiting_award` using existing canonical authority in `src/services/commercial_routing_v3/source_lifecycle.py`. Proven root cause: S7 sync retains `crm_stage = 'torgi'` until S7 scraper observes commission/award, but `source_lifecycle.py` maps `end_date < today` to `WAITING_SOURCE_OUTCOME` (`award_status = 'submission_closed_waiting_award'`). Executed bounded reconciliation on S13: updated 1,377 expired `submission_open` rows to `submission_closed_waiting_award` (`SUBMISSION_OPEN_EXPIRED = 0`). Non-expired active queue tasks remain 100% intact and prioritized ahead of expired rows (`ORDER BY priority_score DESC`). Worker claim SQL and First Pass scoring formula 100% untouched. Services verified active (`crm-streamlit` HTTP 200, `tender-docs-daemon-open` active). STOP after Phase 2.2; next phase: `PHASE_3_CRM_PRIORITY_AND_FILTERS`.
+
+## PRIOR CURRENT WIP — 2026-09-21
+
+**ANALYTICS-V2-FIRST-PASS-CALIBRATION-1** (Phase 2.1) — `[x]` **PASS / STOP**. Scope: eliminate OKPD Prior blanket GOLD fallback, eliminate double-counting of relevance bonus (+10), restore taxonomy projection (SOCIAL, COMMERCIAL, DIRECT_SUPPLY, OTHER), and zero out priority scores for expired active procurements (`submission_end_at < NOW()`). Calibrated discrete OKPD prior weights (`>=80` GOLD, `70..79` SILVER, `40..69` BRONZE, `<40` WOOD) from `crm_category_okpd_priors` and marked source authority as `CATEGORY_OKPD_PRIOR`. Enforced strict independence of relevance bonus (+10 strictly requires independent commercial relevance, `prior_weight >= 80` alone yields `relevance_bonus = 0`). Restored taxonomy-first mapping for `SOCIAL` and `COMMERCIAL` objects, reducing `DIRECT_SUPPLY` share in Top-100 from >80% to 11.00%. Verified all invariants and safety gate (`CANONICAL_GOLD_PERCENT = 16.76% <= 60%`, `DOUBLE_COUNTING_CHECK = PASS`, 9/9 unit tests PASS). Executed production backfill on S13 across 28,109 active queue rows (`document_processing_queue` average score: 3.88; GOLD 4,711, SILVER 2,815, BRONZE 20,356, WOOD 212, UNASSESSED 15). Worker claim SQL untouched. Service active and healthy (HTTP 200 on port 8504). STOP after Phase 2.1; do not start next phase without explicit user request.
+
+## PRIOR CURRENT WIP — 2026-09-14
+
+**CRM-ANALYTICS-V2-DOCUMENT-CATALOG-RESTORATION-1** — `[x]` **PASS / STOP**. Scope: restore full authoritative document catalog in Analytics Contour V2 procurement cards. Identified root cause: `crm_procurements.file_count` column in PostgreSQL was stale/0 for ~99% of procurements, causing the card pill tab to display `Документы · 0` even when tenders had rich documentation. Added `enrich_cards_document_counts()` with `@st.cache_data(ttl=300)` and `filter_unresearchable=False` support in `src/services/commercial_routing_v3/document_links.py`. Integrated batch document count enrichment into `tabs.py` (`_render_torgi_tab`, `_render_komissia_tab`, `_render_razygranye_tab`). Preserved original document resolution order in `src/services/annotation_card_view.py` (`test_annotation_card_view.py` 7/7 PASS). Verified all 5 baseline cards + zero control case on S13: PID 208653 (№ 32616216109, 223-FZ) counter=6 & catalog=6; PID 101879 (№ 32616050792, 223-FZ) counter=1 & catalog=1; PID 568 (№ 32615825485, 223-FZ) counter=1 & catalog=1; PID 41813 (№ 32615912264, 223-FZ) counter=63 & catalog=63; PID 46550 (№ 0872400001326000095, 44-FZ) counter=7 & catalog=7; Zero case counter=0 with clear prompt. Service active and healthy (HTTP 200 on port 8504). Hard guardrails preserved (`HEADER_BLOCKING_CARDS=NO`, `QWEN_STARTED=NO`, `DOCUMENT_BULK_DOWNLOAD_STARTED=NO`, `MODEL_TRAINING_STARTED=NO`). STOP after WIP.
+
+## PRIOR CURRENT WIP — 2026-09-09
 
 **CRM-ANALYTICS-V2-DASHBOARD-COMPACT-VISUAL-REDESIGN-1** — `[x]` **PASS / STOP**. Scope: visual redesign of Analytics Contour V2 dashboard header (`src/ui/components/analytics_v2/dashboard_header.py`). Introduced bounded content width (1220px max, centered), compact KPI cards (minmax(180px, 1fr) width, 82px height), horizontal process strip for document pipeline with subtle separators, 3 compact commercial assessment cards (SAME, DOWN, UP), removed 100% stacked medal bar chart from main screen, moved detailed non-zero transitions and 4x4 matrix under collapsed expanders. Total header height reduced to ~420px. Unit tests: 110 passed (8 new compact tests in `tests/test_analytics_dashboard_compact_redesign.py` + 102 existing tests). Commits: `7a75734`. All hard gates respected (`KPI_SQL_CHANGED=NO`, `KPI_SEMANTICS_CHANGED=NO`, `MODEL_CHANGED=NO`, `PARSER_CHANGED=NO`, `QUEUE_CHANGED=NO`, `DB_MUTATED=NO`, `CARD_WORKSPACE_CHANGED=NO`). STOP after WIP.
 
@@ -82,6 +269,10 @@
 ## PRIOR CURRENT WIP — 2026-08-26
 
 **CRM-V3-EXPERT-CATEGORY-GATE-AND-FIRST-STAGE-DATASET-1** — `[x]` **PASS / STOP**. Baseline GitHub closure `54780848` (S13 runtime start `ec356151`). First expert gate is now product-category only (`expert_category_scope` ∈ IN_CATEGORY/OUT_OF_CATEGORY/UNCERTAIN in JSONB payload; no DDL). Primary question: «Относится ли закупка к нашим товарным категориям?»; NO = `⛔ Вне товарных категорий` with Save&Next and no object/stage/medal/docs; YES reveals canonical `crm_product_categories` multiselect; UNCERTAIN stays unresolved. Legacy OUT_OF_PROFILE/NCE negatives preserved under filter «Старые Неинтересные» without auto-conversion. Counters: ALL=UNREVIEWED+REVIEWED by category-scope. Read-only first-stage dataset expander on Идут торги. Model comparison PARTIAL; no retrain. Tests 23 PASS; service active / HTTP 200. Report: `docs/reports/expert_category_gate_first_stage_dataset/IMPLEMENTATION_AND_PRODUCTION_ACCEPTANCE.md`. STOP after WIP.
+
+## PRIOR CURRENT WIP — 2026-09-21
+
+**ANALYTICS-V2-FIRST-PASS-RESTORE-1** — `[x]` **PASS / STOP**. First Pass canonical pipeline restored and projected directly into existing `document_processing_queue` without modifying worker claim SQL or creating synthetic second-pass medals. Components unified: `OKPD Prior V1`, `ProcurementScopeClassifierV1`, `crm_procurement_category_opportunities` candidate medal, `procurement_ai_assessments` proposed level, expert object taxonomy. Multiplicity on `crm_procurement_category_opportunities` resolved deterministically (GOLD > SILVER > BRONZE > WOOD, tie-break on confidence/score). Invariants verified on 50-control batch: GOLD minimum score >= 70 PASS, WOOD maximum score <= 40 PASS, Wood never leapfrogs Gold PASS. First Pass integrated into `factual_feeder.py` (`admit_procurement`). Production backfill safely executed on S13: 28,320 pending active stage tasks updated (Average Priority Score: 73.86, Distribution: GOLD 27,615, BRONZE 538, SILVER 38, WOOD 114, UNASSESSED 15). Live queue claim order verified; `crm-streamlit.service` active and HTTP 200 on port 8504. Unit tests: 7 passed. All new modules under 300 lines. STOP after Phase 2; do not start Phase 3 without explicit user request.
 
 ## PRIOR CURRENT WIP — 2026-08-25
 

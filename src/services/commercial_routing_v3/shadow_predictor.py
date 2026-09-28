@@ -28,6 +28,11 @@ from src.services.commercial_routing_v3.gpu_arbiter import (
     WORKLOAD_DOCUMENT,
 )
 
+from src.services.commercial_routing_v3.submission_window import (
+    MIN_REMAINING_SUBMISSION_DAYS,
+    is_actionable_submission_window,
+)
+
 PRODUCER_VERSION = "v3_real_truth"
 PIPELINE_GENERATION = "S13_V4_EXHAUSTIVE_CONTEXT"
 OLLAMA_URL = os.getenv("OLLAMA_URL", "http://127.0.0.1:11434/api/generate")
@@ -207,6 +212,76 @@ def release_pre_research_queue(
     finally:
         doc_conn.close()
 
+def classify_shadow_eligibility(life_row) -> Optional[str]:
+    """Deterministic non-actionable classifier for the shadow stage.
+
+    Returns a skip reason when the procurement can never be actionable, else None.
+    Uses the canonical actionable-window authority (submission_window) so the
+    definition of activity is not re-invented here.
+    """
+    if life_row is None:
+        return "MISSING_LIFECYCLE"
+    crm_stage, award_status, end_date = life_row
+    stage = (crm_stage or "").strip()
+    award = (award_status or "").strip()
+    if stage == "commission" or award == "commission":
+        return "NON_ACTIONABLE_COMMISSION"
+    if stage != "torgi":
+        return "NON_ACTIONABLE_NON_TORGI_STAGE"
+    if award == "awarded":
+        return "NON_ACTIONABLE_AWARDED"
+    if award == "submission_closed_waiting_award":
+        return "NON_ACTIONABLE_SUBMISSION_CLOSED"
+    if award != "submission_open":
+        return "NON_ACTIONABLE_AWARD_STATUS"
+    if not is_actionable_submission_window(end_date):
+        return "NON_ACTIONABLE_WINDOW_LT%dD" % MIN_REMAINING_SUBMISSION_DAYS
+    return None
+
+
+def skip_non_actionable_queue_row(
+    queue_id: int,
+    procurement_id: int,
+    pipeline_generation: str,
+    research_generation_hash: Optional[str],
+    reason: str,
+    category_context: Optional[Dict[str, Any]] = None,
+) -> None:
+    """Deterministically terminate a queue row that can never be actionable.
+
+    Reuses the existing terminal NO_LINKS state (nothing researchable to do) and
+    keeps all documents/evidence/inference artefacts untouched. No new status is
+    introduced and no model call is made.
+    """
+    context = dict(category_context or {})
+    context["shadow_eligibility"] = "SKIPPED_NON_ACTIONABLE"
+    context["skip_reason"] = reason
+    context["shadow_prediction"] = "NOT_ATTEMPTED"
+    doc_conn = get_doc_db()
+    try:
+        with doc_conn.cursor() as cur:
+            cur.execute(
+                """
+                UPDATE document_processing_queue
+                   SET status = 'NO_LINKS',
+                       completed_at = NOW(),
+                       last_error = %s,
+                       category_context = %s
+                 WHERE id = %s
+                   AND procurement_id = %s
+                   AND status = 'PRE_RESEARCH_WAITING'
+                """,
+                (f"NON_ACTIONABLE_SKIP:{reason}", json.dumps(context), queue_id, procurement_id),
+            )
+        doc_conn.commit()
+        print(f"Skipped non-actionable queue row {queue_id} (procurement {procurement_id}): {reason}")
+    except Exception as exc:
+        doc_conn.rollback()
+        print(f"Failed to skip queue row {queue_id}: {exc}", file=sys.stderr)
+        raise
+    finally:
+        doc_conn.close()
+
 class ShadowPredictor:
     def __init__(self):
         pass
@@ -245,8 +320,38 @@ class ShadowPredictor:
         if isinstance(cat_ctx, str):
             cat_ctx = json.loads(cat_ctx)
 
-        # 2. Count attempts for this shadow prediction in CRM DB
+        # 2. Open CRM connection (lifecycle eligibility gate + attempt accounting)
         crm_conn = get_crm_db()
+
+        # 2a. Phase 6.3 deterministic lifecycle gate: never spend GPU/Qwen on a
+        # procurement that can never be actionable. Canonical authority:
+        # submission_window.is_actionable_submission_window (same rule as the producer).
+        try:
+            with crm_conn.cursor() as life_cur:
+                life_cur.execute(
+                    "SELECT crm_stage, award_status, end_date FROM crm_procurements WHERE id = %s",
+                    (pid,),
+                )
+                life_row = life_cur.fetchone()
+        except Exception as exc:
+            print(f"Lifecycle eligibility query failed for procurement {pid}: {exc}", file=sys.stderr)
+            crm_conn.close()
+            return False
+
+        skip_reason = classify_shadow_eligibility(life_row)
+        if skip_reason is not None:
+            crm_conn.close()
+            skip_non_actionable_queue_row(
+                queue_id=queue_id,
+                procurement_id=pid,
+                pipeline_generation=pipeline_generation,
+                research_generation_hash=gen_hash,
+                reason=skip_reason,
+                category_context=cat_ctx,
+            )
+            return True
+
+        # 2b. Count attempts for this shadow prediction in CRM DB
         try:
             with crm_conn.cursor() as cur:
                 cur.execute("""
