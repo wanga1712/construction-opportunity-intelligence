@@ -328,13 +328,13 @@ class ShadowPredictor:
         raw_text = None
         run_status = "PENDING"
         try:
-            with acquire_gpu_inference(WORKLOAD_DOCUMENT, poll_sec=0.5, max_wait_sec=60.0):
+            with acquire_gpu_inference(WORKLOAD_DOCUMENT, poll_sec=0.5, max_wait_sec=300.0):
                 resp = requests.post(OLLAMA_URL, json={
                     "model": BASE_MODEL,
                     "prompt": full_prompt,
                     "stream": False,
                     "options": {"temperature": 0.1}
-                }, timeout=60)
+                }, timeout=180)
                 resp_data = resp.json()
                 raw_text = resp_data.get("response", "{}")
                 run_status = "SUCCESS"
@@ -363,12 +363,14 @@ class ShadowPredictor:
                 pass
 
         if run_status != "SUCCESS":
-            val_status = "API_FAILED"
-            parse_status = "API_FAILED"
+            val_status = "NOT_ATTEMPTED"
+            parse_status = "MODEL_CALL_FAILED"
 
         run_status = val_status if val_status != "VALIDATED_SUCCESS" else "COMPLETED"
         if parse_status == "RAW_RECEIVED_PARSE_FAILED":
             run_status = "RAW_RECEIVED_PARSE_FAILED"
+        if parse_status == "MODEL_CALL_FAILED":
+            run_status = "MODEL_CALL_FAILED"
 
         # 6. Save model run and shadow prediction if success
         try:
