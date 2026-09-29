@@ -73,6 +73,10 @@ import streamlit as st
 from typing import Any
 
 from src.domain.commercial_routing_v3 import OpportunityTrack, ProcurementForm
+from src.services.commercial_routing_v3.model_ui_projection import (
+    format_object_stage,
+    routing_axes_view_from_assessment,
+)
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Constants / labels
@@ -389,13 +393,21 @@ def render_expert_full_form(
         expert_form = _FORM_OPTIONS[form_opts_labels.index(sel_form_label)]
 
         # ── Object / work stage (expert-authored, no canonical taxonomy) ───
-        st.markdown("**Объект и стадия работ**")
+        st.markdown("**Объект, стадия объекта и характер работ**")
+        _axes = routing_axes_view_from_assessment(assessment)
         st.caption(
             f"🤖 ИИ предложил: объект = `{nr.get('object_type') or '—'}` · "
             f"подтип = `{nr.get('object_subtype') or '—'}` · "
-            f"стадия = `{nr.get('project_stage') or '—'}`  \\n"
+            f"стадия закупки (legacy `project_stage`) = `{nr.get('project_stage') or '—'}`  \\n"
             "_Исправьте ниже если модель ошиблась. "
             "Значения сохранятся только в разметке, не в production routing._"
+        )
+        st.caption(
+            f"⚙️ Стадия объекта: `{format_object_stage(_axes)}` · "
+            f"Характер работ: `{_axes.get('work_stage') or '—'}` · "
+            f"Тип услуги: `{_axes.get('service_type') or '—'}`  \n"
+            "_Канонические оси OBJECT_STAGE / WORK_STAGE / SERVICE_TYPE — read-only, "
+            "из бизнес-правил, а не из ответа модели._"
         )
 
         # expert_object_type — text_input with datalist-style suggestions note

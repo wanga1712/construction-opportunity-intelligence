@@ -3,7 +3,12 @@ from __future__ import annotations
 
 import streamlit as st
 
-from src.services.commercial_routing_v3.model_ui_projection import business_view_from_assessment, model_view_from_assessment
+from src.services.commercial_routing_v3.model_ui_projection import (
+    business_view_from_assessment,
+    format_object_stage,
+    model_view_from_assessment,
+    routing_axes_view_from_assessment,
+)
 from src.ui.components.analytics_v2.card_trust import fmt_price
 
 
@@ -31,6 +36,7 @@ def render_workbench_header(header: dict, procurement_id: int, lifecycle: str, p
 def render_overview(header: dict, assessment: dict | None, existing: dict | None) -> None:
     model = model_view_from_assessment(assessment)
     business = business_view_from_assessment(assessment)
+    axes = routing_axes_view_from_assessment(assessment)
     payload = (existing or {}).get("payload") or {}
     s, m, b, e = st.columns(4)
     with s:
@@ -44,7 +50,9 @@ def render_overview(header: dict, assessment: dict | None, existing: dict | None
         if model.get("provenance") == "UNKNOWN_LEGACY":
             st.warning("Legacy: RAW модели не сохранён")
         st.markdown(f"**Объект:** {model.get('object_type') or '—'} / {model.get('object_subtype') or '—'}")
-        st.markdown(f"**Стадия:** {model.get('work_stage') or '—'}")
+        st.markdown(f"**Стадия объекта:** {format_object_stage(axes)}")
+        st.markdown(f"**Тип услуги:** `{axes.get('service_type') or '—'}`")
+        st.markdown(f"**Характер работ:** {model.get('work_stage') or '—'}")
         st.markdown(f"**Confidence:** {model.get('overall_confidence') if model.get('overall_confidence') is not None else '—'}")
     with b:
         st.markdown("#### ⚙️ BUSINESS RULE")
@@ -58,7 +66,7 @@ def render_overview(header: dict, assessment: dict | None, existing: dict | None
             st.info("Экспертная версия ещё не сохранена")
         st.markdown(f"**Вердикт:** `{payload.get('expert_verdict') or '—'}`")
         st.markdown(f"**Объект:** {payload.get('expert_object_type') or '—'} / {payload.get('expert_object_subtype') or '—'}")
-        st.markdown(f"**Стадия:** {payload.get('expert_work_stage') or '—'}")
+        st.markdown(f"**Характер работ:** {payload.get('expert_work_stage') or '—'}")
 
 
 def render_documents(

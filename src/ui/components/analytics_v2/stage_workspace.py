@@ -115,13 +115,50 @@ def _summary(card: dict, stage: str, effective: Any, state: dict, published: boo
     deadline, deadline_label = _deadline(card, stage)
     contour = resolve_source_contour(card.get("source_table"))
 
-    # ── Status line: [law] [stage] [region] [deadline] ───────────
+    # ── Status line: [law] [stage] [region] [deadline countdown] ───────────
+    from src.ui.components.analytics_v2.card_trust import fmt_deadline_countdown
     law_label = contour.get("card_primary", "")
     region = card.get("delivery_region") or ""
+    dl_countdown = fmt_deadline_countdown(deadline) if deadline else ""
     dl_text = fmt_date(deadline) if deadline else ""
     status_chips = [c for c in [law_label, contour.get("card_secondary", ""),
-                                region, f"до {dl_text}" if dl_text else ""] if c]
+                                region, f"до {dl_text}" if dl_text else "",
+                                dl_countdown] if c]
     st.markdown(" ".join(f"`{escape(c)}`" for c in status_chips))
+
+    # ── Effective, Base, Model, Preliminary & Expert Badges ─────────────────────────
+    eff_medal = card.get("effective_medal")
+    base_medal = card.get("base_medal") or card.get("preliminary_medal") or "UNASSESSED"
+    base_auth = card.get("base_medal_authority") or "PRELIMINARY"
+    model_medal = card.get("model_medal")
+    model_score = card.get("model_score")
+    prelim_medal = card.get("preliminary_medal") or "UNASSESSED"
+    priority_score = card.get("priority_score", 0)
+    decay = card.get("deadline_decay_steps", 0)
+
+    badge_cols = []
+    if eff_medal:
+        decay_info = f" (decay -{decay})" if decay and decay not in (0, 99) else ""
+        badge_cols.append(f"⚡ **Сейчас:** `{eff_medal}`{decay_info}")
+    if base_medal and base_medal != "UNASSESSED":
+        badge_cols.append(f"🎯 **Базовая:** `{base_medal}` ({base_auth})")
+    if model_medal:
+        score_info = f" ({model_score}/100)" if model_score is not None else ""
+        badge_cols.append(f"🤖 **По документам:** `{model_medal}`{score_info}")
+    else:
+        badge_cols.append("🤖 **По документам:** `не оценено`")
+    if prelim_medal and prelim_medal != "UNASSESSED":
+        badge_cols.append(f"⚡ **Предварительно:** `{prelim_medal}` ({priority_score}/100)")
+    if state.get("is_staged_complete") or card.get("is_confirmed"):
+        exp_m = state.get("expert_medal") or card.get("expert_medal") or "Подтверждено"
+        badge_cols.append(f"✓ **Эксперт:** `{exp_m}`")
+    elif state.get("is_partial") or state.get("is_category_reviewed"):
+        badge_cols.append("👤 **Эксперт:** `Частично`")
+    else:
+        badge_cols.append("👤 **Эксперт:** `не проверено`")
+    if badge_cols:
+        st.markdown(" · ".join(badge_cols))
+
 
     # ── Title ────────────────────────────────────────────────────
     st.markdown(
@@ -184,10 +221,35 @@ def _summary(card: dict, stage: str, effective: Any, state: dict, published: boo
         from src.ui.components.analytics_v2.card_opportunities import render_card_opportunities
         render_card_opportunities(card["id"], opps, evidence or {}, entities or {})
 
+    # ── Category evaluations & Document evidence from Second Pass ───────────
+    cat_evals = card.get("category_evaluations") or []
+    facts = card.get("found_facts") or []
+    if cat_evals or facts:
+        with st.expander(f"📑 Категории и факты по документам ({len(cat_evals)} кат., {len(facts)} факт.)", expanded=False):
+            if cat_evals:
+                st.markdown("**Оценки по категориям:**")
+                for ce in cat_evals:
+                    c_code = ce.get("category_code") or "—"
+                    c_med = ce.get("category_model_medal", "WOOD")
+                    c_scr = ce.get("category_model_score", 0)
+                    c_rsn = ce.get("category_reason", "")
+                    st.markdown(f"- **{escape(str(c_code))}**: `{c_med}` ({c_scr}/100) — *{escape(str(c_rsn))}*")
+            if facts:
+                st.markdown("**Найденные товары / материалы:**")
+                for f in facts:
+                    pname = f.get("product_name_normalized") or "Товар"
+                    cat = f.get("category_code") or "—"
+                    doc = f.get("document_name") or "Документ"
+                    qty = f.get("quantity")
+                    unit = f.get("unit") or ""
+                    qty_str = f" · {qty} {unit}".strip() if qty else ""
+                    st.caption(f"• **{escape(str(pname))}** [{escape(str(cat))}]{qty_str} *(из {escape(str(doc))})*")
+
     # ── OKPD2 (secondary metadata) ───────────────────────────────
     value = format_okpd_preview(card)
     if value:
         st.caption(f"ОКПД2 {escape(value)}")
+
 
     # ── Contractor (for awarded) ─────────────────────────────────
     if stage == "AWARDED" and card.get("contractor_name"):
@@ -252,6 +314,7 @@ def render_stage_workspace(
     workset_ids: list[int] | None = None,
     annotation_states: dict[int, dict] | None = None,
     selected_annotation_filter: str | None = None,
+    review_counts: dict | None = None,
 ) -> str:
     from src.services.annotation_queue_service import batch_publication_visibility
     from src.services.db_bootstrap import connect_databases
@@ -259,10 +322,15 @@ def render_stage_workspace(
     _, _, crm_db, _ = connect_databases()
     all_ids = workset_ids or [card["id"] for card in cards]
     all_states = annotation_states or load_current_annotation_states(all_ids, crm_db)
-    page_states = {card["id"]: all_states[card["id"]] for card in cards}
+    page_states = {card["id"]: all_states[card["id"]] for card in cards if card["id"] in all_states}
     publication = batch_publication_visibility(crm_db, [card["id"] for card in cards])
-    selected_state = selected_annotation_filter or render_review_filter(all_states, session_key)
-    visible = [card for card in cards if _filter_matches(page_states[card["id"]], selected_state)]
+    selected_state = selected_annotation_filter or render_review_filter(
+        all_states, session_key, counts_override=review_counts
+    )
+    visible = [
+        card for card in cards
+        if card["id"] in page_states and _filter_matches(page_states[card["id"]], selected_state)
+    ]
 
     # Теневой визуальный фильтр и сортировка по приоритету исследования
     from src.ui.components.okpd_priority_widget import get_okpd_priority_compact_badge
@@ -356,10 +424,16 @@ def render_stage_workspace(
 
 
 
-def render_review_filter(states: dict[int, dict], session_key: str, *, on_change=None) -> str:
+def render_review_filter(
+    states: dict[int, dict],
+    session_key: str,
+    *,
+    on_change=None,
+    counts_override: dict | None = None,
+) -> str:
     """Render persisted review progress/outcome counters and return the selected key."""
-    counts = annotation_state_counts(states)
-    labels = [f"{label} · {counts[key]}" for key, label in FILTERS]
+    counts = dict(counts_override) if counts_override is not None else annotation_state_counts(states)
+    labels = [f"{label} · {counts.get(key, 0)}" for key, label in FILTERS]
     selected_label = st.pills(
         "Эксперт",
         labels,

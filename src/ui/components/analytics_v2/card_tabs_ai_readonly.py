@@ -10,7 +10,9 @@ import streamlit as st
 from src.services.commercial_routing_v3.field_provenance import ui_label
 from src.services.commercial_routing_v3.model_ui_projection import (
     business_view_from_assessment,
+    format_object_stage,
     model_view_from_assessment,
+    routing_axes_view_from_assessment,
 )
 
 _AI_STATE_LABELS = {
@@ -70,11 +72,15 @@ def render_model_readonly_block(
 
         st.caption(f"Источник: `{ui_label('MODEL_VALIDATED')}` · inference_run_id=`{(assessment or {}).get('inference_run_id')}`")
 
+        axes = routing_axes_view_from_assessment(assessment)
+
         col1, col2 = st.columns(2)
         with col1:
             st.markdown(f"**object_type:** `{view.get('object_type') or '—'}`")
             st.markdown(f"**object_subtype:** `{view.get('object_subtype') or '—'}`")
+            st.markdown(f"**object_stage:** `{format_object_stage(axes)}`")
             st.markdown(f"**work_stage:** `{view.get('work_stage') or '—'}`")
+            st.markdown(f"**service_type:** `{axes.get('service_type') or '—'}`")
         with col2:
             st.markdown(f"**procurement_form:** `{view.get('procurement_form') or '—'}`")
             overall = view.get("overall_confidence")

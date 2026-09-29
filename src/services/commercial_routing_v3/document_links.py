@@ -19,6 +19,7 @@ import psycopg2
 import psycopg2.extras
 
 from src.services.commercial_routing_v3.research_queue_lifecycle import links_table_for_source
+from src.services.db_host_guard import assert_host_allowed
 
 logger = logging.getLogger("commercial_routing_v3.document_links")
 
@@ -29,13 +30,24 @@ ZERO_LINK_ROOT_CAUSE = (
 )
 
 
+def _s7_connect_host() -> tuple:
+    host = os.getenv("TENDER_MONITOR_DB_HOST") or os.getenv("DB_HOST") or "100.80.226.124"
+    if os.getenv("TENDER_MONITOR_DB_HOST"):
+        source = "TENDER_MONITOR_DB_HOST"
+    elif os.getenv("DB_HOST"):
+        source = "DB_HOST"
+    else:
+        source = "S7 canonical default"
+    return assert_host_allowed(host, source), source
+
+
 def _s7_dsn() -> Dict[str, Any]:
     return {
-        "host": os.getenv("DB_HOST") or os.getenv("TENDER_DB_HOST") or os.getenv("TENDER_MONITOR_DB_HOST") or "10.8.0.7",
-        "port": int(os.getenv("DB_PORT") or os.getenv("TENDER_DB_PORT") or os.getenv("TENDER_MONITOR_DB_PORT") or 5432),
-        "dbname": os.getenv("DB_NAME") or os.getenv("TENDER_DB_DATABASE") or os.getenv("TENDER_MONITOR_DB_DATABASE") or "tender_monitor",
-        "user": os.getenv("DB_USER") or os.getenv("TENDER_DB_USER") or os.getenv("TENDER_MONITOR_DB_USER") or "postgres",
-        "password": os.getenv("DB_PASSWORD") or os.getenv("TENDER_DB_PASSWORD") or os.getenv("TENDER_MONITOR_DB_PASSWORD") or "oTIg3EqK85pux8SfZTuCbS-bEcObXiGfV3P2hU2m5uJ_pYMbRtRmP8jnMA-hvyhR",
+        "host": _s7_connect_host()[0],
+        "port": int(os.getenv("TENDER_MONITOR_DB_PORT") or os.getenv("DB_PORT") or 5432),
+        "dbname": os.getenv("TENDER_MONITOR_DB_DATABASE") or os.getenv("DB_NAME") or "tender_monitor",
+        "user": os.getenv("TENDER_MONITOR_DB_USER") or os.getenv("DB_USER") or "postgres",
+        "password": os.getenv("TENDER_MONITOR_DB_PASSWORD") or os.getenv("DB_PASSWORD") or None,
         "connect_timeout": int(os.getenv("S7_LINK_CONNECT_TIMEOUT", "8")),
     }
 
@@ -216,9 +228,17 @@ def count_document_links(
 
 
 def batch_count_document_links(
-    rows: List[Dict[str, Any]]
+    rows: List[Dict[str, Any]],
+    *,
+    filter_unresearchable: bool = False,
 ) -> Dict[int, int]:
-    """Batch count researchable physical download targets for a list of procurements."""
+    """Batch count physical download targets for a list of procurements.
+
+    Args:
+        rows: List of procurement dicts with 'id', 'contract_number', 'source_table', 'source_id'.
+        filter_unresearchable: If True, apply worker skip-list (for AI queue producer).
+                              If False (default for UI), count all resolved attachments.
+    """
     by_table = {}
     for r in rows:
         tbl = links_table_for_source(r.get("source_table"))
@@ -249,8 +269,9 @@ def batch_count_document_links(
                             clauses.append("contract_id IN %s")
                             params.append(tuple(cids))
                         query += " OR ".join(clauses)
-                        query += """
-                            )
+                        query += ")"
+                        if filter_unresearchable:
+                            query += """
                             AND (file_name IS NULL OR (
                                 LOWER(TRIM(file_name)) NOT IN (
                                     'информация о контракте',
@@ -276,7 +297,7 @@ def batch_count_document_links(
                                     OR LOWER(TRIM(file_name)) LIKE '%%.p7s'
                                 )
                             ))
-                        """
+                            """
                         cur.execute(query, tuple(params))
                         links = cur.fetchall() or []
 
@@ -303,12 +324,14 @@ def batch_count_document_links(
 
                     keys = set()
                     for l in matched_links:
-                        if _should_skip_document_name(l.get("file_name")):
+                        if filter_unresearchable and _should_skip_document_name(l.get("file_name")):
                             continue
                         url = l.get("document_links")
                         phys = _physical_download_key(url) or url
                         if phys:
                             keys.add(str(phys))
+                        elif l.get("id") is not None:
+                            keys.add(f"doc_id_{l['id']}")
                     results[pid] = len(keys)
         finally:
             conn.close()
@@ -318,3 +341,32 @@ def batch_count_document_links(
             results[r["id"]] = 0
 
     return results
+
+
+def enrich_cards_document_counts(cards: List[Dict[str, Any]]) -> None:
+    """Enrich card dicts with accurate document counts in-place."""
+    if not cards:
+        return
+    try:
+        import streamlit as st
+        @st.cache_data(ttl=300)
+        def _cached_counts(signatures: tuple) -> Dict[int, int]:
+            reconstructed = [
+                {"id": s[0], "contract_number": s[1], "source_table": s[2], "source_id": s[3]}
+                for s in signatures
+            ]
+            return batch_count_document_links(reconstructed, filter_unresearchable=False)
+
+        sigs = tuple(
+            (c.get("id"), str(c.get("contract_number") or ""), str(c.get("source_table") or ""), c.get("source_id"))
+            for c in cards if c.get("id")
+        )
+        counts = _cached_counts(sigs)
+    except Exception:
+        counts = batch_count_document_links(cards, filter_unresearchable=False)
+
+    for c in cards:
+        cid = c.get("id")
+        if cid in counts:
+            c["file_count"] = counts[cid]
+

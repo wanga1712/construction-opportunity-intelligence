@@ -1,11 +1,19 @@
 """Логика доверия карточки — стадии, статусы, уровни.
 
-Медаль показывается ТОЛЬКО на стадии RANKED и выше.
-До этого — КАНДИДАТ / НАЙДЕНЫ СИГНАЛЫ / КАТЕГОРИЯ ПОДТВЕРЖДЕНА.
+MEDAL SEMANTICS V2 — единый авторитет медали для UI.
 
-Ключевая модель:
-  opportunity_score = commercial_score * (1 - deadline_weight) + deadline_score * deadline_weight
-  Уровень ограничивается сверху по deadline_ratio.
+Единственный источник медали карточки:
+
+  BASE_MEDAL (EXPERT > CURRENT MODEL > PRELIMINARY > UNASSESSED)
+        -> TIME DECAY по сроку подачи
+        -> EFFECTIVE_MEDAL
+        -> resolve_level()
+
+Если карточка пришла из workset-резолвера (в ней есть effective_medal),
+эта медаль и показывается — на любой стадии обработки.
+
+Legacy-путь (commercial_score * deadline_ratio) сохранён только для карточек
+без effective_medal (демо/статические фиды) и медаль больше не изобретает.
 """
 from __future__ import annotations
 
@@ -246,14 +254,36 @@ def resolve_level(card: dict) -> tuple[str, str, str, bool]:
     Возвращает (display_label, color, bg, is_medal).
     is_medal=False → показывать как КАНДИДАТ, не как GOLD/SILVER.
 
-    Логика:
-    1. Медаль доступна только при processing_stage in (ranked, manager_confirmed)
-    2. commercial_score должен быть задан
-    3. deadline_ratio ограничивает максимальную медаль сверху
-    4. remaining_workdays <= 1 → максимум Wood для любой стоимости
+    MEDAL SEMANTICS V2:
+    1. effective_medal (BASE_MEDAL -> TIME DECAY) — авторитет, если он есть;
+       deadline-cap повторно НЕ применяется, decay уже учтён в резолвере.
+    2. Legacy-путь по commercial_score используется только без effective_medal:
+       коммерческий score должен быть задан,
+       deadline_ratio ограничивает максимальную медаль сверху,
+       remaining_workdays <= 1 → максимум Wood для любой стоимости.
     """
     stage = card.get("processing_stage", "matches_found")
     manager_ok = stage == "manager_confirmed"
+
+    # MEDAL SEMANTICS V2 - single UI medal authority.
+    # When the workset resolver produced an effective medal, that medal is the
+    # manager-facing answer (BASE_MEDAL -> time decay). commercial_score is a
+    # diagnostic figure only and can no longer invent a medal on top of it.
+    eff_val = card.get("effective_medal")
+    eff_norm = str(eff_val).strip().upper() if isinstance(eff_val, str) else ""
+    if eff_norm in ("GOLD", "SILVER", "BRONZE", "WOOD"):
+        # MEDAL SEMANTICS V2: the single resolver already applied
+        # BASE_MEDAL -> TIME DECAY -> EFFECTIVE_MEDAL, so the effective medal is
+        # the manager-facing answer for every surface (list, detail, dashboard)
+        # regardless of processing_stage.
+        medal = eff_norm.title()
+        for _, m, color, bg in LEVEL_THRESHOLDS:
+            if m == medal:
+                return medal + (" \u2713" if manager_ok else ""), color, bg, True
+        return "Wood" + (" \u2713" if manager_ok else ""), "#8c6b4f", "#8c6b4f18", True
+    elif eff_norm in ("UNASSESSED", "CLOSED"):
+        if stage in ("ranked", "manager_confirmed"):
+            return "RANKED", *CANDIDATE_COLOR, False
 
     if stage not in ("ranked", "manager_confirmed"):
         label = STAGE_LABEL.get(stage, "КАНДИДАТ")
@@ -308,10 +338,36 @@ def submission_status(award_status: str, end_date) -> tuple[str, str, str]:
         return "🟢", f"ПОДАЧА ОТКРЫТА · {cal} ДН.", "green"
     if cal == 0:
         return "🟡", "ПОДАЧА ЗАВЕРШЕНА СЕГОДНЯ · ОЖИДАЕТСЯ РЕЗУЛЬТАТ", "yellow"
-    return "🟡", f"ПОДАЧА ЗАВЕРШЕНА {-cal} ДН. НАЗАД · ОЖИДАЕТСЯ РЕЗУЛЬТАТ", "yellow"
+    return "🟡", "ПОДАЧА ЗАВЕРШЕНА · ОЖИДАЕТСЯ РЕЗУЛЬТАТ", "yellow"
 
 
 # ── Форматирование ────────────────────────────────────────────────────────────
+
+def fmt_deadline_countdown(end_date) -> str:
+    """Format deadline countdown cleanly without negative values."""
+    if not end_date:
+        return "—"
+    try:
+        from datetime import datetime
+        if not isinstance(end_date, (date, datetime)):
+            end_date = datetime.strptime(str(end_date)[:10], "%Y-%m-%d").date()
+        elif isinstance(end_date, datetime):
+            end_date = end_date.date()
+        today = date.today()
+        if end_date < today:
+            return "Подача завершена"
+        delta_days = (end_date - today).days
+        if delta_days == 0:
+            return "Сегодня (последний день)"
+        elif delta_days == 1:
+            return "Остался 1 день"
+        elif 2 <= delta_days <= 4:
+            return f"Осталось {delta_days} дня"
+        else:
+            return f"Осталось {delta_days} дней"
+    except Exception:
+        return "—"
+
 
 def fmt_price(val) -> str:
     if val is None:

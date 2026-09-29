@@ -122,6 +122,20 @@ def _reset_torgi_page() -> None:
             st.session_state[k] = 1
 
 
+def _render_control_room_scope_banner(count: int) -> None:
+    """Deep-link scope from the main dashboard (canonical category / one procurement)."""
+    from src.ui.components.analytics_v2.control_room_links import clear_control_room_scope
+
+    label = st.session_state.get("_cr_scope_label") or "главная панель"
+    col_msg, col_reset = st.columns([5, 1])
+    with col_msg:
+        st.info(f"Фильтр из главной панели: {label} · {count} закупок")
+    with col_reset:
+        if st.button("Сбросить", key="_cr_scope_reset"):
+            clear_control_room_scope()
+            st.rerun()
+
+
 # ─── DB helpers ───────────────────────────────────────────────────────────────
 
 def _pg():
@@ -147,33 +161,179 @@ def _get_category_filter(stage: str) -> tuple[str, dict]:
     return build_category_sql_filter(selected_cats, set())
 
 
-def _stage_workset_ids(stage: str) -> list[int]:
-    """Return factual filtered workset IDs for true counts (one bounded-column query)."""
-    import psycopg2
+def _stage_where(stage: str) -> tuple[str, str]:
+    """Canonical stage predicate over the ``cp`` alias plus its category-filter key."""
     if stage == "torgi":
         from src.services.commercial_routing_v3.submission_window import actionable_submission_sql
-        where = "cp.crm_stage='torgi' AND cp.award_status='submission_open' AND " + actionable_submission_sql("cp")
-        cat_stage = "torgi"
-    elif stage == "commission":
-        where = "cp.crm_stage='torgi' AND cp.award_status IN ('submission_closed_waiting_award','award_not_found')"
-        cat_stage = "commission"
-    else:
-        where = "cp.crm_stage='razygranye'"
-        cat_stage = "razygranye"
-    cat_sql, params = _get_category_filter(cat_stage)
+        return (
+            "cp.crm_stage='torgi' AND cp.award_status='submission_open' AND "
+            + actionable_submission_sql("cp"),
+            "torgi",
+        )
+    if stage == "commission":
+        return (
+            "cp.crm_stage='torgi' AND cp.award_status IN "
+            "('submission_closed_waiting_award','award_not_found')",
+            "commission",
+        )
+    return ("cp.crm_stage='razygranye'", "razygranye")
+
+
+def _stage_category_sql(stage: str) -> tuple[str, dict, str]:
+    """(category predicate, params, needed join). The join is only added when a
+    category filter is actually active -- joining candidates on 279k rows is the
+    single most expensive thing the stage counters could do."""
+    cat_sql, params = _get_category_filter(stage)
+    if cat_sql.strip().upper() == "TRUE":
+        return "TRUE", params, ""
+    return cat_sql, params, "LEFT JOIN crm_category_candidates cc ON cc.procurement_id = cp.id"
+
+
+@st.cache_data(ttl=60, show_spinner=False)
+def _stage_workset_count(stage: str) -> int:
+    """SQL COUNT of the filtered workset -- the workset id list is never materialized."""
+    import psycopg2
+    where, cat_stage = _stage_where(stage)
+    cat_sql, params, join = _stage_category_sql(cat_stage)
+    count_expr = "COUNT(*)" if not join else "COUNT(DISTINCT cp.id)"
     conn = psycopg2.connect(**_pg())
     try:
         with conn.cursor() as cur:
             cur.execute(
-                f"""SELECT DISTINCT cp.id
-                    FROM crm_procurements cp
-                    LEFT JOIN crm_category_candidates cc ON cc.procurement_id = cp.id
-                    WHERE {where} AND ({cat_sql}) ORDER BY cp.id""",
+                f"""SELECT {count_expr} FROM crm_procurements cp {join}
+                    WHERE {where} AND ({cat_sql})""",
                 params,
             )
-            return [row[0] for row in cur.fetchall()]
+            row = cur.fetchone()
+            return int(row[0] or 0)
     finally:
         conn.close()
+
+
+@st.cache_data(ttl=60, show_spinner=False)
+def _stage_law_counts(stage: str) -> dict:
+    """Single SQL aggregate of per-law counts for the workset (no id list)."""
+    import psycopg2
+    where, cat_stage = _stage_where(stage)
+    cat_sql, params, join = _stage_category_sql(cat_stage)
+    count_expr = "COUNT(*)" if not join else "COUNT(DISTINCT cp.id)"
+    conn = psycopg2.connect(**_pg())
+    try:
+        with conn.cursor() as cur:
+            cur.execute(
+                f"""SELECT cp.source_table, {count_expr} FROM crm_procurements cp {join}
+                    WHERE {where} AND ({cat_sql})
+                    GROUP BY cp.source_table""",
+                params,
+            )
+            rows = cur.fetchall()
+    finally:
+        conn.close()
+    counts = {"ALL": 0, "44-\u0424\u0417": 0, "223-\u0424\u0417": 0}
+    for source_table, cnt in rows:
+        cnt = int(cnt or 0)
+        counts["ALL"] += cnt
+        if source_table == "reestr_contract_44_fz":
+            counts["44-\u0424\u0417"] += cnt
+        elif source_table == "reestr_contract_223_fz":
+            counts["223-\u0424\u0417"] += cnt
+    return counts
+
+
+@st.cache_data(ttl=60, show_spinner=False)
+def _stage_review_counts(stage: str, total: int) -> dict:
+    """SQL review-state counters for the whole workset (single authority classifier)."""
+    from src.services.annotation_state_service import count_annotation_states_sql_scoped
+    from src.services.db_bootstrap import connect_databases
+
+    where, cat_stage = _stage_where(stage)
+    cat_sql, params, join = _stage_category_sql(cat_stage)
+    _, _, crm_db, _ = connect_databases()
+    return count_annotation_states_sql_scoped(
+        total, f"{where} AND ({cat_sql})", params, crm_db, extra_join=join
+    )
+
+
+@st.cache_data(ttl=30, show_spinner=False)
+def _torgi_page_cached(
+    limit: int,
+    offset: int,
+    allowed_ids: tuple | None,
+    effective_medal,
+    model_medal,
+    preliminary_medal,
+    expert_status,
+    expert_medal,
+    object_family,
+    object_type,
+    category,
+    law,
+    region,
+    search_query,
+    hide_expired: bool,
+) -> tuple[list[dict], int]:
+    """Cached evaluation page. Only the requested page is returned to the UI."""
+    from src.services.torgi_workset_service import TorgiFilterParams, load_torgi_workset
+
+    filters = TorgiFilterParams(
+        effective_medal=effective_medal,
+        model_medal=model_medal,
+        preliminary_medal=preliminary_medal,
+        expert_status=expert_status,
+        expert_medal=expert_medal,
+        object_family=object_family,
+        object_type=object_type,
+        category=category,
+        law=law,
+        region=region,
+        search_query=search_query,
+        hide_expired=hide_expired,
+        allowed_ids=list(allowed_ids) if allowed_ids else None,
+    )
+    return load_torgi_workset(limit=limit, offset=offset, filters=filters)
+
+
+def _torgi_page(limit: int, offset: int, filter_params) -> tuple[list[dict], int]:
+    allowed = tuple(filter_params.allowed_ids) if filter_params.allowed_ids else None
+    return _torgi_page_cached(
+        limit,
+        offset,
+        allowed,
+        filter_params.effective_medal,
+        filter_params.model_medal,
+        filter_params.preliminary_medal,
+        filter_params.expert_status,
+        filter_params.expert_medal,
+        filter_params.object_family,
+        filter_params.object_type,
+        filter_params.category,
+        filter_params.law,
+        filter_params.region,
+        filter_params.search_query,
+        filter_params.hide_expired,
+    )
+
+
+def _invalidate_stage_caches() -> None:
+    """Targeted refresh: only dashboard snapshot + stage page caches, never global."""
+    try:
+        from src.ui.components.analytics_v2.command_center import (
+            invalidate_command_center_snapshot,
+        )
+        invalidate_command_center_snapshot()
+    except Exception:
+        pass
+    try:
+        from src.services.torgi_workset_service import get_evaluated_torgi_workset
+    except Exception:
+        get_evaluated_torgi_workset = None
+    for fn in (_torgi_page_cached, _load_komissia, _load_razygranye, get_evaluated_torgi_workset,
+               _stage_workset_count, _stage_law_counts, _stage_review_counts, _load_sync_info,
+               _load_review_counts, _load_review_page):
+        try:
+            fn.clear()
+        except Exception:
+            pass
 
 
 def _page_offset(stage: str, total: int, law_key: str = "ALL") -> tuple[int, int]:
@@ -363,14 +523,19 @@ def _load_effective_map(cards: list[dict]) -> dict:
 
 
 
-def _load_komissia(limit: int = 25, offset: int = 0) -> list[dict]:
+@st.cache_data(ttl=30, show_spinner=False)
+def _load_komissia(limit: int = 25, offset: int = 0, cat_sql: str = "TRUE", cat_params: dict | None = None,
+                  need_join: bool = False) -> list[dict]:
     """Подача закрыта — ждём решения комиссии."""
     try:
         import psycopg2
         from psycopg2.extras import RealDictCursor
 
-        cat_sql, cat_params = _get_category_filter("commission")
-        params = dict(cat_params); params.update({"limit": limit, "offset": offset})
+        params = dict(cat_params or {}); params.update({"limit": limit, "offset": offset})
+        cat_join = (
+            "LEFT JOIN crm_category_candidates cc ON cc.procurement_id = cp.id"
+            if need_join else ""
+        )
 
         conn = psycopg2.connect(**_pg())
         with conn.cursor(cursor_factory=RealDictCursor) as cur:
@@ -392,7 +557,7 @@ def _load_komissia(limit: int = 25, offset: int = 0) -> list[dict]:
                        ai.proposed_procurement_type, ai.confidence,
                        ai.reasons, ai.normalized_result
                 FROM crm_procurements cp
-                LEFT JOIN crm_category_candidates cc ON cc.procurement_id = cp.id
+                {cat_join}
                 LEFT JOIN procurement_ai_assessments ai ON ai.procurement_id = cp.id AND ai.is_current = TRUE
                 WHERE cp.crm_stage = 'torgi'
                   AND cp.award_status IN ('submission_closed_waiting_award', 'award_not_found')
@@ -408,13 +573,18 @@ def _load_komissia(limit: int = 25, offset: int = 0) -> list[dict]:
         return []
 
 
-def _load_razygranye(limit: int = 25, offset: int = 0) -> list[dict]:
+@st.cache_data(ttl=30, show_spinner=False)
+def _load_razygranye(limit: int = 25, offset: int = 0, cat_sql: str = "TRUE", cat_params: dict | None = None,
+                  need_join: bool = False) -> list[dict]:
     try:
         import psycopg2
         from psycopg2.extras import RealDictCursor
 
-        cat_sql, cat_params = _get_category_filter("razygranye")
-        params = dict(cat_params); params.update({"limit": limit, "offset": offset})
+        params = dict(cat_params or {}); params.update({"limit": limit, "offset": offset})
+        cat_join = (
+            "LEFT JOIN crm_category_candidates cc ON cc.procurement_id = cp.id"
+            if need_join else ""
+        )
 
         conn = psycopg2.connect(**_pg())
         with conn.cursor(cursor_factory=RealDictCursor) as cur:
@@ -447,7 +617,7 @@ def _load_razygranye(limit: int = 25, offset: int = 0) -> list[dict]:
                              AND o.confirmed_base_medal IS NOT NULL
                        ) AS is_confirmed
                 FROM crm_procurements cp
-                LEFT JOIN crm_category_candidates cc ON cc.procurement_id = cp.id
+                {cat_join}
                 LEFT JOIN procurement_ai_assessments ai ON ai.procurement_id = cp.id AND ai.is_current = TRUE
                 WHERE cp.crm_stage = 'razygranye'
                   AND ({cat_sql})
@@ -462,6 +632,7 @@ def _load_razygranye(limit: int = 25, offset: int = 0) -> list[dict]:
         return []
 
 
+@st.cache_data(ttl=60, show_spinner=False)
 def _load_sync_info() -> dict:
     try:
         import psycopg2
@@ -535,49 +706,50 @@ def _render_torgi_tab() -> None:
         if info:
             st.caption(f"Обновлено: {_fmt_date(info.get('finished_at'))}")
         if st.button("↻", key="torgi_sync_btn"):
-            st.cache_data.clear()
+            _invalidate_stage_caches()
             st.rerun()
 
-    workset_ids = _stage_workset_ids("torgi")
-    sort_mode = st.radio(
-        "Сортировка по сроку",
-        list(DEADLINE_SORT_LABELS),
-        format_func=lambda value: DEADLINE_SORT_LABELS[value],
-        horizontal=True,
-        key="torgi_deadline_sort",
-        on_change=_reset_torgi_page,
-    )
+    from src.services.torgi_workset_service import load_torgi_workset, TorgiFilterParams
+    from src.ui.components.analytics_v2.torgi_filters import render_torgi_filter_bar
+
+    # ── Render priority & category filters ──
+    filter_params = render_torgi_filter_bar(_SESSION_TORGI, on_change=_reset_torgi_page)
+
+    scope_ids = st.session_state.get("_cr_scope_ids")
+    if scope_ids:
+        filter_params.allowed_ids = list(scope_ids)
+        _render_control_room_scope_banner(len(scope_ids))
+
     from src.services.annotation_state_service import (
-        count_annotation_states_sql,
-        count_law_states_sql,
-        filter_workset_ids_by_law,
-        filter_workset_ids_sql,
         load_current_annotation_states,
     )
     from src.services.db_bootstrap import connect_databases
     _, _, crm_db, _ = connect_databases()
-    # ?????? Law filter (SQL count & filter) ??????
-    law_counts = count_law_states_sql(workset_ids, crm_db)
+
+    # ── Law filter (SQL count & filter) ──
+    law_counts = _stage_law_counts("torgi")
     selected_law = _render_law_filter_from_counts(
         law_counts, _SESSION_TORGI, on_change=_reset_torgi_page
     )
-    law_workset_ids = filter_workset_ids_by_law(workset_ids, selected_law, crm_db)
-    # ?????? Expert review filter (SQL count & filter) ??????
-    sql_counts = count_annotation_states_sql(law_workset_ids, crm_db)
-    selected_review = _render_review_filter_from_counts(
-        sql_counts, _SESSION_TORGI, on_change=_reset_torgi_page
-    )
-    filtered_workset_ids = filter_workset_ids_sql(law_workset_ids, selected_review, crm_db)
-    filtered_total = len(filtered_workset_ids)
-    page, offset = _page_offset("torgi", filtered_total, selected_law)
-    cards = _load_torgi(_PAGE_SIZE, offset, sort_mode, filtered_workset_ids)
+    filter_params.law = selected_law if selected_law != "ALL" else None
+
+    # ── Load prioritized workset with SQL tiered sorting & filters ──
+    # First, get count to calculate pagination
+    _, total_matching = _torgi_page(_PAGE_SIZE, 0, filter_params)
+    page, offset = _page_offset("torgi", total_matching, selected_law)
+    cards, _ = _torgi_page(_PAGE_SIZE, offset, filter_params)
+
     # ── Page-only annotation state load (max 25 IDs) ──
     page_ids = [c["id"] for c in cards]
     annotation_states = load_current_annotation_states(page_ids, crm_db)
 
     if not cards:
-        st.info("Нет тендеров в стадии торгов.")
+        st.info("Нет тендеров, соответствующих выбранным критериям.")
         return
+
+    # ── Batch-load document counts for page cards (cached, no N+1) ──────────
+    from src.services.commercial_routing_v3.document_links import enrich_cards_document_counts
+    enrich_cards_document_counts(cards)
 
     # ── Batch-load processing results (no N+1) ─────────────────────────────
     from src.ui.components.analytics_v2 import card_processing
@@ -589,15 +761,10 @@ def _render_torgi_tab() -> None:
     eff_map = _load_effective_map(cards)
 
     cards_layer = cards
+    filtered = bind_and_advance(cards_layer, _SESSION_TORGI, st.session_state)
 
-    filtered = cards_layer
-
-    # SQL deadline ordering is global and already applied before pagination.
-    filtered = bind_and_advance(filtered, _SESSION_TORGI, st.session_state)
-
-    selected_id = st.session_state.get(_SESSION_TORGI)
-    st.markdown(f"### Идут торги · {len(workset_ids)}")
-    st.caption(f"Показано {offset + 1}–{offset + len(cards)} из {filtered_total}")
+    st.markdown(f"### Идут торги · {total_matching}")
+    st.caption(f"Показано {offset + 1}–{offset + len(cards)} из {total_matching}")
     _render_first_stage_dataset_panel(crm_db, annotation_states)
 
     render_stage_workspace(
@@ -606,9 +773,9 @@ def _render_torgi_tab() -> None:
         stage="OPEN",
         stage_label="Идут торги",
         effective_map=eff_map,
-        workset_ids=workset_ids,
+        workset_ids=[c["id"] for c in cards],
         annotation_states=annotation_states,
-        selected_annotation_filter=selected_review,
+        selected_annotation_filter="ALL",
     )
 
 
@@ -619,16 +786,21 @@ def _render_komissia_tab() -> None:
     col_hdr, col_sync = st.columns([3, 2])
     with col_sync:
         if st.button("↻ Обновить", key="komissia_sync_btn"):
-            st.cache_data.clear()
+            _invalidate_stage_caches()
             st.rerun()
 
-    workset_ids = _stage_workset_ids("commission")
-    page, offset = _page_offset("commission", len(workset_ids))
-    cards = _load_komissia(_PAGE_SIZE, offset)
+    cat_sql, cat_params, cat_join = _stage_category_sql("commission")
+    total = _stage_workset_count("commission")
+    review_counts = _stage_review_counts("commission", total)
+    page, offset = _page_offset("commission", total)
+    cards = _load_komissia(_PAGE_SIZE, offset, cat_sql, cat_params, need_join=bool(cat_join))
 
     if not cards:
         st.info("Нет тендеров на стадии работы комиссии.")
         return
+
+    from src.services.commercial_routing_v3.document_links import enrich_cards_document_counts
+    enrich_cards_document_counts(cards)
 
     waiting   = [c for c in cards if c["award_status"] == "submission_closed_waiting_award"]
     not_found = [c for c in cards if c["award_status"] == "award_not_found"]
@@ -637,7 +809,7 @@ def _render_komissia_tab() -> None:
     selected_id = st.session_state.get(_SESSION_KOMISSIA)
 
     st.caption(
-        f"Комиссия · {len(workset_ids)} · показано {offset + 1}–{offset + len(cards)}"
+        f"Комиссия · {total} · показано {offset + 1}–{offset + len(cards)}"
     )
 
     render_stage_workspace(
@@ -646,8 +818,10 @@ def _render_komissia_tab() -> None:
         stage="COMMISSION",
         stage_label="Комиссия",
         effective_map=_load_effective_map(filtered),
-        workset_ids=workset_ids,
+        workset_ids=[c["id"] for c in cards],
+        review_counts=review_counts,
     )
+
 
 
 # ─── Разыгранные-таб ──────────────────────────────────────────────────────────
@@ -656,21 +830,26 @@ def _render_razygranye_tab() -> None:
     col_hdr, col_sync = st.columns([3, 2])
     with col_sync:
         if st.button("↻ Обновить данные", key="razygr_sync_btn"):
-            st.cache_data.clear()
+            _invalidate_stage_caches()
             st.rerun()
 
-    workset_ids = _stage_workset_ids("razygranye")
-    page, offset = _page_offset("razygranye", len(workset_ids))
-    cards = _load_razygranye(_PAGE_SIZE, offset)
+    cat_sql, cat_params, cat_join = _stage_category_sql("razygranye")
+    total = _stage_workset_count("razygranye")
+    review_counts = _stage_review_counts("razygranye", total)
+    page, offset = _page_offset("razygranye", total)
+    cards = _load_razygranye(_PAGE_SIZE, offset, cat_sql, cat_params, need_join=bool(cat_join))
     if not cards:
         st.info("Нет разыгранных закупок.")
         return
+
+    from src.services.commercial_routing_v3.document_links import enrich_cards_document_counts
+    enrich_cards_document_counts(cards)
 
     cards_layer = cards
     cards_layer = bind_and_advance(cards_layer, _SESSION_RAZYGR, st.session_state)
 
     st.caption(
-        f"Разыгранные · {len(workset_ids)} · показано {offset + 1}–{offset + len(cards_layer)}"
+        f"Разыгранные · {total} · показано {offset + 1}–{offset + len(cards_layer)}"
     )
 
     render_stage_workspace(
@@ -679,7 +858,8 @@ def _render_razygranye_tab() -> None:
         stage="AWARDED",
         stage_label="Разыгранные",
         effective_map=_load_effective_map(cards_layer),
-        workset_ids=workset_ids,
+        workset_ids=[c["id"] for c in cards],
+        review_counts=review_counts,
     )
 
 
@@ -691,6 +871,7 @@ _REVIEW_STAGE_OPTIONS = ["Все", "torgi", "razygranye", "commission"]
 _REVIEW_QUAL_OPTIONS  = ["Все", "unassessed", "candidate", "confirmed", "rejected", "manual_review"]
 
 
+@st.cache_data(ttl=60, show_spinner=False)
 def _load_review_counts() -> dict:
     """Счётчики по всей выборке — один запрос."""
     try:
@@ -720,6 +901,7 @@ def _load_review_counts() -> dict:
         return {}
 
 
+@st.cache_data(ttl=30, show_spinner=False)
 def _load_review_page(
     crm_stage_filter: str,
     qual_filter: str,

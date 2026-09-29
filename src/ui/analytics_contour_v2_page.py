@@ -3,9 +3,10 @@ from __future__ import annotations
 
 import streamlit as st
 
-from src.ui.components.analytics_v2.dashboard_header import render_dashboard_header
+from src.ui.components.analytics_v2.control_room import render_control_room
+from src.ui.components.analytics_v2.control_room_links import apply_control_room_links
+from src.ui.components.analytics_v2.command_center import render_command_center
 from src.ui.components.analytics_v2.header import render_header
-from src.ui.components.analytics_v2.mock_data import CARDS
 from src.ui.components.analytics_v2.quick_filters import render_quick_filters
 from src.ui.components.analytics_v2.tabs_lazy_dispatch import render_tabs
 
@@ -31,14 +32,21 @@ _STICKY_CSS = """
 
 
 def render_analytics_contour_v2_page(service) -> None:
-    """Шапка → Dashboard KPI (factual) → [Фильтры | Рабочая область]."""
-    st.session_state["analytics_v2_cards"] = CARDS
+    """Верх страницы: бизнес-обзор (закупки / новые / документы / результат модели).
 
+    Техническая диагностика вынесена вниз в один collapsed expander и по
+    умолчанию пользователю не показывается.
+    """
     st.markdown(_STICKY_CSS, unsafe_allow_html=True)
 
-    st.caption("CRM build: 53075f6+analytics-v2-ui-rebuild")
+    # URL-навигация панели управления (?cr_cat / ?cr_open) на рабочую область.
+    apply_control_room_links()
+
     render_header()
-    render_dashboard_header()
+
+    # Бизнес-обзор: закупки, новые за 24 часа, документы, результат модели.
+    render_command_center()
+
     st.divider()
 
     left, right = st.columns([1, 3], gap="medium")
@@ -49,6 +57,17 @@ def render_analytics_contour_v2_page(service) -> None:
     with right:
         render_quick_filters()
         render_tabs()
+
+    st.divider()
+
+    with st.expander("Техническая информация", expanded=False):
+        st.caption("CRM build: 53075f6+analytics-v2-overview")
+        _render_technical_diagnostics()
+
+
+def _render_technical_diagnostics() -> None:
+    """Служебная диагностика: heartbeat очереди и состояние контура."""
+    render_control_room()
 
 
 def _render_filters() -> None:
@@ -182,6 +201,8 @@ def _reset_analytics_filters_state(session: dict) -> None:
         "analytics_v2_region_filter",
         "analytics_v2_show_mode",
         "selected_torgi_id",
+        "_cr_scope_ids",
+        "_cr_scope_label",
         "selected_komissia_id",
         "selected_razygr_id",
         "annotation_active_queue_session_key",
@@ -377,7 +398,7 @@ def _load_regions_from_db() -> list[str]:
     from src.services.crm_db_runtime import require_crm_db_connect_kwargs
     PG = require_crm_db_connect_kwargs()
     try:
-        conn = psycopg2.connect(connect_timeout=5, **PG)
+        conn = psycopg2.connect(connect_timeout=5, options="-c statement_timeout=20000", **PG)
         with conn.cursor() as cur:
             cur.execute("""
                 SELECT delivery_region, COUNT(*) AS cnt
@@ -395,7 +416,7 @@ def _load_regions_from_db() -> list[str]:
     except Exception:
         err = traceback.format_exc()
         _log.error("_load_regions_from_db FAILED (host=%s db=%s):\n%s", PG['host'], PG['dbname'], err)
-        st.caption(f"⚠️ Регионы: ошибка соединения ({PG['host']}:{PG['port']}/{PG['dbname']}) — см. лог")
+        st.caption("Регионы: нет данных из базы — фильтр временно недоступен.")
         return []
 
 
@@ -406,7 +427,11 @@ def _load_categories_from_db() -> list[str]:
         import psycopg2
         from psycopg2.extras import RealDictCursor
         from src.services.crm_db_runtime import require_crm_db_connect_kwargs
-        conn = psycopg2.connect(**require_crm_db_connect_kwargs())
+        conn = psycopg2.connect(
+            connect_timeout=5,
+            options="-c statement_timeout=20000",
+            **require_crm_db_connect_kwargs(),
+        )
         with conn.cursor(cursor_factory=RealDictCursor) as cur:
             cur.execute("""
                 SELECT DISTINCT crm_category FROM crm_procurements

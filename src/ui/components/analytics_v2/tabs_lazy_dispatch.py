@@ -38,7 +38,7 @@ def render_tabs() -> None:
         key="analytics_v2_active_stage",
         label_visibility="collapsed",
     )
-    if stage == "Подготовка к торгам":
+    if stage in ("Лиды", "Подготовка к торгам"):
         st.info("Раздел будет подключён на следующем этапе")
         return
 

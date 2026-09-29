@@ -243,7 +243,10 @@ def render_object_stage_selectors(
     stages: list[str],
     model_object_type: str | None,
     model_object_subtype: str | None,
-    model_stage: str | None,
+    model_work_stage: str | None,
+    model_object_stage: str | None = None,
+    model_object_stage_applicable: bool = True,
+    model_service_type: str | None = None,
 ) -> None:
     _render_vocabulary_selector(procurement_id, step="3", label="Тип объекта", field="obj_type",
                                 proposal_type="OBJECT_TYPE", known_values=obj_types,
@@ -251,9 +254,20 @@ def render_object_stage_selectors(
     _render_vocabulary_selector(procurement_id, step="3.1", label="Подтип / уточнение объекта", field="obj_subtype",
                                 proposal_type="OBJECT_SUBTYPE", known_values=subtypes,
                                 model_value=model_object_subtype, allow_empty=True)
-    _render_vocabulary_selector(procurement_id, step="4", label="Стадия / вид работ", field="work_stage",
+    # OBJECT_STAGE is a canonical read-only axis and is NOT the legacy
+    # crm_object_ai_classifications.project_stage column (tender stage).
+    st.markdown("##### 4. Стадия объекта")
+    if not model_object_stage_applicable:
+        st.caption("Не применимо: прямая поставка товара не имеет стадии объекта.")
+    else:
+        st.caption(
+            f"`{model_object_stage or 'UNKNOWN'}` — каноническая ось (только для чтения)"
+        )
+    st.markdown("##### 5. Тип услуги")
+    st.caption(f"`{model_service_type or 'NONE'}` — каноническая ось (только для чтения)")
+    _render_vocabulary_selector(procurement_id, step="6", label="Характер работ", field="work_stage",
                                 proposal_type="WORK_STAGE", known_values=stages,
-                                model_value=model_stage, allow_empty=False)
+                                model_value=model_work_stage, allow_empty=False)
 
 
 def pending_guided_proposals(

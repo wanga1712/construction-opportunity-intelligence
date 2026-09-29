@@ -60,8 +60,8 @@ def batch_load_opportunities(
         SELECT
             id,
             procurement_id,
-            category_code,
-            subcategory_code,
+            commercial_category_code AS category_code,
+            commercial_subcategory_code AS subcategory_code,
             candidate_initial_medal,
             current_effective_medal,
             current_effective_reason,

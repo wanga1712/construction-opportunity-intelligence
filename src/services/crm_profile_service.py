@@ -14,7 +14,14 @@ logger = logging.getLogger(__name__)
 
 
 def _crm_conn():
-    return psycopg2.connect(**require_crm_db_connect_kwargs())
+    # Profile/category queries ultimately read the large ``crm_procurements``
+    # table.  Without a ceiling a slow scan hangs the whole page forever;
+    # 20 s fails visibly instead (callers already render "нет данных").
+    return psycopg2.connect(
+        connect_timeout=5,
+        options="-c statement_timeout=20000",
+        **require_crm_db_connect_kwargs(),
+    )
 
 
 @st.cache_data(ttl=60, show_spinner=False)
@@ -236,7 +243,7 @@ def _cat_display(code: str) -> str:
     return _CAT_DISPLAY_NAMES.get(code, code)
 
 
-@st.cache_data(ttl=30, show_spinner=False)
+@st.cache_data(ttl=120, show_spinner=False)
 def load_category_hierarchy(stage: str = "torgi", filters: dict | None = None) -> dict:
     """
     Один batch-запрос для иерархической агрегации категорий.

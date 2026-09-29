@@ -275,6 +275,50 @@ AI CARD SESSION (Интерактивная сессия пользовател�
 
 ---
 
+---
+
+### 3.8. Analytics V2 — верхний dashboard (command center)
+
+Верх страницы «Аналитический контур V2» — плотный операционный экран,
+который собирается из одного read-only снимка
+(`src/services/analytics_command_center.py`, `load_analytics_command_snapshot()`)
+и кэшируется на 60 секунд. Ни один блок не делает собственный запрос в БД.
+
+| Блок | Что показывает | Источник |
+| :--- | :--- | :--- |
+| LIVE-строка | свежесть хранилищ и сервисов | system health snapshot (без SSH из UI) |
+| Активные торги | открытый приём заявок, разбивка 44-ФЗ / 223-ФЗ, окна по дедлайну | `crm_procurements` + каноническое правило actionable |
+| Pipeline | реальные узлы контура и потери между ними | CRM + document queue |
+| Матрица категорий | закупка × товарная категория, медали, открытые | `crm_procurement_category_opportunities` |
+| Top opportunities | приоритетные category opportunities | `crm_procurement_category_opportunities` |
+| Medal transition | 4×4 `candidate_initial_medal` → `current_effective_medal` + SAME/DOWN/UP | `crm_procurement_category_opportunities` |
+| Кто поставил оценку | только фактически заполненное происхождение оценки | projection provenance |
+| Документы | `NO_LINKS` / `FAILED` и реальные причины | `document_intelligence` |
+| Состояние серверов | компактный health-блок со ссылкой на полную страницу | `src/ui/system_health_page.py` |
+
+Правила экрана:
+
+- «Идут торги» — только реально открытый приём заявок (общее каноническое
+  правило actionable), а не `crm_stage='torgi'`;
+- «Новые за 24 часа» подписаны честно (`CRM_INGEST`): в projection нет
+  authoritative source timestamp появления закупки;
+- единица медальных метрик — category opportunity, а не закупка;
+- ошибка отдельного запроса становится «Нет данных» и коротким warning,
+  но никогда не нулём;
+- техническая диагностика (raw exception, pipeline-схема, KPI control room)
+  вынесена в collapsed expander «Техническая информация»;
+- обновление точечное: `st.cache_data.clear()` для обычного refresh не
+  вызывается; возврат на вкладку не повторяет тяжёлые SQL.
+
+**Матрица категорий — правило отображения.** Строка категории выводится
+только тогда, когда у неё есть хотя бы одна opportunity (`count > 0`).
+Активные категории реестра `crm_product_categories` (контур `procurement`)
+с нулём возможностей не рисуются нулями, а перечисляются короткой строкой
+под таблицей: «Без возможностей (не показано): …». Имена берутся из реестра
+(`category_name`); `CATEGORY_NAMES` — fallback для кодов, которых в реестре
+нет (например `computers`). Возвращать нулевые строки в таблицу не нужно:
+это факт отсутствия возможностей, а не значение KPI.
+
 ## 4. Сервисы и модули
 
 | Модуль / Сервис | Хост / Назначение |

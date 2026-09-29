@@ -181,6 +181,20 @@ def _sync_service(host: Dict[str, Any]) -> Dict[str, Any]:
     return {}
 
 
+def _proc_rows(procs: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    rows: List[Dict[str, Any]] = []
+    for p in procs or []:
+        rows.append(
+            {
+                "PID": p.get("pid"),
+                "Процесс": (p.get("name") or "—").split("/")[-1],
+                "CPU %": f"{float(p.get('cpu_pct') or 0):.1f}%",
+                "RAM": f"{float(p.get('ram_mb') or 0):.1f} MB",
+            }
+        )
+    return rows
+
+
 def _render_overview(hosts: Dict[str, Any], snap: Dict[str, Any]) -> None:
     s13 = hosts.get(HOST_S13) or {}
     s7 = hosts.get(HOST_S7) or {}
@@ -199,8 +213,35 @@ def _render_overview(hosts: Dict[str, Any], snap: Dict[str, Any]) -> None:
         for a in alerts[:8]:
             _alert_card(a, hosts)
 
-    # Golden V3 canary — marked as stale/unavailable in V4
-    st.markdown("**Golden V3 canary:** `stale/unavailable`")
+    # Active top processes on S13 (CPU & GPU)
+    s13_raw = s13.get("top_processes")
+    s13_procs = s13_raw if isinstance(s13_raw, dict) else {}
+    s13_gpu = s13.get("gpu") or {}
+    gpu_procs = s13_gpu.get("gpu_processes") or []
+    
+    st.markdown("#### 🔥 Текущая нагрузка процессов (SERVER 13)")
+    col_p1, col_p2 = st.columns(2)
+    with col_p1:
+        st.markdown("**Топ процессов по CPU:**")
+        cpu_list = s13_procs.get("by_cpu") or []
+        if cpu_list:
+            st.dataframe(_proc_rows(cpu_list[:6]), hide_index=True, use_container_width=True)
+        else:
+            st.caption("Нет данных по процессам CPU.")
+    with col_p2:
+        st.markdown("**Процессы на GPU (VRAM):**")
+        if gpu_procs:
+            gpu_rows = [
+                {
+                    "PID": gp.get("pid"),
+                    "Процесс": (gp.get("name") or "").split("/")[-1],
+                    "GPU VRAM": f"{gp.get('used_gpu_memory_mb', 0):.0f} MB",
+                }
+                for gp in gpu_procs
+            ]
+            st.dataframe(gpu_rows, hide_index=True, use_container_width=True)
+        else:
+            st.caption("Нет активных вычислительных процессов на GPU.")
 
 
 def _host_overview_card(host: Dict[str, Any], title: str, role: str) -> None:
@@ -268,6 +309,8 @@ def _host_overview_card(host: Dict[str, Any], title: str, role: str) -> None:
             f"{(d.get('device') or '').replace('/dev/', '')} {fmt_temp(d.get('temp_c'))}"
             for d in disk_temps[:3]
         ) or "—"
+        gpu_fan = gpu.get("gpu_fan_percent")
+        fan_txt = f" · кульки {gpu_fan:.0f}%" if gpu_fan is not None else ""
         services_html = (
             f"<div class='shm-kpi'><div class='lbl'>GPU</div>"
             f"<div class='val'>{fmt_pct(gpu_util)}</div>"
@@ -277,7 +320,7 @@ def _host_overview_card(host: Dict[str, Any], title: str, role: str) -> None:
             f"<div class='sub'>{vram_txt}</div></div>"
             f"<div class='shm-kpi'><div class='lbl'>Температура GPU</div>"
             f"<div class='val'>{fmt_temp(gpu_temp)}</div>"
-            f"<div class='sub'>power {power_txt}</div></div>"
+            f"<div class='sub'>power {power_txt}{fan_txt}</div></div>"
             f"<div class='shm-kpi'><div class='lbl'>Ollama model</div>"
             f"<div class='val' style='font-size:.95rem'>{active_model}</div>"
             f"<div class='sub'>исполнение: {exec_mode}</div></div>"
@@ -536,14 +579,15 @@ def _render_collectors_table(host: Dict[str, Any]) -> None:
 
 
 def _render_history_charts(history: List[Dict[str, Any]]) -> None:
-    st.markdown("#### История")
+    import pandas as pd
+    st.markdown("#### История (привязка по времени)")
     if not history:
         st.caption("Нет точек истории для выбранного периода.")
         return
     for metric, title_m in (
         ("cpu_pct", "CPU %"),
         ("ram_used_pct", "RAM %"),
-        ("cpu_temp_c", "Температура CPU"),
+        ("cpu_temp_c", "Температура CPU, °C"),
         ("gpu_util_pct", "Загрузка GPU, %"),
         ("gpu_temp_c", "Температура GPU, °C"),
         ("gpu_vram_pct", "Использование VRAM, %"),
@@ -553,9 +597,10 @@ def _render_history_charts(history: List[Dict[str, Any]]) -> None:
         ("data_used_pct", "Занятость /data"),
     ):
         series = history_series(history, metric)
-        if series.get(metric):
-            st.caption(title_m)
-            st.line_chart({title_m: series[metric]})
+        if series.get(metric) and series.get("t"):
+            st.caption(f"**{title_m}** (по времени)")
+            df = pd.DataFrame({title_m: series[metric]}, index=series["t"])
+            st.line_chart(df)
         elif metric.startswith("gpu_"):
             st.caption(f"{title_m} — нет точек истории (ещё не накоплено)")
 
@@ -615,12 +660,25 @@ def _render_network_section(hosts: Dict[str, Any]) -> None:
 def _render_processes_section(hosts: Dict[str, Any]) -> None:
     for hid, title in ((HOST_S13, "SERVER 13"), (HOST_S7, "SERVER 7")):
         host = hosts.get(hid) or {}
-        procs = host.get("top_processes") or []
+        tops = host.get("top_processes")
         st.subheader(title)
-        if not procs:
+        if not tops:
             st.caption("Нет списка процессов в снимке.")
             continue
-        st.dataframe(procs[:15], hide_index=True, use_container_width=True)
+        if isinstance(tops, dict):
+            by_cpu = tops.get("by_cpu") or []
+            by_ram = tops.get("by_ram") or []
+            if not by_cpu and not by_ram:
+                st.caption("Нет списка процессов в снимке.")
+                continue
+            if by_cpu:
+                st.markdown("**Топ по CPU**")
+                st.dataframe(_proc_rows(by_cpu[:15]), hide_index=True, use_container_width=True)
+            if by_ram:
+                st.markdown("**Топ по RAM**")
+                st.dataframe(_proc_rows(by_ram[:15]), hide_index=True, use_container_width=True)
+            continue
+        st.dataframe(tops[:15], hide_index=True, use_container_width=True)
 
 
 def _alert_card(a: Dict[str, Any], hosts: Dict[str, Any]) -> None:

@@ -190,21 +190,9 @@ def annotation_state_counts(states: dict[int, dict]) -> dict[str, int]:
     }
 
 
-def count_annotation_states_sql(procurement_ids: list[int], crm_db: Any) -> dict[str, int]:
-    """Compute review filter counts via SQL aggregation ??? no full Python load needed.
-
-    Returns exact same keys as annotation_state_counts().
-    """
-    ids = list(dict.fromkeys(int(v) for v in procurement_ids))
-    total = len(ids)
-    if not ids:
-        return {"ALL": 0, UNREVIEWED: 0, REVIEWED: 0, OUT_OF_CATEGORY: 0,
-                IN_CATEGORY: 0, UNCERTAIN: 0, COMMERCIAL: 0, NON_COMMERCIAL: 0,
-                LEGACY_NOT_INTERESTING: 0, NOT_INTERESTING: 0, PROFILED: 0,
-                UNANNOTATED: 0, ANNOTATED: 0}
-
-    rows = crm_db.execute_query(
-        """SELECT
+# Grouped projection of current expert annotations, shared by every
+# review-state counter so the classification lives in exactly one place.
+_ANNOTATION_GROUPED_SELECT = """SELECT
               CASE 
                 WHEN jsonb_typeof(payload -> 'expert_category_scope') = 'object' 
                 THEN payload -> 'expert_category_scope' ->> 'verdict' 
@@ -215,12 +203,24 @@ def count_annotation_states_sql(procurement_ids: list[int], crm_db: Any) -> dict
               payload ->> 'expert_scope_verdict' AS scope_verdict,
               payload ->> 'expert_medal' AS medal,
               payload -> 'error_reasons' AS error_reasons,
-              count(*) AS cnt
-           FROM crm_v3_expert_annotations
-           WHERE is_current = TRUE AND procurement_id = ANY(%s)
-           GROUP BY scope, commercial, comm_verdict, scope_verdict, medal, error_reasons""",
-        (ids,),
-    )
+              count(*) AS cnt"""
+
+
+def _empty_review_counts(total: int = 0) -> dict[str, int]:
+    return {
+        "ALL": total, UNREVIEWED: total, REVIEWED: 0, OUT_OF_CATEGORY: 0,
+        IN_CATEGORY: 0, UNCERTAIN: 0, COMMERCIAL: 0, NON_COMMERCIAL: 0,
+        LEGACY_NOT_INTERESTING: 0, NOT_INTERESTING: 0, PROFILED: 0,
+        UNANNOTATED: total, ANNOTATED: 0,
+    }
+
+
+def classify_review_state_counts(total: int, rows: list[dict] | None) -> dict[str, int]:
+    """Map grouped annotation rows onto the review-filter counters.
+
+    ``total`` is the number of procurements in scope (not the number of
+    annotation rows); ``rows`` is the output of ``_ANNOTATION_GROUPED_SELECT``.
+    """
     annotated_cnt = 0
     out_cat = 0; in_cat = 0; uncertain = 0
     commercial = 0; non_commercial = 0
@@ -273,6 +273,53 @@ def count_annotation_states_sql(procurement_ids: list[int], crm_db: Any) -> dict
         UNANNOTATED: total - annotated_cnt,
         ANNOTATED: annotated_cnt,
     }
+
+
+def count_annotation_states_sql(procurement_ids: list[int], crm_db: Any) -> dict[str, int]:
+    """Compute review filter counts via SQL aggregation ? no full Python load."""
+    ids = list(dict.fromkeys(int(v) for v in procurement_ids))
+    total = len(ids)
+    if not ids:
+        return _empty_review_counts(0)
+    rows = crm_db.execute_query(
+        _ANNOTATION_GROUPED_SELECT
+        + """
+           FROM crm_v3_expert_annotations
+           WHERE is_current = TRUE AND procurement_id = ANY(%s)
+           GROUP BY scope, commercial, comm_verdict, scope_verdict, medal, error_reasons""",
+        (ids,),
+    )
+    return classify_review_state_counts(total, rows)
+
+
+def count_annotation_states_sql_scoped(
+    total: int,
+    scoped_where: str,
+    params: dict,
+    crm_db: Any,
+    extra_join: str = "",
+) -> dict[str, int]:
+    """Review filter counts for a procurement-level predicate instead of an ID list.
+
+    ``scoped_where`` filters the ``crm_procurements cp`` alias (``cc`` is the
+    optional category-candidate alias); ``params`` supplies its placeholders.
+    This removes the "materialize every workset id" step from stage tabs.
+    """
+    if total <= 0:
+        return _empty_review_counts(0)
+    rows = crm_db.execute_query(
+        _ANNOTATION_GROUPED_SELECT
+        + f"""
+           FROM crm_v3_expert_annotations ea
+           WHERE ea.is_current = TRUE
+             AND EXISTS (
+                 SELECT 1 FROM crm_procurements cp {extra_join}
+                 WHERE cp.id = ea.procurement_id AND ({scoped_where})
+             )
+           GROUP BY scope, commercial, comm_verdict, scope_verdict, medal, error_reasons""",
+        params or {},
+    )
+    return classify_review_state_counts(total, rows)
 
 
 def annotation_filter_sql_clause(selected_state: str) -> str:

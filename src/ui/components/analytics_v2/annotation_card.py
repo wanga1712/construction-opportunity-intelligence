@@ -8,7 +8,9 @@ from typing import Any
 from src.domain.commercial_routing_v3 import OpportunityTrack
 from src.services.commercial_routing_v3.model_ui_projection import (
     business_view_from_assessment,
+    format_object_stage,
     model_view_from_assessment,
+    routing_axes_view_from_assessment,
 )
 from src.services.expert_annotation_service import (
     load_categories_for_selector,
@@ -551,12 +553,20 @@ def _render_ai_block(assessment: dict | None) -> None:
         if view.get("provenance") == "UNKNOWN_LEGACY":
             st.warning("⚠ **ИСТОРИЧЕСКАЯ ОЦЕНКА** — RAW модели не сохранён")
             nr = (assessment or {}).get("normalized_result") or {}
+            axes = routing_axes_view_from_assessment(assessment)
             st.caption(
                 f"Предмет: `{nr.get('subject_interpretation') or '—'}` · "
-                f"Форма: `{nr.get('procurement_form') or '—'}` · "
+                f"Форма закупки: `{axes.get('procurement_form') or '—'}` · "
                 f"Объект: `{nr.get('object_type') or '—'}` / `{nr.get('object_subtype') or '—'}` · "
-                f"Стадия: `{nr.get('project_stage') or nr.get('work_stage') or '—'}`"
+                f"Стадия объекта: `{format_object_stage(axes)}` · "
+                f"Характер работ: `{axes.get('work_stage') or '—'}` · "
+                f"Тип услуги: `{axes.get('service_type') or '—'}`"
             )
+            if axes.get("legacy_tender_stage"):
+                st.caption(
+                    f"_Стадия закупки (legacy `project_stage`, другая ось): "
+                    f"`{axes.get('legacy_tender_stage')}`_"
+                )
             legacy = _legacy_category_rows(assessment)
             if legacy:
                 st.caption("_Legacy/business provenance — не MODEL_VALIDATED:_")
@@ -565,11 +575,21 @@ def _render_ai_block(assessment: dict | None) -> None:
             return
 
         st.caption(f"MODEL_VALIDATED · inference_run_id=`{(assessment or {}).get('inference_run_id')}`")
+        axes = routing_axes_view_from_assessment(assessment)
         st.markdown(
             f"**Объект:** `{view.get('object_type') or '—'}` / `{view.get('object_subtype') or '—'}` · "
-            f"**Стадия:** `{view.get('work_stage') or '—'}` · "
-            f"**Форма:** `{view.get('procurement_form') or '—'}`"
+            f"**Форма закупки:** `{axes.get('procurement_form') or '—'}`"
         )
+        st.markdown(
+            f"**Стадия объекта:** `{format_object_stage(axes)}` · "
+            f"**Характер работ:** `{axes.get('work_stage') or '—'}` · "
+            f"**Тип услуги:** `{axes.get('service_type') or '—'}`"
+        )
+        if axes.get("legacy_tender_stage"):
+            st.caption(
+                f"_Стадия закупки (legacy `project_stage`, не стадия объекта): "
+                f"`{axes.get('legacy_tender_stage')}`_"
+            )
         nr = (assessment or {}).get("normalized_result") or {}
         if nr.get("subject_interpretation"):
             st.markdown(f"**subject_interpretation:** `{nr['subject_interpretation']}`")
@@ -702,6 +722,7 @@ def _render_guided_positive(
     render_category_selector(procurement_id, assessment, categories, rows, crm_db)
     view = model_view_from_assessment(assessment)
     nr = (assessment or {}).get("normalized_result") or {}
+    axes = routing_axes_view_from_assessment(assessment)
     render_object_stage_selectors(
         procurement_id,
         obj_types=obj_types,
@@ -709,7 +730,10 @@ def _render_guided_positive(
         stages=stages,
         model_object_type=view.get("object_type") or nr.get("object_type"),
         model_object_subtype=view.get("object_subtype") or nr.get("object_subtype"),
-        model_stage=view.get("work_stage") or nr.get("project_stage"),
+        model_work_stage=axes.get("work_stage") or view.get("work_stage"),
+        model_object_stage=axes.get("object_stage"),
+        model_object_stage_applicable=axes.get("object_stage_applicable", True),
+        model_service_type=axes.get("service_type"),
     )
     _render_medal(procurement_id)
     if show_actions:

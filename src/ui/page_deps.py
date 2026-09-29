@@ -17,7 +17,9 @@ class PageDependency(str, Enum):
 # Sidebar + hidden routes. Default for unknown keys: COMPANIES_SERVICE.
 PAGE_DEPENDENCY: dict[str, PageDependency] = {
     # Heavy analytics / contour (need CompaniesService + Radar designers)
-    "objects_v2": PageDependency.COMPANIES_SERVICE,
+    # Analytics V2 renders from CRM DB + local snapshot only; CompaniesService
+    # (Radar designer load_sync) is never used by the page, so keep it light.
+    "objects_v2": PageDependency.CRM_DB_ONLY,
     "objects": PageDependency.COMPANIES_SERVICE,
     "objects_copy": PageDependency.COMPANIES_SERVICE,
     "analytics_v3": PageDependency.COMPANIES_SERVICE,

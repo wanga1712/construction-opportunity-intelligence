@@ -598,7 +598,8 @@ def _confirm_manager(procurement_id):
             """, (procurement_id,))
         conn.close()
         st.toast("✓ Отмечено менеджером")
-        st.cache_data.clear()
+        from src.ui.components.analytics_v2.tabs import _invalidate_stage_caches
+        _invalidate_stage_caches()
     except Exception as e:
         st.error(f"Ошибка: {e}")
 
