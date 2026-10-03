@@ -19,7 +19,19 @@ from src.ui.components.analytics_v2.stage_workspace import (
 _SESSION_TORGI    = "selected_torgi_id"
 _SESSION_KOMISSIA = "selected_komissia_id"
 _SESSION_RAZYGR   = "selected_razygr_id"
-_PAGE_SIZE = 25
+_PAGE_SIZE = 20
+
+# ADMISSION-GATE (BUSINESS_RESEARCH_ADMISSION_V2): "Разыгранные" lists only
+# awarded procurements whose current persisted admission is ELIGIBLE
+# (works with embedded products / design projects). Awarded direct goods
+# (EXCLUDED) and held/unknown rows stay out of the commercial awarded workset.
+_AWARDED_ADMISSION_SQL = (
+    "EXISTS (SELECT 1 FROM crm_procurement_scope_authority sa "
+    "WHERE sa.procurement_id = cp.id "
+    "AND sa.admission_state = 'ELIGIBLE' "
+    "AND sa.admission_policy_version = 'BUSINESS_RESEARCH_ADMISSION_V2')"
+)
+
 FARTHEST_DEADLINE_FIRST = "FARTHEST_DEADLINE_FIRST"
 NEAREST_DEADLINE_FIRST = "NEAREST_DEADLINE_FIRST"
 DEADLINE_SORT_LABELS = {
@@ -122,6 +134,20 @@ def _reset_torgi_page() -> None:
             st.session_state[k] = 1
 
 
+def _render_control_room_scope_banner(count: int) -> None:
+    """Deep-link scope from the main dashboard (canonical category / one procurement)."""
+    from src.ui.components.analytics_v2.control_room_links import clear_control_room_scope
+
+    label = st.session_state.get("_cr_scope_label") or "главная панель"
+    col_msg, col_reset = st.columns([5, 1])
+    with col_msg:
+        st.info(f"Фильтр из главной панели: {label} · {count} закупок")
+    with col_reset:
+        if st.button("Сбросить", key="_cr_scope_reset"):
+            clear_control_room_scope()
+            st.rerun()
+
+
 # ─── DB helpers ───────────────────────────────────────────────────────────────
 
 def _pg():
@@ -158,7 +184,7 @@ def _stage_workset_ids(stage: str) -> list[int]:
         where = "cp.crm_stage='torgi' AND cp.award_status IN ('submission_closed_waiting_award','award_not_found')"
         cat_stage = "commission"
     else:
-        where = "cp.crm_stage='razygranye'"
+        where = "cp.crm_stage='razygranye' AND " + _AWARDED_ADMISSION_SQL
         cat_stage = "razygranye"
     cat_sql, params = _get_category_filter(cat_stage)
     conn = psycopg2.connect(**_pg())
@@ -450,6 +476,7 @@ def _load_razygranye(limit: int = 25, offset: int = 0) -> list[dict]:
                 LEFT JOIN crm_category_candidates cc ON cc.procurement_id = cp.id
                 LEFT JOIN procurement_ai_assessments ai ON ai.procurement_id = cp.id AND ai.is_current = TRUE
                 WHERE cp.crm_stage = 'razygranye'
+                  AND {_AWARDED_ADMISSION_SQL}
                   AND ({cat_sql})
                 ORDER BY cp.contract_signed_at DESC NULLS LAST
                 LIMIT %(limit)s OFFSET %(offset)s
@@ -538,46 +565,49 @@ def _render_torgi_tab() -> None:
             st.cache_data.clear()
             st.rerun()
 
-    workset_ids = _stage_workset_ids("torgi")
-    sort_mode = st.radio(
-        "Сортировка по сроку",
-        list(DEADLINE_SORT_LABELS),
-        format_func=lambda value: DEADLINE_SORT_LABELS[value],
-        horizontal=True,
-        key="torgi_deadline_sort",
-        on_change=_reset_torgi_page,
-    )
+    from src.services.torgi_workset_service import load_torgi_workset, TorgiFilterParams
+    from src.ui.components.analytics_v2.torgi_filters import render_torgi_filter_bar
+
+    # ── Render priority & category filters ──
+    filter_params = render_torgi_filter_bar(_SESSION_TORGI, on_change=_reset_torgi_page)
+
+    scope_ids = st.session_state.get("_cr_scope_ids")
+    if scope_ids:
+        filter_params.allowed_ids = list(scope_ids)
+        _render_control_room_scope_banner(len(scope_ids))
+
     from src.services.annotation_state_service import (
-        count_annotation_states_sql,
         count_law_states_sql,
-        filter_workset_ids_by_law,
-        filter_workset_ids_sql,
         load_current_annotation_states,
     )
     from src.services.db_bootstrap import connect_databases
     _, _, crm_db, _ = connect_databases()
-    # ?????? Law filter (SQL count & filter) ??????
+
+    # ── Law filter (SQL count & filter) ──
+    workset_ids = _stage_workset_ids("torgi")
     law_counts = count_law_states_sql(workset_ids, crm_db)
     selected_law = _render_law_filter_from_counts(
         law_counts, _SESSION_TORGI, on_change=_reset_torgi_page
     )
-    law_workset_ids = filter_workset_ids_by_law(workset_ids, selected_law, crm_db)
-    # ?????? Expert review filter (SQL count & filter) ??????
-    sql_counts = count_annotation_states_sql(law_workset_ids, crm_db)
-    selected_review = _render_review_filter_from_counts(
-        sql_counts, _SESSION_TORGI, on_change=_reset_torgi_page
-    )
-    filtered_workset_ids = filter_workset_ids_sql(law_workset_ids, selected_review, crm_db)
-    filtered_total = len(filtered_workset_ids)
-    page, offset = _page_offset("torgi", filtered_total, selected_law)
-    cards = _load_torgi(_PAGE_SIZE, offset, sort_mode, filtered_workset_ids)
+    filter_params.law = selected_law if selected_law != "ALL" else None
+
+    # ── Load prioritized workset with SQL tiered sorting & filters ──
+    # First, get count to calculate pagination
+    _, total_matching = load_torgi_workset(limit=1, offset=0, filters=filter_params)
+    page, offset = _page_offset("torgi", total_matching, selected_law)
+    cards, _ = load_torgi_workset(limit=_PAGE_SIZE, offset=offset, filters=filter_params)
+
     # ── Page-only annotation state load (max 25 IDs) ──
     page_ids = [c["id"] for c in cards]
     annotation_states = load_current_annotation_states(page_ids, crm_db)
 
     if not cards:
-        st.info("Нет тендеров в стадии торгов.")
+        st.info("Нет тендеров, соответствующих выбранным критериям.")
         return
+
+    # ── Batch-load document counts for page cards (cached, no N+1) ──────────
+    from src.services.commercial_routing_v3.document_links import enrich_cards_document_counts
+    enrich_cards_document_counts(cards)
 
     # ── Batch-load processing results (no N+1) ─────────────────────────────
     from src.ui.components.analytics_v2 import card_processing
@@ -589,15 +619,10 @@ def _render_torgi_tab() -> None:
     eff_map = _load_effective_map(cards)
 
     cards_layer = cards
+    filtered = bind_and_advance(cards_layer, _SESSION_TORGI, st.session_state)
 
-    filtered = cards_layer
-
-    # SQL deadline ordering is global and already applied before pagination.
-    filtered = bind_and_advance(filtered, _SESSION_TORGI, st.session_state)
-
-    selected_id = st.session_state.get(_SESSION_TORGI)
-    st.markdown(f"### Идут торги · {len(workset_ids)}")
-    st.caption(f"Показано {offset + 1}–{offset + len(cards)} из {filtered_total}")
+    st.markdown(f"### Идут торги · {total_matching}")
+    st.caption(f"Показано {offset + 1}–{offset + len(cards)} из {total_matching}")
     _render_first_stage_dataset_panel(crm_db, annotation_states)
 
     render_stage_workspace(
@@ -606,9 +631,9 @@ def _render_torgi_tab() -> None:
         stage="OPEN",
         stage_label="Идут торги",
         effective_map=eff_map,
-        workset_ids=workset_ids,
+        workset_ids=[c["id"] for c in cards],
         annotation_states=annotation_states,
-        selected_annotation_filter=selected_review,
+        selected_annotation_filter="ALL",
     )
 
 
@@ -630,6 +655,9 @@ def _render_komissia_tab() -> None:
         st.info("Нет тендеров на стадии работы комиссии.")
         return
 
+    from src.services.commercial_routing_v3.document_links import enrich_cards_document_counts
+    enrich_cards_document_counts(cards)
+
     waiting   = [c for c in cards if c["award_status"] == "submission_closed_waiting_award"]
     not_found = [c for c in cards if c["award_status"] == "award_not_found"]
     filtered = waiting + not_found
@@ -650,6 +678,7 @@ def _render_komissia_tab() -> None:
     )
 
 
+
 # ─── Разыгранные-таб ──────────────────────────────────────────────────────────
 
 def _render_razygranye_tab() -> None:
@@ -665,6 +694,9 @@ def _render_razygranye_tab() -> None:
     if not cards:
         st.info("Нет разыгранных закупок.")
         return
+
+    from src.services.commercial_routing_v3.document_links import enrich_cards_document_counts
+    enrich_cards_document_counts(cards)
 
     cards_layer = cards
     cards_layer = bind_and_advance(cards_layer, _SESSION_RAZYGR, st.session_state)

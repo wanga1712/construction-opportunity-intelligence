@@ -27,6 +27,13 @@ from src.services.commercial_routing_v3.research_queue_lifecycle import (
 from src.services.commercial_routing_v3.document_lane_authority import (
     apply_current_opportunity_authority,
 )
+from src.services.commercial_routing_v3.business_research_admission import (
+    ADMISSION_POLICY_VERSION,
+    context_admission_fields,
+    is_queue_eligible,
+    load_authority_map,
+    load_authority_one,
+)
 
 logger = logging.getLogger("commercial_routing_v3.queue_producer")
 
@@ -245,6 +252,7 @@ class CommercialRoutingV3QueueProducer:
 
         inserted = updated = skipped_already_active = errors = 0
         skipped_out_of_target = skipped_unknown_okpd = 0
+        skipped_not_eligible = 0
         target_waiting_inserted = target_waiting_updated = 0
         no_links_inserted = no_links_updated = 0
         offset = 0
@@ -288,6 +296,11 @@ class CommercialRoutingV3QueueProducer:
 
                 # Batch count document links to avoid N+1 queries
                 link_counts = batch_count_document_links(rows)
+
+                # ADMISSION-GATE: load current persisted admission for the batch
+                # (crm_procurement_scope_authority). Missing/stale => fail closed.
+                with crm.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as adcur:
+                    admissions = load_authority_map(adcur, [r["id"] for r in rows])
 
                 # Open a single connection to Document DB for this batch
                 doc_conn = psycopg2.connect(**self._doc_dsn)
@@ -367,7 +380,12 @@ class CommercialRoutingV3QueueProducer:
                                         else:
                                             action = "updated"
                             else:
-                                result = self._upsert_queue_task(task, status=status, conn=doc_conn)
+                                result = self._upsert_queue_task(
+                                    task,
+                                    status=status,
+                                    conn=doc_conn,
+                                    admission=admissions.get(pid),
+                                )
                                 action = result.get("action")
 
                             if action == "inserted":
@@ -384,6 +402,8 @@ class CommercialRoutingV3QueueProducer:
                                     target_waiting_updated += 1
                             elif action == "skipped_already_active":
                                 skipped_already_active += 1
+                            elif action == "skipped_not_eligible":
+                                skipped_not_eligible += 1
                         except Exception as exc:
                             errors += 1
                             logger.exception("populate_all_eligible pid=%s: %s", pid, exc)
@@ -408,6 +428,7 @@ class CommercialRoutingV3QueueProducer:
             "inserted": inserted,
             "updated": updated,
             "skipped_already_active": skipped_already_active,
+            "skipped_not_eligible": skipped_not_eligible,
             "skipped_out_of_target": skipped_out_of_target,
             "skipped_unknown_okpd": skipped_unknown_okpd,
             "target_waiting_inserted": target_waiting_inserted,
@@ -727,7 +748,30 @@ class CommercialRoutingV3QueueProducer:
             contract_number=proc.get("contract_number"),
         )
 
-    def _upsert_queue_task(self, task: Dict[str, Any], *, status: str = "PRE_RESEARCH_WAITING", last_error: Optional[str] = None, conn: Optional[Any] = None) -> Dict[str, Any]:
+    def _upsert_queue_task(self, task: Dict[str, Any], *, status: str = "PRE_RESEARCH_WAITING", last_error: Optional[str] = None, conn: Optional[Any] = None, admission: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+        # ADMISSION-GATE (BUSINESS_RESEARCH_ADMISSION_V2): single choke point for
+        # every enqueue/update. A row may only be written when the current
+        # persisted authority says ELIGIBLE; missing / stale / EXCLUDED / HOLD
+        # fails closed (no queue write).
+        if admission is None:
+            adm_conn = psycopg2.connect(**self._crm_dsn)
+            try:
+                admission = load_authority_one(adm_conn, task["procurement_id"])
+            finally:
+                adm_conn.close()
+        if not is_queue_eligible(admission):
+            rec = admission or {}
+            return {
+                "action": "skipped_not_eligible",
+                "queue_id": None,
+                "admission_state": rec.get("admission_state", "HOLD"),
+                "admission_reason": rec.get("admission_reason", "AUTHORITY_MISSING"),
+                **task,
+            }
+        task["category_context"] = {
+            **(task.get("category_context") or {}),
+            **context_admission_fields(admission),
+        }
         sql_check = """
             SELECT id, status, research_depth FROM document_processing_queue
             WHERE procurement_id = %s AND pipeline_generation = %s

@@ -24,6 +24,12 @@ from typing import Any, Dict, List, Optional
 import psycopg2
 import psycopg2.extras
 
+from src.services.commercial_routing_v3.business_research_admission import (
+    context_admission_fields,
+    is_queue_eligible,
+    load_authority_one,
+)
+
 logger = logging.getLogger(__name__)
 
 PIPELINE_GENERATION = "S13_V2"
@@ -259,6 +265,24 @@ class S13V2QueueProducer:
         Upgrade research_depth if new > existing.
         Returns dict with action='inserted'|'updated'|'skipped'.
         """
+        # ADMISSION-GATE (BUSINESS_RESEARCH_ADMISSION_V2): no queue write unless
+        # the current persisted authority says ELIGIBLE (fail closed).
+        adm_conn = psycopg2.connect(**self._crm_dsn)
+        try:
+            admission = load_authority_one(adm_conn, task["procurement_id"])
+        finally:
+            adm_conn.close()
+        if not is_queue_eligible(admission):
+            return {
+                "action": "skipped_not_eligible",
+                "queue_id": None,
+                "admission_state": (admission or {}).get("admission_state", "HOLD"),
+                **task,
+            }
+        task["category_context"] = {
+            **(task.get("category_context") or {}),
+            **context_admission_fields(admission),
+        }
         sql_check = """
             SELECT id, research_depth FROM document_processing_queue
             WHERE procurement_id = %s AND pipeline_generation = 'S13_V2'

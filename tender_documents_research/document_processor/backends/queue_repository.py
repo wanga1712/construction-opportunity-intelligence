@@ -14,6 +14,19 @@ from database_work.database_connection import DatabaseManager
 
 PIPELINE_S13V2 = "S13_V2"
 
+# ADMISSION-GATE (BUSINESS_RESEARCH_ADMISSION_V2): claim is the last fail-closed
+# defense. A row is claimable only when the queue row carries a current ELIGIBLE
+# admission decision (stamped by the producer / reconciliation). Missing, stale
+# or non-ELIGIBLE metadata => row is never claimed, regardless of lane/band/GOLD.
+ADMISSION_POLICY_VERSION = "BUSINESS_RESEARCH_ADMISSION_V2"
+_ADMISSION_FILTER = (
+    " AND q.category_context IS NOT NULL"
+    " AND q.category_context->>'admission_state' = 'ELIGIBLE'"
+    " AND q.category_context->>'admission_policy_version' = '"
+    + ADMISSION_POLICY_VERSION
+    + "'"
+)
+
 class QueueRepository(abc.ABC):
     @abc.abstractmethod
     def claim_batch(self, worker_id: int, batch_size: int, force_contract: Optional[str] = None, force_table: Optional[str] = None, queue_lanes: Optional[Sequence[str]] = None) -> List[Dict[str, Any]]:
@@ -142,6 +155,7 @@ class S13V2QueueRepository(QueueRepository):
                         FROM document_processing_queue q
                        WHERE q.status IN ('PENDING', 'PRE_RESEARCH_WAITING')
                          AND (q.pipeline_generation = %s OR q.pipeline_generation IS NULL)
+                         {_ADMISSION_FILTER}
                          {lane_filter}
                        ORDER BY {order_clause}
                       LIMIT %s
@@ -180,65 +194,35 @@ class S13V2QueueRepository(QueueRepository):
             q.research_prior_score DESC NULLS LAST,
             q.id ASC"""
 
-        _GEN_FILTER = " AND (q.pipeline_generation = %s OR q.pipeline_generation IS NULL)"
-
-        # Phase A: Lock candidate pool — effective-band UNION ALL with subpool partitioning.
-        # 1. Model GOLD subpool (raw GOLD)
-        # 2. Direct Goods Override subpool (DIRECT_GOODS >= 50k, raw band != GOLD)
-        # 3. SILVER, BRONZE, WOOD, UNSCORED subqueries (excluding DIRECT_GOODS >= 50k)
-        union_parts = []
-        union_params: list = []
-
-        # Model GOLD
-        union_parts.append(f"""(
-            SELECT {_COLS}
-              FROM document_processing_queue q
-             WHERE q.status IN ('PENDING', 'PRE_RESEARCH_WAITING')
-               AND q.research_prior_band = 'GOLD'{_GEN_FILTER}{lane_filter}
-             ORDER BY {_ORDER} LIMIT %s FOR UPDATE SKIP LOCKED)""")
-        union_params.extend([self.pipeline_generation()] + lane_params + [per_band_limit])
-
-        # Direct Goods Override to GOLD (non-model-gold)
-        union_parts.append(f"""(
-            SELECT {_COLS}
-              FROM document_processing_queue q
-             WHERE q.status IN ('PENDING', 'PRE_RESEARCH_WAITING')
-               AND q.procurement_scope_type = 'DIRECT_GOODS'
-               AND COALESCE(q.normalized_nmck_rub, 0) >= 50000
-               AND (q.research_prior_band IS NULL OR q.research_prior_band != 'GOLD'){_GEN_FILTER}{lane_filter}
-             ORDER BY {_ORDER} LIMIT %s FOR UPDATE SKIP LOCKED)""")
-        union_params.extend([self.pipeline_generation()] + lane_params + [per_band_limit])
-
-        # Other bands (SILVER, BRONZE, WOOD) excluding DIRECT_GOODS >= 50k
-        for bname in ['SILVER', 'BRONZE', 'WOOD']:
-            union_parts.append(f"""(
-                SELECT {_COLS}
-                  FROM document_processing_queue q
-                 WHERE q.status IN ('PENDING', 'PRE_RESEARCH_WAITING')
-                   AND q.research_prior_band = %s
-                   AND NOT (q.procurement_scope_type = 'DIRECT_GOODS' AND COALESCE(q.normalized_nmck_rub, 0) >= 50000){_GEN_FILTER}{lane_filter}
-                 ORDER BY {_ORDER} LIMIT %s FOR UPDATE SKIP LOCKED)""")
-            union_params.extend([bname, self.pipeline_generation()] + lane_params + [per_band_limit])
-
-        # UNSCORED / NULL band excluding DIRECT_GOODS >= 50k
-        union_parts.append(f"""(
-            SELECT {_COLS}
-              FROM document_processing_queue q
-             WHERE q.status IN ('PENDING', 'PRE_RESEARCH_WAITING')
-               AND (q.research_prior_band IS NULL
-                    OR q.research_prior_band NOT IN ('GOLD','SILVER','BRONZE','WOOD'))
-               AND NOT (q.procurement_scope_type = 'DIRECT_GOODS' AND COALESCE(q.normalized_nmck_rub, 0) >= 50000){_GEN_FILTER}{lane_filter}
-             ORDER BY {_ORDER} LIMIT %s FOR UPDATE SKIP LOCKED)""")
-        union_params.extend([self.pipeline_generation()] + lane_params + [per_band_limit])
-
-        select_sql = " UNION ALL ".join(union_parts)
-        select_params = union_params
+        _GEN_FILTER = (
+            " AND (q.pipeline_generation = %s OR q.pipeline_generation IS NULL)"
+            + _ADMISSION_FILTER
+        )
 
         conn = self._get_conn()
         try:
+            # Lock each subpool separately: PostgreSQL rejects FOR UPDATE on UNION.
+            subpools = [
+                ("q.research_prior_band = %s", ["GOLD"]),
+                ("q.procurement_scope_type = 'DIRECT_GOODS' AND COALESCE(q.normalized_nmck_rub, 0) >= 50000 AND (q.research_prior_band IS NULL OR q.research_prior_band != 'GOLD')", []),
+                ("q.research_prior_band = %s AND NOT (q.procurement_scope_type = 'DIRECT_GOODS' AND COALESCE(q.normalized_nmck_rub, 0) >= 50000)", ["SILVER"]),
+                ("q.research_prior_band = %s AND NOT (q.procurement_scope_type = 'DIRECT_GOODS' AND COALESCE(q.normalized_nmck_rub, 0) >= 50000)", ["BRONZE"]),
+                ("q.research_prior_band = %s AND NOT (q.procurement_scope_type = 'DIRECT_GOODS' AND COALESCE(q.normalized_nmck_rub, 0) >= 50000)", ["WOOD"]),
+                ("(q.research_prior_band IS NULL OR q.research_prior_band NOT IN ('GOLD','SILVER','BRONZE','WOOD')) AND NOT (q.procurement_scope_type = 'DIRECT_GOODS' AND COALESCE(q.normalized_nmck_rub, 0) >= 50000)", []),
+            ]
+            raw_rows = []
             with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
-                cur.execute(select_sql, select_params)
-                raw_rows = [dict(r) for r in cur.fetchall()]
+                for predicate, predicate_params in subpools:
+                    sql = f"""SELECT {_COLS}
+                              FROM document_processing_queue q
+                             WHERE q.status IN ('PENDING', 'PRE_RESEARCH_WAITING')
+                               AND {predicate}{_GEN_FILTER}{lane_filter}
+                             ORDER BY {_ORDER}
+                             LIMIT %s
+                             FOR UPDATE SKIP LOCKED"""
+                    params = predicate_params + [self.pipeline_generation()] + lane_params + [per_band_limit]
+                    cur.execute(sql, params)
+                    raw_rows.extend(dict(r) for r in cur.fetchall())
 
             # Deduplicate by ID to guarantee POOL_DUPLICATE_IDS = 0
             seen_ids = set()
@@ -558,4 +542,3 @@ class LegacyQueueRepository(QueueRepository):
         """
         rows = self.db.execute_query(self.db_alias, sql, fetch=True) or []
         return int(rows[0][0]) if rows else 0
-
