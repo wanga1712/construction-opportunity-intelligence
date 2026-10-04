@@ -77,6 +77,15 @@ def business_relevant_ids(crm_cur, doc_cur) -> list:
         """
     )
     ids = {int(r["id"]) for r in crm_cur.fetchall()}
+    # Phase 3: every procurement that already HAS an authority row must be
+    # re-materialised, regardless of end_date — otherwise a stale lifecycle
+    # (e.g. WAITING derived from the old date-authority) is never refreshed.
+    crm_cur.execute("SELECT procurement_id FROM crm_procurement_scope_authority")
+    ids |= {
+        int(r["procurement_id"])
+        for r in crm_cur.fetchall()
+        if r["procurement_id"] is not None
+    }
     doc_cur.execute(
         "SELECT DISTINCT procurement_id FROM document_processing_queue "
         "WHERE status IN %s",
@@ -212,6 +221,11 @@ def reconcile_queue(doc_cur, crm_cur, authority, apply: bool):
 def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--apply", action="store_true", help="write changes (default dry-run)")
+    ap.add_argument(
+        "--authority-only",
+        action="store_true",
+        help="materialise crm_procurement_scope_authority only; never touch document_processing_queue",
+    )
     args = ap.parse_args()
 
     env = load_env()
@@ -240,10 +254,13 @@ def main() -> int:
                 }
                 for r in rows
             }
-            n_claim, changes = reconcile_queue(
-                dcur, ccur, {**existing, **materialised}, apply=args.apply
-            )
-            print(f"claimable_rows={n_claim} queue_admission={ {f'{k[0]}:authority={k[1]}': v for k, v in changes.items()} }")
+            if args.authority_only:
+                print("QUEUE_UPDATE_CALLS=0 (authority-only)")
+            else:
+                n_claim, changes = reconcile_queue(
+                    dcur, ccur, {**existing, **materialised}, apply=args.apply
+                )
+                print(f"claimable_rows={n_claim} queue_admission={ {f'{k[0]}:authority={k[1]}': v for k, v in changes.items()} }")
         if args.apply:
             crm.commit()
             doc.commit()
