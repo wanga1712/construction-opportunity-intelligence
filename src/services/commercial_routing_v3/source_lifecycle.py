@@ -1,10 +1,8 @@
-"""Canonical S7→S13 source lifecycle normalizer.
+"""Canonical S7->S13 source lifecycle normalizer.
 
-One function for analytics, projection, opportunity sync, and research-queue admission.
-
-Temporal rule: an open/torgi source row whose submission deadline (end_date) has
-already passed is WAITING_SOURCE_OUTCOME — CRM must not treat it as active OPEN
-while waiting for daily status migration.
+Lifecycle authority = the physical S7 status table (Phase 2 / Phase 3).
+Temporal data (``end_date`` / deadline) NEVER changes lifecycle here; it is
+used downstream only for timing / urgency / validation / anomaly signals.
 """
 from __future__ import annotations
 
@@ -14,6 +12,11 @@ from typing import Any, Dict, Optional, Union
 from src.domain.commercial_opportunity_lifecycle import SourceLifecycleEvent
 
 DateLike = Union[date, datetime, str, None]
+
+MAIN_44 = "reestr_contract_44_fz"
+MAIN_223 = "reestr_contract_223_fz"
+
+_TERMINAL_TOKENS = ("completed", "unclear", "unknown", "bad")
 
 
 def _as_date(value: DateLike) -> Optional[date]:
@@ -26,7 +29,6 @@ def _as_date(value: DateLike) -> Optional[date]:
     s = str(value).strip()
     if not s:
         return None
-    # ISO date or datetime prefix
     try:
         return date.fromisoformat(s[:10])
     except ValueError:
@@ -41,51 +43,38 @@ def normalize_source_lifecycle_event(
     end_date: DateLike = None,
     as_of: Optional[date] = None,
 ) -> SourceLifecycleEvent:
-    """Map source identity + temporal deadline to SourceLifecycleEvent.
+    """Map physical S7 status table -> SourceLifecycleEvent.
 
-    Rules (canonical):
-      awarded / razygranye                         → AWARDED
-      commission_work / commission / award_not_found → WAITING_SOURCE_OUTCOME
-      open/torgi AND end_date < as_of              → WAITING_SOURCE_OUTCOME
-      open/torgi AND (end_date >= as_of or unknown) → OPEN
-        (unknown deadline stays OPEN only when still in open table; prefer
-         filling end_date from source — do not invent.)
+    reestr_contract_44_fz / reestr_contract_223_fz   -> OPEN
+    *_commission_work                                -> WAITING_SOURCE_OUTCOME
+    *_awarded                                        -> AWARDED
+    *_unclear / *_completed / *_unknown / *_bad      -> TERMINAL_NO_RESULT (fail closed)
+    anything else                                    -> UNKNOWN
+
+    ``end_date`` / ``as_of`` are accepted for API compatibility only and do NOT
+    affect the result (dates must not be a lifecycle authority).
     """
     table = (source_table or "").strip().lower()
+    if table:
+        if any(tok in table for tok in _TERMINAL_TOKENS):
+            return SourceLifecycleEvent.TERMINAL_NO_RESULT
+        if "awarded" in table:
+            return SourceLifecycleEvent.AWARDED
+        if "commission" in table:
+            return SourceLifecycleEvent.WAITING_SOURCE_OUTCOME
+        if table in (MAIN_44, MAIN_223):
+            return SourceLifecycleEvent.OPEN
+        return SourceLifecycleEvent.UNKNOWN
+
+    # No physical table: use explicit projection hints only (never dates).
     stage = (crm_stage or "").strip().lower()
     award = (award_status or "").strip().lower()
-    today = as_of or date.today()
-    deadline = _as_date(end_date)
-
-    # AWARDED first (table or stage or status)
-    if "awarded" in table or stage == "razygranye" or award == "awarded":
+    if stage == "razygranye" or award == "awarded":
         return SourceLifecycleEvent.AWARDED
-
-    # WAITING: commission layer or explicit award_not_found
-    if (
-        "commission" in table
-        or stage == "commission"
-        or award in ("award_not_found", "commission")
-    ):
+    if stage == "commission" or award in ("commission", "award_not_found"):
         return SourceLifecycleEvent.WAITING_SOURCE_OUTCOME
-
-    is_open_surface = (
-        stage == "torgi"
-        or award in ("submission_open", "submission_closed_waiting_award")
-        or (
-            table.startswith("reestr_contract_")
-            and "commission" not in table
-            and "awarded" not in table
-            and "unclear" not in table
-            and "completed" not in table
-            and "unknown" not in table
-        )
-    )
-    if is_open_surface:
-        if deadline is not None and deadline < today:
-            return SourceLifecycleEvent.WAITING_SOURCE_OUTCOME
+    if stage == "torgi":
         return SourceLifecycleEvent.OPEN
-
     return SourceLifecycleEvent.UNKNOWN
 
 
@@ -110,10 +99,11 @@ def lifecycle_crm_stage_status(
     if event == SourceLifecycleEvent.WAITING_SOURCE_OUTCOME:
         if "commission" in table:
             return "commission", "commission"
-        # Temporal waiting: row may still physically sit in open/torgi table.
         return "torgi", "submission_closed_waiting_award"
     if event == SourceLifecycleEvent.OPEN:
         return "torgi", "submission_open"
+    if event == SourceLifecycleEvent.TERMINAL_NO_RESULT:
+        return "commission", "terminal_no_result"
     return "torgi", "submission_open"
 
 
