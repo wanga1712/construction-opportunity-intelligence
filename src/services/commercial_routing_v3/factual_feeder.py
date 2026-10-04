@@ -16,6 +16,7 @@ from typing import Any, Dict, List, Optional, Tuple
 
 import psycopg2
 import psycopg2.extras
+from decimal import ROUND_HALF_UP, Decimal
 
 from src.services.commercial_routing_v3.document_links import (
     batch_count_document_links,
@@ -375,11 +376,16 @@ class FactualFeeder:
                         raw = float(score or 0)
                         ratio = raw / 100.0 if raw > 1.0 else raw
                         ratio = max(0.0, min(0.99999, ratio))
-                        # research_prior_score is numeric(6,5): compare the exact
-                        # value that would be persisted (round-to-5) so repeated
-                        # cycles converge to zero updates.
-                        stored = round(float(r.get("research_prior_score") or 0), 5)
-                        changed = changed or stored != round(ratio, 5)
+                        # research_prior_score is numeric(6,5): compare/set the exact
+                        # value Postgres persists (Decimal HALF_UP) so repeated cycles
+                        # converge to zero updates.
+                        ratio_q = Decimal(str(ratio)).quantize(
+                            Decimal("0.00001"), rounding=ROUND_HALF_UP
+                        )
+                        stored = Decimal(str(r.get("research_prior_score") or 0)).quantize(
+                            Decimal("0.00001"), rounding=ROUND_HALF_UP
+                        )
+                        changed = changed or stored != ratio_q
                     if not changed:
                         continue
                     updated += 1
@@ -395,13 +401,16 @@ class FactualFeeder:
                         raw = float(score or 0)
                         ratio = raw / 100.0 if raw > 1.0 else raw
                         ratio = max(0.0, min(0.99999, ratio))
+                        ratio_q = Decimal(str(ratio)).quantize(
+                            Decimal("0.00001"), rounding=ROUND_HALF_UP
+                        )
                         prio = max(0, min(32767, int(round(raw))))
                         cur.execute(
                             "UPDATE document_processing_queue "
                             "SET research_prior_band = %s, research_prior_score = %s, "
                             "research_prior_effective_score = %s, priority_score = %s "
                             "WHERE id = %s",
-                            (band, ratio, int(round(raw)), prio, r["id"]),
+                            (band, str(ratio_q), int(round(raw)), prio, r["id"]),
                         )
                 if not dry_run:
                     conn.commit()
