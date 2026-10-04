@@ -204,11 +204,10 @@ class S13V2QueueRepository(QueueRepository):
             # Lock each subpool separately: PostgreSQL rejects FOR UPDATE on UNION.
             subpools = [
                 ("q.research_prior_band = %s", ["GOLD"]),
-                ("q.procurement_scope_type = 'DIRECT_GOODS' AND COALESCE(q.normalized_nmck_rub, 0) >= 50000 AND (q.research_prior_band IS NULL OR q.research_prior_band != 'GOLD')", []),
-                ("q.research_prior_band = %s AND NOT (q.procurement_scope_type = 'DIRECT_GOODS' AND COALESCE(q.normalized_nmck_rub, 0) >= 50000)", ["SILVER"]),
-                ("q.research_prior_band = %s AND NOT (q.procurement_scope_type = 'DIRECT_GOODS' AND COALESCE(q.normalized_nmck_rub, 0) >= 50000)", ["BRONZE"]),
-                ("q.research_prior_band = %s AND NOT (q.procurement_scope_type = 'DIRECT_GOODS' AND COALESCE(q.normalized_nmck_rub, 0) >= 50000)", ["WOOD"]),
-                ("(q.research_prior_band IS NULL OR q.research_prior_band NOT IN ('GOLD','SILVER','BRONZE','WOOD')) AND NOT (q.procurement_scope_type = 'DIRECT_GOODS' AND COALESCE(q.normalized_nmck_rub, 0) >= 50000)", []),
+                ("q.research_prior_band = %s", ["SILVER"]),
+                ("q.research_prior_band = %s", ["BRONZE"]),
+                ("q.research_prior_band = %s", ["WOOD"]),
+                ("(q.research_prior_band IS NULL OR q.research_prior_band NOT IN ('GOLD','SILVER','BRONZE','WOOD'))", []),
             ]
             raw_rows = []
             with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
