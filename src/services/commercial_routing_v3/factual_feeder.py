@@ -56,12 +56,17 @@ class FactualFeeder:
         self.crm_db = crm_db
 
     def get_queue_depth(self) -> int:
-        """Get count of active (PRE_RESEARCH_WAITING / PENDING / RUNNING / RETRY / PROCESSING) tasks in document_processing_queue."""
+        """Count ELIGIBLE active tasks only (blocked/non-eligible rows must not
+        occupy the high-watermark)."""
         conn = _get_doc_db_conn()
         try:
             with conn.cursor() as cur:
                 cur.execute(
-                    "SELECT COUNT(*) FROM document_processing_queue WHERE pipeline_generation = %s AND status IN ('PRE_RESEARCH_WAITING', 'PENDING', 'RUNNING', 'RETRY', 'PROCESSING')",
+                    "SELECT COUNT(*) FROM document_processing_queue "
+                    "WHERE pipeline_generation = %s "
+                    "AND status IN ('PRE_RESEARCH_WAITING', 'PENDING', 'RUNNING', 'RETRY', 'PROCESSING') "
+                    "AND category_context->>'admission_state' = 'ELIGIBLE' "
+                    "AND category_context->>'admission_policy_version' = 'BUSINESS_RESEARCH_ADMISSION_V2'",
                     (PIPELINE_GENERATION,),
                 )
                 res = cur.fetchone()
@@ -81,10 +86,9 @@ class FactualFeeder:
             SELECT DISTINCT ON (p.id) p.id, p.source_table, p.source_id, p.contract_number, p.okpd_code,
                    p.auction_name, p.end_date, p.crm_stage, p.award_status
             FROM crm_procurements p
-            WHERE p.source_table IN ('reestr_contract_44_fz', 'reestr_contract_223_fz')
-              AND p.crm_stage = 'torgi'
-              AND p.award_status = 'submission_open'
-              AND p.end_date >= CURRENT_DATE + INTERVAL '2 days'
+            JOIN crm_procurement_scope_authority a ON a.procurement_id = p.id
+            WHERE a.admission_state = 'ELIGIBLE'
+              AND a.admission_policy_version = 'BUSINESS_RESEARCH_ADMISSION_V2'
             ORDER BY p.id DESC
             LIMIT %s
         """
@@ -277,13 +281,144 @@ class FactualFeeder:
         finally:
             conn.close()
 
+    _BAND_RANK = {"GOLD": 4, "SILVER": 3, "BRONZE": 2, "WOOD": 1}
+
+    def _authority_and_medal_maps(self, pids):
+        auth, medal = {}, {}
+        if not pids:
+            return auth, medal
+        for i in range(0, len(pids), 5000):
+            chunk = pids[i : i + 5000]
+            rows = self.crm_db.execute_query(
+                "SELECT procurement_id, source_lifecycle, procurement_scope_type, "
+                "admission_state, admission_reason, admission_policy_version "
+                "FROM crm_procurement_scope_authority WHERE procurement_id = ANY(%s)",
+                (chunk,),
+            ) or []
+            for r in rows:
+                auth[int(r["procurement_id"])] = dict(r)
+        rows = self.crm_db.execute_query(
+            "SELECT procurement_id, current_effective_medal, current_effective_score, "
+            "candidate_medal, commercial_state "
+            "FROM crm_procurement_category_opportunities "
+            "WHERE status = 'CURRENT' AND procurement_id = ANY(%s)",
+            (pids,),
+        ) or []
+        for r in rows:
+            d = dict(r)
+            pid = int(d["procurement_id"])
+            band = (d.get("current_effective_medal") or "").upper()
+            score = d.get("current_effective_score") or 0
+            prev = medal.get(pid)
+            if prev is None or (
+                self._BAND_RANK.get(band, 0),
+                float(score or 0),
+            ) > (
+                self._BAND_RANK.get((prev.get("current_effective_medal") or "").upper(), 0),
+                float(prev.get("current_effective_score") or 0),
+            ):
+                medal[pid] = d
+        return auth, medal
+
+    def reconcile_active_queue(self, *, dry_run: bool = False) -> Dict[str, Any]:
+        """Refresh V4 claimable queue rows from the CURRENT admission + medal authority.
+
+        Only PRE_RESEARCH_WAITING/PENDING of pipeline_generation S13_V4_EXHAUSTIVE_CONTEXT.
+        PROCESSING/COMPLETED/FAILED/NO_LINKS are never touched. HOLD/EXCLUDED rows are
+        not removed and their status is not rewritten — refreshed admission metadata
+        makes them non-claimable via the existing claim gate.
+        """
+        conn = _get_doc_db_conn()
+        try:
+            with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+                cur.execute(
+                    "SELECT id, procurement_id, status, category_context, research_prior_band, "
+                    "research_prior_score, research_prior_effective_score, priority_score "
+                    "FROM document_processing_queue "
+                    "WHERE pipeline_generation = %s AND status IN ('PRE_RESEARCH_WAITING','PENDING')",
+                    (PIPELINE_GENERATION,),
+                )
+                rows = [dict(r) for r in cur.fetchall()]
+        finally:
+            conn.close()
+
+        pids = sorted({int(r["procurement_id"]) for r in rows if r.get("procurement_id") is not None})
+        auth, medal = self._authority_and_medal_maps(pids)
+
+        updated = 0
+        conn = _get_doc_db_conn()
+        try:
+            with conn.cursor() as cur:
+                for r in rows:
+                    pid = int(r["procurement_id"])
+                    a = auth.get(pid) or {}
+                    m = medal.get(pid) or {}
+                    old = r.get("category_context") or {}
+                    if isinstance(old, str):
+                        try:
+                            old = json.loads(old)
+                        except Exception:
+                            old = {}
+                    fields = {
+                        "admission_state": a.get("admission_state") or "HOLD",
+                        "admission_reason": a.get("admission_reason") or "AUTHORITY_MISSING",
+                        "admission_policy_version": a.get("admission_policy_version")
+                        or "BUSINESS_RESEARCH_ADMISSION_V2",
+                        "source_lifecycle": a.get("source_lifecycle"),
+                        "procurement_scope_type": a.get("procurement_scope_type"),
+                    }
+                    band = (m.get("current_effective_medal") or m.get("candidate_medal") or "").upper()
+                    score = m.get("current_effective_score")
+                    changed = any(old.get(k) != v for k, v in fields.items())
+                    if band in self._BAND_RANK:
+                        changed = changed or (r.get("research_prior_band") or "") != band
+                        raw = float(score or 0)
+                        ratio = raw / 100.0 if raw > 1.0 else raw
+                        ratio = max(0.0, min(0.99999, ratio))
+                        # research_prior_score is numeric(6,5): compare the exact
+                        # value that would be persisted (round-to-5) so repeated
+                        # cycles converge to zero updates.
+                        stored = round(float(r.get("research_prior_score") or 0), 5)
+                        changed = changed or stored != round(ratio, 5)
+                    if not changed:
+                        continue
+                    updated += 1
+                    if dry_run:
+                        continue
+                    cur.execute(
+                        "UPDATE document_processing_queue "
+                        "SET category_context = COALESCE(category_context, '{}'::jsonb) || %s::jsonb "
+                        "WHERE id = %s",
+                        (json.dumps(fields, default=str), r["id"]),
+                    )
+                    if band in self._BAND_RANK:
+                        raw = float(score or 0)
+                        ratio = raw / 100.0 if raw > 1.0 else raw
+                        ratio = max(0.0, min(0.99999, ratio))
+                        prio = max(0, min(32767, int(round(raw))))
+                        cur.execute(
+                            "UPDATE document_processing_queue "
+                            "SET research_prior_band = %s, research_prior_score = %s, "
+                            "research_prior_effective_score = %s, priority_score = %s "
+                            "WHERE id = %s",
+                            (band, ratio, int(round(raw)), prio, r["id"]),
+                        )
+                if not dry_run:
+                    conn.commit()
+        finally:
+            conn.close()
+        return {"scanned": len(rows), "updated": updated, "dry_run": dry_run}
+
     def get_live_lane_depth(self) -> int:
         """Count queue rows that document workers are actually executing."""
         conn = _get_doc_db_conn()
         try:
             with conn.cursor() as cur:
                 cur.execute(
-                    "SELECT COUNT(*) FROM document_processing_queue WHERE pipeline_generation = %s AND status = ANY(%s)",
+                    "SELECT COUNT(*) FROM document_processing_queue "
+                    "WHERE pipeline_generation = %s AND status = ANY(%s) "
+                    "AND category_context->>'admission_state' = 'ELIGIBLE' "
+                    "AND category_context->>'admission_policy_version' = 'BUSINESS_RESEARCH_ADMISSION_V2'",
                     (PIPELINE_GENERATION, list(LIVE_EXECUTABLE_STATUSES)),
                 )
                 res = cur.fetchone()
@@ -293,11 +428,20 @@ class FactualFeeder:
 
     def run_feeder_cycle(self) -> Dict[str, Any]:
         """Execute one bounded feeder cycle with live-lane watermark checks."""
+        # Reconcile existing V4 claimable rows from the CURRENT admission+medal
+        # authority BEFORE feeding — otherwise stale bands are never refreshed
+        # while the live lane is full.
+        try:
+            recon = self.reconcile_active_queue(dry_run=False)
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("queue reconciliation failed: %s", exc)
+            recon = {"updated": 0, "error": str(exc)}
         current_depth = self.get_queue_depth()
         live_depth = self.get_live_lane_depth()
         if live_depth >= HIGH_WATERMARK:
             return {
                 "status": "HIGH_WATERMARK_REACHED",
+                "reconciled_updated": recon.get("updated", 0),
                 "queue_depth": current_depth,
                 "live_lane_depth": live_depth,
                 "admitted_count": 0,
@@ -320,6 +464,7 @@ class FactualFeeder:
 
         return {
             "status": "CYCLE_COMPLETED",
+            "reconciled_updated": recon.get("updated", 0),
             "queue_depth_before": current_depth,
             "live_lane_depth_before": live_depth,
             "admitted_count": admitted,

@@ -147,7 +147,10 @@ class DocumentProcessorDaemon:
             min_score=self.matcher.min_score,
             keyword_meta=dict(self.matcher.keyword_meta),
         )
-        gen = "S13_V4_EXHAUSTIVE_CONTEXT" if _backend_name == "S13_V4" else "S13_V2"
+        gen = os.getenv(
+            "DOCUMENT_PIPELINE_GENERATION",
+            "S13_V4_EXHAUSTIVE_CONTEXT",
+        )
         self.s13_persistence = S13V2TaskPersistenceService(self.db, pipeline_generation=gen)
         self.morning_boost = MorningPriorityBoost()
         self.populate_coordinator = QueuePopulateCoordinator(
@@ -393,7 +396,10 @@ class DocumentProcessorDaemon:
             try:
                 self.logger.info(f"[{task_id}] Начало обработки задачи: {contract_reg_number}")
 
-                if task.get("pipeline_generation") == "S13_V2":
+                if task.get("pipeline_generation") in (
+                    "S13_V2",
+                    "S13_V4_EXHAUSTIVE_CONTEXT",
+                ):
                     proc_result = self.s13_pipeline.process_task(
                         queue_id=task_id,
                         procurement_id=task["procurement_id"],
