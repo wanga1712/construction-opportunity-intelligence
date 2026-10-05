@@ -1,53 +1,34 @@
-# S13 production document workers - runtime authority
+# S13 production document workers - runtime authority (band routing)
 
-WIP: `S13-DOC-WORKER-RUNTIME-AUTHORITY-AND-AWARDED-FIX-1`
-Host: S13 (`sergey-System-Product-Name`) ? date 2026-10-05
+WIP: `S13-DOC-WORKER-BAND-ROUTING-1` ? Host S13 ? 2026-10-05
 
 ## Active production units (5)
 
-| Unit | WORKER_ID | Scope / lanes | Backend | Queue |
-|--|--|--|--|--|
-| tender-docs-daemon-open.service | 13 | crm_active_hot,open_active,awarded_follow_up | S13_V4 | document_intelligence.document_processing_queue |
-| tender-docs-daemon-open-2.service | 15 | crm_active_hot,open_active | S13_V4 | document_intelligence.document_processing_queue |
-| tender-docs-daemon-awarded.service | 14 | awarded_recent,historical_awarded | S13_V4 | document_intelligence.document_processing_queue |
-| tender-docs-daemon-awarded-2.service | 17 | flex (open/CRM, fallback awarded) | S13_V4 | document_intelligence.document_processing_queue |
-| tender-docs-daemon-computers.service | 18 | open_active (computers OKPD) | S13_V4 | document_intelligence.document_processing_queue |
+| Unit | WORKER_ID | QUEUE_BANDS | CPUQuota |
+|--|--|--|--|
+| tender-docs-band-gold-1.service | 31 | GOLD | floating (pool) |
+| tender-docs-band-gold-2.service | 32 | GOLD | floating (pool) |
+| tender-docs-band-silver.service | 33 | SILVER | floating (pool) |
+| tender-docs-band-bronze.service | 34 | BRONZE | floating (pool) |
+| tender-docs-band-wood.service | 35 | WOOD,UNSCORED | 100% (fixed) |
 
-## Disabled / legacy (intentionally not deployed)
+Routing:
+- primary = `research_prior_band` (`QUEUE_BANDS`);
+- secondary ordering = `queue_lane` -> `priority_score` -> FIFO (`created_at`; the queue
+  table has no deadline column, priority_score already encodes deadline urgency);
+- source/awarded/computers specialization = OFF (no QUEUE_LANES / QUEUE_TABLE_SOURCES);
+- all workers use `PROCESSING_BACKEND=S13_V4` -> `document_intelligence.document_processing_queue`.
 
-| Unit | Reason |
-|--|--|
-| tender-docs-daemon.service | duplicate of `-open` (same historical WORKER_ID=13) |
-| tender-docs-daemon-open-3.service | redundant open-lane worker |
-| tender-docs-daemon-computers-2.service | redundant computers worker |
+## Disabled / legacy (not deployed)
 
-Legacy unit files/templates stay in Git for history but must not be enabled on S13.
-
-## CPU resource model (runtime authority)
-
-- No per-worker CPUQuota. All workers share `crm-background-compute.slice`:
-  `CPUQuota=500%`, `AllowedCPUs=2-7`, `CPUWeight=50`, `IOWeight=50`.
-- CRM keeps priority: `crm-streamlit` CPUWeight=800, Nice=-10, MemorySwapMax=0;
-  CPUs 0-1 are reserved for CRM/PostgreSQL/OS (background and user.slice are on 2-7).
-- Host-wide CPU frequency ceiling `cpu-powerlimit.service` (no_turbo + 3.2 GHz) is
-  deployed from the CRM deploy set (see `docs/reports/cpu_thermal_cap/`).
-
-## Awarded defect and fix
-
-Root cause: `tender-docs-daemon-awarded.service.d/zz-s13v4-backend.conf` was missing,
-so the effective environment had **no** `PROCESSING_BACKEND=S13_V4`,
-`MODEL_QUEUE_PRIORITY_ENABLED=1` or `S13_DOCUMENT_DB_*`. The worker fell back to the
-legacy `tender_monitor` queue and failed with
-`relation "document_processing_queue" does not exist`.
-
-Fix: added the same `zz-s13v4-backend.conf` (and `30-mincifry-ca.conf`) drop-in that the
-four working workers already use, so awarded resolves to
-S13 local `document_intelligence.document_processing_queue` with `PROCESSING_BACKEND=S13_V4`.
+tender-docs-daemon-open, -open-2, -awarded, -awarded-2, -computers (source-specialized),
+plus base tender-docs-daemon, -open-3, -computers-2. Files kept for history.
 
 ## Deploy
 
 ```sh
-rsync deploy/systemd/ /etc/systemd/system/   # review before running
+cp deploy/systemd/tender-docs-band-*.service /etc/systemd/system/
+cp -r deploy/systemd/tender-docs-band-*.service.d /etc/systemd/system/
 systemctl daemon-reload
-systemctl restart tender-docs-daemon-awarded.service
+systemctl enable --now tender-docs-band-{gold-1,gold-2,silver,bronze,wood}.service
 ```

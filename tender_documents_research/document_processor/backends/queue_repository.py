@@ -14,6 +14,19 @@ from database_work.database_connection import DatabaseManager
 
 PIPELINE_S13V2 = "S13_V2"
 
+# ADMISSION-GATE (BUSINESS_RESEARCH_ADMISSION_V2): claim is the last fail-closed
+# defense. A row is claimable only when the queue row carries a current ELIGIBLE
+# admission decision (stamped by the producer / reconciliation). Missing, stale
+# or non-ELIGIBLE metadata => row is never claimed, regardless of lane/band/GOLD.
+ADMISSION_POLICY_VERSION = "BUSINESS_RESEARCH_ADMISSION_V2"
+_ADMISSION_FILTER = (
+    " AND q.category_context IS NOT NULL"
+    " AND q.category_context->>'admission_state' = 'ELIGIBLE'"
+    " AND q.category_context->>'admission_policy_version' = '"
+    + ADMISSION_POLICY_VERSION
+    + "'"
+)
+
 class QueueRepository(abc.ABC):
     @abc.abstractmethod
     def claim_batch(self, worker_id: int, batch_size: int, force_contract: Optional[str] = None, force_table: Optional[str] = None, queue_lanes: Optional[Sequence[str]] = None) -> List[Dict[str, Any]]:
@@ -64,10 +77,16 @@ class S13V2QueueRepository(QueueRepository):
     """
     Claim tasks from document_intelligence.document_processing_queue.
     Stateful persistent psycopg2 connection (lazy init).
+
+    When MODEL_QUEUE_PRIORITY_ENABLED=1, claim_batch uses a two-phase
+    approach: SQL locks a candidate pool, Python DWRR selects from it,
+    then SQL claims only the selected IDs — all within one transaction.
     """
-    def __init__(self, dsn: Dict[str, Any]) -> None:
+    def __init__(self, dsn: Dict[str, Any], pipeline_generation: str = PIPELINE_S13V2) -> None:
         self._dsn = dsn
         self._conn: Optional[psycopg2.extensions.connection] = None
+        self._pipeline_generation = pipeline_generation
+        self._dwrr_policy: Optional[Any] = None  # lazy init
 
     def _get_conn(self) -> psycopg2.extensions.connection:
         if self._conn is None or self._conn.closed:
@@ -75,8 +94,15 @@ class S13V2QueueRepository(QueueRepository):
             self._conn.autocommit = False
         return self._conn
 
+    def _get_dwrr_policy(self):
+        """Lazy-init shared DWRR policy (survives across claim calls)."""
+        if self._dwrr_policy is None:
+            from src.services.dwrr_claim_policy import DWRRClaimPolicy
+            self._dwrr_policy = DWRRClaimPolicy()
+        return self._dwrr_policy
+
     def pipeline_generation(self) -> str:
-        return PIPELINE_S13V2
+        return self._pipeline_generation
 
     def claim_batch(
         self,
@@ -93,14 +119,32 @@ class S13V2QueueRepository(QueueRepository):
             lane_filter = f" AND q.queue_lane IN ({placeholders})"
             lane_params = list(queue_lanes)
 
-        # S13_V2 doesn't currently support force_contract/force_table out of the box in the same way,
-        # but we can add filters if needed.
         if force_contract:
             lane_filter += " AND q.contract_number = %s"
             lane_params.append(force_contract)
         if force_table:
             lane_filter += " AND q.source_table = %s"
             lane_params.append(force_table)
+
+        # ---- Band routing (primary): QUEUE_BANDS=GOLD,SILVER,... --------------
+        # When set, this worker may only claim the given research_prior_band(s).
+        # UNSCORED matches NULL / unknown bands. Source/lane specialization is
+        # intentionally NOT applied here: lanes are only a secondary ordering.
+        band_filter = ""
+        band_params: List[Any] = []
+        _band_raw = (os.getenv("QUEUE_BANDS") or "").strip()
+        requested_bands: List[str] = [b.strip().upper() for b in _band_raw.split(",") if b.strip()]
+        if requested_bands:
+            _band_conds: List[str] = []
+            for _b in requested_bands:
+                if _b in ("UNSCORED", "NULL", "NONE"):
+                    _band_conds.append(
+                        "(q.research_prior_band IS NULL OR q.research_prior_band NOT IN ('GOLD','SILVER','BRONZE','WOOD'))"
+                    )
+                else:
+                    _band_conds.append("q.research_prior_band = %s")
+                    band_params.append(_b)
+            band_filter = " AND (" + " OR ".join(_band_conds) + ")"
 
         _LANE_RANK_SQL = """
             CASE q.queue_lane
@@ -112,41 +156,163 @@ class S13V2QueueRepository(QueueRepository):
             END
         """
 
-        sql = f"""
-            UPDATE document_processing_queue
-               SET status     = 'PROCESSING',
-                   worker_id  = %s,
-                   started_at = NOW()
-             WHERE id IN (
-                 SELECT q.id
-                   FROM document_processing_queue q
-                  WHERE q.status = 'PENDING'
-                    {lane_filter}
-                  ORDER BY {_LANE_RANK_SQL} ASC,
-                           q.priority_score DESC,
-                           q.id ASC
-                  LIMIT %s
-                  FOR UPDATE SKIP LOCKED
-             )
-         RETURNING
-             id, procurement_id, source_table, source_id,
-             contract_number, queue_lane, pipeline_generation,
-             research_action, research_depth, category_codes
-        """
-        params = [worker_id] + lane_params + [batch_size]
+        model_priority_enabled = os.getenv("MODEL_QUEUE_PRIORITY_ENABLED", "0").lower() in ("1", "true", "yes", "on")
+
+        if not model_priority_enabled:
+            # Legacy path: simple SQL ORDER BY, no DWRR
+            order_clause = f"""
+                {_LANE_RANK_SQL} ASC,
+                q.priority_score DESC,
+                q.created_at ASC NULLS LAST,
+                q.id ASC
+            """
+            sql = f"""
+                UPDATE document_processing_queue
+                   SET status     = 'PROCESSING',
+                       worker_id  = %s,
+                       started_at = NOW()
+                 WHERE id IN (
+                      SELECT q.id
+                        FROM document_processing_queue q
+                       WHERE q.status IN ('PENDING', 'PRE_RESEARCH_WAITING')
+                         AND (q.pipeline_generation = %s OR q.pipeline_generation IS NULL)
+                         {_ADMISSION_FILTER}
+                         {lane_filter}
+                         {band_filter}
+                       ORDER BY {order_clause}
+                      LIMIT %s
+                      FOR UPDATE SKIP LOCKED
+                 )
+             RETURNING
+                 id, procurement_id, source_table, source_id,
+                 contract_number, queue_lane, pipeline_generation,
+                 research_action, research_depth, category_codes,
+                 research_prior_model, research_prior_version, research_prior_score,
+                 research_prior_percentile, research_prior_band, research_prior_effective_score
+            """
+            params = [worker_id, self.pipeline_generation()] + lane_params + band_params + [batch_size]
+            conn = self._get_conn()
+            with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+                cur.execute(sql, params)
+                rows = cur.fetchall()
+            conn.commit()
+            return self._adapt_rows(rows)
+
+        # ── Two-phase weighted claim with per-band diverse pool ──────────
+        from src.services.dwrr_claim_policy import pool_size
+
+        candidate_limit = pool_size(batch_size)
+        per_band_limit = max(candidate_limit, 20)
+
+        _COLS = """q.id, q.procurement_id, q.source_table, q.source_id,
+                   q.contract_number, q.queue_lane, q.pipeline_generation,
+                   q.research_action, q.research_depth, q.category_codes,
+                   q.research_prior_model, q.research_prior_version, q.research_prior_score,
+                   q.research_prior_percentile, q.research_prior_band, q.research_prior_effective_score,
+                   q.procurement_scope_type, q.normalized_nmck_rub"""
+
+        _ORDER = f"""{_LANE_RANK_SQL} ASC,
+            q.priority_score DESC,
+            q.created_at ASC NULLS LAST,
+            q.id ASC"""
+
+        _GEN_FILTER = (
+            " AND (q.pipeline_generation = %s OR q.pipeline_generation IS NULL)"
+            + _ADMISSION_FILTER
+        )
+
         conn = self._get_conn()
-        with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
-            cur.execute(sql, params)
-            rows = cur.fetchall()
-        conn.commit()
-        # Adapt keys to match Legacy format for QueueManager if needed:
+        try:
+            # Lock each subpool separately: PostgreSQL rejects FOR UPDATE on UNION.
+            if requested_bands:
+                subpools = []
+                for _b in requested_bands:
+                    if _b in ("UNSCORED", "NULL", "NONE"):
+                        subpools.append((
+                            "(q.research_prior_band IS NULL OR q.research_prior_band NOT IN ('GOLD','SILVER','BRONZE','WOOD'))",
+                            [],
+                        ))
+                    else:
+                        subpools.append(("q.research_prior_band = %s", [_b]))
+            else:
+                subpools = [
+                    ("q.research_prior_band = %s", ["GOLD"]),
+                    ("q.research_prior_band = %s", ["SILVER"]),
+                    ("q.research_prior_band = %s", ["BRONZE"]),
+                    ("q.research_prior_band = %s", ["WOOD"]),
+                    ("(q.research_prior_band IS NULL OR q.research_prior_band NOT IN ('GOLD','SILVER','BRONZE','WOOD'))", []),
+                ]
+            raw_rows = []
+            with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+                for predicate, predicate_params in subpools:
+                    sql = f"""SELECT {_COLS}
+                              FROM document_processing_queue q
+                             WHERE q.status IN ('PENDING', 'PRE_RESEARCH_WAITING')
+                               AND {predicate}{_GEN_FILTER}{lane_filter}
+                             ORDER BY {_ORDER}
+                             LIMIT %s
+                             FOR UPDATE SKIP LOCKED"""
+                    params = predicate_params + [self.pipeline_generation()] + lane_params + [per_band_limit]
+                    cur.execute(sql, params)
+                    raw_rows.extend(dict(r) for r in cur.fetchall())
+
+            # Deduplicate by ID to guarantee POOL_DUPLICATE_IDS = 0
+            seen_ids = set()
+            pool_rows = []
+            for r in raw_rows:
+                if r["id"] not in seen_ids:
+                    seen_ids.add(r["id"])
+                    pool_rows.append(r)
+
+            if not pool_rows:
+                conn.commit()
+                return []
+
+            # Phase B: DWRR select
+            policy = self._get_dwrr_policy()
+            selected_ids = policy.select_from_pool(pool_rows, batch_size)
+
+            if not selected_ids:
+                conn.commit()
+                return []
+
+            # Phase C: Claim selected IDs
+            id_placeholders = ", ".join(["%s"] * len(selected_ids))
+            update_sql = f"""
+                UPDATE document_processing_queue
+                   SET status     = 'PROCESSING',
+                       worker_id  = %s,
+                       started_at = NOW()
+                 WHERE id IN ({id_placeholders})
+             RETURNING
+                 id, procurement_id, source_table, source_id,
+                 contract_number, queue_lane, pipeline_generation,
+                 research_action, research_depth, category_codes,
+                 research_prior_model, research_prior_version, research_prior_score,
+                 research_prior_percentile, research_prior_band, research_prior_effective_score
+            """
+            update_params = [worker_id] + selected_ids
+            with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+                cur.execute(update_sql, update_params)
+                claimed_rows = cur.fetchall()
+
+            # Phase D: Commit (releases locks on unclaimed pool rows)
+            conn.commit()
+            return self._adapt_rows(claimed_rows)
+        except Exception:
+            conn.rollback()
+            raise
+
+    @staticmethod
+    def _adapt_rows(rows) -> List[Dict[str, Any]]:
+        """Adapt DB rows to legacy-compatible dict format."""
         res = []
         for r in rows:
             d = dict(r)
             d["contract_reg_number"] = d["contract_number"]
             d["table_source"] = d["source_table"]
-            d["priority_class"] = 1 # Dummy
-            d["priority_score"] = 0 # Dummy
+            d["priority_class"] = 1  # Dummy
+            d["priority_score"] = 0  # Dummy
             res.append(d)
         return res
 
@@ -408,4 +574,3 @@ class LegacyQueueRepository(QueueRepository):
         """
         rows = self.db.execute_query(self.db_alias, sql, fetch=True) or []
         return int(rows[0][0]) if rows else 0
-

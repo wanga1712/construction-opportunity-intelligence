@@ -57,6 +57,7 @@ def claim_batch_ids(
     repr_pred = reprocess_enrich_predicate_sql()
 
     lane_filter, lane_params = _lane_filter(queue_lanes)
+    band_filter, band_params = _band_filter()
 
     claimed: List[Tuple] = []
 
@@ -65,8 +66,8 @@ def claim_batch_ids(
             db_execute=db_execute,
             worker_id=worker_id,
             limit=normal_limit,
-            where_extra=where_extra + f" AND NOT ({repr_pred})" + lane_filter,
-            extra_params=list(extra_params) + lane_params,
+            where_extra=where_extra + f" AND NOT ({repr_pred})" + lane_filter + band_filter,
+            extra_params=list(extra_params) + lane_params + band_params,
         ))
 
     remaining = batch_size - len(claimed)
@@ -75,8 +76,8 @@ def claim_batch_ids(
             db_execute=db_execute,
             worker_id=worker_id,
             limit=remaining,
-            where_extra=where_extra + f" AND ({repr_pred})" + lane_filter,
-            extra_params=list(extra_params) + lane_params,
+            where_extra=where_extra + f" AND ({repr_pred})" + lane_filter + band_filter,
+            extra_params=list(extra_params) + lane_params + band_params,
         ))
 
     remaining = batch_size - len(claimed)
@@ -85,11 +86,33 @@ def claim_batch_ids(
             db_execute=db_execute,
             worker_id=worker_id,
             limit=remaining,
-            where_extra=where_extra + f" AND NOT ({repr_pred})" + lane_filter,
-            extra_params=list(extra_params) + lane_params,
+            where_extra=where_extra + f" AND NOT ({repr_pred})" + lane_filter + band_filter,
+            extra_params=list(extra_params) + lane_params + band_params,
         ))
 
     return claimed
+
+
+def _band_filter(bands_env: Optional[str] = None) -> tuple[str, list]:
+    """Primary routing: restrict claim to the requested research_prior_band(s).
+
+    QUEUE_BANDS=GOLD,SILVER,...  UNSCORED matches NULL / unknown bands.
+    Empty/unset => no band restriction (legacy behaviour).
+    """
+    raw = (bands_env if bands_env is not None else os.getenv("QUEUE_BANDS") or "").strip()
+    if not raw:
+        return "", []
+    conds: List[str] = []
+    params: List[object] = []
+    for band in [x.strip().upper() for x in raw.split(",") if x.strip()]:
+        if band in ("UNSCORED", "NULL", "NONE"):
+            conds.append(
+                "(q.research_prior_band IS NULL OR q.research_prior_band NOT IN ('GOLD','SILVER','BRONZE','WOOD'))"
+            )
+        else:
+            conds.append("q.research_prior_band = %s")
+            params.append(band)
+    return " AND (" + " OR ".join(conds) + ")", params
 
 
 def _lane_filter(lanes: Optional[Sequence[str]]) -> tuple[str, list]:
@@ -110,6 +133,23 @@ def _claim(
     if limit <= 0:
         return []
     params: List[object] = [worker_id, worker_id, *list(extra_params), limit]
+    model_priority_enabled = os.getenv("MODEL_QUEUE_PRIORITY_ENABLED", "0").lower() in ("1", "true", "yes", "on")
+    if model_priority_enabled:
+        order_by_clause = f"""
+            {LANE_RANK_SQL} ASC,
+            q.priority_score DESC,
+            q.created_at ASC NULLS LAST,
+            q.id ASC
+        """
+    else:
+
+        order_by_clause = f"""
+            {LANE_RANK_SQL} ASC,
+            q.priority_score DESC,
+            q.created_at ASC NULLS LAST,
+            q.id ASC
+        """
+
     sql = f"""
         UPDATE document_processing_queue
         SET status     = 'processing',
@@ -122,10 +162,7 @@ def _claim(
               AND (q.worker_id IS NULL OR q.worker_id = %s)
               {where_extra}
             ORDER BY
-                {LANE_RANK_SQL} ASC,
-                q.priority_score DESC,
-                q.submission_end_at ASC NULLS LAST,
-                q.id ASC
+                {order_by_clause}
             LIMIT %s
             FOR UPDATE SKIP LOCKED
         )
