@@ -672,6 +672,22 @@ def _upsert_one(crm_db, row: Dict[str, Any], existing: Optional[Dict[str, Any]],
     stage = stage_from_source_table(str(row.get("source_table") or ""))
     crm_stage, award_status = _crm_stage_for(str(row.get("source_table") or ""), effective_end, stage)
     cn = normalize_contract_number(row.get("contract_number")) or ""
+
+    # Do not downgrade an existing, more complete factual projection to a less
+    # complete physical copy of the same stable identity (duplicate MAIN rows).
+    if existing is not None:
+        prev_view = {
+            "contract_number": existing.get("contract_number"),
+            "start_date": existing.get("start_date"),
+            "end_date": existing.get("end_date"),
+            "initial_price": existing.get("initial_price"),
+            "auction_name": existing.get("auction_name"),
+            "okpd_code": existing.get("okpd_code"),
+            "customer": existing.get("customer"),
+            "source_id": existing.get("source_id"),
+        }
+        if _factual_completeness(row) < _factual_completeness(prev_view):
+            return "skipped_less_complete"
     title = (str(row.get("auction_name")).strip() if row.get("auction_name") is not None else "") or ""
     okpd_code = row.get("okpd_code")
     if okpd_code is not None:
