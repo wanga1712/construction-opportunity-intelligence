@@ -19,7 +19,6 @@ TimeoutStopSec=120
 KillSignal=SIGTERM
 Nice=5
 MemoryMax=6G
-CPUQuota=200%
 LimitNOFILE=65536
 UMask=0027
 

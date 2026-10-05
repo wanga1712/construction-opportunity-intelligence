@@ -1,5 +1,6 @@
+# DISABLED / LEGACY - NOT DEPLOYED ON S13 (see PRODUCTION_DOC_WORKERS.md)
 [Unit]
-Description=Tender documents worker (awarded registries)
+Description=Tender documents worker - computers OKPD 2 (worker 19)
 Wants=network-online.target
 After=network-online.target amneziawg-worker.service
 RequiresMountsFor=/data
@@ -11,14 +12,14 @@ Group=sergey
 WorkingDirectory=/opt/tender_documents_research
 EnvironmentFile=/opt/tender_documents_research/.env
 EnvironmentFile=/etc/tender-docs-db.env
-EnvironmentFile=/etc/tender-docs-worker-awarded.env
+EnvironmentFile=/etc/tender-docs-worker-computers-2.env
 ExecStart=/opt/tender_documents_research/.venv/bin/python -m document_processor.daemon
 Restart=on-failure
 RestartSec=15
 TimeoutStopSec=120
 KillSignal=SIGTERM
-Nice=10
-MemoryMax=12G
+MemoryMax=10G
+CPUQuota=200%
 LimitNOFILE=65536
 UMask=0027
 

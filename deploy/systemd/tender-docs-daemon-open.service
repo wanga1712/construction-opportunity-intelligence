@@ -18,7 +18,6 @@ RestartSec=15
 TimeoutStopSec=120
 KillSignal=SIGTERM
 MemoryMax=18G
-CPUQuota=450%
 LimitNOFILE=65536
 UMask=0027
 

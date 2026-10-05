@@ -1,3 +1,4 @@
+# DISABLED / LEGACY - NOT DEPLOYED ON S13 (see PRODUCTION_DOC_WORKERS.md)
 [Unit]
 Description=Tender documents research worker
 Wants=network-online.target
