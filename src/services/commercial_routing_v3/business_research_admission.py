@@ -81,10 +81,20 @@ def is_queue_eligible(record: Optional[Dict[str, Any]]) -> bool:
     )
 
 
+def _json_safe(value: Any) -> Any:
+    """Coerce DB values (datetime/date/Decimal) into JSON-native types."""
+    if value is None or isinstance(value, (str, int, float, bool)):
+        return value
+    try:
+        return value.isoformat()
+    except AttributeError:
+        return str(value)
+
+
 def context_admission_fields(record: Optional[Dict[str, Any]]) -> Dict[str, Any]:
     """Provenance fields persisted on the queue row (category_context)."""
     rec = record or {}
-    return {
+    fields = {
         "admission_state": rec.get("admission_state") or HOLD,
         "admission_reason": rec.get("admission_reason")
         or (REASON_AUTHORITY_MISSING if not record else REASON_POLICY_UNDECIDED),
@@ -94,6 +104,7 @@ def context_admission_fields(record: Optional[Dict[str, Any]]) -> Dict[str, Any]
         "procurement_scope_type": rec.get("procurement_scope_type"),
         "source_lifecycle": rec.get("source_lifecycle"),
     }
+    return {key: _json_safe(value) for key, value in fields.items()}
 
 
 _AUTH_SELECT = """
