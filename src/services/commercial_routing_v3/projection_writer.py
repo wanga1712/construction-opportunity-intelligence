@@ -686,7 +686,12 @@ def _upsert_one(crm_db, row: Dict[str, Any], existing: Optional[Dict[str, Any]],
             "customer": existing.get("customer"),
             "source_id": existing.get("source_id"),
         }
-        if _factual_completeness(row) < _factual_completeness(prev_view):
+        same_stage = stage_from_source_table(
+            str(existing.get("source_table") or "")
+        ) == stage
+        if same_stage and _factual_completeness(row) <= _factual_completeness(prev_view):
+            # Same-stage duplicate: keep whichever the DB already holds
+            # (deterministic; prevents sync/backfill ping-pong).
             return "skipped_less_complete"
     title = (str(row.get("auction_name")).strip() if row.get("auction_name") is not None else "") or ""
     okpd_code = row.get("okpd_code")
