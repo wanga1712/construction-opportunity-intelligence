@@ -5,6 +5,7 @@ Conflicts=getty@tty1.service
 
 [Service]
 Type=simple
+ExecStartPre=-/usr/bin/chvt 1
 ExecStart=/usr/local/bin/s13_dashboard.sh
 StandardInput=tty
 TTYPath=/dev/tty1

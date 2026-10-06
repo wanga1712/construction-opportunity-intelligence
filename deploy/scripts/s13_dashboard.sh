@@ -8,6 +8,14 @@ INTERVAL=5
 
 svc() { systemctl is-active "$1" 2>/dev/null | tr -d '\n'; }
 
+vt_assert() {
+  # Keep the physical screen on tty1 (unless an operator deliberately sits on tty2-6).
+  local a; a=$(cat /sys/class/tty/tty0/active 2>/dev/null)
+  if [ "$a" != "tty1" ] && { [ "$a" = "tty7" ] || [ -z "$a" ]; }; then
+    chvt 1 2>/dev/null || true
+  fi
+}
+
 render() {
   printf '\033[2J\033[H'
   local ts up busy pkg
@@ -43,6 +51,7 @@ render() {
 }
 
 while :; do
+  vt_assert
   render
   [ "$ONETIME" = "1" ] && break
   sleep "$INTERVAL"
