@@ -3,10 +3,10 @@ from __future__ import annotations
 
 import streamlit as st
 
-from src.ui.components.analytics_v2.analytics_expander import render_charts
+from src.ui.components.analytics_v2.control_room import render_control_room
+from src.ui.components.analytics_v2.control_room_links import apply_control_room_links
+from src.ui.components.analytics_v2.dashboard_header import render_dashboard_header
 from src.ui.components.analytics_v2.header import render_header
-from src.ui.components.analytics_v2.kpi_row import render_kpi_row
-from src.ui.components.analytics_v2.limits import render_limits
 from src.ui.components.analytics_v2.mock_data import CARDS
 from src.ui.components.analytics_v2.quick_filters import render_quick_filters
 from src.ui.components.analytics_v2.tabs_lazy_dispatch import render_tabs
@@ -33,24 +33,36 @@ _STICKY_CSS = """
 
 
 def render_analytics_contour_v2_page(service) -> None:
-    """Шапка → KPI → Лимит → Три графика → [Фильтры | Рабочая область]."""
-    st.session_state["analytics_v2_cards"] = CARDS
+    """Первый экран = реальная S13_V4 очередь; тяжёлая аналитика — по требованию."""
+    from src.ui.components.analytics_v2.queue_first import render_queue_first
 
-    st.markdown(_STICKY_CSS, unsafe_allow_html=True)
+    # Fast first screen: bounded 25-row V4 queue, no KPIs/charts/full workset.
+    render_queue_first()
 
-    st.caption("CRM build: f910bd3+fix-torgi-lifecycle")
-    render_header()
-    render_kpi_row()
-    render_limits()
     st.divider()
-    render_charts()
+    show_stats = st.toggle(
+        "Статистика / аналитика (control room, KPI, графики, рабочая область)",
+        value=False,
+        key="analytics_v2_show_stats",
+    )
+    if not show_stats:
+        return
+
+    st.session_state["analytics_v2_cards"] = CARDS
+    st.markdown(_STICKY_CSS, unsafe_allow_html=True)
+    apply_control_room_links()
+    st.caption("CRM build: 53075f6+analytics-v2-control-room")
+    render_header()
+    render_control_room()
+
+    st.divider()
+    st.markdown("### Вторичная аналитика")
+    render_dashboard_header()
     st.divider()
 
     left, right = st.columns([1, 3], gap="medium")
-
     with left:
         _render_filters()
-
     with right:
         render_quick_filters()
         render_tabs()
@@ -187,6 +199,8 @@ def _reset_analytics_filters_state(session: dict) -> None:
         "analytics_v2_region_filter",
         "analytics_v2_show_mode",
         "selected_torgi_id",
+        "_cr_scope_ids",
+        "_cr_scope_label",
         "selected_komissia_id",
         "selected_razygr_id",
         "annotation_active_queue_session_key",
