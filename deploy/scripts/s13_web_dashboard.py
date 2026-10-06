@@ -170,6 +170,10 @@ canvas{width:100%;height:120px}
 .dsub{font-size:15px;color:#8b949e}
 .dinfo{font-size:14px;color:#d29922;margin-top:2px;text-align:center;max-width:150px}
 .warn{color:#d29922}
+.cool-item{display:flex;align-items:center;gap:10px}
+.ico{width:46px;height:46px}
+.cval{font-size:30px;font-weight:700;line-height:1}
+
 
 table{width:100%;border-collapse:collapse;font-size:19px}td{padding:3px 0;border-bottom:1px solid #21262d}
 .qt{display:flex;align-items:center;gap:10px;margin:6px 0}.qt .nm{width:120px;color:#8b949e}
@@ -177,7 +181,7 @@ footer{padding:8px 22px;color:#484f58;font-size:16px}
 </style></head><body>
 <header><h1 id="host">S13</h1><div class="small" id="clock"></div><div class="small" id="up"></div></header>
 <div class="grid">
- <div class="card"><h2>CPU <span class="small" id="temp"></span></h2><div class="val" id="cpu">-</div><div class="bar"><span id="cpub"></span></div><canvas id="cchart"></canvas><div class="small">load <span id="load"></span></div></div>
+ <div class="card"><h2>CPU</h2><div class="val" id="cpu">-</div><div class="bar"><span id="cpub"></span></div><canvas id="cchart"></canvas><div class="small">load <span id="load"></span></div></div>
  <div class="card"><h2>RAM</h2><div class="val" id="ram">-</div><div class="bar"><span id="ramb"></span></div><div class="small" id="ramt"></div><div class="row small"><span>SWAP</span><span id="swap"></span></div><div class="bar"><span id="swapb"></span></div></div>
  <div class="card"><h2>GPU</h2><div class="val" id="gpu">-</div><div class="bar"><span id="gpub"></span></div><canvas id="gchart"></canvas><div class="small" id="gput"></div></div>
  <div class="card"><h2>Disks - health, temperature, free space</h2><div id="disks"></div></div>
@@ -198,7 +202,7 @@ function line(cv,arr,color){const c=cv.getContext('2d');const w=cv.width=cv.clie
  const grad=c.createLinearGradient(0,0,0,h);grad.addColorStop(0,color+'55');grad.addColorStop(1,color+'00');c.fillStyle=grad;c.lineTo(w,h);c.lineTo(0,h);c.fill();}
 async function tick(){try{const m=await (await fetch('/api/metrics')).json();
  $('host').textContent='S13: '+m.host;$('clock').textContent=m.time;$('up').textContent='up '+m.uptime;
- $('cpu').textContent=m.cpu+'%';setbar($('cpub'),m.cpu);$('temp').textContent=m.temp+' C';$('load').textContent=m.load.join(' ');
+ $('cpu').textContent=m.cpu+'%';setbar($('cpub'),m.cpu);$('load').textContent=m.load.join(' ');
  $('ram').textContent=m.mem.pct+'%';setbar($('ramb'),m.mem.pct);$('ramt').textContent=m.mem.used+'G / '+m.mem.total+'G (avail '+m.mem.avail+'G)';
  $('swap').textContent=m.mem.swap_used+'G / '+m.mem.swap_total+'G';setbar($('swapb'),m.mem.swap_pct);
  if(m.gpu){$('gpu').textContent=m.gpu.util+'%';setbar($('gpub'),m.gpu.util);$('gput').textContent='VRAM '+m.gpu.vram_used+'/'+m.gpu.vram_total+' MiB ('+m.gpu.vram_pct+'%), '+m.gpu.power+'/'+m.gpu.limit+' W, '+m.gpu.temp+' C';}
@@ -212,9 +216,18 @@ async function tick(){try{const m=await (await fetch('/api/metrics')).json();
  const fanSvg=(dur,color)=>`<svg class="blades" style="animation-duration:${dur}s" viewBox="0 0 100 100"><g fill="${color}"><path d="M50 50 L49 6 A44 44 0 0 1 80 20 Z"/><path d="M50 50 L94 49 A44 44 0 0 1 80 80 Z" opacity=".85"/><path d="M50 50 L51 94 A44 44 0 0 1 20 80 Z"/><path d="M50 50 L6 51 A44 44 0 0 1 20 20 Z" opacity=".85"/></g><circle cx="50" cy="50" r="9" fill="#e6edf3"/></svg>`;
  let fansHtml=(m.cooling&&m.cooling.fans?m.cooling.fans:[]).map(f=>`<div class="fan">${fanSvg(span(f.rpm/3500).toFixed(2),'#58a6ff')}<div class="small">${f.label}<br><b style="font-size:24px">${f.rpm}</b> RPM</div></div>`).join('');
  if(m.gpu&&m.gpu.fan!=null){fansHtml+=`<div class="fan">${fanSvg(span(m.gpu.fan/100).toFixed(2),'#3fb950')}<div class="small">GPU fan<br><b style="font-size:24px">${m.gpu.fan}</b> %</div></div>`;}
- let tempsHtml=(m.cooling&&m.cooling.temps?m.cooling.temps:[]).map(t=>`<span class="temp"><span class="dot ${t.c>=80?'bad':t.c>=70?'warn':'ok'}"></span>${t.label}: <b>${t.c} C</b></span>`).join('');
- const gtmp=(m.gpu?`<span class="temp"><span class="dot ${m.gpu.temp>=80?'bad':m.gpu.temp>=70?'warn':'ok'}"></span>GPU: <b>${m.gpu.temp} C</b></span>`:'');
- $('cool').innerHTML=`<div class="fans">${fansHtml}</div><div class="temps">${tempsHtml}${gtmp}</div>`;
+ const tfind=(nm)=>{const a=(m.cooling&&m.cooling.temps)||[];const f=a.find(x=>String(x.label).toLowerCase().includes(nm));return f?f.c:null;};
+const cpuT=tfind('package'); const mbT=tfind('motherboard'); const gpuT=(m.gpu?m.gpu.temp:null);
+const tcol=v=>v>=80?'#da3633':v>=70?'#d29922':'#2ea043';
+const iconCpu=`<svg viewBox="0 0 48 48" class="ico"><g fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><rect x="12" y="12" width="24" height="24" rx="3"/><rect x="19" y="19" width="10" height="10"/><path d="M18 6v6M24 6v6M30 6v6M18 36v6M24 36v6M30 36v6M6 18h6M6 24h6M6 30h6M36 18h6M36 24h6M36 30h6"/></g></svg>`;
+const iconGpu=`<svg viewBox="0 0 48 48" class="ico"><g fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><rect x="5" y="14" width="38" height="20" rx="3"/><circle cx="17" cy="24" r="6"/><path d="M17 19v10M12 24h10M30 20h9M30 28h9"/></g></svg>`;
+const iconMb=`<svg viewBox="0 0 48 48" class="ico"><g fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><rect x="6" y="6" width="36" height="36" rx="3"/><rect x="14" y="14" width="14" height="14"/><path d="M32 14h6M32 19h6M32 24h6M12 32h24M12 37h16"/></g></svg>`;
+const item=(icon,v)=>`<div class="cool-item" style="color:${tcol(v)}">${icon}<div class="cval">${v}<span style="font-size:17px"> C</span></div></div>`;
+let tempsHtml='';
+if(cpuT!=null)tempsHtml+=item(iconCpu,cpuT);
+if(gpuT!=null)tempsHtml+=item(iconGpu,gpuT);
+if(mbT!=null)tempsHtml+=item(iconMb,mbT);
+$('cool').innerHTML=`<div class="fans">${fansHtml}</div><div class="temps">${tempsHtml}</div>`;
 
  $('top').innerHTML=m.top.map(t=>`<tr><td>${t.cmd}</td><td style="text-align:right">${t.cpu.toFixed(1)}%</td><td style="text-align:right">${t.mem.toFixed(1)}%</td></tr>`).join('');
  line($('cchart'),m.hist.cpu,'#58a6ff');line($('gchart'),m.hist.gpu,'#3fb950');
