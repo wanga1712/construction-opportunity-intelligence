@@ -9,7 +9,7 @@ Type=simple
 User=sergey
 Environment=HOME=/home/sergey
 Environment=XAUTHORITY=/home/sergey/.Xauthority
-ExecStart=/usr/bin/xinit /usr/bin/firefox --kiosk --no-remote --new-instance --profile /home/sergey/.mozilla/firefox/s13kiosk http://127.0.0.1:8899 -- :0 vt7 -nolisten tcp
+ExecStart=/usr/bin/xinit /usr/bin/firefox --kiosk --no-remote --new-instance --width 1920 --height 1080 --profile /home/sergey/.mozilla/firefox/s13kiosk http://127.0.0.1:8899 -- :0 vt7 -nolisten tcp
 Restart=always
 RestartSec=5
 Nice=5
