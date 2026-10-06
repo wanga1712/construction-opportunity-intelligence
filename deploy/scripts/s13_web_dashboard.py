@@ -43,12 +43,12 @@ def temp_c():
     return int(float(m.group(1))) if m else 0
 
 def gpu():
-    out = sh("nvidia-smi --query-gpu=utilization.gpu,memory.used,memory.total,power.draw,power.limit,temperature.gpu --format=csv,noheader,nounits 2>/dev/null")
+    out = sh("nvidia-smi --query-gpu=utilization.gpu,memory.used,memory.total,power.draw,power.limit,temperature.gpu,fan.speed --format=csv,noheader,nounits 2>/dev/null")
     if not out: return None
     try:
-        u,mu,mt,pw,pl,gt = [x.strip() for x in out.split(",")]
+        u,mu,mt,pw,pl,gt,fan = [x.strip() for x in out.split(",")]
         return {"util":int(float(u)),"vram_used":int(float(mu)),"vram_total":int(float(mt)),
-                "vram_pct":int(float(mu)/float(mt)*100),"power":round(float(pw)),"limit":round(float(pl)),"temp":int(float(gt))}
+                "vram_pct":int(float(mu)/float(mt)*100),"power":round(float(pw)),"limit":round(float(pl)),"temp":int(float(gt)),"fan":int(float(fan))}
     except Exception:
         return None
 
@@ -78,6 +78,25 @@ def queue():
             b,c=line.split("|"); res.append({"band":b,"count":int(c)})
     return res
 
+
+def cooling():
+    out = sh("sensors 2>/dev/null")
+    temps = []
+    m = re.search(r"Package id 0:\s*\+([0-9.]+)", out)
+    if m: temps.append({"label":"CPU package","c":int(float(m.group(1)))})
+    cores = [float(x) for x in re.findall(r"Core \d+:\s*\+([0-9.]+)", out)]
+    if cores: temps.append({"label":"CPU cores max","c":int(max(cores))})
+    m = re.search(r"SYSTIN:\s*\+([0-9.]+)", out)
+    if m: temps.append({"label":"Motherboard","c":int(float(m.group(1)))})
+    m = re.search(r"PECI Agent 0:\s*\+([0-9.]+)", out)
+    if m: temps.append({"label":"CPU PECI","c":int(float(m.group(1)))})
+    fans = []
+    for fid, rpm in re.findall(r"fan(\d+):\s+(\d+) RPM", out):
+        rpm = int(rpm)
+        if rpm > 0:
+            fans.append({"label":"Chassis fan " + fid, "rpm": rpm})
+    return {"temps": temps, "fans": fans}
+
 def top():
     out=sh("ps -eo pcpu,pmem,comm --sort=-pcpu | head -8")
     res=[]
@@ -97,7 +116,7 @@ def snapshot():
     up=sh("uptime -p").replace("up ","")
     return {"host":socket.gethostname(),"time":time.strftime("%Y-%m-%d %H:%M:%S"),
             "uptime":up,"load":load,"cpu":c,"temp":temp_c(),"mem":mem(),"gpu":g,
-            "disks":disks(),"services":services(),"queue":queue(),"top":top(),"hist":h}
+            "disks":disks(),"services":services(),"queue":queue(),"cooling":cooling(),"top":top(),"hist":h}
 
 PAGE = r"""<!doctype html><html><head><meta charset="utf-8">
 <title>S13</title><style>
@@ -117,6 +136,12 @@ h1{margin:0;font-size:30px;color:#58a6ff}
 .dot{width:14px;height:14px;border-radius:50%}
 .ok{background:#2ea043;box-shadow:0 0 8px #2ea043}.bad{background:#da3633;box-shadow:0 0 8px #da3633}
 canvas{width:100%;height:120px}
+.fans{display:flex;gap:30px;align-items:flex-end;flex-wrap:wrap;margin-bottom:14px}
+.fan{display:flex;flex-direction:column;align-items:center;gap:6px;text-align:center;min-width:90px}
+.blades{width:66px;height:66px;animation:spin linear infinite}
+@keyframes spin{from{transform:rotate(0)}to{transform:rotate(360deg)}}
+.temps{display:flex;gap:24px;flex-wrap:wrap;font-size:21px}
+.temp{display:flex;align-items:center;gap:8px}.warn{background:#d29922;box-shadow:0 0 8px #d29922}
 table{width:100%;border-collapse:collapse;font-size:19px}td{padding:3px 0;border-bottom:1px solid #21262d}
 .qt{display:flex;align-items:center;gap:10px;margin:6px 0}.qt .nm{width:120px;color:#8b949e}
 footer{padding:8px 22px;color:#484f58;font-size:16px}
@@ -127,6 +152,7 @@ footer{padding:8px 22px;color:#484f58;font-size:16px}
  <div class="card"><h2>RAM</h2><div class="val" id="ram">-</div><div class="bar"><span id="ramb"></span></div><div class="small" id="ramt"></div><div class="row small"><span>SWAP</span><span id="swap"></span></div><div class="bar"><span id="swapb"></span></div></div>
  <div class="card"><h2>GPU</h2><div class="val" id="gpu">-</div><div class="bar"><span id="gpub"></span></div><canvas id="gchart"></canvas><div class="small" id="gput"></div></div>
  <div class="card"><h2>Disks</h2><div id="disks"></div></div>
+ <div class="card" style="grid-column:span 3"><h2>Cooling - fans &amp; temperatures</h2><div id="cool"></div></div>
  <div class="card"><h2>Services</h2><div id="svcs"></div><div class="small" id="http"></div></div>
  <div class="card"><h2>Queue</h2><div id="q"></div></div>
  <div class="card" style="grid-column:span 3"><h2>Top CPU</h2><table id="top"></table></div>
@@ -151,6 +177,15 @@ async function tick(){try{const m=await (await fetch('/api/metrics')).json();
  $('svcs').innerHTML=m.services.map(s=>`<span class="svc"><span class="dot ${s.state=='active'?'ok':'bad'}"></span>${s.label}</span>`).join('');
  const max=Math.max(80,...m.queue.map(q=>q.count));
  $('q').innerHTML=m.queue.map(q=>`<div class="qt"><span class="nm">${q.band}</span><span class="bar" style="flex:1"><span class="${cls(q.count/max*100)}" style="width:${q.count/max*100}%"></span></span><span>${q.count}</span></div>`).join('');
+
+ const span=(v)=>Math.max(0.15,2.1-1.9*Math.min(1,Math.max(0,v)));
+ const fanSvg=(dur,color)=>`<svg class="blades" style="animation-duration:${dur}s" viewBox="0 0 100 100"><g fill="${color}"><path d="M50 50 L49 6 A44 44 0 0 1 80 20 Z"/><path d="M50 50 L94 49 A44 44 0 0 1 80 80 Z" opacity=".85"/><path d="M50 50 L51 94 A44 44 0 0 1 20 80 Z"/><path d="M50 50 L6 51 A44 44 0 0 1 20 20 Z" opacity=".85"/></g><circle cx="50" cy="50" r="9" fill="#e6edf3"/></svg>`;
+ let fansHtml=(m.cooling&&m.cooling.fans?m.cooling.fans:[]).map(f=>`<div class="fan">${fanSvg(span(f.rpm/3500).toFixed(2),'#58a6ff')}<div class="small">${f.label}<br><b style="font-size:24px">${f.rpm}</b> RPM</div></div>`).join('');
+ if(m.gpu&&m.gpu.fan!=null){fansHtml+=`<div class="fan">${fanSvg(span(m.gpu.fan/100).toFixed(2),'#3fb950')}<div class="small">GPU fan<br><b style="font-size:24px">${m.gpu.fan}</b> %</div></div>`;}
+ let tempsHtml=(m.cooling&&m.cooling.temps?m.cooling.temps:[]).map(t=>`<span class="temp"><span class="dot ${t.c>=80?'bad':t.c>=70?'warn':'ok'}"></span>${t.label}: <b>${t.c} C</b></span>`).join('');
+ const gtmp=(m.gpu?`<span class="temp"><span class="dot ${m.gpu.temp>=80?'bad':m.gpu.temp>=70?'warn':'ok'}"></span>GPU: <b>${m.gpu.temp} C</b></span>`:'');
+ $('cool').innerHTML=`<div class="fans">${fansHtml}</div><div class="temps">${tempsHtml}${gtmp}</div>`;
+
  $('top').innerHTML=m.top.map(t=>`<tr><td>${t.cmd}</td><td style="text-align:right">${t.cpu.toFixed(1)}%</td><td style="text-align:right">${t.mem.toFixed(1)}%</td></tr>`).join('');
  line($('cchart'),m.hist.cpu,'#58a6ff');line($('gchart'),m.hist.gpu,'#3fb950');
  $('foot').textContent='updated '+m.time+' ? refresh 2s';
