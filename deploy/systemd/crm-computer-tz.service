@@ -9,7 +9,7 @@ WorkingDirectory=/opt/CRM_Streamlit
 EnvironmentFile=-/opt/CRM_Streamlit/.env
 Environment=PYTHONPATH=/opt/CRM_Streamlit:/opt/pythonProject89:/opt/tender_documents_research
 Environment=TENDER_DOCS_RESEARCH_ROOT=/opt/tender_documents_research
-ExecStart=/opt/CRM_Streamlit/.venv/bin/python /opt/CRM_Streamlit/scripts/computer_tz_daemon.py --once --only-open --limit 30
+ExecStart=/opt/CRM_Streamlit/.venv313/bin/python /opt/CRM_Streamlit/scripts/computer_tz_daemon.py --once --only-open --limit 30
 Nice=10
 
 [Install]
