@@ -144,7 +144,7 @@ PAGE = r"""<!doctype html><html><head><meta charset="utf-8">
 *{box-sizing:border-box} body{margin:0;background:#0d1117;color:#e6edf3;font-family:system-ui,Segoe UI,Arial;font-size:22px}
 header{padding:14px 22px;background:#161b22;border-bottom:2px solid #30363d;display:flex;justify-content:space-between;align-items:baseline}
 h1{margin:0;font-size:30px;color:#58a6ff}
-.grid{display:grid;grid-template-columns:repeat(3,1fr);gap:14px;padding:16px}
+.grid{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;padding:16px}
 .card{background:#161b22;border:1px solid #30363d;border-radius:12px;padding:14px 16px}
 .card h2{margin:0 0 10px;font-size:20px;color:#8b949e;font-weight:600;text-transform:uppercase;letter-spacing:1px}
 .bar{height:26px;background:#21262d;border-radius:6px;overflow:hidden}
@@ -172,11 +172,12 @@ footer{padding:8px 22px;color:#484f58;font-size:16px}
  <div class="card"><h2>CPU <span class="small" id="temp"></span></h2><div class="val" id="cpu">-</div><div class="bar"><span id="cpub"></span></div><canvas id="cchart"></canvas><div class="small">load <span id="load"></span></div></div>
  <div class="card"><h2>RAM</h2><div class="val" id="ram">-</div><div class="bar"><span id="ramb"></span></div><div class="small" id="ramt"></div><div class="row small"><span>SWAP</span><span id="swap"></span></div><div class="bar"><span id="swapb"></span></div></div>
  <div class="card"><h2>GPU</h2><div class="val" id="gpu">-</div><div class="bar"><span id="gpub"></span></div><canvas id="gchart"></canvas><div class="small" id="gput"></div></div>
- <div class="card" style="grid-column:span 3"><h2>Cooling - fans &amp; temperatures</h2><div id="cool"></div></div>
- <div class="card" style="grid-column:span 3"><h2>Disks - health, temperature, free space</h2><div id="disks"></div></div>
- <div class="card"><h2>Services</h2><div id="svcs"></div><div class="small" id="http"></div></div>
- <div class="card"><h2>Queue</h2><div id="q"></div></div>
- <div class="card" style="grid-column:span 3"><h2>Top CPU</h2><table id="top"></table></div>
+ <div class="card"><h2>Disks - health, temperature, free space</h2><div id="disks"></div></div>
+  <div class="card" style="grid-column:span 4"><h2>Cooling - fans &amp; temperatures</h2><div id="cool"></div></div>
+ 
+ <div class="card" style="grid-column:span 2"><h2>Services</h2><div id="svcs"></div><div class="small" id="http"></div></div>
+ <div class="card" style="grid-column:span 2"><h2>Queue</h2><div id="q"></div></div>
+ <div class="card" style="grid-column:span 4"><h2>Top CPU</h2><table id="top"></table></div>
 </div><footer id="foot">?</footer>
 <script>
 const $=id=>document.getElementById(id);
