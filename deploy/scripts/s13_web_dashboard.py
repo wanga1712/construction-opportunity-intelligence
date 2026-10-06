@@ -53,11 +53,32 @@ def gpu():
         return None
 
 def disks():
-    res=[]
-    for m in ("/","/data"):
-        out=sh(f"df -h {m} 2>/dev/null | awk 'NR==2{{gsub(\"%\",\"\",$5);print $2\"|\"$3\"|\"$4\"|\"$5}}'")
-        if "|" in out:
-            sz,us,av,pc=out.split("|"); res.append({"mount":m,"size":sz,"used":us,"avail":av,"pct":int(pc)})
+    res = []
+    mounts = {"/": "sda", "/data": "sdc"}
+    models = {}
+    for line in sh("lsblk -o NAME,SIZE,MODEL -dn").splitlines():
+        parts = line.split(None, 2)
+        if len(parts) >= 2 and parts[0] in ("sda", "sdb", "sdc"):
+            models[parts[0]] = parts[2].strip() if len(parts) == 3 else ""
+    for dev in ("sda", "sdb", "sdc"):
+        d = {"dev": dev, "model": models.get(dev, ""), "mount": None}
+        for m, dv in mounts.items():
+            if dv == dev:
+                d["mount"] = m
+        if d["mount"]:
+            out = sh("df -h " + d["mount"] + " 2>/dev/null | awk \'NR==2{gsub(\"%\",\"\",$5);print $2\"|\"$3\"|\"$4\"|\"$5}\'")
+            if "|" in out:
+                sz, us, av, pc = out.split("|")
+                d.update(size=sz, used=us, avail=av, pct=int(pc))
+        sm = sh("smartctl -H -A /dev/%s 2>/dev/null" % dev)
+        d["health"] = "PASSED" if "PASSED" in sm else ("FAILED" if "FAILED" in sm else "n/a")
+        m = re.search(r"Temperature_Celsius.*?-\s*(\d+)", sm)
+        d["temp"] = int(m.group(1)) if m else None
+        m = re.search(r"Current_Pending_Sector.*?-\s*(\d+)", sm)
+        d["pending"] = int(m.group(1)) if m else None
+        m = re.search(r"Reallocated_Sector_Ct.*?-\s*(\d+)", sm)
+        d["realloc"] = int(m.group(1)) if m else None
+        res.append(d)
     return res
 
 def svc(name):
@@ -151,8 +172,8 @@ footer{padding:8px 22px;color:#484f58;font-size:16px}
  <div class="card"><h2>CPU <span class="small" id="temp"></span></h2><div class="val" id="cpu">-</div><div class="bar"><span id="cpub"></span></div><canvas id="cchart"></canvas><div class="small">load <span id="load"></span></div></div>
  <div class="card"><h2>RAM</h2><div class="val" id="ram">-</div><div class="bar"><span id="ramb"></span></div><div class="small" id="ramt"></div><div class="row small"><span>SWAP</span><span id="swap"></span></div><div class="bar"><span id="swapb"></span></div></div>
  <div class="card"><h2>GPU</h2><div class="val" id="gpu">-</div><div class="bar"><span id="gpub"></span></div><canvas id="gchart"></canvas><div class="small" id="gput"></div></div>
- <div class="card"><h2>Disks</h2><div id="disks"></div></div>
  <div class="card" style="grid-column:span 3"><h2>Cooling - fans &amp; temperatures</h2><div id="cool"></div></div>
+ <div class="card" style="grid-column:span 3"><h2>Disks - health, temperature, free space</h2><div id="disks"></div></div>
  <div class="card"><h2>Services</h2><div id="svcs"></div><div class="small" id="http"></div></div>
  <div class="card"><h2>Queue</h2><div id="q"></div></div>
  <div class="card" style="grid-column:span 3"><h2>Top CPU</h2><table id="top"></table></div>
@@ -173,7 +194,7 @@ async function tick(){try{const m=await (await fetch('/api/metrics')).json();
  $('swap').textContent=m.mem.swap_used+'G / '+m.mem.swap_total+'G';setbar($('swapb'),m.mem.swap_pct);
  if(m.gpu){$('gpu').textContent=m.gpu.util+'%';setbar($('gpub'),m.gpu.util);$('gput').textContent='VRAM '+m.gpu.vram_used+'/'+m.gpu.vram_total+' MiB ('+m.gpu.vram_pct+'%), '+m.gpu.power+'/'+m.gpu.limit+' W, '+m.gpu.temp+' C';}
  else{$('gpu').textContent='n/a';}
- $('disks').innerHTML=m.disks.map(d=>`<div class="row"><span>${d.mount}</span><span>${d.pct}%</span></div><div class="bar"><span class="${cls(d.pct)}" style="width:${d.pct}%"></span></div><div class="small">${d.used} used / ${d.size} (avail ${d.avail})</div>`).join('');
+ $('disks').innerHTML=m.disks.map(d=>{const warn=(d.pending&&d.pending>0)||(d.realloc&&d.realloc>0)||d.health=='FAILED';const dot=d.health=='PASSED'?(warn?'warn':'ok'):'bad';return `<div class="row"><span><b>${d.dev}</b>  ${d.model||''}</span><span>${d.mount?d.mount:'(unmounted)'}</span></div>`+ (d.pct!=null?`<div class="bar"><span class="${cls(d.pct)}" style="width:${d.pct}%"></span></div>`: '')+ `<div class="small">`+ (d.pct!=null?`${d.used} used / ${d.size} (avail ${d.avail}) - ${d.pct}%  `:'')+ `<span class="dot ${dot}"></span> SMART ${d.health}`+ (d.temp!=null?`  -  ${d.temp} C`:'')+ (d.pending!=null&&d.pending>0?`  -  <b style="color:#da3633">pending ${d.pending}</b>`:'')+ (d.realloc!=null&&d.realloc>0?`  -  realloc ${d.realloc}`:'')+ `</div>`;}).join('');
  $('svcs').innerHTML=m.services.map(s=>`<span class="svc"><span class="dot ${s.state=='active'?'ok':'bad'}"></span>${s.label}</span>`).join('');
  const max=Math.max(80,...m.queue.map(q=>q.count));
  $('q').innerHTML=m.queue.map(q=>`<div class="qt"><span class="nm">${q.band}</span><span class="bar" style="flex:1"><span class="${cls(q.count/max*100)}" style="width:${q.count/max*100}%"></span></span><span>${q.count}</span></div>`).join('');
