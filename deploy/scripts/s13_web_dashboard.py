@@ -91,15 +91,6 @@ def services():
            "tender-docs-band-bronze":"docs BRONZE","tender-docs-band-wood":"docs WOOD/UNSC"}
     return [{"id":k,"label":v,"state":svc(k)} for k,v in names.items()]
 
-def queue():
-    out=sh("runuser -u postgres -- psql -d document_intelligence -At -F'|' -c \"SELECT COALESCE(research_prior_band,'UNSCORED'), count(*) FROM document_processing_queue WHERE status IN ('PENDING','PRE_RESEARCH_WAITING','PROCESSING') GROUP BY 1 ORDER BY 1\"",8)
-    res=[]
-    for line in out.splitlines():
-        if "|" in line:
-            b,c=line.split("|"); res.append({"band":b,"count":int(c)})
-    return res
-
-
 def cooling():
     out = sh("sensors 2>/dev/null")
     temps = []
@@ -117,6 +108,19 @@ def cooling():
         if rpm > 0:
             fans.append({"label":"Chassis fan " + fid, "rpm": rpm})
     return {"temps": temps, "fans": fans}
+
+def _band_counts(where):
+    out = sh("runuser -u postgres -- psql -d document_intelligence -At -F'|' -c \"SELECT COALESCE(research_prior_band,'UNSCORED'), count(*) FROM document_processing_queue WHERE " + where + " GROUP BY 1 ORDER BY 1\"", 8)
+    res = []
+    for line in out.splitlines():
+        if "|" in line:
+            b, c = line.split("|")
+            res.append({"band": b, "count": int(c)})
+    return res
+
+def queue():
+    return {"waiting": _band_counts("status IN ('PENDING','PRE_RESEARCH_WAITING')"),
+            "processing": _band_counts("status = 'PROCESSING'")}
 
 def top():
     out=sh("ps -eo pcpu,pmem,comm --sort=-pcpu | head -8")
@@ -187,10 +191,11 @@ footer{padding:8px 22px;color:#484f58;font-size:16px}
  <div class="card"><h2>RAM</h2><div class="val" id="ram">-</div><div class="bar"><span id="ramb"></span></div><div class="small" id="ramt"></div><div class="row small"><span>SWAP</span><span id="swap"></span></div><div class="bar"><span id="swapb"></span></div></div>
  <div class="card"><h2>GPU</h2><div class="val" id="gpu">-</div><div class="bar"><span id="gpub"></span></div><canvas id="gchart"></canvas><div class="small" id="gput"></div></div>
  <div class="card"><h2>Disks - health, temperature, free space</h2><div id="disks"></div></div>
-  <div class="card" style="grid-column:span 4"><h2>Cooling - fans &amp; temperatures</h2><div id="cool"></div></div>
+  <div class="card" style="grid-column:span 2"><h2>Cooling - fans &amp; temperatures</h2><div id="cool"></div></div>
  
  <div class="card" style="grid-column:span 2"><h2>Services</h2><div id="svcs"></div><div class="small" id="http"></div></div>
- <div class="card" style="grid-column:span 2"><h2>Queue</h2><div id="q"></div></div>
+ <div class="card" style="grid-column:span 2"><h2>Queue - waiting for parsing</h2><div id="q"></div></div>
+ <div class="card" style="grid-column:span 2"><h2>In progress now</h2><div id="qp"></div></div>
  <div class="card" style="grid-column:span 4"><h2>Top CPU</h2><table id="top"></table></div>
 </div><footer id="foot">?</footer>
 <script>
@@ -211,8 +216,9 @@ async function tick(){try{const m=await (await fetch('/api/metrics')).json();
  else{$('gpu').textContent='n/a';}
  $('disks').innerHTML='<div class="disks">'+m.disks.map(d=>{const prob=d.health!='PASSED'||(d.pending||0)>0||(d.realloc||0)>0||(d.temp&&d.temp>=60);const pct=d.pct!=null?d.pct:0;const colp=pct>=85?'#da3633':pct>=70?'#d29922':'#2ea043';const info=[];if(d.temp!=null)info.push(d.temp+' C');if(d.pending)info.push('pending '+d.pending);if(d.realloc)info.push('realloc '+d.realloc);const ring=d.pct!=null?`<svg viewBox="0 0 42 42" class="donut"><circle cx="21" cy="21" r="15.9" fill="none" stroke="#21262d" stroke-width="6"/><circle cx="21" cy="21" r="15.9" fill="none" stroke="${colp}" stroke-width="6" stroke-dasharray="${pct} ${100-pct}" stroke-dashoffset="25" stroke-linecap="round"/><text x="21" y="24.5" text-anchor="middle" font-size="10.5" fill="#e6edf3">${pct}%</text></svg>`:`<svg viewBox="0 0 42 42" class="donut"><circle cx="21" cy="21" r="15.9" fill="none" stroke="#30363d" stroke-width="6"/><text x="21" y="24.5" text-anchor="middle" font-size="10" fill="#8b949e">n/a</text></svg>`;return `<div class="disk">${ring}<div class="dname">${prob?'<span class="warn">&#9888;</span> ':''}${d.dev}</div><div class="dsub">${d.mount?d.mount:'unmounted'}</div>${prob&&info.length?`<div class="dinfo">${info.join(' / ')}</div>`:''}</div>`;}).join('')+'</div>';
  $('svcs').innerHTML=m.services.map(s=>`<span class="svc"><span class="dot ${s.state=='active'?'ok':'bad'}"></span>${s.label}</span>`).join('');
- const max=Math.max(80,...m.queue.map(q=>q.count));
- $('q').innerHTML=m.queue.map(q=>`<div class="qt"><span class="nm">${q.band}</span><span class="bar" style="flex:1"><span class="${cls(q.count/max*100)}" style="width:${q.count/max*100}%"></span></span><span>${q.count}</span></div>`).join('');
+const qbars=(arr)=>{const a=arr||[];const mx=Math.max(20,...a.map(x=>x.count));return a.length?a.map(x=>`<div class="qt"><span class="nm">${x.band}</span><span class="bar" style="flex:1"><span class="${cls(x.count/mx*100)}" style="width:${x.count/mx*100}%"></span></span><span>${x.count}</span></div>`).join(''):'<div class="small">nothing</div>';};
+ $('q').innerHTML=qbars(m.queue.waiting);
+ $('qp').innerHTML=qbars(m.queue.processing);
 
  const span=(v)=>Math.max(0.15,2.1-1.9*Math.min(1,Math.max(0,v)));
  const fanSvg=(dur,color)=>`<svg class="blades" style="animation-duration:${dur}s" viewBox="0 0 100 100"><g fill="${color}"><path d="M50 50 L49 6 A44 44 0 0 1 80 20 Z"/><path d="M50 50 L94 49 A44 44 0 0 1 80 80 Z" opacity=".85"/><path d="M50 50 L51 94 A44 44 0 0 1 20 80 Z"/><path d="M50 50 L6 51 A44 44 0 0 1 20 20 Z" opacity=".85"/></g><circle cx="50" cy="50" r="9" fill="#e6edf3"/></svg>`;
