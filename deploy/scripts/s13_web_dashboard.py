@@ -157,11 +157,13 @@ h1{margin:0;font-size:30px;color:#58a6ff}
 .dot{width:14px;height:14px;border-radius:50%}
 .ok{background:#2ea043;box-shadow:0 0 8px #2ea043}.bad{background:#da3633;box-shadow:0 0 8px #da3633}
 canvas{width:100%;height:120px}
-.fans{display:flex;gap:30px;align-items:flex-end;flex-wrap:wrap;margin-bottom:14px}
+.cool-row{display:flex;align-items:center;gap:36px;flex-wrap:wrap}
+.fans{display:contents}
+.temps{display:contents}
 .fan{display:flex;flex-direction:column;align-items:center;gap:6px;text-align:center;min-width:90px}
 .blades{width:66px;height:66px;animation:spin linear infinite}
 @keyframes spin{from{transform:rotate(0)}to{transform:rotate(360deg)}}
-.temps{display:flex;gap:24px;flex-wrap:wrap;font-size:21px}
+
 .temp{display:flex;align-items:center;gap:8px}.warn{background:#d29922;box-shadow:0 0 8px #d29922}
 .disks{display:flex;gap:16px;justify-content:space-around;align-items:flex-start;flex-wrap:wrap}
 .disk{display:flex;flex-direction:column;align-items:center;min-width:80px}
@@ -227,7 +229,7 @@ let tempsHtml='';
 if(cpuT!=null)tempsHtml+=item(iconCpu,cpuT);
 if(gpuT!=null)tempsHtml+=item(iconGpu,gpuT);
 if(mbT!=null)tempsHtml+=item(iconMb,mbT);
-$('cool').innerHTML=`<div class="fans">${fansHtml}</div><div class="temps">${tempsHtml}</div>`;
+$('cool').innerHTML=`<div class="cool-row">${fansHtml}${tempsHtml}</div>`;
 
  $('top').innerHTML=m.top.map(t=>`<tr><td>${t.cmd}</td><td style="text-align:right">${t.cpu.toFixed(1)}%</td><td style="text-align:right">${t.mem.toFixed(1)}%</td></tr>`).join('');
  line($('cchart'),m.hist.cpu,'#58a6ff');line($('gchart'),m.hist.gpu,'#3fb950');
