@@ -1,0 +1,18 @@
+[Unit]
+Description=S13 graphical kiosk (X + Firefox fullscreen dashboard)
+After=multi-user.target s13-web-dashboard.service
+Wants=s13-web-dashboard.service
+Conflicts=getty@tty7.service
+
+[Service]
+Type=simple
+User=sergey
+Environment=HOME=/home/sergey
+Environment=XAUTHORITY=/home/sergey/.Xauthority
+ExecStart=/usr/bin/xinit /usr/bin/firefox --kiosk --no-remote --new-instance --profile /home/sergey/.mozilla/firefox/s13kiosk http://127.0.0.1:8899 -- :0 vt7 -nolisten tcp
+Restart=always
+RestartSec=5
+Nice=5
+
+[Install]
+WantedBy=multi-user.target
