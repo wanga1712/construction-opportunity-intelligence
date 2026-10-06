@@ -9,4 +9,4 @@ xset dpms force on 2>/dev/null || true
 # keep display awake even if something re-enables blanking
 ( while true; do sleep 300; xset s off; xset s noblank; xset dpms 0 0 0; xset -dpms; xset dpms force on; done ) &
 exec /usr/bin/firefox --kiosk --no-remote --new-instance --width 1920 --height 1080 \
-  --profile /home/sergey/.mozilla/firefox/s13kiosk http://127.0.0.1:8899
+  --profile /home/sergey/.mozilla/firefox/s13kiosk http://127.0.0.1:8897

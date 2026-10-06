@@ -1,0 +1,10 @@
+[Unit]
+Description=S13 dashboard v3 (3-layer procurement view) - test 8897
+After=network-online.target
+[Service]
+Type=simple
+ExecStart=/usr/bin/python3 /usr/local/bin/s13_dashboard3.py
+Restart=always
+Nice=5
+[Install]
+WantedBy=multi-user.target
