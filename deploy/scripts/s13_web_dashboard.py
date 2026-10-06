@@ -163,6 +163,14 @@ canvas{width:100%;height:120px}
 @keyframes spin{from{transform:rotate(0)}to{transform:rotate(360deg)}}
 .temps{display:flex;gap:24px;flex-wrap:wrap;font-size:21px}
 .temp{display:flex;align-items:center;gap:8px}.warn{background:#d29922;box-shadow:0 0 8px #d29922}
+.disks{display:flex;gap:16px;justify-content:space-around;align-items:flex-start;flex-wrap:wrap}
+.disk{display:flex;flex-direction:column;align-items:center;min-width:80px}
+.donut{width:80px;height:80px}
+.dname{font-size:18px;margin-top:4px}
+.dsub{font-size:15px;color:#8b949e}
+.dinfo{font-size:14px;color:#d29922;margin-top:2px;text-align:center;max-width:150px}
+.warn{color:#d29922}
+
 table{width:100%;border-collapse:collapse;font-size:19px}td{padding:3px 0;border-bottom:1px solid #21262d}
 .qt{display:flex;align-items:center;gap:10px;margin:6px 0}.qt .nm{width:120px;color:#8b949e}
 footer{padding:8px 22px;color:#484f58;font-size:16px}
@@ -195,7 +203,7 @@ async function tick(){try{const m=await (await fetch('/api/metrics')).json();
  $('swap').textContent=m.mem.swap_used+'G / '+m.mem.swap_total+'G';setbar($('swapb'),m.mem.swap_pct);
  if(m.gpu){$('gpu').textContent=m.gpu.util+'%';setbar($('gpub'),m.gpu.util);$('gput').textContent='VRAM '+m.gpu.vram_used+'/'+m.gpu.vram_total+' MiB ('+m.gpu.vram_pct+'%), '+m.gpu.power+'/'+m.gpu.limit+' W, '+m.gpu.temp+' C';}
  else{$('gpu').textContent='n/a';}
- $('disks').innerHTML=m.disks.map(d=>{const warn=(d.pending&&d.pending>0)||(d.realloc&&d.realloc>0)||d.health=='FAILED';const dot=d.health=='PASSED'?(warn?'warn':'ok'):'bad';return `<div class="row"><span><b>${d.dev}</b>  ${d.model||''}</span><span>${d.mount?d.mount:'(unmounted)'}</span></div>`+ (d.pct!=null?`<div class="bar"><span class="${cls(d.pct)}" style="width:${d.pct}%"></span></div>`: '')+ `<div class="small">`+ (d.pct!=null?`${d.used} used / ${d.size} (avail ${d.avail}) - ${d.pct}%  `:'')+ `<span class="dot ${dot}"></span> SMART ${d.health}`+ (d.temp!=null?`  -  ${d.temp} C`:'')+ (d.pending!=null&&d.pending>0?`  -  <b style="color:#da3633">pending ${d.pending}</b>`:'')+ (d.realloc!=null&&d.realloc>0?`  -  realloc ${d.realloc}`:'')+ `</div>`;}).join('');
+ $('disks').innerHTML='<div class="disks">'+m.disks.map(d=>{const prob=d.health!='PASSED'||(d.pending||0)>0||(d.realloc||0)>0||(d.temp&&d.temp>=60);const pct=d.pct!=null?d.pct:0;const colp=pct>=85?'#da3633':pct>=70?'#d29922':'#2ea043';const info=[];if(d.temp!=null)info.push(d.temp+' C');if(d.pending)info.push('pending '+d.pending);if(d.realloc)info.push('realloc '+d.realloc);const ring=d.pct!=null?`<svg viewBox="0 0 42 42" class="donut"><circle cx="21" cy="21" r="15.9" fill="none" stroke="#21262d" stroke-width="6"/><circle cx="21" cy="21" r="15.9" fill="none" stroke="${colp}" stroke-width="6" stroke-dasharray="${pct} ${100-pct}" stroke-dashoffset="25" stroke-linecap="round"/><text x="21" y="24.5" text-anchor="middle" font-size="10.5" fill="#e6edf3">${pct}%</text></svg>`:`<svg viewBox="0 0 42 42" class="donut"><circle cx="21" cy="21" r="15.9" fill="none" stroke="#30363d" stroke-width="6"/><text x="21" y="24.5" text-anchor="middle" font-size="10" fill="#8b949e">n/a</text></svg>`;return `<div class="disk">${ring}<div class="dname">${prob?'<span class="warn">&#9888;</span> ':''}${d.dev}</div><div class="dsub">${d.mount?d.mount:'unmounted'}</div>${prob&&info.length?`<div class="dinfo">${info.join(' / ')}</div>`:''}</div>`;}).join('')+'</div>';
  $('svcs').innerHTML=m.services.map(s=>`<span class="svc"><span class="dot ${s.state=='active'?'ok':'bad'}"></span>${s.label}</span>`).join('');
  const max=Math.max(80,...m.queue.map(q=>q.count));
  $('q').innerHTML=m.queue.map(q=>`<div class="qt"><span class="nm">${q.band}</span><span class="bar" style="flex:1"><span class="${cls(q.count/max*100)}" style="width:${q.count/max*100}%"></span></span><span>${q.count}</span></div>`).join('');
