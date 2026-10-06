@@ -172,6 +172,33 @@ def torgi_medals():
     except ValueError: procs = 0
     return {"medals": medals, "procurements": procs}
 
+_daily = {"data": {"new_s7": None, "queued": None, "completed": None, "medals": {}, "ts": None}}
+
+def _compute_daily():
+    try:
+        new_s7 = sh("runuser -u postgres -- psql -d crm -At -c \"SELECT count(*) FROM crm_procurements WHERE crm_created_at >= current_date\"", 90)
+        queued = sh("runuser -u postgres -- psql -d document_intelligence -At -c \"SELECT count(*) FROM document_processing_queue WHERE created_at >= current_date\"", 90)
+        completed = sh("runuser -u postgres -- psql -d document_intelligence -At -c \"SELECT count(*) FROM document_processing_queue WHERE completed_at >= current_date\"", 90)
+        med = sh("runuser -u postgres -- psql -d crm -At -F'|' -c \"SELECT COALESCE(current_effective_medal,'NULL'), count(*) FROM crm_procurement_category_opportunities WHERE updated_at >= current_date GROUP BY 1\"", 120)
+        medals = {}
+        for line in med.splitlines():
+            q = line.split("|")
+            if len(q) == 2:
+                try: medals[q[0]] = int(q[1])
+                except ValueError: pass
+        def i(x):
+            try: return int(x.strip())
+            except Exception: return None
+        _daily["data"] = {"new_s7": i(new_s7), "queued": i(queued), "completed": i(completed),
+                          "medals": medals, "ts": time.strftime("%H:%M:%S")}
+    except Exception:
+        pass
+
+def _daily_loop():
+    while True:
+        _compute_daily()
+        time.sleep(120)
+
 def snapshot():
     c=cpu_busy(); g=gpu()
     with _lock:
@@ -182,7 +209,7 @@ def snapshot():
     up=sh("uptime -p").replace("up ","")
     return {"host":socket.gethostname(),"time":time.strftime("%Y-%m-%d %H:%M:%S"),
             "uptime":up,"load":load,"cpu":c,"temp":temp_c(),"mem":mem(),"gpu":g,
-            "disks":disks(),"services":services(),"queue":queue(),"cooling":cooling(),"pipeline":pipeline(),"torgi":torgi_medals(),"hist":h}
+            "disks":disks(),"services":services(),"queue":queue(),"cooling":cooling(),"pipeline":pipeline(),"torgi":torgi_medals(),"daily":_daily["data"],"hist":h}
 
 PAGE = r"""<!doctype html><html><head><meta charset="utf-8">
 <title>S13</title><style>
@@ -250,7 +277,7 @@ footer{padding:8px 22px;color:#484f58;font-size:16px}
  <div class="card"><h2>Disks - health, temperature, free space</h2><div id="disks"></div></div>
   <div class="card" style="grid-column:span 2"><h2>Cooling - fans &amp; temperatures</h2><div id="cool"></div></div>
  
- <div class="card" style="grid-column:span 2"><h2>Services</h2><div id="svcs"></div><div class="small" id="http"></div></div>
+ <div class="card" style="grid-column:span 2"><h2>Today on S13 - new records / queue / categories</h2><div id="daily"></div></div>
  <div class="card" style="grid-column:span 2"><h2>Queue - waiting for parsing</h2><div id="q"></div></div>
  <div class="card" style="grid-column:span 2"><h2>In progress now</h2><div id="qp"></div></div>
  <div class="card" style="grid-column:span 4"><h2>Pipeline - document queue (conveyor)</h2><div id="pipe"></div></div>
@@ -273,7 +300,13 @@ async function tick(){try{const m=await (await fetch('/api/metrics')).json();
  if(m.gpu){$('gpu').textContent=m.gpu.util+'%';setbar($('gpub'),m.gpu.util);$('gput').textContent='VRAM '+m.gpu.vram_used+'/'+m.gpu.vram_total+' MiB ('+m.gpu.vram_pct+'%), '+m.gpu.power+'/'+m.gpu.limit+' W, '+m.gpu.temp+' C';}
  else{$('gpu').textContent='n/a';}
  $('disks').innerHTML='<div class="disks">'+m.disks.map(d=>{const prob=d.health!='PASSED'||(d.pending||0)>0||(d.realloc||0)>0||(d.temp&&d.temp>=60);const pct=d.pct!=null?d.pct:0;const colp=pct>=85?'#da3633':pct>=70?'#d29922':'#2ea043';const info=[];if(d.temp!=null)info.push(d.temp+' C');if(d.pending)info.push('pending '+d.pending);if(d.realloc)info.push('realloc '+d.realloc);const ring=d.pct!=null?`<svg viewBox="0 0 42 42" class="donut"><circle cx="21" cy="21" r="15.9" fill="none" stroke="#21262d" stroke-width="6"/><circle cx="21" cy="21" r="15.9" fill="none" stroke="${colp}" stroke-width="6" stroke-dasharray="${pct} ${100-pct}" stroke-dashoffset="25" stroke-linecap="round"/><text x="21" y="24.5" text-anchor="middle" font-size="10.5" fill="#e6edf3">${pct}%</text></svg>`:`<svg viewBox="0 0 42 42" class="donut"><circle cx="21" cy="21" r="15.9" fill="none" stroke="#30363d" stroke-width="6"/><text x="21" y="24.5" text-anchor="middle" font-size="10" fill="#8b949e">n/a</text></svg>`;return `<div class="disk">${ring}<div class="dname">${prob?'<span class="warn">&#9888;</span> ':''}${d.dev}</div><div class="dsub">${d.mount?d.mount:'unmounted'}</div>${prob&&info.length?`<div class="dinfo">${info.join(' / ')}</div>`:''}</div>`;}).join('')+'</div>';
- $('svcs').innerHTML=m.services.map(s=>`<span class="svc"><span class="dot ${s.state=='active'?'ok':'bad'}"></span>${s.label}</span>`).join('');
+
+ const dl=m.daily||{};
+ const md=dl.medals||{};
+ const drow=(lbl,v,tone)=>`<div class="row"><span>${lbl}</span><b class="${tone||''}" style="font-size:28px">${v==null?'...':v}</b></div>`;
+ const medchips=['GOLD','SILVER','BRONZE','WOOD','NULL'].filter(k=>md[k]).map(k=>`<span class="chip"><b style="color:${bc[k]||'#8b949e'}">${k==='NULL'?'no medal':k}</b> ${md[k]}</span>`).join('');
+ $('daily').innerHTML=drow('New records today',dl.new_s7)+drow('Queued today',dl.queued)+drow('Completed today',dl.completed)+'<div class="chips">'+(medchips||'<span class="small">medals today: -</span>')+'</div><div class="lanes">updated '+(dl.ts||'-')+' (every 2 min)</div>';
+
 const qbars=(arr)=>{const a=arr||[];const mx=Math.max(20,...a.map(x=>x.count));return a.length?a.map(x=>`<div class="qt"><span class="nm">${x.band}</span><span class="bar" style="flex:1"><span class="${cls(x.count/mx*100)}" style="width:${x.count/mx*100}%"></span></span><span>${x.count}</span></div>`).join(''):'<div class="small">nothing</div>';};
  $('q').innerHTML=qbars(m.queue.waiting);
  $('qp').innerHTML=qbars(m.queue.processing);
@@ -330,4 +363,5 @@ class H(BaseHTTPRequestHandler):
 
 if __name__ == "__main__":
     cpu_busy()
+    threading.Thread(target=_daily_loop, daemon=True).start()
     ThreadingHTTPServer(("127.0.0.1",8899),H).serve_forever()
