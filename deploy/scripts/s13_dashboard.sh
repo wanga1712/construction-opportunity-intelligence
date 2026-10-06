@@ -21,7 +21,6 @@ spark() { local chars=" .:-=+*#%@" out="" v idx; for v in $HIST; do idx=$(( v * 
 vt_assert() { local a; a=$(cat /sys/class/tty/tty0/active 2>/dev/null); if [ "$a" != "tty1" ] && { [ "$a" = "tty7" ] || [ -z "$a" ]; }; then chvt 1 2>/dev/null || true; fi; }
 
 render() {
-  printf '%s[2J%s[H' "$E" "$E"
   local u n s idle w irq sirq st _ t1 t2 i1 i2 busy pkg
   read -r _ u n s idle w irq sirq st _ < /proc/stat; t1=$((u+n+s+idle+w+irq+sirq+st)); i1=$idle
   sleep 1
@@ -83,4 +82,15 @@ render() {
   printf '%s(refresh %ss)%s\n' "$DIM" "$INTERVAL" "$RST"
 }
 
-while :; do vt_assert; render; [ "$ONETIME" = "1" ] && break; sleep "$INTERVAL"; done
+FRAME=/run/s13_dashboard.frame
+printf '%s[?25l' "$E"   # hide cursor
+while :; do
+  vt_assert
+  render > "$FRAME"
+  printf '%s[H' "$E"
+  while IFS= read -r _line; do printf '%s%s\n' "$_line" "$E[K"; done < "$FRAME"
+  printf '%s[J' "$E"
+  [ "$ONETIME" = "1" ] && break
+  sleep "$INTERVAL"
+done
+printf '%s[?25h' "$E"
