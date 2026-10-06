@@ -131,6 +131,32 @@ def top():
             res.append({"cpu":float(p[0]),"mem":float(p[1]),"cmd":p[2]})
     return res[:6]
 
+def pipeline():
+    out = sh("runuser -u postgres -- psql -d document_intelligence -At -F'|' -c \"SELECT status, COALESCE(research_prior_band,'UNSCORED'), count(*) FROM document_processing_queue GROUP BY 1,2\"", 10)
+    stages = {}
+    for line in out.splitlines():
+        q = line.split("|")
+        if len(q) == 3:
+            try: n = int(q[2])
+            except ValueError: continue
+            stages.setdefault(q[0], {})[q[1]] = n
+    def agg(keys):
+        d = {}; total = 0
+        for k in keys:
+            for b, n in stages.get(k, {}).items():
+                d[b] = d.get(b, 0) + n; total += n
+        return {"total": total, "bands": d}
+    lanes = {}
+    lo = sh("runuser -u postgres -- psql -d document_intelligence -At -F'|' -c \"SELECT queue_lane, count(*) FROM document_processing_queue WHERE status IN ('PENDING','PRE_RESEARCH_WAITING') GROUP BY 1\"", 8)
+    for line in lo.splitlines():
+        q = line.split("|")
+        if len(q) == 2 and q[0]:
+            try: lanes[q[0]] = int(q[1])
+            except ValueError: pass
+    return {"waiting": agg(["PENDING","PRE_RESEARCH_WAITING"]), "processing": agg(["PROCESSING"]),
+            "completed": agg(["COMPLETED"]), "failed": agg(["FAILED"]), "no_links": agg(["NO_LINKS"]),
+            "lanes": lanes}
+
 def snapshot():
     c=cpu_busy(); g=gpu()
     with _lock:
@@ -141,7 +167,7 @@ def snapshot():
     up=sh("uptime -p").replace("up ","")
     return {"host":socket.gethostname(),"time":time.strftime("%Y-%m-%d %H:%M:%S"),
             "uptime":up,"load":load,"cpu":c,"temp":temp_c(),"mem":mem(),"gpu":g,
-            "disks":disks(),"services":services(),"queue":queue(),"cooling":cooling(),"top":top(),"hist":h}
+            "disks":disks(),"services":services(),"queue":queue(),"cooling":cooling(),"pipeline":pipeline(),"hist":h}
 
 PAGE = r"""<!doctype html><html><head><meta charset="utf-8">
 <title>S13</title><style>
@@ -184,6 +210,17 @@ canvas{width:100%;height:120px}
 table{width:100%;border-collapse:collapse;font-size:19px}td{padding:3px 0;border-bottom:1px solid #21262d}
 .qt{display:flex;align-items:center;gap:10px;margin:6px 0}.qt .nm{width:120px;color:#8b949e}
 footer{padding:8px 22px;color:#484f58;font-size:16px}
+
+.pipe{display:flex;align-items:stretch;gap:12px;flex-wrap:wrap}
+.stage{background:#0d1117;border:1px solid #30363d;border-radius:10px;padding:10px 12px;min-width:150px;flex:1}
+.stitle{font-size:15px;color:#8b949e;text-transform:uppercase;letter-spacing:1px}
+.snum{font-size:34px;font-weight:700;margin:2px 0 6px}
+.stage.w .snum{color:#58a6ff}.stage.p .snum{color:#d29922}.stage.c .snum{color:#2ea043}
+.stage.f .snum{color:#da3633}.stage.n .snum{color:#c9a227}
+.chips{display:flex;flex-wrap:wrap;gap:6px}
+.chip{border:1px solid #30363d;border-radius:20px;padding:1px 9px;font-size:14px;color:#c9d1d9}
+.arrow{display:flex;align-items:center;font-size:30px;color:#484f58}
+.lanes{margin-top:8px;font-size:16px;color:#8b949e}
 </style></head><body>
 <header><h1 id="host">S13</h1><div class="small" id="clock"></div><div class="small" id="up"></div></header>
 <div class="grid">
@@ -196,7 +233,7 @@ footer{padding:8px 22px;color:#484f58;font-size:16px}
  <div class="card" style="grid-column:span 2"><h2>Services</h2><div id="svcs"></div><div class="small" id="http"></div></div>
  <div class="card" style="grid-column:span 2"><h2>Queue - waiting for parsing</h2><div id="q"></div></div>
  <div class="card" style="grid-column:span 2"><h2>In progress now</h2><div id="qp"></div></div>
- <div class="card" style="grid-column:span 4"><h2>Top CPU</h2><table id="top"></table></div>
+ <div class="card" style="grid-column:span 4"><h2>Pipeline - document queue (conveyor)</h2><div id="pipe"></div></div>
 </div><footer id="foot">?</footer>
 <script>
 const $=id=>document.getElementById(id);
@@ -237,7 +274,13 @@ if(gpuT!=null)tempsHtml+=item(iconGpu,gpuT);
 if(mbT!=null)tempsHtml+=item(iconMb,mbT);
 $('cool').innerHTML=`<div class="cool-row">${fansHtml}${tempsHtml}</div>`;
 
- $('top').innerHTML=m.top.map(t=>`<tr><td>${t.cmd}</td><td style="text-align:right">${t.cpu.toFixed(1)}%</td><td style="text-align:right">${t.mem.toFixed(1)}%</td></tr>`).join('');
+ const bc={GOLD:'#d4a017',SILVER:'#a8b3bd',BRONZE:'#b06a2b',WOOD:'#6e4b2a',UNSCORED:'#8b949e'};
+ const pstage=(title,d,tone)=>{if(!d)return '';const chips=Object.entries(d.bands||{}).sort().map(([b,n])=>`<span class="chip"><b style="color:${bc[b]||'#8b949e'}">${b}</b> ${n}</span>`).join('');return `<div class="stage ${tone}"><div class="stitle">${title}</div><div class="snum">${d.total}</div><div class="chips">${chips}</div></div>`;};
+ const parr='<div class="arrow">&#10230;</div>';
+ const pip=m.pipeline||{};
+ const lanes=Object.entries(pip.lanes||{}).map(([k,v])=>`${k} ${v}`).join(' / ');
+ $('pipe').innerHTML='<div class="pipe">'+pstage('Waiting',pip.waiting,'w')+parr+pstage('Processing',pip.processing,'p')+parr+pstage('Completed',pip.completed,'c')+parr+pstage('Failed',pip.failed,'f')+parr+pstage('No links',pip.no_links,'n')+'</div><div class="lanes">waiting lanes: '+(lanes||'-')+'</div>';
+
  line($('cchart'),m.hist.cpu,'#58a6ff');line($('gchart'),m.hist.gpu,'#3fb950');
  $('foot').textContent='updated '+m.time+' ? refresh 2s';
 }catch(e){$('foot').textContent='error: '+e;}}
