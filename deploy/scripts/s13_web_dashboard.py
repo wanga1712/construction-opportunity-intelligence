@@ -157,6 +157,21 @@ def pipeline():
             "completed": agg(["COMPLETED"]), "failed": agg(["FAILED"]), "no_links": agg(["NO_LINKS"]),
             "lanes": lanes}
 
+def torgi_medals():
+    out = sh("runuser -u postgres -- psql -d crm -At -F'|' -c \"SELECT COALESCE(o.current_effective_medal,'NULL'), count(*), count(DISTINCT o.procurement_id) FROM crm_procurement_category_opportunities o JOIN crm_procurements p ON p.id = o.procurement_id WHERE p.crm_stage='torgi' GROUP BY 1\"", 12)
+    medals = {}; procs = 0
+    for line in out.splitlines():
+        q = line.split("|")
+        if len(q) == 3:
+            try:
+                medals[q[0]] = int(q[1])
+            except ValueError:
+                pass
+    tot = sh("runuser -u postgres -- psql -d crm -At -c \"SELECT count(DISTINCT o.procurement_id) FROM crm_procurement_category_opportunities o JOIN crm_procurements p ON p.id = o.procurement_id WHERE p.crm_stage='torgi' AND o.current_effective_medal IS NOT NULL\"", 12)
+    try: procs = int(tot.strip())
+    except ValueError: procs = 0
+    return {"medals": medals, "procurements": procs}
+
 def snapshot():
     c=cpu_busy(); g=gpu()
     with _lock:
@@ -167,7 +182,7 @@ def snapshot():
     up=sh("uptime -p").replace("up ","")
     return {"host":socket.gethostname(),"time":time.strftime("%Y-%m-%d %H:%M:%S"),
             "uptime":up,"load":load,"cpu":c,"temp":temp_c(),"mem":mem(),"gpu":g,
-            "disks":disks(),"services":services(),"queue":queue(),"cooling":cooling(),"pipeline":pipeline(),"hist":h}
+            "disks":disks(),"services":services(),"queue":queue(),"cooling":cooling(),"pipeline":pipeline(),"torgi":torgi_medals(),"hist":h}
 
 PAGE = r"""<!doctype html><html><head><meta charset="utf-8">
 <title>S13</title><style>
@@ -221,6 +236,11 @@ footer{padding:8px 22px;color:#484f58;font-size:16px}
 .chip{border:1px solid #30363d;border-radius:20px;padding:1px 9px;font-size:14px;color:#c9d1d9}
 .arrow{display:flex;align-items:center;font-size:30px;color:#484f58}
 .lanes{margin-top:8px;font-size:16px;color:#8b949e}
+
+.mtiles{display:flex;gap:18px;flex-wrap:wrap}
+.mtile{background:#0d1117;border:2px solid #30363d;border-radius:12px;padding:10px 22px;min-width:150px;text-align:center}
+.mname{font-size:17px;letter-spacing:1px}
+.mnum{font-size:38px;font-weight:700;line-height:1.1}
 </style></head><body>
 <header><h1 id="host">S13</h1><div class="small" id="clock"></div><div class="small" id="up"></div></header>
 <div class="grid">
@@ -234,6 +254,7 @@ footer{padding:8px 22px;color:#484f58;font-size:16px}
  <div class="card" style="grid-column:span 2"><h2>Queue - waiting for parsing</h2><div id="q"></div></div>
  <div class="card" style="grid-column:span 2"><h2>In progress now</h2><div id="qp"></div></div>
  <div class="card" style="grid-column:span 4"><h2>Pipeline - document queue (conveyor)</h2><div id="pipe"></div></div>
+ <div class="card" style="grid-column:span 4"><h2>Medals - procurements in bidding now (crm_stage=torgi)</h2><div id="torgi"></div></div>
 </div><footer id="foot">?</footer>
 <script>
 const $=id=>document.getElementById(id);
@@ -279,6 +300,11 @@ $('cool').innerHTML=`<div class="cool-row">${fansHtml}${tempsHtml}</div>`;
  const parr='<div class="arrow">&#10230;</div>';
  const pip=m.pipeline||{};
  const lanes=Object.entries(pip.lanes||{}).map(([k,v])=>`${k} ${v}`).join(' / ');
+ 
+ const tg=m.torgi||{}; const mm=tg.medals||{};
+ const mord=['GOLD','SILVER','BRONZE','WOOD','NULL'];
+ $('torgi').innerHTML='<div class="mtiles">'+mord.filter(k=>mm[k]!=null).map(k=>`<div class="mtile" style="border-color:${bc[k]||'#30363d'}"><div class="mname" style="color:${bc[k]||'#8b949e'}">${k==='NULL'?'??? ??????':k}</div><div class="mnum">${mm[k]}</div></div>`).join('')+'</div><div class="lanes">distinct procurements with a medal: '+(tg.procurements||0)+'</div>';
+
  $('pipe').innerHTML='<div class="pipe">'+pstage('Waiting',pip.waiting,'w')+parr+pstage('Processing',pip.processing,'p')+parr+pstage('Completed',pip.completed,'c')+parr+pstage('Failed',pip.failed,'f')+parr+pstage('No links',pip.no_links,'n')+'</div><div class="lanes">waiting lanes: '+(lanes||'-')+'</div>';
 
  line($('cchart'),m.hist.cpu,'#58a6ff');line($('gchart'),m.hist.gpu,'#3fb950');
