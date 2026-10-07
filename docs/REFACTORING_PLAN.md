@@ -1,4 +1,233 @@
+## CURRENT WIP — 2026-10-07 (CANONICAL-PRODUCT-TAXONOMY-DETERMINISTIC-BACKFILL-1)
+
+**CANONICAL-PRODUCT-TAXONOMY-DETERMINISTIC-BACKFILL-1** — `[x]` **PASS (шаги 1–9) / STOP перед массовым backfill / WAITING_USER_REVIEW**. Scope: additive semantic-kind migration + approved PRODUCT subcategories + deterministic (non-model) subcategory backfill canary. Qwen, initial-pass, runner/timer, medals/temporal, document queue, object/category classifier и category overview UI — не трогались.
+
+- **Effective DB.** Canonical CRM `127.0.0.1:5432/crm`, роль `crm_app` (owner всех трёх таблиц → DDL через runtime-роль, sudo/postgres маршрут не потребовался).
+- **Миграция.** `src/migrations/product_taxonomy_kind_and_backfill_1.sql` (additive, идемпотентна, `NO DELETE`/`NO RENAME`, `SET LOCAL lock_timeout='10s'`): `category_kind`, `subcategory_kind`, `commercial_subcategory_source`, `commercial_subcategory_confidence` + CHECK-ограничения допустимых значений. Применена целиком (`ALTER×4, DO, UPDATE 5, UPDATE 20, INSERT 13, UPDATE 1564, COMMIT`).
+- **Kinds.** `category_kind`: LEGACY_CONTEXT=5 (`composite_structures, bridge_road_infrastructure, external_utility_networks, concrete_materials, cable_support_systems`), PRODUCT=10. `subcategory_kind`: OBJECT_CONTEXT=14, MIXED_LEGACY=6, PRODUCT=95. Старые object-context строки НЕ удалялись — только re-tag.
+- **Новые PRODUCT-подкатегории** (`source='product_taxonomy_v1'`): lighting 5 (`indoor_luminaires, street_luminaires, lighting_poles, architectural_lighting, lighting_controls`), composites 8 (`pultruded_profiles, frp_gratings, composite_guardrails, composite_cornice_blocks, composite_pipeline_casings, composite_concrete_fiber, composite_cable_trays, polymer_chutes`). Lighting active subs 14→19, composites 0→8. `composites` category_kind=PRODUCT.
+- **Sentinel.** `commercial_subcategory_code='SUBCATEGORY_NOT_ASSIGNED'` → NULL (literal only), pre-image сохранён (`tmp_sentinel_preimage.json`, 1499→1564 строк из-за живого drain). Проверено перед UPDATE: 321 proc / 1499 rows (аудит-снимок был 318/1484).
+- **DDL-lock отклонение.** Целевые таблицы были удержаны idle-in-transaction сессиями контура (drain, Streamlit, computer_tz_daemon, factual_feeder). DDL применён fail-fast; для получения `ACCESS EXCLUSIVE` завершены ровно 2 idle-in-transaction бэкенда (3091611 streamlit, 2416208 factual_feeder). Контур здоров: `crm-streamlit` active, drain работает.
+- **Resolver.** `src/services/product_subcategory_resolver.py` — детерминированный, без модели: приоритет `COMPUTER_STRUCTURED > DOC_FACT > TERM_MATCH`; term-match только для `DIRECT_SUPPLY` (works/embedded → NULL, «не классифицировать по дорога/школа»); тай-брейк → NULL; OBJECT_CONTEXT/MIXED_LEGACY никогда не возвращаются.
+- **Backfill script.** `scripts/backfill_product_subcategories.py` (`--dry-run/--apply/--limit/--category/--track/--per-category-limit`), provenance `commercial_subcategory_source/confidence`. Первый dry-run выявил систематическую ошибку (works матчились в product-подкатегории по общим словам) → resolver исправлен, dry-run повторён чистым (`SELECTED=100 RESOLVED=11 AMBIGUOUS=6 NO_MATCH=83`), только затем assignment DML.
+- **Canary (applied).** computers 20/50 (servers 16, all_in_one_computers 1, computer_peripherals 1, network_equipment 1, workstation_kits 1), lighting 5/50 (floodlights, DOC_FACT). Всего 25 opportunity rows: TERM_MATCH=20, DOC_FACT=5. `OBJECT_CONTEXT_USED_AS_PRODUCT=0`. Принятые примеры сработали: «Закупка серверов»→servers, «Поставка сетевого оборудования»→network_equipment, «…(моноблоков)»→all_in_one_computers, «Поставка сервера»→servers, «автоматизированных рабочих мест»→workstation_kits; мусор (выключатели 220кВ, электронно-лучевая установка, шкафы АСУ ТП) остался NULL.
+- **Coverage BEFORE→AFTER** (classified of total): computers 2.56%→5.76% (16→36), lighting 1.98%→2.53% (18→23), waterproofing 0.06% (1, без изменений), flooring 0.00% (0), drainage_water_management 0.15% (2, без изменений).
+- **Тесты.** `tests/test_product_subcategory_resolver.py` — 5 passed (узкий прогон только этого файла; полный pytest не гонялся).
+- **Отклонения/долги.** (1) Canary-строка `409451` («Персональные ЭВМ (системный блок, клавиатура, мышь, монитор)») → `computer_peripherals` (сматчились клавиатура/мышь) — кандидат на ревью/пересмотр. (2) lighting canary резолвится только через DOC_FACT, т.к. крупнейшие unclassified — стройработы (правильно NULL). (3) Массовый backfill НЕ запускался. `COMMIT`/`PUSH` не выполнялись. `STATUS=PASS / STOP`.
+
+## CURRENT WIP — 2026-10-05 (CRM-V4-QUEUE-FIRST-MANAGER-SHELL-1)
+
+**CRM-V4-QUEUE-FIRST-MANAGER-SHELL-1** — `[x]` **PASS (реализация + production-верификация по локальному контуру) / WAITING_USER_REVIEW**. Первый экран аналитического контура V2 (`objects_v2`) больше не рендерит KPI/графики/worksets/category hierarchy на старте — он показывает реальную коммерческую очередь «Очередь возможностей». UI только читает готовый production truth; lifecycle/admission/category/medal/priority на UI не пересчитываются.
+- **Authority первого слоя.** `document_processing_queue` (`pipeline_generation='S13_V4_EXHAUSTIVE_CONTEXT'`) × `crm_procurement_scope_authority` (`admission_state='ELIGIBLE'`, `admission_policy_version='BUSINESS_RESEARCH_ADMISSION_V2'`) + batch lookups `crm_procurements` + `crm_procurement_category_opportunities` (`status='CURRENT'`). Порядок — production-порядок очереди (lane rank → `research_prior_band` → `research_prior_effective_score`/`priority_score` → `id`); отдельной UI-формулы нет.
+- **Один bounded query + небольшие batch lookups.** Doc DB и CRM DB — разные БД одного кластера, поэтому страница = keyset-scan очереди (`LIMIT`-батч) + 3 batched CRM-запроса (`= ANY(ids)`). Никаких полных дампов ID, никаких per-card round-trips, `crm_procurements` целиком не читается.
+- **Файлы.** Новые: `src/services/queue_first_service.py` (bounded read-model: page/detail/ai-history/options), `src/ui/queue_first_page.py` (первый экран, фильтры, keyset Next/Previous, lazy detail, гейт аналитики), `src/ui/components/queue_first/queue_cards.py` (дешёвая карточка + ленивый detail). Изменён: `src/ui/analytics_contour_v2_page.py` — тяжёлые импорты убраны с верхнеуровня, `render_analytics_contour_v2_page` делегирует в queue-first. Существующие компоненты не удалены: `render_header/render_command_center/render_quick_filters/render_tabs/контроль/heavy category filter` живут под явным `st.toggle("📊 Статистика / аналитика")`.
+- **Карточка (§3, §9, §10).** Показывает оба состояния раздельно: commercial medal (GOLD/SILVER/BRONZE/WOOD + слой `Подтверждено документами` / `Предварительно квалифицировано`) и technical research state (ожидает/обрабатывается/обработаны/ошибка/no links). Также: название, OPEN/AWARDED, DIRECT/WORKS/DESIGN, preliminary categories, НМЦК/цена, дедлайн или execution runway, заказчик/регион, приоритет, «Почему сейчас» из сохранённых score/timing/reason. Содержимое документов/AI/history не грузится.
+- **Вторая строка — сводка производства (дешёвая).** Под заголовком добавлен компактный ряд счётчиков: «Обработано / В работе-ожидает / Ошибка-нет ссылок / Всего в очереди» (агрегат `document_processing_queue` S13_V4 по `status`) и «Активных карт / GOLD / SILVER / BRONZE / WOOD / Идут торги (OPEN) / Разыграно (AWARDED)» (агрегат CURRENT-возможностей по лучшей медали на закупку + агрегат `crm_procurement_scope_authority` ELIGIBLE по `source_lifecycle`). Это 3 bounded aggregate-запроса, кэш 2 минуты (`st.session_state`), не иерархия и не heavy KPI. На 2026-10-06: обработано 6141, в работе/ожидает 499, ошибка/нет ссылок 28214, всего 34854; активных карт 1627 (GOLD 0 · SILVER 45 · BRONZE 990 · WOOD 592); ELIGIBLE OPEN 9850, AWARDED 9011.
+- **Lazy.** Detail — по клику «Открыть карточку»; «📄 Документы» — по клику (research UI projection); «🤖 AI / история» — по клику (bounded AI assessment + audit); «📊 Статистика / аналитика» — по явному открытию. Первый render не читает documents/match_details/evidence/structured facts/model raw/history/expert annotation/full assessment JSON.
+- **Фильтры (§7).** Только дешёвые: Medal ALL/GOLD/SILVER/BRONZE/WOOD, Lifecycle ALL/OPEN/AWARDED, Scope ALL/DIRECT/WORKS/DESIGN, Category — один lightweight список из `crm_product_categories` (без иерархии), Region — по явному тумблеру.
+- **Производительность (§11), production по локальному SSH-туннелю `127.0.0.1:15432 → S13:5432`.** `PAGE_TTFB=31.7 ms` (HTTP shell, health ok); `FIRST_QUEUE_QUERY_MS≈90–200 ms`; `FIRST_RENDER_MS≈150–540 ms` (AppTest: cold 1.44 s включает старт рантайма + установление соединений, warm 47–54 ms); `DB_QUERIES_BEFORE_FIRST_20_CARDS=4`; `scanned=143` для первых 20 ELIGIBLE; 20 карточек появляются до загрузки detail/docs. Ориентир <2 s — PASS. Соединения к doc/crm кэшируются (`st.cache_resource`), результат страницы — в session_state.
+- **Business acceptance (§12).** `UI_TOP20_QUEUE_MATCH=YES`, `UI_MEDAL_MISMATCH=0`, `UI_NON_ELIGIBLE_ROWS=0`, `UI_LIFECYCLE_MISMATCH=0`, `UI_SCOPE_MISMATCH=0`, `UI_CATEGORY_MISMATCH=0` (скрипт `scratch/acceptance_queue_first.py`). UI top-20 сравнивается с независимым backend-запросом production-порядка очереди, отфильтрованным по `crm_procurement_scope_authority`.
+- **Отклонения / долги.** (1) `BASE_COMMIT=eb235a2` в этом репозитории отсутствует (`git cat-file -e eb235a2` → unknown revision); работа велась от текущего HEAD `920d20b` ветки `CRM-ANALYTICS-V2-UI-REBUILD-1`. (2) `document_processing_queue.category_context->>'admission_state'` и `crm_procurement_scope_authority` расходятся (3738 vs 5738 eligible в пересечении с очередью) — принят authority `crm_procurement_scope_authority`, как единственный источник admission (§2). (3) Локальный Windows-контур требует SSH-туннель `127.0.0.1:15432`; он не поднимается автоматически. (4) Гeйт «Статистика/аналитика» локально может показать сообщение о недоступности (`No module named 'config'` — отсутствующий sibling-пакет `config.settings` на Windows), в проде зависит от bootstrap; первый экран при этом не падает.
+- **Размеры модулей.** `src/ui/queue_first_page.py` 297, `src/ui/components/queue_first/queue_cards.py` 182 — в норме. `src/services/queue_first_service.py` 611 строк — свыше 450; записанное объяснение (декомпозиция отложена осознанно, чтобы не менять уже верифицированный read-model перед ревью): модуль — один цельный bounded read-model первого слоя (константы + dataclasses + SQL + scan + batch-merge + card build + lazy lookups), без побочных обязанностей; естественная будущая граница — вынести `load_category_options/load_region_options/load_card_detail/load_card_ai_history` в отдельный `queue_first_lookups.py` (≈120 строк) при следующем касании этого файла.
+- **Не делалось (§13).** Новый scoring/queue engine не создавался; medal/admission в Streamlit не пересчитываются; правила admission в UI не копируются; Phase 2–4 не переделывались; все 400k `crm_procurements` не грузятся. Проверки — точечные (AppTest первого экрана и route `objects_v2`, acceptance-скрипт); полный pytest не гонялся. `STATUS=PASS / STOP`.
+
+## CURRENT WIP — 2026-10-05 (S13-CPU-POWER-CAP-AND-CRM-RESOURCE-RESERVATION-1)
+
+**S13-CPU-POWER-CAP-AND-CRM-RESOURCE-RESERVATION-1** — `[x]` **PASS / APPLIED ON S13**. Operator report: S13 CPU 97.5% / 73 °C. Root cause: only 3 background units were inside `crm-background-compute.slice`; the rest (base `tender-docs-daemon` 700%, `-open-2/-3`, `-awarded-2`, `-computers/-2`, `crm-v3-*`) ran in `system.slice` on CPUs 0-7, so the CRM reservation was not enforced. RAPL package capping is firmware-locked (`I/O error`), so the CPU analogue of `nvidia-powerlimit.service` is `cpu-powerlimit.service`: `no_turbo=1`, `max_perf_pct=84`, `scaling_max_freq=3200000` (~3.19 GHz). `crm-background-compute.slice` CPUQuota 600%→400%; 27 `20-background-slice.conf` drop-ins bring every AI/document worker into the slice (CPUs 2-7); `user.slice` confined to 2-7 with 200% quota. CPUs 0-1 reserved for `crm-streamlit` + `postgresql@17-main` + OS. Config persisted in `deploy/systemd/`. Report: `docs/reports/cpu_thermal_cap/S13_CPU_POWER_AND_CRM_RESERVATION_2026-10-05.md`. Pre-existing (not caused by this change): `crm-second-pass-worker` stop-timeout (2026-09-28), `crm-procurement-sync` `undefined column c.updated_at` (2026-10-05 09:28).
+
+**Phase 2 (operator request: 8 documents workers too many → 4-6 with floating resources)** — `[x]` **PASS / APPLIED ON S13**. Kept 5 lane-covering workers: `-open`, `-open-2`, `-awarded`, `-awarded-2` (flex), `-computers`. Disabled + stopped 3 redundant: base `tender-docs-daemon` (duplicate `WORKER_ID=13`), `-open-3`, `-computers-2`. Floating model: per-worker `CPUQuota` cleared via `30-floating-cpu.conf`, shared pool = slice `CPUQuota=500%` (4-6 CPU range, CPUs 2-7, `CPUWeight=50` vs CRM 800). Verified: 5 workers active, 3 disabled/inactive, CRM HTTP 200 (155 ms), load ~12, CPU temp 63 °C, GPU 80/90 W. CPU non-idle can still read high (floating pool fills when CRM idle); lower the pool to 400% if the monitoring CPU warning must disappear.
+
+## PRIOR WIP — 2026-09-29 (HYDRO-PARKING-CARDS-LOADER-UI-1)
+**HYDRO-PARKING-CARDS-LOADER-UI-1** — `[x]` **PASS (реализация + живая верификация) / WAITING_USER_REVIEW**. Scope (подтверждён пользователем): ветка `CRM-HYDRO-PARKING-LEAD-CARDS-AND-MAP-1`; загрузчик данных и отображение в UI делаются одной связкой «загрузчик ➔ UI», визуал не откладывается. Prod-адрес `10.8.0.13:8504` не использовался ни разу; все проверки — локальный Streamlit `127.0.0.1:8502`.
+- **Решение по данным (прямое указание пользователя).** REST API для фонового синка отставлен. Вместо него — суточный загрузчик по паттерну S7: таймер `systemd/crm-hydro-daily-sync.timer` (`OnCalendar=*-*-* 03:30:00`, `Persistent=true`) + воркер `systemd/crm-hydro-daily-sync.service` (`User=sergey`, `WorkingDirectory=/opt/CRM_Streamlit`), разовая логика — `scripts/hydro_daily_sync.py` (101 стр.; коды выхода 0 ok/dry-run, 1 источник недоступен, 2 CRM/схема, 3 падение).
+- **Загрузчик.** `src/services/hydro_daily_sync.py` (185 стр.) — `run_daily_sync`, `ensure_tables` (fail-closed: без канонических таблиц не пишем, ни не показываем «ноль»), `read_health`, `write_health_success/failure`, `connection_of`, `HydroSyncUnavailable`. Upsert идёт по естественным ключам (ИНН УК / кадастр / `source_system+source_object_id`), поэтому повторный прогон идемпотентен (`inserted=0`, 6810 `updated`, 0 дублей).
+- **Source vs manual override — обязательное правило.** `src/migrations/hydro_manual_override_1.sql` (36 стр.): колонка `manual_overrides jsonb` + GIN-индекс на `parking_prefunnel_objects` и `management_companies`. Загрузчик пишет только колонки источника и не читает `manual_overrides`; выгрузка в UI идёт через `effective(...)` (`manual_overrides → колонка-источник`), а сохранение — `.save_overrides` (`(manual_overrides || %s::jsonb) - %s::text[]`, т.е. точечный merge и снятие правки). Проверено живьём: на 2 объектах записаны `severity=critical` / `tech_solution_type` / `inspection_notes` → после полного ночного синка значения на месте (затем тестовые правки убраны, `manual_count()` снова 0).
+- **Ошибки и метрики наружу.** Состояние живёт в `crm_hydro_source_health` (`source, status, last_attempt_at, last_success_at, rows_seen/inserted/updated/unchanged/invalid, safe_error_class, safe_error_message`, allowed-class-фильтр для текста ошибки). Провал не затирает `last_success_at` — UI показывает последние успешные данные и честно говорит, что свежих нет (`src/ui/hydro_source_status.py`, 105 стр.: `describe/ribbon/alert/status_tile`, `STALE_AFTER_HOURS=36`).
+- **UI: карточка объекта / паркинга (16 новых колонок — секциями, не плоской таблицей).** `src/services/hydro/card_fields.py` (154 стр.) — реестр полей: 24 записи / 16 manual / 8 source, секции `SECTIONS=(tech, commerce)` → «Техническое состояние» (Дефектовка, Техрешение) и «Коммерция» (КП, ТЗ, Торги 615-ПП). `src/services/hydro/card_repository.py` (198 стр.) — `HydroCardRepository` (`total`, `list_objects`, `get_object`, `save_overrides`, `source_health`, `manual_count`), `normalize_value/effective/as_text`, `HydroCardSchemaMissing`. Экран `src/ui/hydro_object_card.py` (247 стр.) — KPI-полоса (объектов / с правками / статус синка / загружено), ribbon статуса, поиск + фильтр «только с правками», секции SLDS-карточки и форма правки с плашкой «Источник (автозагрузка)» против «Поле менеджера (ручной ввод)», вход — новый пункт «🏢 Паркинги и объекты (карточки)» на странице «Гидроизоляция».
+- **UI: карточка УК.** `src/services/hydro/company_repository.py` (256 стр.) — `HydroCompanyRepository` (+`get_by_inn`, `ensure_company`), `save_params`, контакты/встречи (`list_contacts/add_contact`, `list_activities/add_activity`), лейблы `RECEPTION_TYPE_LABELS{«Живая очередь»,«По записи»}` / `STAGE_LABELS`. `src/ui/hydro_uk_panel.py` (217 стр.) — блок «Параметры приёма» (Сайт, Тип приёма бейджем, График приёма, Стадия; каждое с бейджем «Поле менеджера»), форма правки, блоки-заглушки «Контакты УК» (`➕ Добавить контакт`) и «Встречи» (`➕ Назначить встречу`), кнопка «Завести УК в CRM», если УК ещё нет в CRM.
+- **UI: мониторинг фонового синка.** `src/ui/system_health_page.py` (434 стр.) — на экране «Состояние серверов» выведена строка статуса «Гидроизоляция (ночная загрузка)»: Статус синка / Последний синк / Успешный синк / Загружено записей (`_crm_db_conn` `@st.cache_resource`, `_hydro_sync_view` `@st.cache_data(ttl=60)`, `_render_hydro_sync`).
+- **Живая верификация (реальные данные, 2026-09-29).** Ночной синк выполнен полностью: `{"status":"SUCCESS","rows_loaded":6810,"updated":6810,"inserted":0,"invalid":0,"companies_created":0,"duration_ms":157437}`; в `crm_hydro_source_health` — `SUCCESS`, `last_success_at=2026-09-29 19:29:52+03`, `rows_seen=6810`, ошибки пусты. `parking_prefunnel_objects=6810`, `manual_overrides` пусты, `management_companies=217`, `company_contacts=0`, `company_activities=0` (тестовые строки удалены). `describe()` с этих данных даёт `state=ok / tone=ok / label=SUCCESS`, `alert()=None`.
+- **UI-смоук.** Экран «Паркинги и объекты» через Streamlit `AppTest` — `EXCEPTIONS=0`, карточка открывается (секции + поля правки + «Сохранить поля менеджера»); панель УК — `EXCEPTIONS=0`, сохранение параметров/контакта/встречи без ошибок; строка статуса синка на «Состоянии серверов» рендерится (все 4 подписи найдены). Playwright HTTP на `127.0.0.1:8502` = `200`.
+- **Найдены и исправлены живые дефекты БД.** (1) `uq_contacts_company_primary` — у УК только один основной контакт: `add_contact` теперь снимает флаг с прежнего; (2) `company_activities.end_time NOT NULL` — конец встречи вычисляется как `start + 1 час`. Round-trip (создание контакта + встречи, затем удаление) прошёл.
+- **DoD §5 (мониторинг/UI).** Токены SLDS — в `src/ui/system_health_slds.py` (302 стр.) и новых hydro-карточках; ось Y графиков `domainMin=0`, X синхронизирована; `/dev/sdb` — одна свёрнутая карточка с бейджем `UNUSED LEGACY NTFS`; статусная строка + KPI-риббон добавлены (детали — в записи `SYSTEM-HEALTH-SLDS-REDESIGN-1`).
+- **Размеры модулей.** Новые модули — все ≤ 260 стр. Правленые существующие: `src/ui/system_health_page.py` 434, `src/services/hydro/persistence_repository.py` 133 — в допустимом диапазоне 300–450 / ниже.
+- **Отклонения / долги.**
+  - **Миграция #2 применена только к таблицам-владельца `crm_app`.** DDL-правило: postgres-owned таблицы (`crm_hydro_source_health`) требуют separate route `ssh S13 → sudo -n -u postgres psql -d crm`; в этом WIP не менялись.
+  - **`RealDictRow` в `persistence_repository.py`.** CRM-соединение отдаёт `RealDictRow`, а код индексировал `row[1]/row[0]` → `KeyError: 1`, ломавший весь прогон. Введены `_row_get/_returned_id`.
+  - **Батч-коммиты `BATCH_SIZE=250`** вместо одной длинной транзакции: прогон 6810 строк занимает ~157 с; цена — частичная загрузка при падении серединного батча (статус при этом всё равно становится FAILED).
+  - **Стоимость источника.** `NspdSourceRepository.fetch_objects()` стабильно отдаёт 6810 объектов, но занимает ~6–7 мин из-за медленного источника — это свойство источника, не дефект.
+  - **Ветка и `main` расходятся** (`main` — `920d20b`, ветка `CRM-HYDRO-PARKING-LEAD-CARDS-AND-MAP-1` — `56790d6`, merge-base `fc0d53a`); в ветке нет модулей `system_health_{kpi,sections,alerts_view}.py`, поэтому hydro-карточки используют локальные хелперы, а `src/ui/system_health_slds.py` самодостаточен. Файлы ветки синхронизированы в worktree `.codex_worktrees/hydro_parking_leads`.
+  - **systemd-путь.** Юниты лежат в `systemd/` (как у `crm-waterproofing-615-link.*` в этом же репозитории); в ветке есть также `deploy/systemd/` — куда класть новые юниты, определяется на шаге деплоя.
+  - **Деплой не выполнялся.** Таймер на S13 не включён; запись `crm_hydro_source_health` получена ручным прогоном загрузчика из локального контура, штатно её даст таймер при первом прогоне.
+- **Дальше:** деплой на S13 `systemd/crm-hydro-daily-sync.{service,timer}` + миграции, затем подтверждение пользователем визуала. `STATUS=WAITING_USER_REVIEW`.
+
+## PRIOR WIP — 2026-09-29 (HYDRO-CRM-REDESIGN-V2)
+**HYDRO-CRM-REDESIGN-V2** — `[x]` **PASS (реализация + верификация) / WAITING_USER_REVIEW**. Scope: переработать раздел CRM «Гидроизоляция» из одного технического канбана в B2B/B2G CRM с двумя связанными воронками — воронкой УК (карточка = УК) и воронкой объектов (карточка = объект). Деплой на S13 не выполнялся.
+- **Две воронки вместо одной доски.** Единственный владелец словаря стадий — `src/services/waterproofing_funnel.py` (258 стр.): `FUNNEL_ACCOUNT` (`new` «Новая УК / База» · `meeting` «Назначение встречи» · `followup` «Встреча / Дожим» · `survey_approved` «Доступ к объектам») и `FUNNEL_DEAL` (`survey` «Обследование» · `proposal` «КП / Техрешение» · `specification` «Подготовка ТЗ» · `procurement` «Торги / Закупка» · `contract` «Контракт / Работы»), плюс `closed` «Отложено / отказ». Стабильный контракт — id стадии; русские названия — только UI-label.
+- **Микродействия убраны из колонок.** «Первичный звонок», «Секретарь / диспетчер», «Найден тех. контакт» и подобные больше не этапы сделки: они живут в activity / history / next action. `LEGACY_STAGE_ALIASES` продолжает разрешать все прежние 11 названий и старый объектный контур, поэтому уже сохранённое состояние не теряется.
+- **Карточка не «сбрасывается» в первую колонку.** `coerce_stage(value, funnel)` переводит стадию, сохранённую для *другой* воронки, в ближайшую осмысленную стадию этой (`survey…contract` → `survey_approved` на УК-воронке; `new…survey_approved` → `survey` на объектной). Одна УК открывает ровно одну колонку и ровно одну карточку; объекты одной УК расходятся по стадиям независимо.
+- **Новые сервисные модули.** `src/services/waterproofing_deals.py` (196 стр.) — append-only журнал `data/waterproofing/deal_states.jsonl` (newest-wins): `deal_key`, `latest_deal_state`, `merge_deal_state`, `build_deal_card`, `deal_columns`, `deal_kpis`. `src/services/waterproofing_board.py` (187 стр.) — `account_kpis`, `pipeline_amount` (без двойного счёта), `dashboard_kpis`, `uk_district(s)`, `account_columns`, `apply_filters`.
+- **UI разбит на модули.** `src/ui/hydro_board.py` (114 стр.) — горизонтальная доска `st.container(horizontal=True, height=…)`, ширина колонки 300 px, счётчик рядом с названием стадии, короткое описание этапа, полоса KPI. `src/ui/hydro_cards.py` (183 стр.) — карточка УК и карточка объекта (адрес, УК, дата обследования, потенциал, следующий шаг и дата). `src/ui/hydro_filters.py` (117 стр.) — одна toolbar-строка: поиск, район, менеджер, статус, «только просроченные», «только с активными», сброс. `waterproofing_kanban_tab.py` (279 стр.) — заголовок раздела, tagline «Работа с УК → обследование → техрешение → ТЗ → закупка → контракт», действия «+ Добавить УК» и «Обновить».
+- **KPI только из реальных данных.** `dashboard_kpis` считает «УК в работе / Объектов / Обследований / КП выдано / В закупке / Сумма pipeline» из существующих карточек; demo-значений нет. Деньги принадлежат объекту: `pipeline_amount` добавляет оценку УК только если ни у одного её объекта нет собственной оценки.
+- **Строки доски сохранены.** Подписи `615-ПП: … · Hydro: …` (`board_615_line` + `_data_line`) и `ГБУ «Жилищник» на доске: N · с тех. контактом: M` остались на месте под полосой KPI.
+- **Ежедневное обновление уже реализовано, не переделывалось.** `scripts/hydro_daily_sync.py` + `systemd/crm-hydro-daily-sync.{service,timer}`; состояние читается из `crm_hydro_source_health`, доска печатает дату последней удачной загрузки и не выдаёт отсутствие загрузки за ноль.
+- **Проверки.** `tests/test_waterproofing_uk_crm.py` + `tests/test_waterproofing_615_store.py` + новый `tests/test_waterproofing_deal_funnel.py` — **99 passed** (`PYTHONPATH=<CRM_SOURCE_ROOT>`; без него 615-модуль не находит `modules.*` и падает на сборе). `pyflakes` по всем изменённым модулям — чисто. AppTest-smoke `scratch/_smoke_hydro_board.py` — `SMOKE OK`: доска рендерится, кнопки/тоглы/селекты на месте, обе строки-подписи найдены.
+- **Размеры модулей.** Все новые и затронутые модули ≤ 300 стр., кроме `waterproofing_crm.py` (395) — в допустимом диапазоне 300–450 и целен по смыслу.
+- **Отклонения / долги.**
+  - Деплой не выполнялся: `docs/PROJECT_OPERATING_RULES.md` в этом WIP не подтверждался, prod-контур не проверялся.
+  - **Известное расхождение, требующее отдельного этапа и согласования:** CHECK-констрейнт `management_companies_stage_check` из `src/migrations/hydro_uk_parking_card_1.sql` допускает прежние значения (`lead, meeting_scheduled, meeting_held, access_granted, inspected, offer_sent, tz_prep, bidding, in_progress, won, lost`), а не новые id воронки. Файл миграции в этом WIP не менялся — правка DDL и данных это отдельный этап.
+  - Район определяется только по названию УК (`uk_district`): колонки района в БД нет, поэтому УК без района в названии остаются без группировки, а не угадываются.
+- **Решения пользователя (2026-09-29, позже) — закрытые вопросы этой записи:** работаем в ветке `CRM-HYDRO-PARKING-LEAD-CARDS-AND-MAP-1`; REST API для фонового синка отставлен, вместо него — суточный systemd-таймер (паттерн S7). Детали и верификация — в записи `HYDRO-PARKING-CARDS-LOADER-UI-1`.
+- **Дальше:** по указанию пользователя — согласовать миграцию CHECK-констрейнта стадии и деплой на S13.
+## CURRENT WIP — 2026-09-29 (SYSTEM-HEALTH-SLDS-REDESIGN-1)
+**SYSTEM-HEALTH-SLDS-REDESIGN-1** — `[x]` **PASS / WAITING_USER_REVIEW**. Scope: редизайн раздела «Состояние серверов» под Salesforce Lightning Design System + триаж инцидентов (SMART/legacy-диск, CPU spike, коллекторы S7). Prod-адрес `10.8.0.13:8504` не использовался; все проверки — локальный Streamlit `127.0.0.1:8502`.
+- **P0 «раздел встал».** Причина: `KeyError slice(None,15)` — snapshot `top_processes` это dict `{by_cpu, by_ram}`, а код резал его как список. Исправлено, страница рендерится без исключений.
+- **Дизайн-система.** Новые модули (страница разбита: `system_health_page.py` 721 → 400 стр.):
+  - `src/ui/system_health_slds.py` (303 стр.) — токены (`#F3F2F2` фон, `#FFFFFF` карточки, рамка `#DDDBDA`, radius 4px, `#0176D3` actions), badge-тона ok `#EBF7E6/#04844B`, warn `#FEF3D6/#8C4B02/#FE8F10`, crit `#FEE8E6/#BA0517/#EA001E`; `SLDS_CSS`, `badge/status_badge/meter/kpi_card/card/alert_card/service_row/badge_pair`, `area_chart_spec/render_area_chart`.
+  - `src/ui/system_health_kpi.py` (107 стр.) — KPI-риббон из 4 карточек + статистика коллекторов (вынесено из страницы ради лимита строк).
+  - `src/ui/system_health_sections.py` (274 стр.) — секции деталей, таблицы дисков/сервисов/коллекторов, `render_processes_table`.
+  - `src/ui/system_health_alerts_view.py` (127 стр.) — консолидация алертов `group_alerts` по `(host_id, device_or_service)`, аккордеон деталей устройства.
+- **DoD.**
+  - Токены SLDS применены (фон/карточки/бордеры/отступы 16px/бейджи/лейблы uppercase).
+  - Ось Y графиков: `y.scale.domainMin = 0` — отрицательных отметок нет; X-ось CPU/RAM синхронизирована (общий `x_domain`); area с полупрозрачной заливкой `#0176D3`.
+  - `/dev/sdb`: 3 отдельных warning (`disk health WARNING`, `pending sectors 8`, `reallocated sectors 50`) схлопнуты в одну карточку «S13: Диск /dev/sdb требует внимания» + бейджи `UNUSED LEGACY NTFS` / `низкий приоритет` + раскрывающиеся детали (SMART, pending, realloc, CRC, power-on hours).
+  - Верхняя статусная строка: Last synced, «Degraded Performance», связь S13↔S7, свежесть снимка, статусы хостов; KPI-риббон: S13 CPU (Critical/Spike), S7 CPU, Storage Health (S13) = `1 Warning` + subtext «/dev/sdb — legacy / не используется, non-blocking», Data Collectors (S7) = `3 / 4` + имя упавшего коллектора.
+  - Таблица процессов: PID / Команда / CPU,% / RAM,МБ / Статус / Действие, сортировка по CPU desc, CPU > 80% красным + «На разбор»; действия только для чтения (`SYSTEM_HEALTH_MUTATING_ACTIONS=0`).
+  - Адаптив: Playwright 1440×950 и 1600×950 — `documentElement.scrollWidth == window.innerWidth`, горизонтального скролла нет ни в одном из разделов.
+- **Бэкенд-триаж (§4).**
+  - `system_health_probes.collect_top_processes` — добавлен `cmdline` (`_proc_cmdline`: маскирование `password/token/secret/apikey/...`, обрезка 200 символов, env не читается) и реальный `cpu_pct` для `by_ram` (раньше всегда 0.0%).
+  - `system_health_alerts` — поля `priority/device_role/non_blocking`; для устройств из `UNUSED_LEGACY` приоритет понижается (`priority=LOW`, `non_blocking=True`), факт предупреждения сохраняется, `disk health CRITICAL` для legacy не эскалируется до CRITICAL.
+  - `system_health_s7.collect_s7_host` — `source_collectors_summary {ok,total,failing_units,failing_statuses,failing_reasons}`; при недоступности S7 summary отдаёт `0 / total` с полным списком коллекторов.
+- **Проверки.** `tests/test_system_health_{dashboard,nav_recovery,ux_temps}.py` — 25 passed, 1 skipped, 3 pre-existing failed (см. отклонения). AppTest-smoke по всем 9 разделам — `EXCEPTIONS=0`. Локальный Streamlit перезапущен (`127.0.0.1:8502`, HTTP 200).
+- **Отклонения / долги.**
+  - Pre-existing, не связаны с WIP: `test_s7_ssh_never_on_ui` (`assert "S7" not in ui` — прежняя версия страницы тоже содержала `S7`), `test_nav_no_streamlit_pages_multipage` и `test_streamlit_config_hides_sidebar_nav` — локально отсутствует `.streamlit/config.toml` (файл не в git).
+  - Размеры: `src/services/system_health_probes.py` — 568 стр. (>450). Файл был >450 до WIP; это единый пул read-only OS-проб (/proc, sysfs, smartctl), декомпозиция в scope не входила.
+  - Новые поля снимка (`cmdline`, `priority`, `source_collectors_summary`) появятся на боевых хостах только после деплоя сборщика; UI корректно работает и на старом снимке (graceful fallback).
+  - **Не сделано (нужно решение пользователя):** деплой на production S13 и включение сбора `cmdline` на боевом коллекторе — deploy-контракт (`crm-streamlit.service`, `/opt/CRM_Streamlit`) в этом WIP не подтверждался.
+- **Дальше:** по указанию пользователя — деплой конкретных файлов на S13 после подтверждения deploy-контракта.
+
+## CURRENT WIP — 2026-09-29 (OBJECT-TAXONOMY-CANONICAL-DEPLOY-V1)
+**OBJECT-TAXONOMY-CANONICAL-DEPLOY-V1** — `[x]` **PASS / WAITING_USER_REVIEW**. Scope: применить additive-миграцию OBJECT_CONTEXT и задеплоить принятую canonical object taxonomy на S13. Inference, обучение, backfill, medals/categories, OBJECT baseline не запускались.
+- **Effective production DB.** Из runtime `crm-streamlit` (`.env`, `/opt/CRM_Streamlit`) подтверждено: `127.0.0.1:5432/crm`, роль `crm_app` — совпадает с documented canonical CRM DB; случайные `CRM_DB_HOST` из SSH environment не использовались.
+- **Миграция применена.** `src/migrations/commercial_taxonomy_object_context_terms_1.sql` через approved DDL-route `sudo -n -u postgres psql -d crm`: `INSERT 0 5`, повторный прогон — `INSERT 0 5` → **идемпотентно**, дублей нет. Итог: OBJECT_CONTEXT = 5 (`landscaping, courtyard, external_territory, parking_area` + существовавший `roof`), APPLICATION_AREA = 3 (`facade` + `roof, basement`), всего строк 9 → 14. Только INSERT / ON CONFLICT DO UPDATE; DROP/DELETE/RENAME нет. Pre-check: owner = `crm_app`, unique-констрейнт `(dimension_type, dimension_code)` подтверждён.
+- **Deploy.** Скопированы 6 файлов; md5 совпали с локальными 1:1: `expert_object_taxonomy.py` (`2c420378`), `object_mode_routing.py` (`1320cbdbb`), `candidate_scoring.py` (`e1653ac1`), `prompt.py` (`eae2ec3c`), `first_pass/resolver.py` (`914b725c`), `commercial_taxonomy_object_context_terms_1.sql` (`ef0dc695`). Бэкап прежних версий — `/opt/CRM_Streamlit/.otc_backup_20260929_160413/` (pre-deploy хэши совпали). LOCAL_HEAD=`920d20b` (branch `CRM-ANALYTICS-V2-UI-REBUILD-1`). Замороженные `prompt_v6*/v9` не менялись.
+- **Перезапуск — только `crm-streamlit`.** Active, PID обновлён (`NRestarts=0`, `ActiveEnterTimestamp` 16:04:39); `HTTP :8504=200`, `/_stcore/health=200`, EXCEPTIONS=0, journal `-p err` пуст. Document workers (`tender-docs-*`), Ollama, S7 не трогались; `crm-ai-assessment-runner` отрабатывает штатно (oneshot drain, `MODEL_V0 freeze`), без ошибок.
+- **Production canonical smoke** (интерпретатор сервиса python3.13, `PYTHONPATH=/opt/CRM_Streamlit`, без inference): `OBJECT_SECTORS_COUNT=8`, `OBJECT_TYPES_COUNT=52`, `OBJECT_SUBTYPES_COUNT=13`. Присутствуют URBAN_IMPROVEMENT/PARK|SQUARE|COURTYARD, INFRASTRUCTURE/ROAD|BRIDGE|STREET, UTILITY_NETWORKS/HEATING_NETWORK|WATER_NETWORK, SOCIAL/SCHOOL|DISPENSARY, RESIDENTIAL/APARTMENT_BUILDING, COMMERCIAL/PARKING, INDUSTRIAL/INDUSTRIAL_SITE. Отсутствуют сектора `TRANSPORT_INFRASTRUCTURE`/`UTILITY_INFRASTRUCTURE` и типы `HEALTHCARE`/`BENCH`/`MAF`. Legacy-имена нормализуются на входе (`TRANSPORT_INFRASTRUCTURE→INFRASTRUCTURE`, `SOCIAL_OBJECTS→SOCIAL`), direct supply → `{N/A, N/A, N/A}`.
+- **Тесты.** Целевые `test_object_taxonomy_canonical.py` + `test_object_stage_service_type_axes.py` + `test_v3_object_mode_construction_design_routing.py` — **67 passed**. Полный pytest не гонялся.
+- **MODEL_RAW_ECHO сохранён.** Raw model output не переписывается canonical normalization; RAW и CANONICAL показываются раздельно, namespace-separation гарантии не менялись (`model_ui_projection.py` в этом WIP не правился).
+- **Историческое не тронуто.** Backfill не запускался; free-text legacy `object_type` (473 строки в `crm_object_ai_classifications`) остаются историческими данными.
+- **Acceptance:** `MIGRATION_APPLIED=YES`, `MIGRATION_IDEMPOTENT=YES`, `CODE_DEPLOYED=YES`, `CRM_ACTIVE=YES`, `HTTP_8504=200`, `HEALTH=200`, `EXCEPTIONS=0`, `CANONICAL_AUTHORITY_SINGLE=YES`, `URBAN_IMPROVEMENT_AVAILABLE=YES`, `UTILITY_SUBTYPES_AVAILABLE=YES`, `LEGACY_MAPPING_INPUT_ONLY=YES`, `MODEL_RAW_ECHO_PRESERVED=YES`, `BACKFILL_RUN=NO`, `INFERENCE_RUN=NO`, `TRAINING_RUN=NO`.
+- **Needs User Review:** подтвердить production-состояние taxonomy и следующий шаг (OBJECT baseline). `STATUS=WAITING_USER_REVIEW`. OBJECT baseline/Qwen/training не запускались.
+
+## PRIOR CURRENT WIP — 2026-09-29 (OBJECT-TAXONOMY-CANONICAL-IMPLEMENTATION-V1)
+**OBJECT-TAXONOMY-CANONICAL-IMPLEMENTATION-V1** — `[x]` **PASS (реализация + верификация) / WAITING_USER_REVIEW**. Scope: сделать `src/services/expert_object_taxonomy.py` единственным canonical-источником OBJECT_SECTOR / OBJECT_TYPE / OBJECT_SUBTYPE, добавить сектор URBAN_IMPROVEMENT, subtypes для UTILITY_NETWORKS, alias-маппинг legacy, N/A для direct supply, расширить OBJECT_CONTEXT. Inference, обучение, backfill, medals/categories и production-данные не затрагивались.
+- **Canonical-модуль** (`src/services/expert_object_taxonomy.py`, 513 строк): 8 секторов — `SOCIAL, RESIDENTIAL, COMMERCIAL, INDUSTRIAL, INFRASTRUCTURE, URBAN_IMPROVEMENT, OTHER, UNCERTAIN`; 52 типа; 13 subtypes. Отдельных секторов `TRANSPORT_INFRASTRUCTURE` / `UTILITY_INFRASTRUCTURE` нет — они выражаются как `INFRASTRUCTURE / ROAD|BRIDGE|UTILITY_NETWORKS`.
+- **Добавлено:** новый сектор `URBAN_IMPROVEMENT` (PARK, SQUARE, COURTYARD, EMBANKMENT, PUBLIC_SPACE, PEDESTRIAN_ZONE, STREETSCAPE, PLAYGROUND, GREEN_AREA, OTHER_URBAN_IMPROVEMENT); SOCIAL `DISPENSARY, UNIVERSITY, SOCIAL_CARE`; RESIDENTIAL `RESIDENTIAL_UNIT`; COMMERCIAL `PARKING`; INDUSTRIAL `INDUSTRIAL_SITE`; INFRASTRUCTURE `STREET, TUNNEL, INTERCHANGE, RAILWAY, AIRPORT, TRANSPORT_HUB`; subtypes `UTILITY_NETWORKS`: HEATING/WATER/SEWER/POWER/GAS/COMMUNICATION_NETWORK.
+- **Сознательно не добавлено:** `HEALTHCARE`, `SANATORIUM`, `UTILITY_PLANT`, а также товары (`BENCH`, `URN`, `MAF`, `LIGHTING_POLE`, `PLAYGROUND_EQUIPMENT`, `CURBSTONE`, `DRAINAGE`) — товары остаются commercial opportunities/categories, не object types. Зафиксировано тестами.
+- **API:** `normalize_object_axes()`, `canonical_object_sector/type/subtype`, `is_canonical_*`, `sector_of_object_type`, `types_of_sector`, `object_subtype_options`, `object_context_terms()`, `application_area_terms()`, `object_axes_for_direct_supply()`, `OBJECT_NOT_APPLICABLE="N/A"`, `taxonomy_stats()`. `APPLICATION_AREA` (части объекта: ROOF/BASEMENT/FACADE) остаётся отдельной осью от `OBJECT_CONTEXT` (LANDSCAPING/COURTYARD/EXTERNAL_TERRITORY/PARKING_AREA).
+- **Legacy-маппинг (только вход, не выход):** `TRANSPORT_INFRASTRUCTURE → INFRASTRUCTURE`, `ROAD_INFRASTRUCTURE → INFRASTRUCTURE/ROAD`, `BRIDGE_INFRASTRUCTURE → INFRASTRUCTURE/BRIDGE`, `UTILITY_INFRASTRUCTURE → INFRASTRUCTURE/UTILITY_NETWORKS`, `SOCIAL_INFRASTRUCTURE / SOCIAL_OBJECTS → SOCIAL`, `road_infrastructure → INFRASTRUCTURE/ROAD`. Legacy-имена секторов принимаются нормализатором и в слоте `object_type`. Legacy-значения не удалялись.
+- **Direct supply:** `DIRECT_GOODS_PURCHASE` → `OBJECT_SECTOR/TYPE/SUBTYPE = N/A`; объект по месту поставки не придумывается.
+- **Ad-hoc taxonomy вычищена:** `object_mode_routing.py` (`classify_object`) и `first_pass/resolver.py` берут сектора/типы из canonical-модуля; `prompt.py` инструктирует canonical-коды (version не менялся → прогоны не инвалидируются). Замороженные `prompt_v6*/v9` намеренно не трогались (их читают calibration-contract тесты).
+- **Миграция OBJECT_CONTEXT — создана; применена на S13 в OBJECT-TAXONOMY-CANONICAL-DEPLOY-V1:** `src/migrations/commercial_taxonomy_object_context_terms_1.sql` (idempotent `INSERT ... ON CONFLICT DO UPDATE`): OBJECT_CONTEXT `landscaping, courtyard, external_territory, parking_area`; APPLICATION_AREA `facade`; `evidence_role=SIGNAL_ONLY`. Никаких DROP/RENAME/DELETE; БД не менялась.
+- **Тесты.** Новый `tests/test_object_taxonomy_canonical.py` — **31 тест**; вместе с `test_object_stage_service_type_axes.py` — **61 passed**. Фокусный набор из 22 файлов — **205 passed**. Полный pytest не гонялся. Пре-существующие падения в чужих WIP (guided taxonomy selectors, annotation staged/category gate, expert first decision gate) — не связаны с этим WIP (stash-проверка).
+- **Верификация на 60 реальных закупках** (`scratch/_real60.out.txt`, без нового inference): 10×6 бакетов SOCIAL/RESIDENTIAL/COMMERCIAL/INDUSTRIAL/INFRASTRUCTURE/URBAN_IMPROVEMENT. `CANONICAL_VALID=60/60`, `UNREPRESENTABLE=0`. 15 обязательных эталонных кейсов (`scratch/_req17.out.txt`) — все представимы: дорога→INFRASTRUCTURE/ROAD, мост→INFRASTRUCTURE/BRIDGE, теплосеть→UTILITY_NETWORKS/HEATING_NETWORK, водопровод→WATER_NETWORK, улица→STREET, площадка→PLAYGROUND, парк→URBAN/PARK, сквер→SQUARE, двор→COURTYARD, МКД+двор→RESIDENTIAL/APARTMENT_BUILDING+ctxt COURTYARD, школа+благоустройство→SOCIAL/SCHOOL+ctxt LANDSCAPING, набережная→EMBANKMENT, поликлиника→POLYCLINIC, диспансер→DISPENSARY, производственное здание→INDUSTRIAL/PRODUCTION_BUILDING.
+- **Acceptance:** `CANONICAL_OBJECT_SECTORS=8`, `CANONICAL_OBJECT_TYPES=52`, `CANONICAL_OBJECT_SUBTYPES=13`, `URBAN_IMPROVEMENT_ADDED=YES`, `UTILITY_NETWORK_SUBTYPES_ADDED=YES`, `OBJECT_CONTEXT_EXTENDED=YES`, `TRANSPORT_DUPLICATE_REMOVED_FROM_CANONICAL=YES`, `UTILITY_DUPLICATE_REMOVED_FROM_CANONICAL=YES`, `DIRECT_SUPPLY_OBJECT_NA=YES`, `REAL_CASES=60`, `CANONICAL_VALID=60/60`, `UNREPRESENTABLE_CASES=0`.
+- **Needs User Review:** подтвердить canonical-дерево и трактовку "объект vs товар" для благоустройства/URBAN_IMPROVEMENT. `STATUS=WAITING_USER_REVIEW`. Инференс, обучение, backfill и OBJECT baseline не запускались.
+
+## PRIOR CURRENT WIP — 2026-09-29 (HYDRO-UK-PARKING-CARD-SCHEMA-1 + OBJECT-STAGE-SERVICE-TYPE-DEPLOY-V1)
+**HYDRO-UK-PARKING-CARD-SCHEMA-1** — `[x]` **PASS / STOP (этап «схема данных»)**: additive-миграция под обновлённую карточку УК/паркингов (профиль УК, контакты, встречи, дефектовка, КП/ТЗ/торги) применена к рабочей БД S13. Работали только со схемой; API/сервисный слой не создавался.
+- **ТЗ адресовало несуществующие таблицы.** В спецификации фигурируют `companies` и `parking_objects`, которых в CRM нет. Реальные таблицы предметной области: `management_companies` (УК, 217 строк) и `parking_prefunnel_objects` (объекты/паркинги, 6810 строк, `cadastral_number NOT NULL UNIQUE`). Связь УК↔объект уже нормализована таблицей `mc_parking_links` (332 строки, уникальный ключ `(mc_id, parking_object_id)`, оба FK) — поэтому колонка `company_id` в таблицу объектов **сознательно не добавлялась**: она дублировала бы единственный источник истины.
+- **Разрыв между ветками (важно).** Весь код УК/parking-prefunnel живёт не в текущем чекауте. Текущая ветка `CRM-ANALYTICS-V2-UI-REBUILD-1` (`3fb65bc`) не содержит ни одного упоминания `management_companies`/`parking_prefunnel`. Домен целиком в ветке `CRM-HYDRO-PARKING-LEAD-CARDS-AND-MAP-1` (worktree `.codex_worktrees/hydro_parking_leads`, HEAD `56790d6`, дивергенция +21/−168 от merge-base `fc0d53a`), где уже есть `src/services/hydro/*` (13 модулей, в т.ч. `lead_repository.py`, `persistence_repository.py`, `models.py`), `src/ui/hydro_leads_tab.py`, `company_card.py`, `company_detail.py` и миграции `crm_hydro_canonical_data_{1,2}.sql`. `docs/reports/hydro_parking_leads/PHASE_2_HYDRO_LEAD_CARDS.md` фиксирует `PASS / STOP before Phase 3`.
+- **REST-слоя в проекте нет вообще.** FastAPI/Flask/OpenAPI и какой-либо API-юнит в инвентаре сервисов `docs/PROJECT_OPERATING_RULES.md` отсутствуют; приложение — Streamlit + прямой доступ к БД. Значит `PATCH /api/...` из ТЗ — это новая архитектура, а не правка существующего модуля.
+- **Артефакт:** `src/migrations/hydro_uk_parking_card_1.sql` (132 строки, no BOM, LF, 7360 байт). Только additive: `ALTER TABLE ... ADD COLUMN IF NOT EXISTS`, `CREATE TABLE IF NOT EXISTS`, `CREATE INDEX IF NOT EXISTS`; ни одного `DROP`/`RENAME`/`DELETE`; данные не затрагивались.
+- **`management_companies` (4/4 новых колонок, всего 15):** `website varchar(255)`, `reception_type varchar(30) DEFAULT 'daily'`, `reception_schedule jsonb DEFAULT '{}'::jsonb`, `stage varchar(50) DEFAULT 'lead'`.
+- **Новые таблицы:** `company_contacts` (11 колонок, `serial` PK, FK → `management_companies(id) ON DELETE CASCADE`, индекс `idx_contacts_company`) и `company_activities` (12 колонок, включая `google_event_id`/`google_event_link`, FK → `management_companies(id)`, индекс `idx_activities_company`).
+- **`parking_prefunnel_objects` (16/16 новых колонок, всего 64):** дефектовка (`inspection_date`, `leak_types jsonb`, `severity`, `inspection_notes`, `inspection_photos jsonb`), техрешение и КП (`tech_solution_type`, `commercial_proposal_sum`, `commercial_proposal_file_url`, `proposal_status`), ТЗ и торги (`tz_approved_by_client`, `tz_file_url`, `tender_url`, `tender_number`, `tender_nmck`, `tender_end_date`), плюс `access_status` и `updated_at`. Также 8 CHECK-констрейнтов на домены значений и 7 индексов.
+- **Применение и владение.** Миграция применена к канонической БД `crm` на S13 **ролью `crm_app`** (владелец всех четырёх таблиц — `crm_app`, поэтому `ADD COLUMN` разрешён без `sudo -u postgres`; маршрут смены владельца не использовался и запрещён). Подключение — `psycopg2` с реквизитами из `/opt/CRM_Streamlit/.env`; пароль не выводился.
+- **Доказательства.** Повторный прогон → `RERUN OK (idempotent)`. Данные не изменились: `company_contacts` 0, `company_activities` 0, `management_companies` 217, `parking_prefunnel_objects` 6810, `mc_parking_links` 332 — те же, что до миграции. Post-check подтвердил все 8 CHECK и 7 индексов, владельца `crm_app` и колонки 4/16/11/12.
+- **Осознанные отклонения от ТЗ:** (1) вместо частично задействованной `crm_activities` (7 колонок, generic `entity_type`/`entity_id`, 0 строк, без времени/статуса/`google_event_id`) создана специализированная `company_activities`; (2) `assigned_user_id` оставлен без FK — таблица пользователей в схеме не подтверждена; (3) стадии УК (`management_companies.stage`, 11 значений из ТЗ) и стадии объектов (`parking_prefunnel_stages`, 8 значений) — **разные оси**, взаимозаменять их нельзя; (4) `updated_at` = `DEFAULT now()` без триггера — обновление делает repo-слой, триггеров в домене нет.
+- **Незакрытые вопросы (ждём решения пользователя, дальше не двигались).** (1) В какой ветке/чекауте жить коду карточки: продолжить `CRM-HYDRO-PARKING-LEAD-CARDS-AND-MAP-1` (где уже есть `src/services/hydro/*` и UI карточки) или портировать домен в текущий чекаут — ветки дивергентны, это реальная развилка. (2) Нужен ли настоящий HTTP REST-сервис (новый сервис + деплой, буквально по ТЗ) или тот же контракт сервисным слоем + Streamlit, как принято в проекте. Отдельно не закрыт исходный запрос «данные должны обновляться каждый день»: ежедневное автообновление требует планировщика и опирается на то же решение по архитектуре.
+- **По `AGENTS.md` остановились на этапе схемы; API/сервис не начинались.** `STATUS=PASS / STOP`.
+
+**OBJECT-STAGE-SERVICE-TYPE-DEPLOY-V1** — `[x]` **PASS / STOP**. Scope: доставить на S13 уже принятый и проверенный код OBJECT_STAGE / SERVICE_TYPE и убрать UI-коллизию legacy `project_stage`. Backfill, inference, обучение, medals/categories, object taxonomy не затрагивались.
+
+- **Доставка (scp, не git).** Локальная ветка и ветка S13 исторически не эквивалентны, поэтому перенос — только файлами. Перед перезаписью по каждому из 12 файлов сверены sha256: 10 файлов на S13 байт-в-байт совпадали с локальным HEAD, `model_ui_projection.py` имел незакоммиченную правку MEDAL SEMANTICS V2 (строгое подмножество локальной версии), `annotation_card.py` на S13 = общий предок `c5db3ad`, локальная версия — его потомок `49b16da`. Посторонние dirty-правки S13 не потеряны; остальные 204 чужих dirty-файла не трогались.
+- **Доставленные файлы (12).** `src/domain/commercial_routing_v3.py`, `src/services/commercial_routing_v3/{object_mode_routing,field_provenance,model_ui_projection}.py`, `src/services/crm_ai_assessment_runner.py`, `src/services/object_models.py`, `src/services/object_ai_classification_store.py`, `src/ui/components/analytics_v2/{guided_annotation,annotation_card,annotation_card_sections,card_tabs_ai_readonly,card_tabs_ai_expert_form}.py` + `src/migrations/crm_object_ai_classifications_object_stage_service_type_1.sql`, `tests/test_object_stage_service_type_axes.py`. Хэши после распаковки совпали с локальными 1:1; бэкап прежних версий — `.osst_backup_<ts>/` на S13.
+- **БД.** Миграция повторно не применялась — только проверка наличия колонок. Рабочая БД сервиса = `127.0.0.1:5432/crm` (PostgreSQL 17.10, роль `crm_app`): `object_stage` = YES, `service_type` = YES, legacy `project_stage` = YES и не тронут; 473 строки; `object_stage`/`service_type` non-null = 0 — backfill не делался, старые записи остаются NULL.
+- **Тесты.** `tests/test_object_stage_service_type_axes.py` — **30 passed** локально и на S13. Полный pytest не запускался.
+- **Рестарт.** Перезапущен только `crm-streamlit`. Document workers, Ollama и S7 не трогались. После рестарта: `active`, HTTP :8504 = 200, `/_stcore/health` = 200.
+- **Production smoke (AppTest, 4 реальные карточки, `EXCEPTIONS=0`).**
+  - `1300` (legacy `project_stage=design`): «Стадия объекта: не определено», «Характер работ: —», «Тип услуги: —»; legacy выведен отдельно как «Стадия закупки (legacy `project_stage`, другая ось): `design`».
+  - `1380` (legacy `project_stage=execution`): «Стадия объекта: не определено» — значение `execution` в стадию объекта не подставлено.
+  - `20527` (`DIRECT_GOODS_PURCHASE`): «Стадия объекта: не применимо» — legacy-значение объектную стадию не заменяет.
+  - `20614` (`SERVICES_OTHER`): «Стадия объекта: не определено», «Тип услуги: —».
+  - В форме эксперта присутствуют отдельные секции «4. Стадия объекта», «5. Тип услуги», «6. Характер работ».
+- **Acceptance:** `CODE_DEPLOYED=YES`, `CRM_ACTIVE=YES`, `OBJECT_STAGE_UI_PRESENT=YES`, `WORK_STAGE_UI_PRESENT=YES`, `SERVICE_TYPE_UI_PRESENT=YES`, `LEGACY_PROJECT_STAGE_SHOWN_AS_OBJECT_STAGE=NO`, `OLD_ROW_NULL_HANDLING=PASS`, `DIRECT_CARD_SMOKE=PASS`, `SERVICE_OR_OBJECT_CARD_SMOKE=PASS`, `EXCEPTIONS=0`.
+- **Дальше:** по указанию пользователя ничего не запускать. Backfill `object_stage`/`service_type`, массовая переклассификация, Qwen inference, OBJECT_SECTOR/OBJECT_TYPE taxonomy и ручная правка 473 старых строк — вне этого WIP. `STATUS=PASS / STOP`.
+
+## PRIOR CURRENT WIP — 2026-09-29 (OBJECT-STAGE-SERVICE-TYPE-MIGRATION-APPLY-V1 + IMPLEMENTATION-V1)
+
+**OBJECT-STAGE-SERVICE-TYPE-MIGRATION-APPLY-V1** — `[x]` **PASS / STOP**. Scope: применить подготовленную additive-миграцию `src/migrations/crm_object_ai_classifications_object_stage_service_type_1.sql` к рабочей CRM БД S13 и проверить только её acceptance. Taxonomy, inference, обучение, medals/categories не затрагивались.
+- **Effective DB (доказано сервером, не догадка).** Локальный `.env` смотрит в `127.0.0.1:15432` через SSH-туннель на хост S13; сервер ответил `current_database=crm`, `current_user=crm_app`, PostgreSQL 17.10, `pg_database = {crm, document_intelligence, postgres}`; `crm_v3_expert_annotations.owner = postgres` — совпадает с записанным в `docs/PROJECT_OPERATING_RULES.md` фактом для S13. Хосты/юзеры в отчёт не выводятся.
+- **Pre-check.** `crm_object_ai_classifications` существует (473 строки, 31 колонка), `project_stage` присутствует (legacy), `object_stage` и `service_type` отсутствуют → миграция применима, ничего не перетирается. Владелец таблицы = `crm_app`, то есть runtime-роль сама является owner: `ADD COLUMN` разрешён, `sudo -u postgres` маршрут не потребовался.
+- **Применение.** Выполнен ровно текст миграции: `ALTER TABLE ... ADD COLUMN IF NOT EXISTS object_stage TEXT, ADD COLUMN IF NOT EXISTS service_type TEXT`. Никаких `DROP`/`RENAME`, `project_stage` не тронут (единственное вхождение слов DROP/RENAME в файле — комментарий «NOT renamed, NOT dropped»). Повторный прогон — `IDEMPOTENT_RERUN_OK`, ошибок нет.
+- **Post-check.** `object_stage` (text, nullable) и `service_type` (text, nullable) существуют; `project_stage` существует; число строк 473 не изменилось; `object_stage`/`service_type` non-null = 0 — бэкфилла не делалось, старые записи остаются NULL, как и допускает WIP.
+- **Runtime smoke.** Импорт всех изменённых модулей (store, runner, routing v3, `annotation_card`, `annotation_card_sections`, `guided_annotation`, `card_tabs_ai_*`, `domain.commercial_routing_v3`) и страниц (`analytics_contour_v2_page`, `annotation_workbench_page`) — OK. Карточка реальной закупки `procurement_id=216341` отрисована в настоящем Streamlit-рантайме (AppTest): `EXCEPTIONS=0`, секции «Стадия объекта» / «Характер работ» / «Тип услуги» отрисованы (`**Стадия объекта:** не определено`, `**Тип услуги:** —`, `**Характер работ:** EXECUTION`).
+- **Коллизия подтверждена данными.** В таблице 415 строк с непустым legacy `project_stage`, и это стадии торгов («торги объявлены» 240, «готов к закупке» 20, «готовность к торгу» 18, «экспертиза» 8 …), а не стадии жизненного цикла объекта. Карточка показывает «Стадия объекта: не определено» и **не** подставляет эти значения — фикс коллизии работает на живых данных.
+- **Продовая безопасность.** На S13 `/opt/CRM_Streamlit` HEAD = `0d40c637`, продовый store не содержит новых осей, а его `INSERT INTO crm_object_ai_classifications (...)` перечисляет колонки явно — добавленные nullable-колонки не могут сломать продовую запись. Сервис `crm-streamlit` = `active`, `http://127.0.0.1:8504/` = 200, `/_stcore/health` = 200. Рестарт сервиса в этом WIP не делался (не требовался и не запрашивался).
+- **CASE 34905** принят как `RUBRIC_ERROR`: `PROCUREMENT_FORM=SURVEY_AND_DESIGN`, `OBJECT_STAGE=DESIGN`, `SERVICE_TYPE=NONE`.
+- **Продовый S13 smoke (отдельно от локального).** На S13 в его собственном venv (`/opt/CRM_Streamlit/.venv313`) импортируются все 12 модулей, CRM БД подключается, и в БД видны `object_stage` + `service_type` + `project_stage`. Карточка `procurement_id=216341`, отрисованная кодом S13 в реальном Streamlit-рантайме, даёт `EXCEPTIONS=0` и прежние ярлыки «**Стадия:** EXECUTION» / «**Стадия:** —». При этом в S13-версии `model_ui_projection` нет `routing_axes_view_from_assessment` / `format_object_stage`, а `annotation_card.py` берёт «Стадия» из `project_stage or work_stage` — то есть сам фикс коллизии на прод ещё НЕ задеплоен и живёт только в локальной ветке; на проде текущая подстановка legacy `project_stage` в подпись «Стадия» остаётся.
+- **Acceptance:** `MIGRATION_APPLIED=YES`, `OBJECT_STAGE_COLUMN=YES`, `SERVICE_TYPE_COLUMN=YES`, `LEGACY_PROJECT_STAGE_PRESENT=YES`, `CRM_STARTS=YES`, `ONE_CARD_SMOKE=PASS`, `WIP_STATUS=PASS`.
+- **Не сделано намеренно:** deploy кода на S13 (продовый checkout не содержит новых осей — это отдельный шаг), рестарт сервиса, бэкфилл новых колонок, taxonomy audit, inference, обучение.
+
+**OBJECT-STAGE-SERVICE-TYPE-IMPLEMENTATION-V1** — `[x]` **PASS / STOP**. Scope: ввести две отсутствующие canonical-оси — `OBJECT_STAGE` и `SERVICE_TYPE` — и устранить смысловую коллизию legacy `project_stage`, не ломая производственную схему. Модель не обучалась, массовый inference не запускался, medals/categories не затрагивались.
+- **OBJECT_STAGE (canonical).** Новая ось `OBJECT_STAGE` со значениями `SURVEY / DESIGN / WORKING_DOCUMENTATION / EXPERTISE / CONSTRUCTION / OPERATION / UNKNOWN` объявлена в `src/domain/commercial_routing_v3.py` (`class ObjectStage(StrEnum)`); классификатор — `classify_object_stage(*, title, form, service_type=None)` в `src/services/commercial_routing_v3/object_mode_routing.py`. Правила: `DIRECT_GOODS_PURCHASE → UNKNOWN`; `SURVEY_AND_DESIGN → DESIGN`; `DESIGN_ONLY → EXPERTISE` при явной «экспертиз», иначе `WORKING_DOCUMENTATION` при РД/ПСД, иначе `DESIGN`; строительные формы → `CONSTRUCTION`; `SERVICES_OTHER → map(SERVICE_TYPE)`. Цена в определении стадии не участвует.
+- **SERVICE_TYPE (canonical).** Новая ось `SERVICE_TYPE` со значениями `CONSTRUCTION_CONTROL / AUTHOR_SUPERVISION / TECHNICAL_SURVEY / ENGINEERING_SURVEY / LAB_TESTING / MAINTENANCE_SERVICE / OTHER_SERVICE / NONE / UNKNOWN`. `classify_service_type(*, title, form)` возвращает `NONE` для всех форм, кроме `SERVICES_OTHER`; `is_object_stage_applicable(*, form)` = `False` только для `DIRECT_GOODS_PURCHASE` (в UI — «не применимо»).
+- **Коллизия legacy `project_stage` устранена в UI.** В `field_provenance.py` убраны ключи `project_stage`; добавлены `object_stage: BUSINESS_RULE`, `service_type: BUSINESS_RULE`, `work_stage`, `legacy_tender_stage: UNKNOWN_LEGACY` (обе ветки). `annotation_card.py`, `annotation_card_sections.py`, `card_tabs_ai_readonly.py`, `card_tabs_ai_expert_form.py` показывают раздельно «Форма закупки / Стадия объекта / Характер работ / Тип услуги», а legacy `project_stage` — только с явной пометкой «(legacy `project_stage`, не стадия объекта)». Общий резолвер — `format_object_stage()` / `routing_axes_view_from_assessment()` в `model_ui_projection.py`. Селекторы эксперта (`guided_annotation.py`) переименованы: `model_stage` → `model_work_stage`, добавлены `model_object_stage` / `model_object_stage_applicable` / `model_service_type`.
+- **WORK_STAGE остаётся отдельной осью.** `WORK_STAGE_VALUES` включает `SUPPLY`; `OBJECT_STAGE` отвечает на «где объект в жизненном цикле», `WORK_STAGE` — «какой характер работ/изменений». Legacy-колонка в БД не переименовывалась и не удалялась.
+- **Хранение — только additive.** Миграция `src/migrations/crm_object_ai_classifications_object_stage_service_type_1.sql` добавляет колонки `object_stage TEXT`, `service_type TEXT` (`ADD COLUMN IF NOT EXISTS`, без rename/drop). `object_ai_classification_store.py` пишет их guarded-способом (`_known_columns()` + `_persist_optional_axes()`, только если миграция применена и producer передал значение), read-path заполняет `ai_object_stage` / `ai_service_type`; legacy `ai_project_stage` не тронут. Миграции при rollout требуют отдельного применения — в этом WIP она только создана.
+- **Проверки.** `tests/test_object_stage_service_type_axes.py` — **30 тестов PASS** (новый файл). Регрессий относительно baseline (HEAD + чужие незакоммиченные правки, без моих 12 файлов) — **0**; 7 пре-существующих падений не связаны с этим WIP. Массовый inference не запускался, unrelated pytest не гонялся.
+- **Верификация на 30 кейсах** (`wip_routing_contract30.tsv`, без нового inference). Результат — `wip_object_stage_service_type_verify30.tsv`: **30/31 точных совпадений** по `OBJECT_STAGE` + `SERVICE_TYPE`. Единственное расхождение — `CRM_ID=34905` («Проектирование и топографическая съёмка газопровода», OKPD 71.12.1): эталонная строка внутренне противоречива — форма `SURVEY_AND_DESIGN` по канону даёт `OBJECT_STAGE=DESIGN`, но в той же строке вручную проставлен `SERVICE_TYPE=ENGINEERING_SURVEY`, что тянет `SURVEY`. Классификатор внутренне непротиворечив (`DESIGN` + `NONE`); расхождение помечено как `AMBIGUOUS` / `RUBRIC_ERROR` и намеренно не «догонялось» правкой кода.
+- **Acceptance:** `OBJECT_STAGE_CANONICAL=YES`, `SERVICE_TYPE_CANONICAL=YES`, `LEGACY_PROJECT_STAGE_UNTOUCHED=YES`, `ANALYTICS_PROJECT_STAGE_COLLISION_FIXED=YES`, `WORK_STAGE_SEPARATE=YES`, `DIRECT_SUPPLY_SEPARATE=YES`, `REAL_CASES=30`, `UNREPRESENTABLE_CASES=0`.
+- **Needs User Review:** подтвердить таблицу `wip_object_stage_service_type_verify30.tsv` и согласиться с трактовкой кейса 34905. `STATUS=WAITING_USER_REVIEW`. Обучение и следующий inference не запускались.
 ## CURRENT WIP — 2026-09-28
+**WATERPROOFING-615-UK-LINK-STORE-1** — `[x]` **PASS**. Scope: закрыть замечание по живому экрану «Гидроизоляция» — доска печатала `615-ПП: в 2026 разыграно 0 торгов на —` и `торги найдены у 0 УК: 0 торгов на —`, при этом в CRM по 615-ПП не было ничего. Разбор дал три независимых дефекта; исправление — не косметика строки, а перенос связки «615-ПП ↔ УК» в CRM БД с ежедневным обновлением.
+- **Дефект 1 — путь чтения 615-ПП держался на роли `postgres`.** Боевой процесс CRM работает под `crm_app`; проверка на живой БД показала, что реестр 615-ПП читался только потому, что проверочные прогоны шли под `postgres`. Под боевой ролью чтение источника не давало реестр.
+- **Дефект 2 — ошибка доступа молча превращалась в ноль.** `query_dicts` глотал исключение и возвращал `[]`, поэтому недоступность источника отрисовывалась как «торгов нет» (`0 торгов на —`). Введён строгий режим: `TenderSourceUnavailable` + `fetch_615_rows(..., strict=True)` / `load_615_slice(..., strict=True)`. «Недоступно» больше никогда не показывается нулём.
+- **Дефект 3 — связка нигде не сохранялась.** Сопоставление считалось в UI на каждом rerun и не персистилось, поэтому в CRM данных о 615-ПП не было вовсе.
+- **Хранилище в CRM БД.** Миграция `src/migrations/waterproofing_615_uk_link_store_1.sql` (88 строк) создаёт `crm_waterproofing_615_{program_year,uk_address,uk_link,sync_state}`; владелец — `crm_app` (как у производного кэша `crm_tender_match_cache`). Чтение — `src/services/waterproofing_615_store.py` (367 строк: сводки, статус свежести, честная строка доски), запись — `src/services/waterproofing_615_refresh.py` (272 строки), CLI — `scripts/refresh_waterproofing_615_link.py` (86 строк, коды возврата 0/1/2/3). Накопители перезаписываются целиком в одной транзакции, поэтому повторный прогон даёт ровно то же состояние. Соединение fail-closed: `_connection()` повторяет контракт `expert_annotation_service._transaction_connection` — у боевого `CrmDatabaseManager` нет `get_connection`, соединение берётся через `_ensure_connection()` + `_connection`; без соединения обновление не пишет ничего. Ошибка обновления не затирает `last_success_at`: доска продолжает показывать последние успешные данные и честно сообщает, что свежих нет (`fresh`/`stale`/`failed`/`never_run`).
+- **Ежедневное обновление.** `systemd/crm-waterproofing-615-link.{service,timer}`: `OnCalendar=daily`, `Persistent=true`, `EnvironmentFile=/opt/CRM_Streamlit/.env`, `PYTHONPATH=/opt/CRM_Streamlit:/opt/pythonProject89`, продовый интерпретатор `/opt/CRM_Streamlit/.venv313/bin/python`. Юниты установлены в `/etc/systemd/system/`, `enable --now` → `enabled` / `active`, следующий запуск `2026-09-29 00:00 MSK`; разовый прогон через `systemctl start` — `code=exited, status=0/SUCCESS`.
+- **Живая сверка на продовой БД (2026-09-28).** `crm_waterproofing_615_uk_address=322`, `uk_link=32`, `program_year=7`, `sync_state=1`; повторный прогон даёт те же числа. `sync_state` = `SUCCESS`, `source_contracts=3883`, `history_from_year=2019`, `safe_error_class` пуст. Программа 2026: **1082 торга / 190 284.3 млн ₽**, гидроизоляция **3 / 700.1 млн ₽**. Связка УК: **23 УК / 32 торга / 2 014.6 млн ₽**, в 2026 — **8 / 460.1 млн ₽**. Арифметика адресов сходится: 332 объектных строки портфеля → 217 УК → 322 уникальные пары «УК + адрес» (10 дублей схлопнуто при записи).
+- **Проверки.** `tests/test_waterproofing_615_store.py` — **27 тестов** (новый файл, 407 строк), вместе с `tests/test_waterproofing_uk_crm.py` — **75 PASS** локально и на продовом `.venv313` (1.94 s); `pyflakes` по изменённым файлам чисто. Строка доски проверена живьём через Streamlit `AppTest` (0 исключений), в т.ч. с полным списком УК: `615-ПП: в 2026 разыграно 1082 торгов на 190284.3 млн ₽, из них гидроизоляция — 3 на 700.1 млн ₽. По адресам домов УК на доске торги найдены у 23 УК: 32 торгов на 2014.6 млн ₽, в том числе в 2026 — 8 на 460.1 млн ₽. История по адресам домов с 2019 года. Обновлено 2026-09-28.` `crm-streamlit.service` перезапущен → `active`, `_stcore/health` = `200`.
+- **Попутно исправлено.** `board_kpis.tenders_year_amount` суммировал не то поле (2014.6 млн вместо 460.1 млн) — теперь суммируется `tenders_615_year_amount`, добавлена подпись `tenders_615_year_amount_label`, а `build_card` отдаёт `tenders_615_year_amount`.
+- **Отклонения и наблюдения.**
+  - Тело строки 615-ПП считает «по адресам домов УК **на доске**», поэтому зависит от фильтра «Показать УК»: при дефолтных 100 УК — 17 УК / 25 торгов / 1 720.5 млн ₽ (в 2026 — 6 / 453.3 млн ₽), при 500 (все 217 УК) — полные 23 / 32 / 2 014.6 млн ₽. Это честная семантика подписи, а не потеря данных; сводная часть строки (программа 2026) всегда берётся из БД целиком.
+  - `is_waterproofing=0` у всех 32 связанных торгов — свойство данных, не дефект: в реестре всего 4 гидроизоляционных контракта (2024 — 1, 2026 — 3), и ни один из них не попал в портфель УК (доля 0.1 % от 3 883, ожидаемое число совпадений ≈ 0.03).
+  - Полнота связки по-прежнему ограничена принципиально (23 из 217 УК): заказчиком 615-ПП всегда выступает ФКР, ИНН УК в реестре нет. Расширение охвата — вне scope.
+  - `tests/test_app_bootstrap_relocation.py` — 3 падения, **предсуществующие** (расхождение сигнатуры `_get_service(load_companies=...)`), к этой работе не относятся и не чинились.
+- **Frozen Authorities Preserved.** AI-контур документов, First Pass / Second Pass, очередь и её порядок, MODEL_MEDAL и категорийные медали, S7 OKPD admission — не изменялись.
+
+**ANALYTICS-V2-MAIN-DASHBOARD-REBUILD-1** — `[x]` **PASS**. Scope: полная замена главного экрана аналитики («Аналитический контур v2», дефолтная страница) на тёмную операторскую панель. Только UI + read-only аналитика: production-логика (CRM sync, queue producer, First Pass, Second Pass, category scoring, MODEL_MEDAL, effective medal, time decay, document pipeline, S7, lifecycle) не менялась.
+- **Шесть зон в первом экране 1920×1080** (`src/ui/components/analytics_v2/control_room.py`, 372 строки): «что происходит прямо сейчас» (freshness CRM Sync / новая закупка / Queue Producer / Doc Worker / Second Pass; GREEN ≤ 300 c, YELLOW ≤ 1800 c, дальше RED), активный workset (canonical actionable), главный pipeline (активные → есть документы → документы обработаны → evidence → Second Pass → MODEL MEDAL и разрывы между стадиями, «нет ссылок» не смешивается с ошибками загрузки), матрица категорий, топ возможностей, состояние системы (источник текущей оценки, тип объекта, срок подачи, time decay, ошибки документов за 24 ч). Доска отрисована ОДНИМ `st.markdown` (единый HTML-документ + CSS grid 1.3 / 1 / 0.92); измеренная нижняя граница панели 1062 px при вьюпорте 1080 px, колонки 564 / 434 / 399 px.
+- **Матрица категорий — только из БД.** Строки берутся исключительно из `crm_product_categories` (14 active), без хардкода в Python; все счётчики `COUNT(DISTINCT procurement_id)` в одном агрегирующем CTE (`src/services/main_dashboard_queries.py`, без N+1). Авторитет медали категории: current Second Pass CATEGORY_MODEL_MEDAL → First Pass `crm_procurement_category_opportunities` → unassessed. Живой срез: `computers 3/1/1/0/1`, `lighting 13/2/0/0/11`, `waterproofing 6/1/3/0/2`, `flooring 7/0/2/1/4`, `drainage_water_management 13/0/1/1/11` (активных / Gold / Silver / Bronze / Wood).
+- **Никаких выдуманных чисел.** Виджет без данных печатает `—` (`.cr-err`), ноль — приглушённый `0`; таймаут/ошибка запроса НЕ превращается в 0. `load_control_room()` никогда не бросает исключение, ошибки источников собираются в `ControlRoom.errors` и печатаются в подвале панели.
+- **Переходы.** `?cr_cat=<code>` / `?cr_open=<crm_id>` → скоуп workset → вкладка «Идут торги» + баннер «Фильтр из главной панели». Проверено живьём: `?cr_cat=computers` → «категория Вычислительная техника и ИТ-оборудование · 3 закупок», `?cr_open=46550` → «закупка CRM #46550 · 1 закупок», 0 исключений.
+- **Проверки.** `tests/test_main_dashboard_service.py` — **27 тестов PASS** (0.001 s). UI == SQL на 4 категориях (Активных / Gold / Silver / Second Pass / Ждут док. / Док.) — MATCH=PASS. Живой прогон AppTest: 0 исключений, все 8 маркеров секций YES, полный рендер панели 2.85 s. Chromium 151, 1920×1080: `CR_ROOT_BG=rgb(13, 17, 23)`, тёмная панель занимает 56 % кадра; FCP 2.59 s прогретый / 4.27 s холодный.
+- **Данные продовой БД на 2026-09-28.** `ACTIVE=311`, `NEW_24H=32`, `WITH_DOCS=40`, `DOCS_COMPLETE=40`, `SECOND_PASS=23`, `MODEL_AUTHORITY=26`; pipeline 311 → 40 → 40 → 23 → 23 → 23; разрывы: нет ссылок 271 · нет evidence 17. Authority: Preliminary 105 · Second Pass 26 · Unassessed 180 (Σ 311). Тип объекта: COMMERCIAL 120 · OTHER 107 · SOCIAL 42 · DIRECT_SUPPLY 42. Срок подачи: > 14 дн 14 · 8–14 дн 63 · 4–7 дн 62 · 2–3 дн 172; понижено time decay 122. Ошибки документов за 24 ч: Skipped 5 · Unsupported 5. Индикаторы: Queue Producer и Second Pass — RED (честный простой, воркеры живы), CRM Sync и Doc Worker — GREEN.
+- **Изменённые файлы.** Новые: `src/services/main_dashboard_types.py`, `src/services/main_dashboard_queries.py`, `src/services/main_dashboard_service.py`, `src/ui/components/analytics_v2/control_room.py`, `src/ui/components/analytics_v2/control_room_links.py`, `tests/test_main_dashboard_service.py`. Изменены: `src/ui/analytics_contour_v2_page.py` (панель первой, ниже прежний блок «Вторичная аналитика» и вкладки), `src/ui/components/analytics_v2/tabs.py` (баннер скоупа + `allowed_ids`).
+- **Зафиксированные дефекты (вне scope этого WIP).** Deep-link «Идут торги» холодным кэшем занял 107 s (прогретым — 13 s) при рендере панели 2.6–2.9 s — производительность torgi-этапа, не панели. Noncanonical historical category results, отсутствие `finished_at` в telemetry Second Pass и 203/EXEC у analytics-refresh / objects-index-rebuild остаются как были.
+
+**WATERPROOFING-UK-CRM-REFINE-1** — `[x]` **PASS**. Scope: доработка УК-канбана гидроизоляции по замечаниям заказчика к живому экрану: короткие названия УК, отказ от ОГРН и подсказки «следующее действие» на карточке, приоритет по объёму подземных работ, приоритет показа ГБУ «Жилищник», подключение реестра 615-ПП по адресам домов.
+- **Названия УК (`uk_display_name`).** «Управляющая компания «Вк комфорт»» → «УК «Вк Комфорт»», «ГБУ …» остаётся «ГБУ «…»», ТСЖ/ЖСК сокращаются так же. Карточка канбана и intake используют короткое имя, полное имя остаётся в детальной карточке.
+- **Приоритет по объёму работ (`default_priority`).** Считается не число объектов, а масштаб подземной гидроизоляции: `total_underground_floors` (сумма подземных этажей) и `parking_count`. Gold: этажей ≥ 10 или паркингов ≥ 5; Silver: этажей ≥ 4 или паркингов ≥ 3; иначе Bronze. Примеры заказчика — 11 паркингов по 2 этажа (22 уровня) и 3 паркинга по 5 этажей (15 уровней) — оба дают Gold. `priority_reason` выводит «N паркинг(ов) · M подземных этажей». Ручное переопределение приоритета в карточке сохранено.
+- **Этап 1 переименован.** «Контур найден» → «УК найдена» (`CRM_STAGES[0]`), легаси-значения маппятся через `_LEGACY_STAGE_ALIASES`. Порядок карточек (`sort_cards`): просрочка → приоритет → ГБУ «Жилищник» → дата касания → имя; добавлен фильтр «Только ГБУ «Жилищник»».
+- **Состав карточки канбана (`_card_lines`).** Название УК, ИНН, телефон, адрес УК (если есть), объектов / с подземными / паркингов, подземных этажей (+ «максимум в одном паркинге»), потенциал, приоритет, тех. контакт, дата касания, ответственный, текущий этап. ОГРН и «следующее действие» убраны по требованию заказчика.
+- **615-ПП (`src/services/waterproofing_615.py`, 312 строк).** Реестр `public.reestr_contract_615_pp` (3 883 контракта с 2020). Заказчик всегда ФКР, ИНН УК в реестре отсутствует, поэтому связка идёт по адресам домов УК: нормализация улицы, коэффициент Жаккара по словам, порог `MATCH_THRESHOLD = 0.5` (точное совпадение = 1.0), словарь аббревиатур улиц и пропуск маркеров района. `load_615_slice` берёт реальный handle `tender_db` (не `SourceReadOnlyDatabase`, который глотает ошибки), `HISTORY_FROM_YEAR = 2019`. Карточка УК получает строку «615-ПП: N торг(ов) на X (годы) · в 2026: Y», детальная карточка — блок с историей и приблизительными совпадениями; при отсутствии совпадений выводится честное «по N адресам торгов капремонта не найдено».
+- **Проверки.** `tests/test_waterproofing_uk_crm.py` — **48 тестов PASS** локально и на продовом `.venv313` (0.48 s); sha256 локально == прод по девяти файлам модуля (`waterproofing_crm.py`, `waterproofing_615.py`, `waterproofing_contour.py`, `map_export.py`, `waterproofing_kanban_tab.py`, `waterproofing_uk_tab.py`, `waterproofing_uk_activity.py`, `waterproofing_page.py`, `waterproofing_meta_tabs.py`). Устаревшая копия теста на проде (420 строк) заменена на актуальную (535 строк).
+- **Живой прогон на продовой БД (Streamlit AppTest, 0 исключений).** Карточка «УК «Вк Комфорт»»: ИНН 7706724054 · ☎ +7(495)737-77-40 · объектов 3 · паркингов 3 · подземных этажей 6 · 🥈 Silver · 🏷 «УК найдена»; карточек с ОГРН или «следующим действием» — 0; карточек со старым названием «Контур найден» — 0; детальная карточка открывается (2 таблицы, блок 615-ПП). KPI доски: 6 метрик (УК на доске, Объектов, Паркингов, Подземных этажей, Просрочено, Потенциал) + строка 615-ПП + строка ГБУ/тех.контакт.
+- **Отклонение / ограничение.** Полнота 615-ПП ограничена принципиально: совпадения найдены у 23 из 217 УК (25 из 332 адресов, 7.5 %), 5 совпадений приблизительные. Причина — в реестре 615-ПП заказчиком всегда выступает ФКР, ИНН УК там нет, а у большинства домов из `nspd_parking` контрактов 615-ПП просто не существует. Расширение охвата требует другого источника или разбора `auction_name`, вне scope этой итерации.
+- **Перезапуск.** `sudo systemctl restart crm-streamlit.service` → `active`; `http://127.0.0.1:8504/_stcore/health` = `200`; внешний адрес `http://100.113.185.90:8504/`.
+- **Frozen Authorities Preserved.** AI-контур документов, S7/S13 transport, Second Pass, очередь и аналитика V2 не затронуты.
 
 **ANALYTICS-V2-PRODUCTION-MAINTENANCE-1** (Phase 6.3) — `[x]` **PASS / STOP**. Scope: закрыть два доказанных остаточных дефекта после восстановления live-flow (Phase 6.1/6.2), не меняя работающую production-архитектуру.
 - **Дефект 1 — Shadow/Qwen на мёртвых закупках.** `crm-v3-shadow-predictor` бесконечно прогонял `PRE_RESEARCH_WAITING` (9 265 строк) через Qwen, включая 9 175 неактуальных legacy-строк бэкфилла `DEEP_RESEARCH` от 2026-08-31 (`created_at` = 2026-08-31), до 3 попыток на строку.
@@ -46,7 +275,7 @@
 - **Ссылки проверены:** единственный потребитель `waterproofing_contour` — заменяемый `waterproofing_uk_tab.py`; `render_uk_tab` больше никем не вызывается, роут идёт через `render_waterproofing_page` из `src/ui/app_bootstrap.py` и `src/services/app.py`; `fetch_uk_summary` используется также `src/ui/customers_page.py`, изменение аддитивно (новая колонка `ge1_floors`).
 - **Проверки на S13:** `py_compile` продовым `.venv313` — OK; `pytest tests/test_waterproofing_uk_crm.py` — 36 passed; живой прогон на продовой БД: 217 УК, 332 объекта, все в колонке «Контур найден» (сохранённых контуров 0); Streamlit AppTest с продовым `PYTHONPATH=/opt/CRM_Streamlit:/opt/pythonProject89` — канбан отрисован, 100 карточек, открытие карточки УК без исключений, 6 вложенных секций.
 - **Перезапуск:** `sudo systemctl restart crm-streamlit.service` → `active`, `http://100.113.185.90:8504/_stcore/health` = `200 / ok`.
-- **Наблюдения (вне scope):** пакет `modules` доступен в проде только через `PYTHONPATH` systemd-юнита (`/opt/pythonProject89`), в дереве репозитория его нет. В логах сервиса остаётся ранее существовавшая ошибка другой страницы — `ModuleNotFoundError: src.ui.components.analytics_v2.card_opportunities` (аналитический контур V2, вкладка торгов), к гидроизоляции не относится. Продовые `src/ui/hydro_leads_tab.py` и `src/services/hydro/*` — не подключённый WIP другого направления, доставка их не касалась.
+- **Наблюдения (вне scope):** пакет `modules` доступен в проде только через `PYTHONPATH` systemd-юнита (`/opt/pythonProject89`), в дереве репозитория его нет. В логах сервиса остаётся ранее существовавшая ошибка другой страницы — `ModuleNotFoundError: src.ui.components.analytics_v2.card_opportunities` (аналитический контур V2, вкладка торгов), к гидроизоляции не относится. Предсуществующие падения тестов на S13 вне scope: `test_app_bootstrap_relocation.py` (3 теста, ожидают старую структуру `app_bootstrap.py`) и `test_hydro_phase2c.py::test_primary_hydro_router_has_no_source_database_call` (ожидает вызов `render_hydro_leads_tab` из `waterproofing_page.py`); все четыре падали и до доставки. Продовые `src/ui/hydro_leads_tab.py` и `src/services/hydro/*` — не подключённый WIP другого направления, доставка их не касалась.
 - **Frozen Authorities Preserved:** AI-контур документов, S7/S13 transport, Second Pass, очередь и аналитика V2 не затронуты.
 
 ## PRIOR CURRENT WIP — 2026-09-24
@@ -741,3 +970,1818 @@ Python 3.13 и откат:
 - Восстановление: `sudo cp /etc/systemd/system/crm-streamlit.service.bak-20260804-python312 /etc/systemd/system/crm-streamlit.service`.
 - Затем: `sudo systemctl daemon-reload` и `sudo systemctl restart crm-streamlit`.
 - Проверка: `systemctl is-active crm-streamlit` и `curl -sS -o /dev/null -w '%{http_code}\n' http://127.0.0.1:8504/`; ожидается `active` и `200`.
+
+## WIP: RESTORE CANONICAL CRM DATA + REBUILD ANALYTICS V2 OVERVIEW (????????? Windows)
+
+??????: ???????? ??? ?????????? Windows-????????. ????? `CRM-ANALYTICS-V2-UI-REBUILD-1`.
+
+???????? ??????:
+
+- Canonical ???????? ? S13 (`crm`, ???? `crm_app`; `document_intelligence`, ???? `doc_worker`).
+- PostgreSQL ?? S13 ???????? localhost-only; ?????? ? Windows ? ?????? ????? SSH-??????? `127.0.0.1:15432 -> S13 127.0.0.1:5432`.
+- `listen_addresses`, firewall, Tailscale ? production-??????? ?? ??????????. ????? grants ?? ??????????.
+- ????????? `.env`: `CRM_DB_*` ?????????? ? ???????; `S13_DOCUMENT_DB_*` ? ? `document_intelligence` ????? ??? ?? ???????.
+
+???????? ?????????? VPN-?????? (?? ??????? ???????????? ? ??? ??? ???????? ????? Tailscale):
+
+- `src/services/commercial_routing_v3/document_links.py`: ???????????? ????? `TENDER_MONITOR_DB_*` ????? ?????????, ?????? `10.8.0.7` ??????? ?? Tailscale-????? S7; ?? ???? ?????? ??????? ??????.
+- ????????? `.env` ??????? ???????????? `DB_*` (S7/Tailscale), ??? ????????? ?????? `DB_HOST=10.0.0.7` ?? ????????? ??????? `pythonProject89` (??? `.env` ???????? ??? override ? ???????? ?????????? ?????).
+- `pythonProject89/.env`: 4 ?????????? ?????? ???????? ?? Tailscale (?????? ?????).
+
+??????????? UI/???????? (??? ????????? ?????? dashboard, ??????, scoring ? ?????):
+
+- `src/ui/components/analytics_v2/card_opportunities.py`: ?????? ????????? ? ?????????????? `category_code` / `subcategory_code` (???????? ? `commercial_category_code` / `commercial_subcategory_code`) ? ????? ? `UndefinedColumn`. ???????? ?? ?????? ??? ????????? ?????????? ????.
+- `src/services/analytics_dashboard_kpi_service.py`: ?????? ?????? ?? 24 ????? ?????????? ?? `id` (??????? ?????? ????); ?????????? ?????????????? ???????? ?? ?????????? `id`.
+- `src/ui/components/analytics_v2/dashboard_header.py`: ????????? ??? ??????-????? (???????, ????? ?? 24 ????, ?????????, ????????? ?????? + ??????? ?????????); ??????????? ??????????? ?????? ? collapsed expander.
+- `src/services/crm_profile_service.py`, `src/ui/analytics_contour_v2_page.py`: ????????? `connect_timeout` / `statement_timeout`, ????? ??????????? ???????? ????? ???????? ??????, ? ?? ??????????? ????????.
+- ?????? ?????????? enrichment-??????? ?????? ?? ?????????? ????? ? ????: ???????? ?????? ? ????? ?????????? `0`, ??????? ? ???? ???????.
+
+???????? (????, read-only, ?????? ??, ?? ??????? ?????? ????????? dashboard):
+
+- `DB_TARGET=CANONICAL_S13`, `APP_DB_USER=crm_app`, `CRM_PROCUREMENTS_SELECT=YES`.
+- `CRM_PROCUREMENTS_TOTAL=303187`; ????? 44-?? 199265, 223-?? 88761; ????????? 44-?? 15158, 223-?? 0.
+- ????? ?? 24 ????: 44-?? 60422, 223-?? 36296.
+- ?????????: PENDING 2103, PROCESSING 1, COMPLETED 4629, FAILED+NO_LINKS 26832.
+- Category opportunities: 3701; ??????? ??????? (?????????) 3509.
+
+????????? ??????????? (? ???? WIP ?? ????????????, ??????? ?????????? ????????????):
+
+- ?????? ???????? ? ?????? ????????? ?? ???????? ????????? ????????? ? `statement_timeout`: ??? ??????? ??? `delivery_region`, ? `crm_procurements` ?????? ?????? (????? VACUUM FULL / ??????, ?.?. DDL).
+- ?? S13 ? ???? ???????? ?????? ???????? (??????? ???????????? ?????? ? smoke-???????? LoRA), ??????? ??????? ??????????? ?? I/O.
+
+## WIP: FIX ANALYTICS KPI SEMANTICS + ELIMINATE pythonProject89/.env
+
+Дата: 2026-09-28. Ветка: `CRM-ANALYTICS-V2-UI-REBUILD-1`. Статус: DONE.
+
+### Конфигурация: один источник истины
+
+- `src/bootstrap.py`: удалена загрузка любого чужого `.env` (`dotenv_values` /
+  sibling-load). Конфигурация берётся ТОЛЬКО из `<repo>/.env`; путь считается от
+  `Path(__file__).resolve()`, а не от cwd. Fallback-поиск `.env` вверх/вниз по
+  дереву и в соседних проектах убран полностью.
+- Соседний проект (`CRM_SOURCE_ROOT`, pythonProject89) используется только как
+  источник импортов (`sys.path`) для legacy `modules.*`; его `.env` не читается.
+  После импорта соседних модулей авторитет своего `.env` переустанавливается.
+- `scripts/check_uk_object.py`: убрана явная загрузка `pythonProject89/.env`.
+
+### LEGACY ADDRESS GUARD
+
+- `src/services/db_host_guard.py` (новый модуль) — единственный fail-fast guard:
+  host `10.0.0.7` / `10.0.0.13` -> `LegacyDbHostBlocked`
+  (`LEGACY_DB_HOST_BLOCKED` + имя переменной, без пароля).
+- Подключён в: `crm_db_runtime`, `doc_db_runtime`, `s13_v2_counters`,
+  `commercial_routing_v3/evidence_discovery`,
+  `commercial_routing_v3/document_links` (S7), `parking_db`.
+
+### Семантика KPI (верхний dashboard)
+
+- «Идут торги» = `crm_stage='torgi' AND award_status='submission_open'` +
+  канонический `actionable_submission_sql` (>= `MIN_REMAINING_SUBMISSION_DAYS`
+  дней до дедлайна) из `submission_window.py`. `submission_closed_waiting_award`
+  исключён; отдельного нового определения не вводилось.
+- «Новые за 24 часа» -> «Загружено в CRM за 24 часа» (`crm_created_at` — время
+  ingest, не first-seen); добавлена справочная строка по `start_date` источника.
+- Убрана несуществующая семантика `commercial_state` CONFIRMED/UNCONFIRMED/
+  REJECTED; medal transition считается только по
+  `candidate_initial_medal` -> `current_effective_medal`.
+
+### Проверка (одна, read-only)
+
+- `CONFIG_SOURCE=C:\Users\Lenovo\Projects\CRM_Streamlit\.env`
+- `CRM_DB=127.0.0.1:15432/crm` (role `crm_app`) -> `current_user=crm_app`, `current_database=crm`
+- `DOC_DB=127.0.0.1:15432/document_intelligence` (role `doc_worker`) -> `current_user=doc_worker`, `current_database=document_intelligence`
+- `S7_ROUTE=100.80.226.124:5432/tender_monitor` (`nspd_user`, Tailscale) — из `.env`, не из sibling.
+- Литералы `10.0.0.7`/`10.0.0.13` в runtime остались только внутри guard-модуля (deny-list).
+- `FOREIGN_ENV_LOADED=NO`.
+- Локальный Streamlit перезапущен: `127.0.0.1:8502`, HTTP 200.
+
+### Отклонения
+
+- Абсолютный путь `/opt/CRM_Streamlit/.env` в dev/migration-скриптах
+  (`scripts/*`, `src/services/*_migration*.py`) не тронут: на Windows файла нет
+  (no-op), на production путь совпадает с каноническим.
+- `scripts/run_second_pass_worker.py` не тронут: workers вне scope этого WIP.
+## WIP: SECOND PASS CONFIG CLEANUP ONLY
+
+Дата: 2026-09-28. Ветка: `CRM-ANALYTICS-V2-UI-REBUILD-1`. Статус: DONE.
+
+- `scripts/run_second_pass_worker.py`: `PROJECT_ROOT` считается от `__file__`
+  (убраны `/opt/CRM_Streamlit`-эвристика и `os.path.abspath(".")` / cwd).
+- Удалён `_load_env_safe()` вместе со списком
+  `["/opt/CRM_Streamlit/.env", "/etc/crm_v3.env", ".env"]` — worker больше не
+  ищет `.env` сам. Конфигурация берётся из canonical bootstrap
+  (`import src.bootstrap`), один authority с Streamlit и CRM services.
+- `get_di_connection()` переведён на `require_doc_db_connect_kwargs()`
+  (canonical `document_intelligence` / роль `doc_worker`) вместо ручной подмены
+  `dbname`/`user`/`password` поверх CRM-kwargs.
+- Убраны silent fallback-и `psycopg2.connect("... user=postgres")`. Отсутствие
+  документированной DB identity теперь даёт fail-fast
+  `SecondPassDbIdentityMissing` / `SECOND_PASS_DB_IDENTITY_MISSING`.
+- Подключён существующий `src/services/db_host_guard.py`
+  (`guard_connect_kwargs`) на оба connection path:
+  `10.0.0.7` / `10.0.0.13` -> `LEGACY_DB_HOST_BLOCKED` с именем переменной.
+- `src/bootstrap.py`: добавлен публичный `crm_env_file()` — путь единственного
+  авторитетного конфига, без дублирования config loader в worker-е.
+- Добавлен режим `--check-connection`: только проверка подключения и
+  `SELECT current_user, current_database()` по обеим БД, backlog не обрабатывается.
+
+Проверка:
+
+- `CONFIG_SOURCE=C:\Users\Lenovo\Projects\CRM_Streamlit\.env`
+- `SECOND_PASS_DB=127.0.0.1:15432/crm` (`crm_app`) -> `current_user=crm_app`, `current_database=crm`
+- `SECOND_PASS_DOC_DB=127.0.0.1:15432/document_intelligence` (`doc_worker`) -> `current_user=doc_worker`, `current_database=document_intelligence`
+- `FOREIGN_ENV_LOADED=NO`, `LEGACY_HOST_REFERENCES_RUNTIME=0`, `POSTGRES_FALLBACK=NO`
+- Подсунутые `10.0.0.7` / `10.0.0.13` -> `LEGACY_DB_HOST_BLOCKED`;
+  отсутствующий `CRM_DB_USER` -> `SECOND_PASS_DB_IDENTITY_MISSING`.
+
+Отклонения: нет. Second Pass semantics, model, prompts, scoring, БД и queue не
+затрагивались; batch не запускался.
+
+
+---
+
+## WIP=OBJECT-CLASSIFICATION-BASELINE-V1 (measurement only)
+
+Статус: WAITING_USER_REVIEW. Измерение базовой `qwen2.5:7b` на выборе объекта
+из canonical taxonomy (`src/services/expert_object_taxonomy.py`,
+sha256[:16]=9601d4af7b236933, md5[:8]=2c420378). `PROCUREMENT_FORM` передан
+модели как ВХОДНОЙ ФАКТ, модель его не переопределяет. Обучения, backfill,
+production-записей, изменения enrollment/prompt не было.
+
+Артефакты (scratch/, read-only run):
+- `sample.jsonl` (120 кейсов, sha256[:16]=55e8cfc62027781e)
+- `_ob_prompts.jsonl` (замороженный prompt, sha256[:16]=6a3c648494d06d23)
+- `_ob_expected.jsonl` (эталон, заморожен ДО inference, sha256[:16]=5c76bd3533d3e7c1)
+- `results_raw.jsonl` / `results_parsed.jsonl` (qwen2.5:7b, temperature=0, seed=42, format=json)
+- `object_baseline.tsv` (sha256[:16]=bfa9a2def436cd53)
+- runner: `/tmp/_ob/runner.py` на S13, модель вызывалась напрямую по `/api/generate`
+
+Результат (детерминированный эталон, 105 из 120 кейсов): OBJECT_APPLICABLE_ACCURACY=0.7404,
+SECTOR_ACCURACY=0.5147, TYPE_ACCURACY=0.2353, SECTOR_TYPE_EXACT=0.2353,
+FULL_OBJECT_EXACT=0.0294, N/A_FALSE_NEGATIVE=24, N/A_FALSE_POSITIVE=3.
+Систематическое нарушение контракта: модель НИ РАЗУ не отдала `N/A` (0 из 120)
+и при `object_applicable=NO` всё равно заполняет sector/type (65 кейсов);
+confidence принимает только значения 0/1 (118 из 120).
+
+RUBRIC_ERRORS=20 (подстрочные ложные срабатывания замороженного рубрика,
+например «котельной»->HOTEL, «Цемзавод»->завод, «Главная улица»->STREET);
+INPUT_FORM_ERRORS=2 (детерминированный `classify_procurement_form` дал
+DIRECT_GOODS_PURCHASE на design/works-контракты 356553, 356757).
+Все правки эталона залогированы OLD/NEW/REASON в `_ob_rubric_overrides.json`.
+
+PRODUCTION_WRITES=0, BACKFILL_RUN=NO, TRAINING_RUN=NO.
+Следующий шаг не запускать без явного запроса пользователя.
+
+---
+
+## WIP=OBJECT-CLASSIFIER-CALIBRATION-V1 (measurement / architecture fix, no training)
+
+Статус: WAITING_USER_REVIEW. Baseline (OBJECT-CLASSIFICATION-BASELINE-V1) заморожен
+без изменений (проверено по sha256: `sample.jsonl`, `_ob_expected.jsonl`,
+`results_raw.jsonl`, `results_parsed.jsonl`, `object_baseline.tsv` — все совпали;
+см. `object_calibration_baseline_frozen.json`).
+
+Изменено ТОЛЬКО в calibration-артефактах (baseline не переписывался):
+1. Applicability вынесен из модели в детерминированный router:
+   - `DIRECT_GOODS_PURCHASE` -> `OBJECT_APPLICABLE=NO`, оси принудительно `N/A`, Qwen НЕ вызывается (31 кейс);
+   - объектные формы (`CONSTRUCTION_WORKS`, `DESIGN_ONLY`, `SURVEY_AND_DESIGN`, `DESIGN_AND_BUILD`,
+     `DESIGN_EXPERTISE_AND_BUILD`) -> `=YES`, Qwen классифицирует объект (81 кейс);
+   - `SERVICES_OTHER` / `WORKS_OTHER` / `UNKNOWN` -> решает Qwen (8 кейсов).
+   `DETERMINISTIC_APPLICABILITY_N=112`, `MODEL_APPLICABILITY_N=8`.
+2. Новый иерархический prompt (sector -> type-within-sector -> subtype-within-type),
+   дерево собрано из `src/services/expert_object_taxonomy.py` (второго enum нет).
+3. Детерминированный output-validator (canonical sector/type/subtype/context/application_area,
+   N/A-контракт, confidence 0..100 integer) + enforced N/A-контракт на выходе router.
+4. Calibration truth = baseline truth + уже выявленные RUBRIC_ERRORS=20 и INPUT_FORM_ERRORS=2
+   (см. `_cal_corrections.json`); исходный frozen expected не тронут.
+
+Результат (qwen2.5:7b, temperature=0, seed=42, format=json, одинаковые 120 кейсов):
+
+| metric | baseline (rescored на cal-truth) | calibration | delta |
+|---|---|---|---|
+| OBJECT_APPLICABLE_ACCURACY | 0.7212 | 0.9712 | +0.2500 |
+| SECTOR_ACCURACY | 0.5000 | 0.6571 | +0.1571 |
+| TYPE_ACCURACY | 0.2286 | 0.4571 | +0.2286 |
+| SECTOR_TYPE_EXACT | 0.2286 | 0.4429 | +0.2143 |
+| FULL_OBJECT_EXACT | 0.0286 | 0.2286 | +0.2000 |
+| N/A_FALSE_POSITIVE | 3 | 1 | -2 |
+| N/A_FALSE_NEGATIVE | 26 | 2 | -24 |
+| N/A_CONTRACT_VALID_RATE (router) | 0.0 | 1.0 | +1.0 |
+| CONFIDENCE_FORMAT_VALID_RATE | (degenerate 0/1) | 1.0 | fixed |
+| TAXONOMY_VALID_RATE | 0.9919 | 0.9605 | -0.0314 |
+| AXIS_CONSISTENT_RATE | 0.9758 | 0.9435 | -0.0323 |
+
+FIXED_CASES=12, REGRESSED_CASES=5, STABLE_OK=42, STABLE_ERR=45, AMBIGUOUS=16.
+MODEL_ONLY_APPLICABILITY_ACC (8 кейсов) = 0.5.
+
+Незакрытые дефекты модели (не исправлялись, только зафиксированы):
+- модель НИ РАЗУ не отдала `UNKNOWN` (0/89) и в 19/20 случаев, сказав `NO`,
+  всё равно заполняет sector/type (N/A-контракт в raw соблюдён 1/20; router это скрывает -> 1.0);
+- non-canonical `object_type`: `OTHER` x5, `NONE` x3, `N/A` x2 (10);
+- OBJECT_CONTEXT/APPLICATION_AREA слишком узкие: модель помещала туда `power_network`,
+  `water_network`, `heating_network`, `road_pavement`, `playground`, `facade`;
+- URBAN_IMPROVEMENT/COURTYARD -> RESIDENTIAL/APARTMENT_BUILDING x8 (двор без определяемого МКД);
+- confidence формат исправлен, но значения всё ещё грубые (5 различных).
+
+RUBRIC_CONCERNS_NOT_APPLIED=1: frozen rubric никогда не выдаёт FACTORY/PRODUCTION_BUILDING
+(завод/ремцех/цех/производствен -> INDUSTRIAL_SITE), тогда как canonical labels —
+FACTORY='Завод', PRODUCTION_BUILDING='Производственный корпус'. НЕ правил постфактум,
+чтобы не подгонять truth под ответы модели.
+
+Артефакты: `object_calibration_expected.jsonl`, `object_calibration_prompts.jsonl`,
+`object_calibration_raw.jsonl`, `object_calibration_parsed.jsonl`, `object_calibration.tsv`,
+`object_calibration_comparison.tsv`, `object_calibration_metrics.json`.
+
+PRODUCTION_WRITES=0, BACKFILL_RUN=NO, TRAINING_RUN=NO, DEPLOY=NO, taxonomy не менялась.
+Следующий prompt-итерации/обучения/деплоя не запускать без явного запроса пользователя.
+
+## WIP=OBJECT-CLASSIFIER-HELDOUT-VALIDATION-V1 (held-out validation of CALIBRATION V1)
+
+MODE=READ_ONLY_MEASUREMENT. Модель НЕ обучалась, prompt/router/validator/taxonomy НЕ менялись,
+production НЕ переписывался, backfill не запускался. Проверка CALIBRATION V1 на НОВОЙ выборке
+реальных закупок (все CRM_ID вне предыдущих 120). Один прогон, qwen2.5:7b, temperature=0, seed=42, format=json.
+
+### Freeze (sha256[:16])
+
+| artefact | sha256[:16] |
+|---|---|
+| calibration prompt builder | `1763291d1767b189` (head `c6918e7b51b275a5`) |
+| applicability router + validator | `1763291d1767b189` |
+| runner | `684ec518e9b7e1d5` |
+| expert_object_taxonomy.py | `9601d4af7b236933` |
+| heldout prompts | `13537c9a9a23cc46` |
+
+Эквивалентность билдера промпта проверена: регенерированные calibration-промпты совпадают с
+исходными (`96be70b8953ae59e` mod CRLF) -> `PROMPT_BUILDER_EQUIVALENT=YES`. Overlap с предыдущими 120 = 0.
+
+### Выборка
+
+SAMPLES=150, MODEL_CALLS=140 (DETERMINISTIC_APPLICABILITY_N=140, MODEL_APPLICABILITY_N=10).
+
+### FINAL_ROUTED (система целиком: router + модель)
+
+| metric | value |
+|---|---|
+| OBJECT_APPLICABLE_ACCURACY | 0.9933 |
+| MODEL_ONLY_APPLICABILITY_ACC | 0.8 |
+| SECTOR_ACCURACY | 0.7405 |
+| TYPE_ACCURACY | 0.4962 |
+| SUBTYPE_ACCURACY | 0.5 |
+| SUBTYPE_N | 18 |
+| SECTOR_TYPE_EXACT | 0.4656 |
+| FULL_OBJECT_EXACT | 0.2824 |
+| TAXONOMY_VALID_RATE | 0.9633 |
+| AXIS_CONSISTENT_RATE | 0.9433 |
+| N/A_CONTRACT_VALID_RATE | 1.0 |
+| N/A_FALSE_POSITIVE | 0 |
+| N/A_FALSE_NEGATIVE | 1 |
+| CONFIDENCE_FORMAT_VALID_RATE | 1.0 |
+| UNKNOWN_EMITTED | 0 |
+| REAL_MODEL_ERRORS | 78 |
+| AMBIGUOUS_CASES | 0 |
+| EXCEPTIONS | 0 |
+
+VERDICTS={"WRONG": 69, "OK": 72, "SUBTYPE_ONLY": 7, "FN": 2}
+
+### RAW_MODEL (только модель, до router-постобработки)
+
+| metric | value |
+|---|---|
+| OBJECT_APPLICABLE_ACCURACY | 0.906 |
+| SECTOR_ACCURACY | 0.7252 |
+| TYPE_ACCURACY | 0.4885 |
+| SECTOR_TYPE_EXACT | 0.458 |
+| FULL_OBJECT_EXACT | 0.2824 |
+| TAXONOMY_VALID_RATE | 0.9626 |
+| AXIS_CONSISTENT_RATE | 0.9422 |
+| N/A_CONTRACT_VALID_RATE | 0.0 |
+| N/A_FALSE_POSITIVE | 0 |
+| N/A_FALSE_NEGATIVE | 4 |
+| RAW_NA_EMITTED | 13 |
+| FREE_TEXT_VIOLATIONS | 11 |
+
+### BY_SECTOR (heldout)
+
+| sector | N | SECTOR_ACC | TYPE_ACC | SECTOR_TYPE_EXACT |
+|---|---|---|---|---|
+| SOCIAL | 21 | 0.9524 | 0.5238 | 0.5238 |
+| RESIDENTIAL | 21 | 1.0 | 0.9524 | 0.9524 |
+| COMMERCIAL | 20 | 0.1 | 0.25 | 0.1 |
+| INDUSTRIAL | 15 | 0.8667 | 0.0667 | 0.0667 |
+| INFRASTRUCTURE | 28 | 0.9643 | 0.8214 | 0.8214 |
+| URBAN_IMPROVEMENT | 26 | 0.5385 | 0.1923 | 0.1538 |
+
+### CALIBRATION vs HELDOUT (final/routed)
+
+| metric | calibration | heldout | delta |
+|---|---|---|---|
+| OBJECT_APPLICABLE_ACCURACY | 0.9712 | 0.9933 | 0.0221 |
+| SECTOR_ACCURACY | 0.6571 | 0.7405 | 0.0834 |
+| TYPE_ACCURACY | 0.4571 | 0.4962 | 0.0391 |
+| SUBTYPE_ACCURACY | 0.0833 | 0.5 | 0.4167 |
+| SECTOR_TYPE_EXACT | 0.4429 | 0.4656 | 0.0227 |
+| FULL_OBJECT_EXACT | 0.2286 | 0.2824 | 0.0538 |
+| TAXONOMY_VALID_RATE | 0.9605 | 0.9633 | 0.0028 |
+| AXIS_CONSISTENT_RATE | 0.9435 | 0.9433 | -0.0002 |
+| N/A_CONTRACT_VALID_RATE | 1.0 | 1.0 | 0.0 |
+| N/A_FALSE_POSITIVE | 1 | 0 | -1 |
+| N/A_FALSE_NEGATIVE | 2 | 1 | -1 |
+| CONFIDENCE_FORMAT_VALID_RATE | 1.0 | 1.0 | 0.0 |
+
+BY_SECTOR_DELTA (N / SECTOR_ACC / TYPE_ACC / EXACT):
+
+- SOCIAL: N 10->21 (11); SECTOR_ACC 1.0->0.9524 (-0.0476); TYPE_ACC 0.8->0.5238 (-0.2762); EXACT 0.8->0.5238 (-0.2762)
+- RESIDENTIAL: N 13->21 (8); SECTOR_ACC 0.9231->1.0 (0.0769); TYPE_ACC 0.7692->0.9524 (0.1832); EXACT 0.7692->0.9524 (0.1832)
+- COMMERCIAL: N 4->20 (16); SECTOR_ACC 0.0->0.1 (0.1); TYPE_ACC 0.25->0.25 (0.0); EXACT 0.0->0.1 (0.1)
+- INDUSTRIAL: N 9->15 (6); SECTOR_ACC 0.7778->0.8667 (0.0889); TYPE_ACC 0.0->0.0667 (0.0667); EXACT 0.0->0.0667 (0.0667)
+- INFRASTRUCTURE: N 15->28 (13); SECTOR_ACC 0.8->0.9643 (0.1643); TYPE_ACC 0.7333->0.8214 (0.0881); EXACT 0.7333->0.8214 (0.0881)
+- URBAN_IMPROVEMENT: N 19->26 (7); SECTOR_ACC 0.2632->0.5385 (0.2753); TYPE_ACC 0.1053->0.1923 (0.087); EXACT 0.1053->0.1538 (0.0485)
+
+DEGRADED_VS_CALIBRATION=[{"metric": "AXIS_CONSISTENT_RATE", "delta": -0.0002}]
+IMPROVED_VS_CALIBRATION=[{"metric": "OBJECT_APPLICABLE_ACCURACY", "delta": 0.0221}, {"metric": "SECTOR_ACCURACY", "delta": 0.0834}, {"metric": "TYPE_ACCURACY", "delta": 0.0391}, {"metric": "SUBTYPE_ACCURACY", "delta": 0.4167}, {"metric": "SECTOR_TYPE_EXACT", "delta": 0.0227}, {"metric": "FULL_OBJECT_EXACT", "delta": 0.0538}, {"metric": "TAXONOMY_VALID_RATE", "delta": 0.0028}]
+STABLE_VS_CALIBRATION=["N/A_CONTRACT_VALID_RATE"]
+
+### TOP_CONFUSIONS (heldout)
+
+- `URBAN_IMPROVEMENT/PUBLIC_SPACE -> URBAN_IMPROVEMENT/PARK` x6
+- `INDUSTRIAL/ENERGY_FACILITY -> INDUSTRIAL/FACTORY` x6
+- `URBAN_IMPROVEMENT/COURTYARD -> RESIDENTIAL/APARTMENT_BUILDING` x4
+- `INDUSTRIAL/PRODUCTION_BUILDING -> INDUSTRIAL/FACTORY` x4
+- `COMMERCIAL/WAREHOUSE -> INDUSTRIAL/WAREHOUSE` x3
+- `COMMERCIAL/HOTEL -> RESIDENTIAL/APARTMENT_BUILDING` x3
+- `URBAN_IMPROVEMENT/PLAYGROUND -> SOCIAL/SPORTS_FACILITY` x2
+- `URBAN_IMPROVEMENT/PUBLIC_SPACE -> SOCIAL/SCHOOL` x2
+- `INFRASTRUCTURE/MUNICIPAL_INFRASTRUCTURE -> INFRASTRUCTURE/UTILITY_NETWORKS` x2
+- `SOCIAL/CULTURE_FACILITY -> SOCIAL/LIBRARY` x2
+- `SOCIAL/CULTURE_FACILITY -> SOCIAL/SCHOOL` x2
+- `COMMERCIAL/OFFICE -> OTHER/OTHER_OBJECT` x2
+
+### Артефакты
+
+`heldout_sample.jsonl`, `heldout_expected.jsonl` (ground truth до inference, SEMANTIC_REVIEW),
+`heldout_prompts.jsonl`, `heldout_raw.jsonl`, `heldout_parsed.jsonl`, `heldout_results.tsv`,
+`heldout_metrics.json`, `heldout_comparison.json`; frozen-пакет `heldout_frozen/`.
+
+PRODUCTION_WRITES=0, PROMPT_CHANGED=NO, TRAINING_RUN=NO, DEPLOY=NO.
+STATUS=WAITING_USER_REVIEW. Решение 'обучать/не обучать' не принимается в этом WIP.
+
+## WIP=OBJECT-CLASSIFIER-ERROR-DECOMPOSITION-V1
+
+STATUS=WAITING_USER_REVIEW. Read-only разбор ошибок завершённого held-out validation.
+Никаких изменений prompt / taxonomy / router / validator; inference / training / deploy НЕ запускались.
+
+### Входы (не изменялись)
+`scratch/heldout_expected.jsonl`, `heldout_raw.jsonl`, `heldout_parsed.jsonl`,
+`heldout_results.tsv`, `heldout_metrics.json`, frozen-пакет `scratch/heldout_frozen/calibration_v1.py`.
+
+### Итог разбора (78 ошибок)
+- BUCKET: {"MODEL_FIXABLE": 49, "INPUT_LIMITED": 10, "TAXONOMY_GAP": 16, "RUBRIC_SUSPECT": 1, "NON_CANONICAL": 1, "UNKNOWN_CASE": 1}
+- ERROR_LEVEL: {"TYPE": 35, "MULTIPLE": 30, "SECTOR": 4, "SUBTYPE": 7, "APPLICABILITY": 2}
+- ERROR_CAUSE: {"OVERGENERALIZATION": 9, "CANONICAL_DEFINITION_WEAK": 14, "TYPE_CONFUSION": 21, "SECTOR_CONFUSION": 11, "INSUFFICIENT_INPUT": 4, "OBJECT_VS_CONTEXT_CONFUSION": 5, "PROMPT_CONSTRAINT_IGNORED": 7, "CROSS_SECTOR_TYPE_LEAK": 2, "NON_CANONICAL_OUTPUT": 3, "OTHER": 2}
+- PRIMARY_REMEDY: {"FEW_SHOT_EXAMPLE": 31, "MORE_INPUT_CONTEXT": 9, "PROMPT_DEFINITION": 21, "TAXONOMY_CHANGE": 17}
+- MODEL_FIXABLE_ERRORS=49, INPUT_LIMITED_ERRORS=12,
+  TAXONOMY_GAP_ERRORS=16, NON_CANONICAL_ERRORS=7,
+  OUT_OF_BRANCH_AXIS_MISMATCH=6,
+  OBJECT_CONTEXT_CONFUSIONS=17 (axis-misplaced 11 + object-vs-context 6),
+  RUBRIC_SUSPECT=1, UNKNOWN_CASE=1.
+
+### Профили ветвей
+- SOCIAL: N=21 ERRORS=10 SECTOR_ERR=1 TYPE_ERR=10 SUBTYPE_ERR=0 CONTEXT_ERR=0 INPUT_LIMITED=0 NON_CANONICAL=2 DOM=TYPE_CONFUSION
+- RESIDENTIAL: N=21 ERRORS=1 SECTOR_ERR=0 TYPE_ERR=1 SUBTYPE_ERR=0 CONTEXT_ERR=0 INPUT_LIMITED=0 NON_CANONICAL=0 DOM=TYPE_CONFUSION
+- COMMERCIAL: N=20 ERRORS=18 SECTOR_ERR=18 TYPE_ERR=15 SUBTYPE_ERR=0 CONTEXT_ERR=0 INPUT_LIMITED=0 NON_CANONICAL=2 DOM=SECTOR_CONFUSION
+- INDUSTRIAL: N=15 ERRORS=14 SECTOR_ERR=2 TYPE_ERR=14 SUBTYPE_ERR=0 CONTEXT_ERR=0 INPUT_LIMITED=1 NON_CANONICAL=2 DOM=TYPE_CONFUSION
+- INFRASTRUCTURE: N=28 ERRORS=12 SECTOR_ERR=1 TYPE_ERR=5 SUBTYPE_ERR=9 CONTEXT_ERR=9 INPUT_LIMITED=3 NON_CANONICAL=0 DOM=PROMPT_CONSTRAINT_IGNORED
+- URBAN_IMPROVEMENT: N=26 ERRORS=22 SECTOR_ERR=12 TYPE_ERR=21 SUBTYPE_ERR=0 CONTEXT_ERR=8 INPUT_LIMITED=7 NON_CANONICAL=1 DOM=OVERGENERALIZATION
+
+### Доминирующие причины
+- COMMERCIAL: SECTOR_BOUNDARY — модель почти не выбирает сектор COMMERCIAL (sector hits 0/20),
+  WAREHOUSE распознан, но уходит в INDUSTRIAL (3x); административное здание в каноне отсутствует.
+- INDUSTRIAL: TYPE_CONFUSION_FACTORY_CATCHALL — ENERGY_FACILITY/PRODUCTION_BUILDING/INDUSTRIAL_SITE сворачиваются в FACTORY.
+- URBAN_IMPROVEMENT: OVERGENERALIZATION_TO_PARK — модель понимает объект, но PUBLIC_SPACE/PEDESTRIAN_ZONE/EMBANKMENT по умолчанию кодирует как PARK.
+- INFRASTRUCTURE: сектор сильный, дефект — subtype (network) уходит в OBJECT_CONTEXT/APPLICATION_AREA вместо OBJECT_SUBTYPE.
+
+### Артефакты
+`scratch/decomp_errors.tsv` (78x22), `scratch/decomp_metrics.json`, `scratch/decomp_matrix.json`,
+`scratch/decomp_commercial.tsv`, `scratch/decomp_industrial.tsv`, `scratch/decomp_urban.tsv`,
+`scratch/decomp_social.tsv`, `scratch/decomp_residential.tsv`, `scratch/decomp_infrastructure.tsv`.
+
+PRODUCTION_WRITES=0, INFERENCE_RUN=NO, TRAINING_RUN=NO, DEPLOY=NO. Решение о следующем инструменте не принято.
+
+## WIP=OBJECT-TAXONOMY-GAP-REVIEW-V1
+
+STATUS=WAITING_USER_REVIEW. Read-only разбор TAXONOMY_GAP / TAXONOMY_CHANGE candidates из
+OBJECT-CLASSIFIER-ERROR-DECOMPOSITION-V1. Taxonomy/prompt не менялись; inference/training/deploy НЕ запускались.
+
+### Входы (не изменялись)
+`scratch/decomp_*.tsv`, `scratch/decomp_metrics.json`, `scratch/decomp_matrix.json`, canonical `src/services/expert_object_taxonomy.py`.
+
+### Итог по 17 кандидатам
+- DECISION_MIX: {"ALIAS": 9, "RUBRIC_REVIEW": 3, "DEFINITION_ONLY": 4, "NEW_TYPE": 1}
+- REAL_TAXONOMY_GAPS=1 (только СПО), ALIASES=9,
+  DEFINITION_ONLY=4, RUBRIC_REVIEW=3,
+  OBJECT_CONTEXT_CASES=0, INSUFFICIENT_EVIDENCE=0.
+
+### Решения
+- ADMIN_BUILDING: KEEP_EXISTING + DEFINITION_CHANGE(OFFICE label) + ALIAS; NEW_TYPE ADMIN_BUILDING НЕ предлагается. ADMIN_CASES=9,
+  OFFICE=7, SOCIAL_ADMIN=2, UNREPRESENTABLE=0
+  (RUBRIC_REVIEW: 392675, 392785 — госучреждения/органы).
+- LIBRARY: ALIAS LIBRARY -> SOCIAL/CULTURE_FACILITY; NEW_TYPE не нужен (IDS: 393023, 393054).
+- СПО: NEW_TYPE SOCIAL/COLLEGE (Колледж / техникум / СПО) (IDS: 393155; aliases: техникум, колледж, училище, СПО).
+- WAREHOUSE: COMMERCIAL/WAREHOUSE = склад/логистика как основное назначение (уже закреплено alias 'склад'). INDUSTRIAL/INDUSTRIAL_SITE (+ OBJECT_CONTEXT) для склада внутри промплощадки.
+- UTILITY/ENERGY: INFRASTRUCTURE/UTILITY_NETWORKS = линейная сеть/трасса/трубопровод/кабель (+subtypes). INDUSTRIAL/ENERGY_FACILITY = самостоятельный энергообъект (котельная, ТЭЦ, подстанция).
+
+### Переклассификация
+- INDUSTRIAL: N=14, MODEL_CONFUSION=13,
+  INPUT_LIMITED=1, TAXONOMY_GAP=0.
+- URBAN_IMPROVEMENT: N=22, MODEL_CONFUSION=15,
+  INPUT_LIMITED=6, RUBRIC_REVIEW=1,
+  TAXONOMY_GAP=0.
+
+### Артефакты
+`scratch/object_taxonomy_gap_review.tsv` (17 строк), `scratch/object_taxonomy_gap_decisions.json`
+(PER_CANDIDATE + PROPOSED_SPEC: PROPOSED_NEW_TYPES / PROPOSED_ALIASES / PROPOSED_NEW_SUBTYPES / PROPOSED_CONTEXT_VALUES / DEFINITION_CHANGES).
+
+INFERENCE_RUN=NO, PROMPT_CHANGED=NO, TAXONOMY_CHANGED=NO, TRAINING_RUN=NO, DEPLOY=NO.
+Решение о применении PROPOSED_SPEC не принято.
+
+
+## WIP=OBJECT-TAXONOMY-GAP-IMPLEMENTATION-V1
+
+STATUS=WAITING_USER_REVIEW. Реализованы только принятые решения OBJECT-TAXONOMY-GAP-REVIEW-V1
+в canonical taxonomy `src/services/expert_object_taxonomy.py`. Classifier prompt, routing, DB и
+medals/categories не менялись; inference/training/backfill/deploy НЕ запускались.
+
+### Изменения canonical taxonomy
+- SOCIAL/COLLEGE добавлен как canonical type: "Колледж / техникум (СПО)". SOCIAL теперь 12 типов.
+- Safe aliases (однозначная цель): LIBRARY -> SOCIAL/CULTURE_FACILITY;
+  TECHNICUM/VOCATIONAL_SCHOOL/SPO -> SOCIAL/COLLEGE; POLYCLINIC, DISPENSARY -> одноимённые SOCIAL типы;
+  OVERHEAD_POWER_LINE/CABLE_LINE -> INFRASTRUCTURE/UTILITY_NETWORKS/POWER_NETWORK;
+  HEATING_MAIN/HEATING_PIPELINE -> INFRASTRUCTURE/UTILITY_NETWORKS/HEATING_NETWORK.
+- Русские lexical forms (object_type slot): библиотека, колледж/техникум/училище/спо, диспансер,
+  кабельная линия/вл, тепломагистраль/теплотрасса.
+- OFFICE label уточнён: "Офис / административно-офисное здание" (boundary vs SOCIAL_ADMIN).
+- CONTEXTUAL_BOUNDARY_EXAMPLES добавлен: ADMINISTRATIVE_BUILDING, PUMPING_STATION, TREATMENT_PLANT,
+  PLAYGROUND — документированные boundary-примеры, НЕ normalizer aliases.
+- OBJECT_SEMANTIC_BOUNDARIES (17 соседних кодов) и OBJECT_VS_CONTEXT_RULES зафиксированы;
+  сетевой subtype (HEATING_NETWORK и т.д.) никогда не OBJECT_CONTEXT.
+
+### Границы (definitions only, без новых кодов)
+- COMMERCIAL/OFFICE <-> SOCIAL/SOCIAL_ADMIN; WAREHOUSE остаётся COMMERCIAL (нет INDUSTRIAL/WAREHOUSE).
+- INDUSTRIAL: FACTORY / PRODUCTION_BUILDING / INDUSTRIAL_SITE / ENERGY_FACILITY; новых типов нет.
+- UTILITY_NETWORKS = линейная сеть; MUNICIPAL_INFRASTRUCTURE = самостоятельное коммунальное сооружение;
+  ENERGY_FACILITY = самостоятельный энергообъект. URBAN: значения не менялись, definitions уточнены.
+
+### Counts / tests
+- OBJECT_SECTORS_COUNT=8, OBJECT_TYPES_COUNT=53 (+1 COLLEGE), OBJECT_SUBTYPES_COUNT=13.
+- Тесты: `tests/test_object_taxonomy_canonical.py` 55 passed; `tests/test_object_stage_service_type_axes.py` и
+  `tests/test_v3_object_mode_construction_design_routing.py` — passed. Полный pytest не запускался.
+
+### RUBRIC_REVIEW (frozen truth не переписывался)
+- 392675, 392785 (проверить SOCIAL_ADMIN vs OFFICE), 393039 (PEDESTRIAN_ZONE вероятнее STREETSCAPE).
+
+### Артефакты
+`scratch/object_taxonomy_gap_implementation.json` (решения, aliases, boundary examples, counts, тесты).
+
+INFERENCE_RUN=NO, PROMPT_CHANGED=NO, TAXONOMY_CHANGED=YES(additive), TRAINING_RUN=NO, BACKFILL_RUN=NO, DEPLOY=NO.
+
+
+## WIP=OBJECT-TAXONOMY-GAP-DEPLOY-V1
+
+STATUS=PASS. Задеплоена принятая canonical object taxonomy (OBJECT-TAXONOMY-GAP-IMPLEMENTATION-V1) на production S13.
+Prompt/inference/training/backfill/medals не затрагивались; DB migration не требовалась.
+
+### Precheck
+- Production DB из runtime `crm-streamlit` (`/opt/CRM_Streamlit/.env`): `127.0.0.1:5432/crm`, роль `crm_app` (не из SSH env).
+- Prod checkout работал на HEAD `0d40c637` (branch `CRM-V3-CATEGORY-OPPORTUNITY-CARDS-AND-MULTI-MEDAL-OUTPUT-1`).
+- Pre-deploy prod `expert_object_taxonomy.py` (LF-normalized sha256 `cd18c9b2`) **байт-идентичен** локальному `HEAD`-блоку файла — delta деплоя = только изменения этого WIP. Prod counts до деплоя: 8/52/13, `COLLEGE` отсутствовал.
+- `MIGRATION_REQUIRED=NO` (изменение — только Python-модуль taxonomy; SQL/DB не трогались).
+
+### Deploy
+- Скопирован только `src/services/expert_object_taxonomy.py` (+ `tests/test_object_taxonomy_canonical.py` для verification); связанные routing-файлы не требовались.
+- EOL сохранён как на хосте (CRLF); LF-normalized sha256 совпал 1:1: `fd34f6ae…` (модуль), `9152b188…` (тест).
+- Бэкап pre-deploy версии: `/opt/CRM_Streamlit/.otgi_backup_20261001_071910/` (pre-deploy sha256 `9601d4af…`). Staging-каталог удалён. `scratch/`, `docs/` и чужие dirty-файлы на S13 не переносились.
+
+### Restart / health
+- Перезапущен только `crm-streamlit`: `active`, PID `2839803`→`726046`, `NRestarts=0`, ActiveEnterTimestamp `2026-10-01 07:19:27 MSK`.
+- `HTTP :8504=200`, `/_stcore/health=200`, journal `-p err` пуст, traceback=0.
+- Не трогались: `ollama` (active, ts 2026-09-29), `tender-docs-daemon-open` (active, ts 2026-09-30), `crm-ai-assessment-runner` / `tender-docs-daemon-awarded` (inactive oneshot/idle). Mtime `object_mode_routing.py` и `first_pass/resolver.py` остались от деплоя 2026-09-29 16:04.
+
+### Production canonical smoke (интерпретатор сервиса python3.13, без inference)
+- `OBJECT_SECTORS_COUNT=8`, `OBJECT_TYPES_COUNT=53`, `OBJECT_SUBTYPES_COUNT=13`; `SOCIAL_COUNT=12`.
+- `COLLEGE` присутствует; `SOCIAL` types: …, DIPENSARY, COLLEGE, UNIVERSITY, ….
+- Safe aliases 18/18: `LIBRARY→SOCIAL/CULTURE_FACILITY`, `POLYCLINIC`, `DISPENSARY`, `TECHNICUM`/`VOCATIONAL_SCHOOL`/`SPO`/колледж/техникум/спо→`SOCIAL/COLLEGE`, `CABLE_LINE`/`OVERHEAD_POWER_LINE`/кабельная линия→`UTILITY_NETWORKS/POWER_NETWORK`, `HEATING_MAIN`/`HEATING_PIPELINE`/тепломагистраль/теплотрасса→`UTILITY_NETWORKS/HEATING_NETWORK`.
+- Negative boundary 7/7: `ADMINISTRATIVE_BUILDING`, `PUMPING_STATION`, `TREATMENT_PLANT`, `PLAYGROUND_TERM` (и RU/en-формы) **не** нормализуются молча (None/None).
+- `CONTEXTUAL_BOUNDARY_EXAMPLES` (4 ключа), `OBJECT_SEMANTIC_BOUNDARIES` (17), `OBJECT_VS_CONTEXT_RULES` (4) доступны; boundary-definitions 16/16; `HEATING_NETWORK` никогда не OBJECT_CONTEXT; `NET_SUBTYPES` 6/6; direct supply → `{N/A,N/A,N/A}`; `TRANSPORT_INFRASTRUCTURE`/`UTILITY_INFRASTRUCTURE` секторами не являются.
+
+### Tests
+- На S13 (`.venv313`): `test_object_taxonomy_canonical.py` — **55 passed**; вместе с `test_object_stage_service_type_axes.py` и `test_v3_object_mode_construction_design_routing.py` — **89 passed, 2 failed**.
+- 2 падения — **pre-existing stale test artifact**, не связан с деплоем: prod-версия `test_v3_object_mode_construction_design_routing.py` = закоммиченный локальный `HEAD` (sha `02cfaffa`), который ожидает legacy `SOCIAL_INFRASTRUCTURE`, тогда как prod-рантайм (routing-модуль, задеплоенный ранее 2026-09-29) уже отдаёт canonical `SOCIAL`. Подтверждено: PRE_DEPLOY-копия taxonomy (backup) тоже даёт `SOCIAL_INFRASTRUCTURE→SOCIAL`, т.е. эти тесты падали и до деплоя. Локальная рабочая (незакоммиченная) версия этого теста проходит; она не переносилась (чужой dirty-файл вне scope).
+
+### Acceptance
+`CODE_DEPLOYED=YES`, `DEPLOYED_SHA(LF)=fd34f6ae…`, `MIGRATION_REQUIRED=NO`, `CRM_RESTARTED=YES`, `CRM_ACTIVE=active`, `HTTP_8504=200`, `HEALTH=200`, `EXCEPTIONS=0`, `OBJECT_SECTORS_COUNT=8`, `OBJECT_TYPES_COUNT=53`, `OBJECT_SUBTYPES_COUNT=13`, `COLLEGE_AVAILABLE=YES`, `SAFE_ALIASES_AVAILABLE=YES`, `CONTEXTUAL_TERMS_NOT_HARDCODED=YES`, `BACKFILL_RUN=NO`, `INFERENCE_RUN=NO`, `PROMPT_CHANGED=NO`, `TRAINING_RUN=NO`.
+
+
+## WIP=OBJECT-PRODUCT-APPLICABILITY-DISCOVERY-V1
+- Цель: из реальных OKPD 41.*/42.* выявить повторяющиеся canonical объекты и построить предварительную матрицу OBJECT → PRODUCT_FAMILY → PRODUCT_TYPE → VARIANT. Read-only, без inference/Qwen.
+- Данные (S13 crm DB, read-only): OKPD 41/42 = 74 952; evidence-pool ≈ 94 046; mode-split OBJECT=43 763 / AMBIGUOUS=27 581 / DIRECT=3 055 / SERVICE_NO_OBJECT=553.
+- Артефакты: `scratch/object_product_applicability.tsv` (66 связей), `object_product_summary.tsv`, `product_object_summary.tsv`, `object_frequency.tsv`, `object_product_applicability_meta.json`.
+- 4 семейства: LIGHTING(24), COMPOSITES(13), BARRIER_AND_RAILING_SYSTEMS(12), DRAINAGE(17). YES=44/CONDITIONAL=14/NO=2/UNKNOWN=6. Правило: 0 подтверждающих → UNKNOWN.
+- Caveat: атрибуция — детерминированный regex по title+OKPD, не per-case semantic labeling. OBJECT≠medal. `PRODUCTION_WRITES=0`.
+
+## WIP=PRODUCT-TAXONOMY-APPLICABILITY-REVIEW-V1
+### Scope
+- Цель: превратить результаты discovery в чистую спецификацию OBJECT → PRODUCT_FAMILY → PRODUCT_TYPE → MATERIAL → VARIANT → APPLICABILITY и проверить 66 связей на реальных примерах. Spec-only, без deploy/train/medals/Qwen.
+- Вход: 5 discovery-артефактов (не менялись) + evidence-pool для выборки спорных случаев.
+
+### Product types (28 → review)
+- KEEP_AS_PRODUCT_TYPE=16, RENAME=2 (`URBAN_LIGHTING→OTHER_LIGHTING`, `STREET_RAILING→TERRITORY_FENCE`), MOVE_TO_VARIANT=4 (`BRIDGE_BARRIER→ROAD_BARRIER`, `BRIDGE_RAILING→PEDESTRIAN_RAILING`, `ROAD_DRAINAGE`/`BRIDGE_DRAINAGE`→`DRAINAGE_TRAY` приложение), MOVE_TO_MATERIAL=3 (`COMPOSITE_RAILING`/`COMPOSITE_DRAINAGE_TRAY`/`COMPOSITE_PIPE`; COMPOSITE = MATERIAL, не продукт), MERGE=2 (`LINEAR_DRAINAGE`→`DRAINAGE_TRAY`, `DRAINAGE_WELL`→`STORM_WATER_INLET`), SPLIT=0, DROP_AS_FALSE_SIGNAL=1 (`DRAINAGE_CHANNEL`). Новый base type: `PIPE`.
+- `LIGHTING_FIXTURE`: MATERIAL=LED переведён в ось VARIANT (LED = технология, не материал).
+
+### Link review (66)
+- KEEP_YES=33, UPGRADE=2, KEEP_CONDITIONAL=3, KEEP_NO=2, KEEP_UNKNOWN=6, DOWNGRADE=13, REMOVE_FALSE_POSITIVE=7.
+- Итог: YES=35, CONDITIONAL=13, NO=2, UNKNOWN=9, REMOVED=7.
+- Подтверждённые дефекты discovery-regex (подстроки): `просвещения→освещение`, `отмостки→мост`, `композиторов/композиция/Композитора→композит`, `канализации→канал`, `вл`/`Вл.` (адрес/имя), `Набережно-челнинский→набережн`, `ЛЭП опора→опора освещения`, `энергосбережение→энерго`.
+
+### High-frequency object pattern quality (6 pattern, по 20 примеров)
+- FP-rate: LANDSCAPING 0.15, SOCIAL_CARE 0.85 (жильё детям-сиротам = DIRECT/RESIDENTIAL), STREET 0.30 (адресные подстроки), COURTYARD 0.05, PLAYGROUND 0.05, ENERGY_FACILITY 0.40 (котельная как источник сети). Средневзвешенный FP-rate = 0.30 (36/120).
+- DIRECT sanity: DIRECT-паттерн (покупка квартир/жилья) → candidate products = EMPTY; DIRECT_WITH_PRODUCT_CANDIDATES=0.
+
+### Artifacts
+- `scratch/product_taxonomy_review.tsv`, `scratch/object_product_link_review.tsv`, `scratch/object_pattern_quality.tsv`, `scratch/product_taxonomy_proposal.json`, `scratch/object_product_matrix_proposal.tsv` (все LF, без BOM).
+
+### Acceptance
+`PRODUCT_TYPES_INPUT=28`, `PRODUCT_TYPES_KEEP=16`, `LINKS_REVIEWED=66`, `YES=35`, `CONDITIONAL=13`, `NO=2`, `UNKNOWN=9`, `REMOVED_FALSE_POSITIVE=7`, `DIRECT_WITH_PRODUCT_CANDIDATES=0`, `INFERENCE_RUN=NO`, `TRAINING_RUN=NO`, `PRODUCTION_WRITES=0`, `CATEGORIES_CHANGED=NO`, `STATUS=WAITING_USER_REVIEW`.
+
+## WIP=PRODUCT-ONTOLOGY-CONTRACT-V1
+### Scope
+- Цель: зафиксировать семантический контракт продуктовой онтологии (PRODUCT_FAMILY/PRODUCT_TYPE/APPLICATION/MATERIAL/VARIANT/TECHNOLOGY) и снять оставшиеся неоднозначности ДО реализации. Spec-only: без deploy/Qwen/train/medals/categories.
+- Вход (read-only): discovery-артефакты + review-артефакты (`product_taxonomy_review.tsv`, `object_product_link_review.tsv`, `product_taxonomy_proposal.json`, `object_product_matrix_proposal.tsv`).
+
+### Frozen axes
+- PRODUCT_FAMILY=5: `LIGHTING`, `BARRIER_RAILING`, `DRAINAGE`, `PIPES`, `GRATING_AND_DECKING`. Семейство `COMPOSITES` распущено: COMPOSITE = MATERIAL, не продукт и не family.
+- PRODUCT_TYPE=12: `LIGHTING_FIXTURE`, `LIGHTING_POLE`, `LIGHTING_BRACKET`, `LIGHTING_POLE_BASE_PROTECTOR`, `ROAD_BARRIER`, `RAILING`, `TERRITORY_FENCE`, `DRAINAGE_TRAY`, `STORM_WATER_INLET`, `DRAINAGE_PUMP`, `PIPE`, `GRATING`.
+- APPLICATION=16 (ROAD/STREET/BRIDGE/TUNNEL/PARK/SQUARE/COURTYARD/PLAYGROUND/PARKING/EMBANKMENT/PEDESTRIAN_ZONE/FACADE/INDUSTRIAL/TERRITORY/UTILITY_NETWORK/OTHER_URBAN): объектно-типизированные «системы освещения» стали APPLICATION, а не product type.
+- MATERIAL: CONFIRMED=4 (`METAL`, `CONCRETE`, `COMPOSITE`, `FIBERGLASS`); RESERVED_UNCONFIRMED=5 (`POLYMER`, `POLYMER_CONCRETE`, `POLYMER_SAND`, `WOOD`, `WOOD_POLYMER`). Для лотков подтверждены только CONCRETE и METAL.
+- VARIANT=2 (`LINEAR`, `WELL`). TECHNOLOGY: ось предусмотрена, CONFIRMED=0; `LED` = reserved candidate, словарь не расширяется (evidence недостаточно).
+
+### Migrations (28 old discovery types)
+- MOVE_TO_APPLICATION=12 (8 `*_LIGHTING` → `LIGHTING_FIXTURE`+APPLICATION; `BRIDGE_BARRIER`→`ROAD_BARRIER`; `BRIDGE_RAILING`→`RAILING`; `ROAD_DRAINAGE`/`BRIDGE_DRAINAGE`→`DRAINAGE_TRAY`).
+- MOVE_TO_MATERIAL=3 (`COMPOSITE_RAILING`/`COMPOSITE_DRAINAGE_TRAY`/`COMPOSITE_PIPE`), MOVE_TO_VARIANT=2 (`LINEAR_DRAINAGE`→LINEAR, `DRAINAGE_WELL`→WELL), MOVE_TO_TECHNOLOGY=0.
+- RENAME=2 (`PEDESTRIAN_RAILING`→`RAILING`, `STREET_RAILING`→`TERRITORY_FENCE`), KEEP_AS_PRODUCT_TYPE=8, DROP_AS_FALSE_SIGNAL=1 (`DRAINAGE_CHANNEL`), MERGED=0.
+- NEW base types: `PIPE` (композит/стеклопластик; genuine 387970 ГВС) и `GRATING` (настилы/решётки; 318300 композитный настил, 22573/56282 деревянный).
+
+### Unresolved (10)
+- KEEP_UNKNOWN=9 (BRIDGE↔LIGHTING_POLE, BRIDGE_LIGHTING, PARKING↔LIGHTING_POLE, BRIDGE↔LIGHTING_POLE_BASE_PROTECTOR, TUNNEL↔ROAD_BARRIER, BRIDGE/TUNNEL↔RAILING(COMPOSITE), BRIDGE↔DRAINAGE_TRAY(COMPOSITE), SEWER↔PIPE(FIBERGLASS)), CONDITIONAL=1 (BRIDGE↔GRATING). UNKNOWN принят как конечный результат review.
+
+### Architecture rules
+- Regex/substring discovery = `FIND_CANDIDATE` только. Никогда не CONFIRM_PRODUCT / CONFIRM_OBJECT / SET_MEDAL.
+- Запрещены как детерминированный object prior (до отдельного исправления): `SOCIAL_CARE` FP=0.85, `ENERGY_FACILITY` FP=0.40, `STREET` FP=0.30. В этом WIP не чинятся.
+- Инвариант DIRECT: `PROCUREMENT_MODE=DIRECT` → генерация object-product candidates OFF.
+- OBJECT → candidate products → document evidence → confirmed opportunity → medal (нет OBJECT → MEDAL напрямую).
+
+### Artifacts
+- `scratch/product_ontology_contract.tsv`, `scratch/product_ontology_values.json`, `scratch/product_ontology_migrations.tsv`, `scratch/product_ontology_unresolved.tsv` (все LF, без BOM).
+
+### Acceptance
+`INPUT_PRODUCT_TYPES=28`, `PROPOSED_BEFORE_REVIEW=19`, `CANONICAL_PRODUCT_FAMILIES=5`, `CANONICAL_PRODUCT_TYPES=12`, `APPLICATION_VALUES=16`, `MATERIAL_VALUES=4`, `VARIANT_VALUES=2`, `TECHNOLOGY_VALUES=0`, `MOVED_TYPE_TO_APPLICATION=12`, `MOVED_TYPE_TO_MATERIAL=3`, `MOVED_TYPE_TO_VARIANT=2`, `MOVED_TYPE_TO_TECHNOLOGY=0`, `MERGED_TYPES=0`, `DROPPED_TYPES=1`, `UNRESOLVED_LINKS=10`, `REGEX_AUTHORITY=NO`, `DIRECT_PRODUCT_GENERATION=OFF`, `INFERENCE_RUN=NO`, `TRAINING_RUN=NO`, `PRODUCTION_WRITES=0`, `CATEGORIES_CHANGED=NO`, `DEPLOY=NO`, `STATUS=WAITING_USER_REVIEW`.
+
+## WIP=PRODUCT-ONTOLOGY-CANONICAL-IMPLEMENTATION-V1
+### Scope
+- Цель: реализовать принятый PRODUCT-ONTOLOGY-CONTRACT-V1 одним canonical machine-readable справочником. Без candidate generation, medals, crm_product_categories, Qwen, train, deploy, production writes.
+- Precheck: отдельного product-ontology authority в коде не было. Существующие модули — это другой слой и не заменялись: `expert_object_taxonomy.py` (OBJECT-оси), `crm_product_categories` + `product_subcategory_seed_data` / `product_subcategories_service` (коммерческие категории), `commercial_taxonomy_registry` (категорийный semantic layer).
+
+### Authority
+- Создан один модуль: `src/services/product_ontology.py` (единственный источник product-оси; второй enum не создавался).
+- `COMPOSITES` как семейство отсутствует; COMPOSITE существует только в MATERIAL. Product type содержит ровно одну family, невозможные пары отвергаются валидатором.
+- Ось TECHNOLOGY предусмотрена, но словарь пуст: `LED` — reserved candidate, в канонические значения не добавлен.
+
+### Counts / migrations
+- families=5, types=12, applications=16, materials=4 (CONFIRMED), variants=2, technology=0.
+- Легиси/discovery: 28 значений, mapping строго по `scratch/product_ontology_migrations.tsv`: MOVE_TO_APPLICATION=12, MOVE_TO_MATERIAL=3, MOVE_TO_VARIANT=2, KEEP_AS_PRODUCT_TYPE=8, RENAME=2, DROP_AS_FALSE_SIGNAL=1. `migrate_legacy_product()` возвращает канонические оси; dropped-значение осей не имеет.
+- UNRESOLVED_LINKS=10 не разрешались; `APPLICABILITY=UNKNOWN` — валидное состояние.
+
+### Invariants
+- COMPOSITE decomposition: `COMPOSITE_RAILING`→`RAILING`+COMPOSITE, `COMPOSITE_DRAINAGE_TRAY`→`DRAINAGE_TRAY`+COMPOSITE, `COMPOSITE_PIPE`→`PIPE`+(COMPOSITE|FIBERGLASS).
+- LIGHTING decomposition: 8 `*_LIGHTING` → `LIGHTING_FIXTURE` + APPLICATION, не product type.
+- BARRIER/RAILING: BRIDGE/ROAD → APPLICATION; RAILING ≠ `BRIDGE_RAILING`/`PEDESTRIAN_RAILING`.
+- DRAINAGE: product vs application (`ROAD_DRAINAGE`/`BRIDGE_DRAINAGE`) vs variant (`LINEAR`/`WELL`) не смешиваются.
+- DIRECT: `product_candidate_generation_allowed("DIRECT") is False`.
+- Regex = `FIND_CANDIDATE_ONLY`; `SOCIAL_CARE`/`ENERGY_FACILITY`/`STREET` зафиксированы как запрещённые object prior.
+
+### Tests
+- `tests/test_product_ontology_canonical.py`: 29 passed (membership, vocab sizes, technology empty, 28 migrations, composite/lighting/drainage decomposition, invalid pairs, UNKNOWN, DIRECT, projection examples, слой отделён от категорий).
+- Regression sanity: `tests/test_object_taxonomy_canonical.py` 55 passed (не менялся). Полный pytest не запускался.
+
+### Artifacts
+- `src/services/product_ontology.py`, `tests/test_product_ontology_canonical.py`, `scratch/product_ontology_implementation.json` (LF, без BOM). Старые contract-артефакты не менялись.
+
+### Acceptance
+`PRODUCT_FAMILIES_COUNT=5`, `PRODUCT_TYPES_COUNT=12`, `APPLICATION_VALUES_COUNT=16`, `MATERIAL_VALUES_COUNT=4`, `VARIANT_VALUES_COUNT=2`, `TECHNOLOGY_VALUES_COUNT=0`, `DISCOVERY_VALUES_MIGRATED=28/28`, `UNRESOLVED_LINKS=10`, `UNKNOWN_SUPPORTED=YES`, `DIRECT_PRODUCT_GENERATION=OFF`, `CRM_CATEGORIES_CHANGED=NO`, `PRODUCTION_WRITES=0`, `INFERENCE_RUN=NO`, `TRAINING_RUN=NO`, `DEPLOY=NO`, `STATUS=WAITING_USER_REVIEW`.
+
+---
+
+## HISTORICAL-PRODUCT-CANDIDATE-BACKTEST-V1 (read-only backtest)
+
+### Scope
+Сравнение старого production-контура (category queue / downloaded documents / matched terms / findings)
+с новым первым слоем `PROCUREMENT_MODE -> OBJECT -> PRODUCT CANDIDATES`
+(`src/services/product_ontology.py`, 5 families / 12 types / 16 applications / 4 materials / 2 variants / 0 technology)
+и proposal-матрицей `scratch/object_product_matrix_proposal.tsv` (66 связей, UNRESOLVED_LINKS=10 как UNKNOWN).
+Cohort 300 из 2465 (pool = старый сигнал ∩ скачанные документы ∩ ОКПД 41/42/43), приоритет: старые CONFIRMED findings, DIRECT, SERVICE, разные object types.
+
+### Источники (только существующие, без новых скачиваний)
+- `OLD_QUEUE_SOURCE` = DOC `document_processing_queue` (`S13_V4_EXHAUSTIVE_CONTEXT`); `category_codes` пусты во всей БД, поэтому операционный old-signal = категории `document_match_details`.
+- `DOCUMENT_SOURCE` = DOC `document_files` / `document_matches` (имена файлов).
+- `ANALYSIS_SOURCE` = DOC `document_evidence` + `document_match_details` (реальные старые попадания по терминам).
+- `OLD_FINDING_SOURCE` = CRM `crm_v3_product_findings` (23 cohort proc), `crm_procurement_category_opportunities`.
+- `OLD_NOT_FOUND_SOURCE` = derived: `document_match_details` без `CONFIRMED`.
+
+### Метрики
+- Cohort: OBJECT=242, DIRECT=25, SERVICE_NO_OBJECT=21, AMBIGUOUS=12; OBJECT_SOURCE: HIGH_CONFIDENCE_RULE=282, UNRESOLVED=18.
+- Old: SEARCH_ATTEMPTS=1503, FOUND=57, NOT_FOUND=1446, HIT_RATE=0.0379; DIRECT_OLD_SEARCH_ATTEMPTS=111.
+- New: CANDIDATES=401 (9 различных canonical product types), CONFIRMED=16, NOT_CONFIRMED=364, UNKNOWN_APPLICABILITY=79, UNCHECKABLE=21.
+- Comparison: CONFIRMED_BOTH=16, OLD_MISSED_OPPORTUNITIES=0, OLD_WASTED_SEARCHES=261, CURRENT_MATRIX_GAPS=189 (из них OLD_AND_NEW_MISSED=89, COMPOSITE_ONLY evidence=52).
+- Old zeros: TRUE_NEGATIVE=168, OTHER_PRODUCT_WAS_PRESENT=63, BAD_OLD_SEARCH_TERMS=24, INSUFFICIENT_DOCS=16, WRONG_OLD_CATEGORY=2.
+- DIRECT_WITH_NEW_CANDIDATES=0 (invariant подтверждён), DIRECT↔WATERPROOFING и т.п. не порождают кандидатов.
+
+### Ограничение (важно)
+Corpus существующих доказательств частично самореферентный: `matched_term` существует только там, где старый pipeline запускал категорию.
+Из 16 подтверждённых new-side связей все опираются на matched terms (0 — только на имена документов).
+Поэтому OLD_MISSED_OPPORTUNITY в этой выборке структурно недонаблюдаем (0) и НЕ означает отсутствие пропусков;
+основной содержательный сигнал — CURRENT_MATRIX_GAPS (189), top: PIPE=53, DRAINAGE_TRAY=35, LIGHTING_FIXTURE=32, GRATING=30, RAILING=25, STORM_WATER_INLET=7, LIGHTING_POLE=7.
+
+### Artifacts
+`scratch/historical_backtest_procurements.tsv`, `historical_old_queue.tsv`, `historical_old_vs_new.tsv`,
+`historical_missed_opportunities.tsv`, `historical_matrix_gaps.tsv`, `historical_backtest_metrics.json`
+(LF, без BOM). Матрица/ontology не менялись.
+
+### Guards
+NEW_DOWNLOADS=0, NEW_QUEUE_WRITES=0, MEDALS_ASSIGNED=0, PRODUCTION_WRITES=0, INFERENCE_RUN=NO, TRAINING_RUN=NO, DEPLOY=NO, STATUS=WAITING_USER_REVIEW.
+---
+
+## WIP=HISTORICAL-INDEPENDENT-PRODUCT-EVIDENCE-V1 (independent re-scan of frozen 300 cohort)
+
+### Scope
+Повторное исследование УЖЕ СКАЧАННЫХ исторических документов замороженного cohort (300 procurement),
+НЕЗАВИСИМО от старого pipeline `matched_term`. Цель: установить, какие canonical products реально
+присутствуют в текстах, используя продуктовую онтологию `src/services/product_ontology.py`
+(5 families / 12 types / 16 applications / 4 materials / 2 variants / 0 technology).
+Cohort НЕ расширялся, новые документы НЕ скачивались, матрица/онтология/prompt НЕ менялись, medals НЕ назначались.
+
+### Источники (только существующие)
+- `document_match_details.row_data` (JSONB): значения + `context_before` / `context_after` (несущие поля matched_term, но используемые только как OLD_REFERENCE).
+- `document_matches` / `document_files` (идентификация документа).
+- `structured_extraction_runs.source_text_snapshot` (165 структурированных текстовых снапшотов).
+- `structured_entities` (структурированные сущности спецификаций).
+Скан выполнен server-side, результат заморожен: `scratch/_ie_precise.json.gz` (568 candidates + `strong`),
+`scratch/_ie_scan.json.gz`, `scratch/_ie_matonly.json.gz`. Повторный скан не требовался.
+
+### Метод
+- Boundary-safe словарь терминов на каждый canonical PRODUCT_TYPE/MATERIAL; запрещены голые substrings.
+- Второй слой негативных контекст-гардов в `scratch/_ie_core.py`:
+  `_HARD_GUARD_RX` (совпадение -> уровень `FALSE_POSITIVE`), `_AMB_GUARD_RX` (-> `AMBIGUOUS`),
+  функции `hit_is_fp()`, `hit_is_amb()`, `name_level_review()`.
+- КРИТИЧНО: все lookahead-паттерны гардов анкорированы через `\A` (unanchored zero-width lookahead
+  матчился на сдвинутой позиции и пропускал реальные FP).
+- Гарды подключены в `build_evidence_precise` (фильтр survivors; эмитит `FALSE_POSITIVE`; выбирается лучший
+  выживший hit, а не сырой hit) и в `extra_evidence` (name/snapshot/entity path; имя-документа-only -> `AMBIGUOUS`
+  через `name_only=True`). `any_ev()` в `_ie_analyze.py` исключает `FALSE_POSITIVE`.
+- Проверка гардов на известных FP: `просвещения`, `отмостка`, `композитор`, `канализация`, `опора лэп`,
+  `энергосбережение` -> все False.
+
+### Новые определения (независимые от matched_term)
+- `OLD_MISSED_OPPORTUNITY` = old category/search НЕ покрывал продукт + независимое document evidence подтверждает
+  + новая object->product матрица содержит candidate.
+- `TRUE_MATRIX_GAP` = независимое document evidence подтверждает + `procurement_mode=OBJECT` + canonical object resolved
+  + матрица продукт НЕ содержит.
+- `OLD_WASTED_SEARCH` = old search attempted + независимое evidence отсутствует + матрица продукт НЕ предлагает.
+- `DIRECT` -> никогда не порождает embedded `TRUE_MATRIX_GAP`; встречающиеся термины помечаются `DIRECT_CONTEXT_ONLY`.
+- Regex/substring discovery = только `FIND_CANDIDATE`, НЕ authority. Уровни `FALSE_POSITIVE`/`AMBIGUOUS`/`WEAK_TERM`
+  не используются как scored evidence.
+
+### Метрики
+- Cohort: PROCUREMENTS=300, DOCUMENTS_SCANNED=1981, DOCUMENT_TABLE_ROWS_SCANNED=127341,
+  ROWS_WITH_PRODUCT_TERM=36072, STRUCTURED_TEXT_SNAPSHOTS=165.
+  MODE_EFFECTIVE: OBJECT=232, DIRECT=35 (после DIRECT_ACQUISITION_GUARD=30), SERVICE_NO_OBJECT=21, AMBIGUOUS=12.
+- Independent findings: 657; BY_LEVEL: EXACT_PRODUCT=209, AMBIGUOUS=139, FALSE_POSITIVE=150,
+  PRODUCT_PLUS_MATERIAL=49, WEAK_TERM=47, PRODUCT_PLUS_APPLICATION=42, PRODUCT_MATERIAL_APPLICATION=21.
+  BY_REVIEW_STATUS: INDEPENDENT_CONFIRMED=305, NEEDS_SEMANTIC_REVIEW=117, WEAK_CONTEXT_ONLY=47,
+  FALSE_POSITIVE=150, DIRECT_CONTEXT_ONLY=38. DISTINCT_PROCUREMENTS_WITH_EVIDENCE=132.
+- Old vs new (809 строк): TRUE_MATRIX_GAP=126, NEW_CANDIDATE_NOT_CONFIRMED=362, INSUFFICIENT_EVIDENCE=146,
+  OLD_WASTED_SEARCH=71, DIRECT_CONTEXT_ONLY=77, CONFIRMED_BOTH=14, OLD_MISSED_OPPORTUNITY=4,
+  SEMANTIC_REVIEW_REQUIRED=9. DIRECT_WITH_NEW_CANDIDATES=0 (invariant держится).
+- Reclassification 189 старых gaps: TRUE_MATRIX_GAP=77, PRODUCT_WRONG=32, SEMANTIC_REVIEW_REQUIRED=28,
+  DIRECT_NOT_APPLICABLE=37, OLD_FALSE_POSITIVE=15.
+- COMPOSITE_ONLY 52: MATERIAL_ONLY=35, COMPOSITE_MATERIAL_ONLY=13, COMPOSITE_WITH_BASE_PRODUCT=4.
+- TRUE_GAP_BY_PRODUCT_TYPE: PIPE=61, LIGHTING_FIXTURE=30, GRATING=14, LIGHTING_POLE=5,
+  DRAINAGE_TRAY=4, STORM_WATER_INLET=3, TERRITORY_FENCE=3, RAILING=2, DRAINAGE_PUMP=2,
+  LIGHTING_BRACKET=1, ROAD_BARRIER=1. MISSED_BY_PRODUCT_TYPE: ROAD_BARRIER=4.
+- BY_OBJECT: 35 distinct объектов.
+
+### Residual limitations (заявлены честно)
+- PIPE=61 TRUE_MATRIX_GAP широк по построению (route/utility/sewer/conduit pipes); матрица связывает PIPE
+  только с UTILITY_NETWORKS. Подтверждение на уровне терминов, требует object-scope суждения; не все — истинные object-scope gaps.
+- GRATING: остаточные ~10 `Щиты настила` — false positives, не полностью устранимые; заявлено.
+- `INDEPENDENT_CONFIRMED`/`LEXICAL_CONFIRMED` означает совпадение термина, НЕ коммерческую применимость;
+  финальный candidate требует boundary+semantic проверки (по архитектуре).
+- COMPOSITE_ONLY 52: MATERIAL_ONLY=35 -> base product не определяется -> не opportunity.
+- Reclassification 189 не содержит статус `INSUFFICIENT_EVIDENCE`; неопределённые разнесены по
+  `PRODUCT_WRONG`=32 / `SEMANTIC_REVIEW_REQUIRED`=28.
+
+### Artifacts
+`scratch/independent_document_product_evidence.tsv` (657x12), `historical_gap_reclassification.tsv` (189x14),
+`historical_independent_old_vs_new.tsv` (809x16), `historical_true_missed_opportunities.tsv` (4x10),
+`historical_true_matrix_gaps.tsv` (126x10), `historical_independent_metrics.json` (13 keys) — LF, без BOM.
+Добавлена колонка `CANDIDATE_GENERATED` (YES только при mode=OBJECT ∧ object resolved ∧ matrix YES/CONDITIONAL).
+
+### Guards
+NEW_DOWNLOADS=0, NEW_QUEUE_WRITES=0, QWEN_RUN=NO, MATRIX_CHANGED=NO, ONTOLOGY_CHANGED=NO,
+MEDALS_ASSIGNED=0, PRODUCTION_WRITES=0, INFERENCE_RUN=NO, TRAINING_RUN=NO, DEPLOY=NO,
+STATUS=WAITING_USER_REVIEW.
+
+---
+
+## WIP=OBJECT-PRODUCT-MATRIX-GAP-SEMANTIC-REVIEW-V1
+
+### Scope
+Семантический разбор 126 новых OBJECT->PRODUCT gaps (независимое document evidence) и решение,
+какие связи действительно должны войти в Layer 1 candidate matrix.
+Новых scan/extraction/search не запускалось; matrix/ontology/prompt не менялись; medals не назначались.
+
+### Разведение метрик (не путать)
+- `INDEPENDENT_GAP_EVIDENCE_ROWS=126` = строки `scratch/historical_true_matrix_gaps.tsv` (новые независимые gaps).
+- `ORIGINAL_GAPS_RECLASSIFIED_TRUE=77` = статус TRUE_MATRIX_GAP среди исходных 189 `historical_gap_reclassification.tsv`.
+Это разные величины; одна метрика = одно имя.
+
+### Reconciliation 657
+- По EVIDENCE_LEVEL: EXACT_PRODUCT=209, PRODUCT_PLUS_MATERIAL=49, PRODUCT_PLUS_APPLICATION=42,
+  PRODUCT_MATERIAL_APPLICATION=21, AMBIGUOUS=139, WEAK_TERM=47, FALSE_POSITIVE=150 -> сумма 657.
+- По REVIEW_STATUS: INDEPENDENT_CONFIRMED=305, NEEDS_SEMANTIC_REVIEW=117, WEAK_CONTEXT_ONLY=47,
+  FALSE_POSITIVE=150, DIRECT_CONTEXT_ONLY=38 -> сумма 657.
+
+### Метод
+Правила по PRODUCT_TYPE над MATCH_FRAGMENT/OBJECT (boundary-safe), классы:
+TRUE_OBJECT_PRODUCT_RELATION / CONTEXT_ONLY / INTERNAL_SYSTEM / WORK_METHOD_OR_COMPONENT /
+WRONG_OBJECT_SCOPE / FALSE_POSITIVE / INSUFFICIENT_CONTEXT.
+Критерии добавления (§8): procurement_mode=OBJECT; canonical OBJECT корректен; надёжное evidence;
+конструктивная связь с типом объекта; повторяемость; польза candidate для других таких закупок.
+Итог: TRUE -> YES/CONDITIONAL, AMBIGUOUS/INSUFFICIENT -> UNKNOWN, остальное -> NO.
+
+### Результаты review 126
+- TRUE_OBJECT_PRODUCT_RELATION=23, CONTEXT_ONLY=37, WORK_METHOD_OR_COMPONENT=28, INTERNAL_SYSTEM=16,
+  FALSE_POSITIVE=15, AMBIGUOUS=4, INSUFFICIENT_CONTEXT=3, WRONG_OBJECT_SCOPE=0 (сумма 126).
+- PIPE: reviewed=61, TRUE=8, not-object-level=53 (WORK=25, INTERNAL=16, CONTEXT=7, INSUFF=3, FP=2).
+  Осмысленный объектный остаток — водопропускные трубы (ROAD/BRIDGE/RAILWAY) и сети (MUNICIPAL/UTILITY).
+- LIGHTING_FIXTURE: reviewed=30, TRUE=0, CONTEXT_ONLY=26 (внутреннее освещение зданий),
+  FALSE_OR_AMBIGUOUS=4. LIGHTING_POLE: TRUE=2 (COURTYARD, APARTMENT_BUILDING, CONDITIONAL).
+  LIGHTING_BRACKET: 1 FP (розетка «Рондо»).
+- GRATING: reviewed=14, TRUE=4 (ливнеприёмная/зумпфовая решётка, резино-кордовый настил, полимерная решётка),
+  FALSE=10 («щиты настила», вентрешётка — не решётчатый настил).
+
+### Предложения (proposal, без изменения matrix)
+- MATRIX_RELATIONS_PROPOSED_ADD (YES)=2: MUNICIPAL_INFRASTRUCTURE->DRAINAGE_TRAY, ->STORM_WATER_INLET.
+- MATRIX_RELATIONS_PROPOSED_CONDITIONAL=16 (ROAD->PIPE n=4; BRIDGE/STREET/COURTYARD/RAILWAY->PIPE;
+  COURTYARD/APARTMENT_BUILDING->LIGHTING_POLE; KINDERGARTEN/PUBLIC_SPACE->DRAINAGE_TRAY;
+  RAILWAY/FACTORY/PEDESTRIAN_ZONE/MUNICIPAL->GRATING; SPORTS_FACILITY->TERRITORY_FENCE;
+  OFFICE->RAILING; UNIVERSITY->DRAINAGE_PUMP).
+- MATRIX_RELATIONS_REJECTED=96 строк; MATRIX_RELATIONS_UNRESOLVED=7 строк (5 distinct: EMBANKMENT/SOCIAL_CARE/
+  PRODUCTION_BUILDING/UNIVERSITY/AIRPORT).
+- Distinct relations proposed = 23.
+
+### Old missed opportunities
+4/4 подтверждены независимо: ROAD/ROAD_BARRIER (CRM 983, 147138 — уровень стандарта/титула;
+163859, 163862 — уровень работ), old coverage = DRAINAGE+LIGHTING (barrier не искали),
+matrix уже содержит ROAD->ROAD_BARRIER.
+
+### Artifacts
+`scratch/matrix_gap_semantic_review.tsv` (126x12), `scratch/matrix_gap_relation_proposal.tsv` (23x12),
+`scratch/matrix_gap_review_metrics.json` (11 keys) — LF, без BOM.
+
+### Guards
+MATRIX_CHANGED=NO, NEW_DOCUMENT_SCAN=NO, QWEN_RUN=NO, DOWNLOAD=NO, MEDALS_ASSIGNED=0,
+PRODUCTION_WRITES=0, STATUS=WAITING_USER_REVIEW.
+
+---
+
+## WIP OBJECT-PRODUCT-CANDIDATE-LAYER-IMPLEMENTATION-V1 (Layer 1: OBJECT -> PRODUCT candidates)
+
+Статус: реализовано, ожидает ревью пользователя. Массовой записи в БД нет, миграций нет.
+
+### Единый DISTINCT relation set
+- Источники: `object_product_matrix_proposal.tsv` (66), `matrix_gap_relation_proposal.tsv` (23),
+  `matrix_gap_semantic_review.tsv` (126 evidence rows).
+- Сформирован `scratch/object_product_matrix_distinct.tsv` — 78 distinct relations, 26 distinct objects.
+  Ключ: OBJECT_SECTOR/OBJECT_TYPE/OBJECT_SUBTYPE + PRODUCT_FAMILY/PRODUCT_TYPE/APPLICATION/MATERIAL/VARIANT.
+- BY_APPLICABILITY: YES=37, CONDITIONAL=29, UNKNOWN=10, NO=2.
+- BY_SOURCE: REVIEWED_DISCOVERY=55, SEMANTIC_REVIEW=23 (SOURCE нормализован в contract-значения).
+- EVIDENCE_ROWS_RECONCILED=126/126 (все REVIEWED). REJECTED не применялись:
+  96 NO-строк semantic review + 7 REMOVE_FALSE_POSITIVE базового ревью.
+- Применено: REVIEW_ADDITIONS_APPLIED=2 (YES), REVIEW_CONDITIONAL_APPLIED=16, UNKNOWN оставлены
+  (5 relations). Co-occurrence как основание не использовалась.
+
+### Canonical authority (один модуль)
+- `src/services/object_product_applicability.py` (446 строк; ~80 из них — встроенный TSV-реестр, runtime I/O нет).
+- Оси не дублируются: OBJECT_* -> `expert_object_taxonomy.py`, PRODUCT_* -> `product_ontology.py`.
+- `validate_matrix()` возвращает пусто: все 78 relations проходят canonical-axis валидацию
+  (family/type membership, application/material/variant, subtype, SOURCE, REASON, dedup).
+- Контракт relation: OBJECT_SECTOR/OBJECT_TYPE/OBJECT_SUBTYPE + PRODUCT_FAMILY/PRODUCT_TYPE +
+  APPLICATION/MATERIAL/VARIANT (optional) + APPLICABILITY + SOURCE + REASON.
+- CANDIDATE_MODEL_VERSION=`object_product_v1`, CANDIDATE_STATUS=`PRE_EVIDENCE`.
+
+### Gate + generator
+- `candidate_generation_enabled(mode)`: только OBJECT. DIRECT / SERVICE_NO_OBJECT / AMBIGUOUS /
+  неизвестный mode -> OFF (обязательный первый gate).
+- `resolve_object()` принимает только canonical коды; free text и legacy aliases -> None.
+  Классификацию объекта делает upstream-слой, generator не угадывает и не запускает Qwen.
+- YES/CONDITIONAL -> candidate; UNKNOWN -> только диагностика (`include_unknown=True`); NO -> никогда.
+- Dedup по canonical product axes, детерминированная сортировка.
+- Candidate != opportunity != medal: Layer 1 medals не считает, CRM categories не пишет.
+
+### Historical backtest (те же 300 закупок, без документов и Qwen)
+- NEW_CANDIDATES_OLD=401 (прошлый proposal-level матрикс: distinct FAMILY/TYPE)
+  vs NEW_CANDIDATES_LAYER1=583 (distinct canonical axes: family/type/application/material/variant).
+- PROCUREMENTS_WITH_MORE_CANDIDATES=113, PROCUREMENTS_WITH_FEWER_CANDIDATES=0 (потерь нет).
+- DIRECT_WITH_CANDIDATES=0, INVALID_OBJECT_WITH_CANDIDATES=0, REJECTED_RELATIONS_GENERATED=0,
+  UNKNOWN_PROMOTED=0, UNRESOLVED_AS_CONFIRMED=0, PIPE_OVERGENERATION=0,
+  LIGHTING_INTERNAL_OVERGENERATION=0.
+- MATRIX_RELATIONS_EXERCISED=57/78. BY_MODE: OBJECT=242, DIRECT=25, SERVICE_NO_OBJECT=21, AMBIGUOUS=12.
+
+### Guards по продуктам
+- PIPE: общий ROAD -> PIPE не создан. Приняты только объектные relations: UTILITY_NETWORKS -> PIPE (YES,
+  MATERIAL=COMPOSITE); ROAD/BRIDGE/STREET/RAILWAY/COURTYARD -> PIPE (CONDITIONAL, водопропускные);
+  EMBANKMENT -> PIPE (UNKNOWN). Внутренние инженерные системы зданий не переносятся на parent object.
+- LIGHTING_FIXTURE_TRUE_ADDITIONS=0: внутреннее освещение зданий (APARTMENT_BUILDING/SCHOOL/OFFICE/
+  KINDERGARTEN/UNIVERSITY) кандидатов не даёт. Добавлены ровно 2 conditional LIGHTING_POLE
+  (COURTYARD, APARTMENT_BUILDING).
+- TUNNEL: LIGHTING_POLE=NO -> не генерируется (проверено тестом).
+
+### Tests
+`tests/test_object_product_applicability.py` — 23 теста: DIRECT/SERVICE/AMBIGUOUS/invalid -> [],
+ROAD и BRIDGE candidate sets, TUNNEL без LIGHTING_POLE, UTILITY_NETWORKS -> PIPE, внутренние трубы
+зданий не генерируются, conditional lighting pole, UNKNOWN не промоутится, NO никогда не генерируется,
+dedup, canonical-axis validation, human projection без новых PRODUCT_TYPE.
+Прогон: 23 passed; вместе с `tests/test_object_taxonomy_canonical.py` — 78 passed. Full pytest не запускался.
+
+### Storage (SPEC ONLY, миграция не применялась)
+`crm_procurement_product_candidates`: procurement_id + object_sector/type/subtype +
+product_family/type/application/material/variant + applicability + candidate_source + candidate_version +
+is_current + created_at; UNIQUE(procurement_id, object_*, product_*, candidate_version). NO-строки не пишутся.
+
+### Отклонения
+- NEW_CANDIDATES_LAYER1 (583) > NEW_CANDIDATES_OLD (401) — разные единицы учёта (canonical product axes
+  против distinct FAMILY/TYPE), а не рост связей. RELATIONS=78 = 55 базовых + 23 semantic review.
+- Residual diagnostics builder (7 строк: 6 частично снятых CONCRETE/POLYMER + 1 пустая базовая строка)
+  на реестр не влияют; в нём только canonical relations.
+
+### Artifacts
+`scratch/object_product_matrix_distinct.tsv` (78x11), `scratch/product_candidate_layer_v1.json`,
+`scratch/product_candidate_layer_v1_metrics.json`, `scratch/product_candidate_layer_v1_backtest.tsv` (300),
+`scratch/product_candidate_layer_v1_smokes.json` — LF, без BOM.
+
+### Guards
+PRODUCTION_WRITES=0, DB_MIGRATION_APPLIED=NO, QWEN_RUN=NO, DOWNLOAD=NO, MEDALS_ASSIGNED=0,
+TRAINING_RUN=NO, DEPLOY=NO, PRODUCT_ONTOLOGY_CHANGED=NO, OBJECT_TAXONOMY_CHANGED=NO,
+STATUS=WAITING_USER_REVIEW.
+## WIP=PRODUCT-CANDIDATE-LAYER-PRODUCTION-V1
+
+### Scope
+Вывести реализованный Layer 1 (`PROCUREMENT_MODE -> CANONICAL OBJECT -> PRODUCT CANDIDATES`) в production
+и материализовать candidates только там, где mode и canonical object уже достоверно определены.
+Qwen не запускался, object не переклассифицировался, medals/downloads/train не выполнялись.
+
+### Authorities after deploy (S13, md5 совпадает с local)
+- OBJECT: `src/services/expert_object_taxonomy.py`
+- PRODUCT: `src/services/product_ontology.py`
+- OBJECT->PRODUCT: `src/services/object_product_applicability.py`
+- Materializer: `src/services/product_candidate_materializer.py`
+- Storage: `src/migrations/crm_procurement_product_candidates_1.sql`
+Параллельных registry не создавалось.
+
+### Predeploy counts (local и S13 совпадают)
+OBJECT_SECTORS=8, OBJECT_TYPES=53, OBJECT_SUBTYPES=13; PRODUCT_FAMILIES=5, PRODUCT_TYPES=12,
+APPLICATIONS=16, MATERIALS=4, VARIANTS=2, TECHNOLOGIES=0. MATRIX_RELATIONS=78
+(YES=37, CONDITIONAL=29, UNKNOWN=10, NO=2), `validate_matrix()` = 0 ошибок.
+Targeted tests на S13: 134 passed (4 модуля).
+
+### Storage migration
+`crm_procurement_product_candidates` создана аддитивно; применена дважды -> idempotent.
+Колонки: procurement_id/mode, object_*, product_*, technology, applicability, candidate_status,
+candidate_source, candidate_version, is_current, created_at, updated_at. UNIQUE `uix_cppc_identity`
+(NULLS NOT DISTINCT) по (procurement_id, candidate_version, product_*, object_*). CHECK'и: applicability,
+candidate_status='PRE_EVIDENCE', mode, technology IS NULL. Medal/opportunity колонок нет. Rows=0.
+
+### Object source policy (критично)
+Разрешены только REVIEWED / EXPERT_CONFIRMED / CANONICAL_CURRENT / DETERMINISTIC_HIGH_CONFIDENCE.
+В production единственная подходящая таблица — `crm_v3_expert_annotations` (is_current, decision_source=
+EXPERT_ANNOTATION): 20 строк, непустых 2 (`товар`, `TEST_SECTOR/TEST_TYPE`) — обе NONCANONICAL.
+Отклонены как не-truth: `procurement_ai_assessments.proposed_object_type` (model_version=qwen2.5:7b,
+free text), `crm_object_ai_classifications.object_type` (source=ai_background), `crm_procurements.object_type`
+(всё NULL), `category_object_observations/object_applicability/priority_stats` (0 непустых),
+`parking_prefunnel_objects.object_type` (`Здание`), `crm_objects_index.segment` (raw-бакеты).
+Политика НЕ ослаблена: подстановка AI/free-text = переклассификация и этим WIP запрещена.
+
+### Full-DB dry-run (read-only, 394725 закупок)
+MODE: DIRECT=3168, OBJECT=2874, SERVICE_NO_OBJECT=121, AMBIGUOUS=199, UNKNOWN=388363
+(3358 со scope-строкой UNKNOWN + 385005 без scope-строки; mode authority = `crm_procurement_scope_authority`, 9720 строк).
+CANONICAL_OBJECT_RESOLVED=0, OBJECT_MISSING=394723, OBJECT_UNRESOLVED=0, OBJECT_NONCANONICAL=2.
+ELIGIBLE_FOR_LAYER1=0. SKIP_REASONS: UNKNOWN_MODE=388363, DIRECT=3168, OBJECT_MISSING=2874,
+AMBIGUOUS_MODE=199, SERVICE_NO_OBJECT=121. Диагностика (не источник): AI free text 472/245/114.
+Вывод: канонического object layer в production фактически нет — это настоящий bottleneck.
+
+### Materialization
+INVARIANTS_PASS=true (все 8 обязательных = 0: DIRECT/SERVICE_NO_OBJECT/AMBIGUOUS/INVALID_OBJECT_WITH_CANDIDATES,
+UNKNOWN_PROMOTED, NO_PROMOTED, DUPLICATE_CANDIDATES, PIPE_OVERGENERATION).
+ELIGIBLE=0 -> INSERT не выдавался (ROWS_WRITTEN_FIRST_RUN=0; таблица 0 строк) — честный no-op вместо фиктивной записи.
+Idempotency: SECOND_RUN_NEW_ROWS=0. Механизм уникальности проверен rollback-only пробой
+(2 синтетические строки -> повторный upsert дал 0 дублей -> ROLLBACK -> 0 строк).
+
+### Coverage
+ELIGIBLE_FOR_LAYER1=0 (0.00%), PROCUREMENTS_WITH_CANDIDATES=0, TOTAL_LAYER1_CANDIDATES=0, AVG=0,
+BY_OBJECT/BY_PRODUCT_FAMILY/BY_PRODUCT_TYPE пусты, ZERO_CANDIDATE_OBJECTS=0.
+OBJECT_COVERAGE_PERCENT=0.00%; OBJECT_MISSING=394723, OBJECT_UNRESOLVED=0, OBJECT_NONCANONICAL=2.
+
+### Production samples
+43 реальные карточки (ROAD, BRIDGE, STREET, PARK, COURTYARD, PLAYGROUND, SCHOOL, APARTMENT_BUILDING,
+UTILITY_NETWORKS/WATER, UTILITY_NETWORKS/POWER, ENERGY_FACILITY, DIRECT_GOODS, квартиры OKPD 41.*):
+CANDIDATES=[] у всех. Примеры: BRIDGE id=175188 mode=OBJECT -> object_status=MISSING -> 0 candidates;
+DIRECT_GOODS id=4/5 mode=DIRECT -> 0; квартиры id=783/1212/1275 -> 0.
+Object identity в выборке демонстрационная (по title), не production classification.
+Замечание: DIRECT_GOODS + OKPD 41.* в scope authority отсутствует, поэтому DIRECT-инвариант для квартиры
+показан на реальных DIRECT_GOODS закупках, а сама квартира сейчас в UNKNOWN mode (тоже 0 candidates).
+
+### Deploy safety
+crm-streamlit active/running, NRestarts=0, старт 07:19 MSK — НЕ перезапускался: новые модули импортируются
+только друг другом и тестами, production import path отсутствует. HTTP_8504=200, /healthz=200,
+CRM ui_status=OK, journal errors (30 мин)=0, collection_errors=[]. S13/GLOBAL=WARNING — прежние алерты
+по /dev/sdb (SMART с 2026-08-13), к этому WIP не относятся. Ollama/document/S7-сервисы не трогались.
+
+### Guards
+QWEN_RUN=NO, NEW_DOWNLOADS=0, MEDALS_ASSIGNED=0 (medal history max created 2026-08-17, новых нет),
+TRAINING_RUN=NO, CRM_CATEGORIES_CHANGED=NO (15 строк, max updated 2026-08-12), FULL_DB_BACKFILL=NO,
+PRODUCTION_WRITES=0 (кроме additive DDL, не затронувшей существующие таблицы), STATUS=WAITING_USER_REVIEW.
+
+### Artifacts (LF, без BOM)
+`scratch/layer1_dryrun_report.json`, `scratch/layer1_materialize_report.json`,
+`scratch/layer1_production_samples.json`, `scratch/layer1_coverage_metrics.json`,
+`scratch/product_candidate_layer_production_report.json`; операционные скрипты
+`scratch/_l1_dryrun.py`, `scratch/_l1_materialize.py`, `scratch/_l1_samples.py`,
+`scratch/_l1_predeploy_counts.py`, `scratch/_l1_final_report.py`, `scratch/_s13_*.sh`.
+
+### Next real bottleneck
+Не product rules. Нужен mass canonical object layer (OBJECT_SECTOR/OBJECT_TYPE/OBJECT_SUBTYPE
+из разрешённых источников). Пока его нет — Layer 1 корректно выдаёт 0 candidates.
+
+## CANONICAL-OBJECT-LAYER-PRODUCTION-V1 (2026-10-01)
+
+### Goal
+Первый persisted canonical Object Layer для актуальной базы: PROCUREMENT -> PROCUREMENT_MODE -> OBJECT_SECTOR/TYPE/SUBTYPE
++ OBJECT_CONTEXT + APPLICATION_AREA, чтобы Layer 1 product candidate generator мог материализовать candidates.
+Guards: NO Qwen, NO evidence layer, NO medals, NO downloads, NO train, NO taxonomy extension, NO product-matrix change.
+
+### Authority
+`src/services/object_classification.py` (548 строк, object_canonical_v1) поверх `expert_object_taxonomy.py`
+(OBJECT_SECTORS=8, OBJECT_TYPES=53, OBJECT_SUBTYPES=13). `crm_product_categories` НЕ трогалась.
+
+### Storage
+Additive migration `src/migrations/crm_procurement_object_classifications_1.sql` ->
+таблица `crm_procurement_object_classifications` (md5 b33a93159489d1eef675f6f403a390cc). Применена на S13,
+идемпотентна (2-й apply чистый), 9 constraint'ов, 0 строк до записи. Classification_version=object_canonical_v1.
+
+### FP fixes перед materialization
+`_ENDPOINT_REF` расширен guard'ами (не считать ориентир объектом), RAILWAY-adj narrowed до railway-noun,
+добавлен `_FORMER_REF` (бывшего/бывшей/...) для AIRPORT/RAILWAY. На 1832 resolved: ровно 5 строк меняют тип,
+net-zero (AIRPORT 8->7, RAILWAY 7->3, ROAD 1053->1055, ENERGY_FACILITY 12->13, UTILITY_NETWORKS 25->26).
+
+### Dry-run / coverage
+TOTAL_PROCUREMENTS=394725; MODE: DIRECT=3168, OBJECT=2874, SERVICE_NO_OBJECT=121, AMBIGUOUS=199, UNKNOWN=388363.
+OBJECT_MODE_TOTAL=2874; RESOLVED_HIGH_CONFIDENCE=1832, RESOLVED_REVIEWED=0; OBJECT_MISSING=1037, OBJECT_CONFLICT=5.
+OBJECT_COVERAGE_PERCENT=63.74% от object-mode. OBJECT_MODE_WITHOUT_OBJECT_AFTER_RUN=1042.
+
+### Materialization
+Записаны только RESOLVED_HIGH_CONFIDENCE (source=DETERMINISTIC_HIGH_CONFIDENCE): OBJECT_ROWS_MATERIALIZED=1832.
+Idempotency: SECOND_RUN_NEW_ROWS=0. AMBIGUOUS/MISSING/CONFLICT не записывались.
+
+### Layer 1 re-run
+LAYER1_CANDIDATE_ROWS=13104; LAYER1_PROCUREMENTS_WITH_CANDIDATES=1589; AVG=8.247; второй прогон -> 0 новых строк.
+BY_PRODUCT_FAMILY: LIGHTING=4650, BARRIER_RAILING=3747, DRAINAGE=3473, PIPES=1215, GRATING_AND_DECKING=19.
+Invariants=0: DIRECT/SERVICE_NO_OBJECT/AMBIGUOUS/INVALID_OBJECT_WITH_CANDIDATES_WITH_CANDIDATES, UNKNOWN_PROMOTED,
+NO_PROMOTED, DUPLICATE_CANDIDATES, PIPE_OVERGENERATION.
+
+### §11 Quality sample (executed POST-materialization, seed 20261001)
+QUALITY_SAMPLE_N=278, QUALITY_CORRECT=266, QUALITY_WRONG=7, QUALITY_AMBIGUOUS=5,
+HIGH_CONFIDENCE_PRECISION=95.68% (strict non-error 97.48%). Artifacts: `scratch/objlayer/object_layer_quality_review.tsv`,
+`quality_review.json`. Явное отклонение от §11 (sample должен был идти ДО записи) — зафиксировано честно.
+
+WRONG (7): 41586/40091/26058 (приобретение квартиры -> APARTMENT_BUILDING вместо DIRECT/RESIDENTIAL_UNIT, §5 violation),
+1509 (RAILWAY как ориентир), 107199 (MUNICIPAL_INFRASTRUCTURE для Центра реабилитации), 177939/177971 (UNIVERSITY для общежития / внутриквартальных проездов).
+AMBIGUOUS (5): 160593, 170566, 118780, 1233, 13935.
+
+### Known defect inventory (full base)
+`scratch/objlayer/object_layer_defect_inventory.tsv`. Главный класс: DWELLING_PURCHASE_AS_OBJECT = 65 procurements
+(APARTMENT_BUILDING + 65 Layer1 candidate rows) — нарушает инвариант "приобретение квартиры -> DIRECT -> object product layer OFF".
+Также: RAILWAY_AS_BOUNDARY_REFERENCE=1, UNIVERSITY_BY_OWNER_NAME=4, SCHOOL_ARTS_AMBIGUOUS=7,
+MUNICIPAL_INFRASTRUCTURE_GENERIC=2, INTERCHANGE_VS_BRIDGE=7.
+
+### Deploy safety
+Новые модули не импортируются production-runtime (только тесты/скрипты), `crm_procurement_product_candidates`
+не читается UI -> RESTART_NOT_REQUIRED=YES. crm-streamlit active, HTTP_8504=200.
+Ollama/document workers/S7/second-pass не трогались.
+
+### Tests
+`tests/test_object_classification.py` = 72 теста (md5 5be858749500026efcb8dcabadc4cb36); targeted suite (5 файлов) = 208 passed
+локально и на S13. Full pytest НЕ запускался.
+
+### Guards / status
+QWEN_RUN=NO, NEW_DOWNLOADS=0, MEDALS_ASSIGNED=0, TRAINING_RUN=NO, PRODUCTION_WRITES=0 (кроме additive DDL и Layer 1 write
+по ранее авторизованному WIP), PRODUCT_MATRIX_CHANGED=NO, TAXONOMY_CHANGED=NO. STATUS=WAITING_USER_REVIEW.
+
+### Next real bottleneck
+OBJECT_MODE_WITHOUT_OBJECT_AFTER_RUN=1042 + mode-gate fix для dwelling purchase. Продуктовые правила не трогать:
+сначала canonical object для остатка (Qwen-классификатор / более богатый input / expert review).
+
+## WIP=DWELLING-PURCHASE-DIRECT-REMEDIATION-V1 (2026-10-01)
+
+**Доказанный business defect.** Приобретение/покупка/выкуп готовой квартиры или жилого помещения
+(не строительство/ремонт/проектирование) ошибочно классифицировалось как `OBJECT`/`APARTMENT_BUILDING`,
+и Layer 1 писал embedded-product candidates. Нарушение контракта "приобретение квартиры -> DIRECT ->
+object layer OFF" (PRODUCT-ONTOLOGY-CONTRACT-V1 §13, CANONICAL-OBJECT-LAYER-PRODUCTION-V1 §5).
+
+**§1 Affected (из defect inventory).** `scratch/objlayer/object_layer_defect_inventory.tsv`:
+DWELLING_PURCHASE_AS_OBJECT = 65 (APARTMENT_BUILDING, 65 current candidate rows) + 3 аналогичных
+RESIDENTIAL_UNIT (0 candidates) = **68**. Все 68 были `RESOLVED_HIGH_CONFIDENCE`,
+`scope_type=WORKS_WITH_EMBEDDED_PRODUCTS`, Layer1 candidates извлеклись из wrong object row.
+
+**§2 Mode rule (code).** `resolve_procurement_mode(scope_type, title=...)` делегирует в
+`resolve_procurement_mode_with_source(...) -> (mode, source)`: при acquisition-вербе + dwelling-существительном
+режим = `DIRECT`, source = `MODE_SOURCE_ACQUISITION` (=`TITLE_DWELLING_ACQUISITION`). Без `title`
+поведение прежнее (scope lookup) — backwards compatible.
+Детектор `is_dwelling_acquisition(title)` boundary-safe и aside-aware:
+верб `(приобретени|покупк|выкуп)\w*` обязан стоять ВНЕ круглых скобок (режет "...включая приобретение приборов учета"),
+dwelling-существительное `(?<![а-яёa-z])квартир\w*` или `жил(ое|ого|...)\s+помещени\w*` — в окне 130 символов ПОСЛЕ верба,
+с левой границей слова (режет "многоквартиРных", "неЖИЛОго помещения"). Строительство / ремонт / капремонт /
+проектирование жилья и закупка оборудования остаются `OBJECT`.
+
+**§3-§5 Correction policy.** `crm_procurement_object_classifications` — version-identity row
+(`uix_cpoc_procurement_version (procurement_id, classification_version)`), второй current row невозможен,
+поэтому wrong OBJECT row **исправлен на месте** (`procurement_mode=DIRECT`, `object_applicable=FALSE`,
+sector/type/subtype=`N/A`, `classification_method=MODE_DIRECT_ACQUISITION`, версия `object_canonical_v1`),
+без hard-delete; прежние значения сохранены как provenance-запись `{"remediation":...}` в `matched_terms`.
+`crm_procurement_product_candidates` поддерживает `is_current` -> candidates **инвалидированы**
+(`is_current=false`), не удалены.
+
+**§6-§7 Targeted re-run + invariants (verified on S13).** AFFECTED=68
+(=65 APARTMENT_BUILDING + 3 RESIDENTIAL_UNIT), detector TRUE=68/FALSE=0;
+`SCOPE_TYPE_BEFORE_FIX = {WORKS_WITH_EMBEDDED_PRODUCTS: 68}` -> `MODE_CHANGED_TO_DIRECT=68`
+(`DIRECT/TITLE_DWELLING_ACQUISITION`), `classify_from_title(...)` = DIRECT_NA + `validate_classification()==()` для всех 68,
+`build_candidates(DIRECT, ...)` = 0 для всех 68.
+OBJECT_ROWS_INVALIDATED(=corrected)=68, LAYER1_ROWS_INVALIDATED=65,
+CURRENT_DIRECT_NA_ROWS=68, CURRENT_LAYER1_ROWS_FOR_AFFECTED=0,
+DWELLING_PURCHASE_OBJECT_ROWS_CURRENT=0, DWELLING_PURCHASE_CANDIDATES_CURRENT=0,
+`DIRECT_WITH_CANDIDATES=0`, `direct_rows_with_object_axes=0`.
+Повторный `--apply` -> `DECISION=NO_OP_IDEMPOTENT` (scanned 1764, affected 0):
+SECOND_RUN_NEW_OBJECT_ROWS=0, SECOND_RUN_NEW_CANDIDATES=0.
+
+**§8 Regression negatives.** `tests/test_dwelling_purchase_direct.py` (10 тестов): acquisition-формулировки
+-> DIRECT; строительство МКД / капремонт МКД / ремонт жилого помещения / проектирование жилого дома ->
+OBJECT (APARTMENT_BUILDING / APARTMENT_BUILDING / RESIDENTIAL_UNIT / APARTMENT_BUILDING);
+aside- и boundary-guard'ы; "приобретение приборов учета в многоквартирных домах" и
+"приобретение нежилого помещения" -> OBJECT. На реальной базе: 65 acquisition-строк -> DIRECT/N/A,
+соседние dwelling-WORKS (ремонт/строительство/проектирование) остаются OBJECT с object rows и candidates.
+
+**Отклонения / наблюдения (требует решения пользователя, НЕ исправлялось).**
+Вне inventory обнаружен смежный класс: 4 закупки `173688, 173694, 174819, 174823` с заголовком
+"Квартира в многоквартирном жилом доме ..." (программа расселения из аварийного жилья, reestr_contract_44_fz,
+torgi, OKPD 41.20.10.110 / 41.2) — верба приобретения в заголовке нет, поэтому детектор не срабатывает:
+остаются `OBJECT`/`APARTMENT_BUILDING` c 1 candidate каждая (`LIGHTING_POLE:TERRITORY`). Класс
+семантически похож на dwelling purchase, но в scope этого WIP (68) не входил и по §1 ("не расширять выборку")
+не расширялся. Отдельно: 7 кандидатов бы отсеклись левой границей ("многоквартирных", "нежилого") — они
+корректно оставлены `OBJECT`.
+
+**Guards / status.** QWEN_RUN=NO, EVIDENCE_RUN=NO, NEW_DOWNLOADS=0, MEDALS_ASSIGNED=0
+(`crm_category_opportunity_medal_history` не трогалась), TRAINING_RUN=NO, INFERENCE_RUN=NO,
+`crm_product_categories`=15 (unchanged), PRODUCT_MATRIX_CHANGED=NO, TAXONOMY_CHANGED=NO, PRODUCTION_WRITES=0
+(кроме точечной правки 68 object rows + инвалидации 65 candidate rows по этому WIP), FILESYSTEM_BACKUP
+на S13 `.dwelling_remediation_backup/`. Deploy: md5-выверенные файлы на S13
+(`product_candidate_materializer.py` cd2722cebfc29d76775915808a8ea35b,
+`object_classification.py` 8121c7b6c60fec4667ba9f36beff9dee,
+`tests/test_dwelling_purchase_direct.py` 127925adf1d4084df1979efedef73ca0,
+`scratch/_dwelling_direct_remediate.py` 514c38d2886b8e9132c8ad13153a53f1);
+targeted suite = 218 passed (локально и на S13), full pytest НЕ запускался;
+crm-streamlit active, HTTP_8504=200, RESTART_NOT_REQUIRED=YES (модуль не читается UI);
+Ollama / document workers / S7 ingestion / second-pass не трогались.
+STATUS=WAITING_USER_REVIEW.
+
+## WIP=DWELLING-ACQUISITION-BY-SUBJECT (2026-10-01)
+
+**Статус.** Расширение DWELLING-PURCHASE-DIRECT-REMEDIATION-V1: закрыт ранее зафиксированный
+открытый класс (см. «Отклонения / наблюдения» предыдущего раздела) — 4 закупки `173688, 173694,
+174819, 174823`, у которых предмет закупки сам является готовым жильём, но acquisition-верба в
+заголовке нет. Пользователь авторизовал узкое правило `DWELLING_ACQUISITION_BY_SUBJECT`.
+
+**Правило (все условия одновременно).**
+1. OKPD = готовое жилое помещение: `41.20.10.*` (в первую очередь `41.20.10.110`).
+2. Заголовок называет ПРЕДМЕТ как готовую единицу жилья: `квартира` / `жилое помещение`.
+3. Нет признаков работ ПЕРЕД первым упоминанием жилья: строительство, реконструкция, капитальный
+   ремонт, ремонт, проектирование, благоустройство, выполнение работ, устройство, монтаж.
+4. Контекст программы (переселение / расселение / обеспечение жильём / предоставление жилого
+   помещения / приобретение в собственность / доступность жилья) усиливает DIRECT, но не обязателен
+   для 4 проверенных кейсов.
+
+Реализация: `is_dwelling_acquisition_by_subject(title, okpd_code)` в
+`src/services/product_candidate_materializer.py`, новый `MODE_SOURCE_SUBJECT_ACQUISITION`
+(`TITLE_DWELLING_SUBJECT_ACQUISITION`), порядок веток в
+`resolve_procurement_mode_with_source`: acquisition-верб -> subject -> scope lookup;
+`classify_from_title(mode, title, okpd_code=...)` пробрасывает OKPD, DIRECT-ветка
+`classify_object` пишет `classification_method=MODE_DIRECT_SUBJECT_ACQUISITION`.
+Две строгости OKPD: `41.20.10.*` (префикс) самодостаточен, грубые `41.2` / `41.20` покрывают и
+строительные работы, поэтому требуют контекста программы (условие 4 как обязательное только для
+грубого класса). Маркеры работ проверяются ТОЛЬКО в тексте до первого упоминания жилья, поэтому
+программная «болтовня» ПОСЛЕ предмета («...аварийными и подлежащими сносу или **реконструкции**»,
+«Развитие **строительства** и повышения уровня доступности жилых помещений») покупку в работы не
+переводит — это ключ для кейса 174819/174823.
+
+**§1-§3 Full-base dry-run (read-only, S13, 419764 закупки).**
+`scratch/_dwelling_subject_dryrun.py`. SUBJECT_HITS=3013 (PREFIX=2411, COARSE=602); по текущему
+состоянию: NO_ROW=2941, DIRECT=68 (уже исправленные вербовым правилом), OBJECT=4 ->
+`SUBJECT_DEFECT_ROWS=4`, `SUBJECT_HITS_WITH_CURRENT_CANDIDATES=4`,
+`DIRECT_WITH_CANDIDATES_AFTER_RULE=4`; `VERB_RULE_HITS=3490`, OKPD-классы базы:
+OTHER=413139, NONE=7, COARSE=3968, PREFIX=2650. Полный список HIT-строк выведен в отчёт (не счётчик).
+
+**Контроль точности (тот же dry-run).** Все current OBJECT-строки с OKPD `41.20.10.*` = 10:
+4 дефекта (173688, 173694) + 8 законных исключений, которые правило обязано НЕ трогать и не трогает:
+участие в долевом строительстве МКД (20680, 21039), капремонт общежития (52622, 52623),
+капремонт квартиры (71576), капремонт котельной школы (80294), реконструкция общежития (144214),
+капремонт теневых навесов детсада (152513). Итого 10 = 2 дефекта(prefix) + 8 законных;
+ещё 2 дефекта (174819, 174823) идут по грубому OKPD `41.2` и в этот фильтр не попадают.
+`RELAXED_ONLY_COUNT=936`: столько строк грубого класса отсекает контекстный гейт (условие 4) — среди
+них нет ни одной current OBJECT-строки, т.е. гейт ничего не ломает, а лишний DIRECT не создаёт.
+
+**§4-§7 Targeted remediation (--apply, только affected IDs).**
+AFFECTED_DWELLING_PURCHASES=4 (все APARTMENT_BUILDING), method=MODE_DIRECT_SUBJECT_ACQUISITION x4,
+GATE_AGREES_ALL_DIRECT=true, RERUN_ALL_DIRECT=true, CANDIDATES_REGENERATED_FROM_OBJECT_ROW=0.
+Policy та же, что в предыдущем WIP: version-identity object row исправлен НА МЕСТЕ
+(`procurement_mode=DIRECT`, `object_applicable=FALSE`, sector/type/subtype=`N/A`,
+`classification_status=DIRECT_NA`, `classification_method=MODE_DIRECT_SUBJECT_ACQUISITION`,
+версия `object_canonical_v1`), прежние значения сохранены в `matched_terms` как
+`{"remediation": "DWELLING-PURCHASE-DIRECT-REMEDIATION-V1", "previous_*": ...}`;
+Layer1 candidates ИНВАЛИДИРОВАНЫ (`is_current=false`), не удалены.
+OBJECT_ROWS_INVALIDATED(corrected)=4, LAYER1_ROWS_INVALIDATED=4, CURRENT_DIRECT_NA_ROWS=4,
+CURRENT_LAYER1_ROWS_FOR_AFFECTED=0. Backup: `.dwelling_remediation_backup/subject_4_before.json`
+(4 object rows + 4 candidate rows).
+
+**§8-§9 Независимая верификация (после apply).** OBJECT_ROWS_CURRENT=1832 (unchanged),
+OBJECT_APPLICABLE_CURRENT=1760 (было 1764), OBJECT_DIRECT_NA_CURRENT=72 (было 68),
+OBJECT_DIRECT_ACQ_CURRENT=68, OBJECT_DIRECT_SUBJECT_ACQ_CURRENT=4,
+CANDIDATE_ROWS_CURRENT=13035 (было 13039), CANDIDATE_ROWS_TOTAL=13104 (unchanged),
+CANDIDATE_ROWS_INVALIDATED=69, `DIRECT_WITH_CANDIDATES=0`, `SERVICE_WITH_CANDIDATES=0`,
+`DIRECT_ROWS_STILL_APPLICABLE=0`, affected candidates current/total = 0/1 each.
+По OKPD `41.20.10.*`: DIRECT/N/A=70 + OBJECT=8 (6 законных + 2 DDU). Повторный `--apply` ->
+`DECISION=NO_OP_IDEMPOTENT` (scanned 1760, affected 0): SECOND_RUN_NEW_OBJECT_ROWS=0,
+SECOND_RUN_NEW_CANDIDATES=0. Regression negatives (unit + targeted re-run): строительство МКД,
+капремонт МКД, ремонт жилого помещения, проектирование жилого дома, долевое строительство,
+приобретение нежилого помещения -> OBJECT; "Выполнение работ по устройству кровли квартиры" и
+"Благоустройство двора многоквартирного жилого дома" -> не DIRECT.
+
+**Guards / deploy.** QWEN_RUN=NO, EVIDENCE_RUN=NO, NEW_DOWNLOADS=0, MEDALS_ASSIGNED=0
+(`crm_category_opportunity_medal_history`: rows=2989, max(created_at)=2026-08-17 — не трогалась),
+TRAINING_RUN=NO, INFERENCE_RUN=NO, `crm_product_categories`=15 (unchanged),
+PRODUCT_MATRIX_CHANGED=NO, TAXONOMY_CHANGED=NO, PRODUCTION_WRITES=0 (кроме точечной правки
+4 object rows + инвалидации 4 candidate rows). Deploy: md5-выверенные файлы на S13
+(`product_candidate_materializer.py` 950122ae458b3a820614d08c2eb3e2e5,
+`object_classification.py` d614725629fb3c86c8a89da869324250,
+`tests/test_dwelling_purchase_direct.py` 5fcaf399ad0f066ef67126170df0d05b,
+`scratch/_dwelling_direct_remediate.py` 4409acabb937db2c1d408f45052140cb,
+`scratch/_dwelling_subject_dryrun.py` b175d488d314c7e81b06d09885d7c357);
+targeted suite = 224 passed (локально и на S13), full pytest НЕ запускался;
+crm-streamlit active, HTTP_8504=200, RESTART_NOT_REQUIRED=YES (модуль не читается UI);
+Ollama / document workers / S7 ingestion / second-pass не трогались.
+STATUS=WAITING_USER_REVIEW.
+
+## WIP=COMMERCIAL-PRIORITY-DATA-MAP-1 (2026-10-02)
+
+**Статус.** Read-only карта фактических production-полей и данных для Commercial Priority V3.
+Ничего не проектировалось, Research Priority V2 не менялся, parallel priority engine не создавался.
+`QWEN_RUN=NO`, `DB_WRITES=0`, `CODE_CHANGES=0`, `STATUS=PASS`.
+Отправные точки: `src/learning/okpd_prior/combined_v2.py`, `src/services/research_queue_priority.py`,
+`src/services/queue_repository.py`, `src/services/crm_procurements_sync.py`.
+
+**§1 S13 `crm_procurements` (430 320 строк на снимке; живой sync добавляет строки ежечасно).**
+Ключевые поля (COLUMN / TYPE / NULL_RATE):
+`id` int NOT NULL; `source_table` text 0; `source_id` int 0; `contract_number` text 0;
+`auction_name` text 0; `initial_price` numeric 0; `final_price` numeric 0.819;
+`customer` text 0.045; `delivery_region` text 0.045; `region_id` int 0.045;
+`okpd_code` text 0.000016 (7 строк без кода); `okpd_name` text 0.0004;
+`start_date` date 0.227; `end_date` date 0.097; `delivery_start_date`/`delivery_end_date` 0.819;
+`tender_link` text 0; `crm_stage` text 0; `award_status` text 0;
+`final_contract_price` numeric 0.955; `winner_name`/`winner_inn` 0.957;
+`source_awarded_table`/`source_awarded_id` 0.955; `contract_signed_at`/`execution_start_at`/
+`execution_end_at`/`award_date`/`next_award_check_at`/`awarded_match_type`/
+`commercial_window_state`/`manager_note`/`object_type`/`product_names` = 1.0 (пусты);
+`last_award_check_at` 0.9994; `crm_created_at`/`crm_updated_at`/`source_updated_at` 0;
+`match_score`/`matched_keywords`/`processing_stage`/`qualification_state`/`file_count`/
+`match_count`/`evidence_count`/`ai_assessment_status`/`ai_assessment_version` 0;
+`commercial_score` 0.995; `signal_score` 0.999; `deadline_trust` text 0.000009.
+Полей `created_at`/`updated_at` нет — только `crm_created_at`/`crm_updated_at`.
+Индексы, релевантные priority: `(crm_stage, award_status)`, `end_date DESC`, `okpd_code`.
+
+**§2 S7 (host `nyx`, БД `tender_monitor`) — source tables (schema + counts).**
+`reestr_contract_44_fz` = 301 029 строк: `contract_number`, `auction_name`, `initial_price`,
+`final_price`, `start_date`, `end_date`, `delivery_start_date`, `delivery_end_date`, `okpd_id`,
+`customer_id`, `customer`, `region_id`, `status_id`, `tender_link`, `contractor_id`,
+`trading_platform_id`, `guarantee_amount`, `warranty_size`, `delivery_address`, `created_at`, `updated_at`.
+`reestr_contract_223_fz` = 124 502 строки: та же схема, но `placer`/`placer_inn` вместо `customer`.
+Варианты: `reestr_contract_44_fz_awarded` 187 562; `223_fz_awarded` 0; `44_fz_commission_work` 3;
+`223_fz_commission_work` 13; `44_fz_completed` 194 701; `223_fz_completed` 0; `44_fz_unclear` 328 011;
+`223_fz_unclear` 14 127; `44_fz_unknown` 0; `44_fz_bad` 0; `reestr_contract_615_pp` 4 050.
+`status_id` присутствует, но NULL во всех строках обеих основных таблиц; lookup `tender_statuses`
+(4 записи: 1 Новая / 2 Работа комиссии / 3 Разыграна / 4 Плохие) содержит date-derived правила,
+а не материализованный статус. Обязательные поля подтверждены, кроме `okpd_code` — есть только `okpd_id`.
+
+**§3 OKPD authority (`tender_monitor.collection_codes_okpd`).** Поля: `id` int, `main_code` varchar,
+`sub_code` varchar, `parent_id` int, `name` varchar. Строк 2 977; узлов с `parent_id IS NULL` — 18;
+глубина дерева 1–2 (avg 1.99). Фактический climb: лист (`sub_code` = полный код, напр. `43.99.90.200`)
+→ parent → корень (`main_code` = 2-значный root, `parent_id IS NULL`). Промежуточные уровни (XX.XX/XX.XX.XX)
+в таблице не материализованы — climb = ровно один шаг.
+
+**§4 Текущее состояние S13.** `award_status`: `submission_closed_waiting_award` 364 073,
+`submission_open` 46 747, `awarded` 19 500, `commission` 3. `crm_stage`: `torgi` 410 820,
+`razygranye` 19 500, `commission` 3. Live-проверка `end_date >= current_date` = 6 299 (6 297 в `torgi`).
+Из хранимого `submission_open` реально открыты только 6 297, а 40 489 строк имеют прошедший/пустой `end_date`;
+`award_not_found` = 0, т.е. ветка reconciliation в `sync_awarded` фактически не отрабатывала.
+**Реальное поле «идут торги» = `crm_stage='torgi' AND end_date >= current_date`** (6 297);
+`award_status` — снимок на момент последнего sync, а не live-состояние.
+
+**§5 Daily flow, последние 14 дней.** `crm_created_at` непригоден как мера входящего потока: строки
+загружены пачками (28.09 = 99 726, 29.09 = 47 212, 30.09 = 39 648, 01.10 = 31 427, 02.10 = 5 941,
+остальные дни 0). Реальный вход по `start_date`: будни 1 004–1 288 новых открытий в день
+(медиана буднего дня ≈ 1 127), выходные 0–11. Закрытий по `end_date`: будни ~315–1 355 в день.
+Qwen не использовался.
+
+**§6 Price coverage.** `TOTAL_WITH_OKPD` = 430 415; `WITH_INITIAL_PRICE` = 430 422 (100% строк);
+`WITHOUT_INITIAL_PRICE` = 0; `POSITIVE_PRICE` = 404 547 (25 875 нулевых); `WITH_FINAL_PRICE` = 77 808.
+Sanity-перцентили `initial_price > 0`: P50 = 900 000, P75 = 3 276 745, P90 = 11 478 661,
+P95 = 28 426 133, P99 = 173 141 421.
+
+**§7 OKPD market coverage, rolling 365 дней** (окно `COALESCE(start_date, crm_created_at::date) >=
+current_date - 365d`): строк 247 512; `DISTINCT_FULL_OKPD` = 2 091; `DISTINCT_PARENT_L2` = 125;
+`DISTINCT_ROOT` = 14. Коды с N≥10 — 1 104; N≥30 — 715; N≥100 — 359; N≥500 — 103; N≥1000 — 45;
+кодов с единственной закупкой — 270. Т.е. медианы/перцентили статистически осмысленны для ~700
+полных кодов и ~100 родителей, а не для длинного хвоста.
+
+**§8 Существующая priority-система (runtime presence/state).**
+`ResearchPriorityModelV2` присутствует в коде и в production: S13 `data/models/research_priority_v2/`
+(`manifest.json` + `research_priority_v2_5de406d1938562f9.pkl`, model_version 2.0.0, trained_at
+2026-09-05, training_rows=112 / 26 positive / 86 negative, git_commit `f88bf0e`).
+Поля `research_prior_score`, `research_prior_percentile`, `research_prior_band`,
+`research_prior_effective_score`, `research_prior_model`, `research_prior_version`,
+`research_prior_scored_at` живут в **`document_intelligence.document_processing_queue`** (не в CRM БД).
+`MODEL_QUEUE_PRIORITY_ENABLED=1` (в `/opt/CRM_Streamlit/.env`). Проскорировано 32 665 из 34 520 строк,
+`research_prior_scored_at` = 2026-09-05 10:08 (единый batch), модель `okpd_research_hit_v2` /
+`v2_5de406d1938562f9`. Полосы: BRONZE 11 595, WOOD 11 226, SILVER 6 523, GOLD 3 321, NULL 1 855.
+Очередь: `open_active` 34 519, `awarded_recent` 1, `crm_active_hot` 0, `historical_awarded` 0;
+статусы FAILED 18 605, NO_LINKS 8 267, COMPLETED 5 421, PRE_RESEARCH_WAITING 1 991, PENDING 229,
+PROCESSING 6. `DWRR_EXISTS=YES` (`DWRRBoundedScheduler`, веса GOLD 5 / SILVER 3 / BRONZE 2 / WOOD 1),
+`WOOD_EXPLORATION_EXISTS=YES`, `POST_RESEARCH_FEATURE_COUNT=0`.
+
+**§9 Ограничения V2 (только факты).** `FEATURE_NAMES_V2` = `semantic_score`, 6 доменных сигналов
+по заголовку (`construction_prior`, `medical_risk`, `it_electronics_risk`, `furniture_risk`,
+`food_risk`, `works_signal`), `log_price` и 4 OKPD-кодирования (`okpd_root_enc`, `okpd_level2_enc`,
+`okpd_level3_enc`, `okpd_full_enc`). Итог: semantic title — YES; OKPD hierarchy — YES (target-encoding
+по уровням); absolute/log price — YES. При этом OKPD cohort median — NO; OKPD price percentile — NO;
+`ratio_to_okpd_median` — NO; parent OKPD median — NO (есть только label-encoding по OKPD, не медиана цен);
+deadline urgency — NO (датовых признаков нет вообще; aging считается от `created_at` очереди).
+`MARKET_RELATIVE_PRICE_FEATURES_EXIST=NO`, `DEADLINE_URGENCY_FEATURE_EXISTS=NO`.
+
+**§10 Final.** `S13_PROCUREMENTS=430422`; `ACTIVE_OPEN=6299` (live `end_date>=today`; 6 297 в `torgi`;
+хранимый `submission_open` = 46 747); `NEW_OPEN_PER_DAY_MEDIAN_14D≈1127` (будни, по `start_date`);
+`WITH_OKPD=430415`; `WITH_PRICE=430422` (положительных 404 547); `DISTINCT_OKPD_365D=2091`;
+`OKPD_N_GE_30=715`; `OKPD_N_GE_100=359`; `OKPD_N_GE_500=103`; `EXISTING_PRIORITY_V2=YES`;
+`DWRR_EXISTS=YES`; `WOOD_EXPLORATION_EXISTS=YES`; `QWEN_RUN=NO`; `DB_WRITES=0`; `CODE_CHANGES=0`;
+`STATUS=PASS`.
+
+**Наблюдения (не исправлялись, вне scope WIP).** `crm_procurements` занимает 39 ГБ при ~430k живых
+и 304 598 мёртвых строк; полный скан — ~13 минут. В `crm` висит backend `idle in transaction` с
+`SELECT 1` более 11 часов (пиннит xmin, мешает vacuum). `award_status` системно устарел (40 489
+«открытых» строк с прошедшим дедлайном). В S7 `status_id` не заполняется, а `tender_statuses`
+описывает date-derived правила. 223-ФЗ таблицы awarded/completed пусты (0 строк).
+
+**§11 Populations contract (POPULATION_A / B / C) — верифицировано на проде 2026-10-02.**
+
+`POPULATION_A = ACTIVE_OPEN`: `crm_stage='torgi' AND end_date IS NOT NULL AND end_date >= CURRENT_DATE`.
+Использование: direct supply priority, object opportunity priority, urgency, live medals (позже).
+`POPULATION_B = AWARDED_OBJECT_HISTORY`: `crm_stage='razygranye' OR award_status='awarded'`.
+Использование: object→product empirical priors, project/material statistics, historical product
+occurrence; **не** live direct-sales opportunity. `POPULATION_C = CLOSED_NOT_AWARDED / OLD`:
+всё остальное (`submission_closed_waiting_award` и хвост). Использование: только
+historical/background analytics, низкий приоритет, не смешивать с A и не смешивать автоматически с B.
+
+Факт на S13 (снимок 430 850 строк, таблица живая): A = 6 297; B = 19 500; C = 404 970; `A∩B = 0`;
+расхождений `crm_stage='razygranye' <> award_status='awarded'` — 0 в обе стороны. Состав C:
+`end_date` в прошлом 364 481, `end_date IS NULL` 40 569, `commission` 3.
+
+**Ловушка, которую обязательно фиксировать в коде A/C.** 40 569 строк имеют `crm_stage='torgi'`
+и пустой `end_date` (из них 40 544 помечены `award_status='submission_open'`, 25 —
+`submission_closed_waiting_award`). Они не могут быть в A (нет дедлайна → нет urgency), но при
+записи C как `NOT (crm_stage='torgi' AND end_date >= CURRENT_DATE)` SQL-семантика NULL отбрасывает
+их из обеих популяций и теряет 40 569 строк. Предикат A обязан содержать `end_date IS NOT NULL`.
+
+Срезы A: 44-ФЗ 4 845 / 223-ФЗ 1 452; urgency — P50 = 4 дня, P90 = 7 дней, ≤3 дней 2 672,
+≤7 дней 5 720, ≤14 дней 6 226, max 90. Покрытие объектным слоем: текущая object-row есть только
+у 15 из 6 297 (все `mode=OBJECT`), 6 282 без строки — разделить direct supply и object opportunity
+по `crm_procurements` пока нельзя. В research queue (`document_intelligence.document_processing_queue`)
+из A присутствуют 982 (COMPLETED 736, PENDING 223, FAILED 40, NO_LINKS 5, PROCESSING 2,
+PRE_RESEARCH_WAITING 2); полосы почти не проставлены (NULL 967, GOLD 1, SILVER 18, BRONZE 19, WOOD 3).
+
+Срезы B: `reestr_contract_44_fz_awarded` 19 496 + `reestr_contract_615_pp` 4; OKPD заполнен
+у 19 493; `initial_price > 0` у 18 107; объектный слой — `OBJECT` 1 231 + `DIRECT` 62 (1 293),
+18 207 без object-row. Read-only: `DB_WRITES=0`, `CODE_CHANGES=0`, `QWEN_RUN=NO`.
+
+## WIP=S13-DETERMINISTIC-ANOMALY-GUARD-1 (2026-10-02)
+
+**Статус.** Read-only детерминированный anomaly-слой по procurement на S13: `QWEN_RUN=NO`,
+`DB_WRITES=0`, `CODE_CHANGES=0`, `STATUS=PASS`. Реализация — один streaming-проход по
+`crm_procurements` + один read S7 awarded-реестра; все cohort-статистики считаются в памяти
+(повторных full scan нет). Артефакты: `scratch/_anomaly_s13.py`, `/tmp/anomaly_guard/summary.json`
+на S13.
+
+**§1 Derived state (431 301 строка).** ACTIVE_OPEN 6 297; CLOSED_WAITING_AWARD 364 876;
+DEADLINE_UNKNOWN 40 625; AWARDED 19 500; OTHER (commission) 3.
+
+**§2-§3 Date anomalies и peer-relative bid window.** BID_WINDOW_DAYS = `end_date - start_date`;
+cohort hierarchy: `law + FULL OKPD` → `law + L3` → `law + L2`, выбирается самый детальный уровень
+с N≥30; иначе `STAT_CREDIBILITY=LOW` и вердикт не выдаётся. Окно — rolling 365 дней
+(`start_date >= current_date - 365d`), пороги относительные: ≥P99 `BID_WINDOW_EXTREME`,
+≥P95 `BID_WINDOW_HIGH`, ≤P05 `BID_WINDOW_LOW`. Вырожденные cohort'ы (P95=0) пропускаются:
+`DEGENERATE_COHORT_SKIPS=1 483` — это почти исключительно 223-ФЗ, где `start_date`/`end_date`
+не являются окном подачи (см. ниже). DATE_ORDER_INVALID = 17 135 (223-ФЗ 17 132 / 44-ФЗ 3);
+NULL_DEADLINE = 42 018 (torgi 40 625 + awarded 1 393); START_DATE_FAR_FUTURE (>365 дней вперёд) — 0.
+
+**§4-§5 Verdicts и source mismatch.** BID_WINDOW_HIGH 6 897 (44-ФЗ 6 375 / 223-ФЗ 522);
+BID_WINDOW_EXTREME 1 977 (44-ФЗ 1 738 / 223-ФЗ 239); BID_WINDOW_LOW 728;
+STALE_TORGI (>90 дней после `end_date`, всё ещё `crm_stage='torgi'`) = 305 639
+(44-ФЗ 226 875 / 223-ФЗ 78 764). Класс state-staleness (`submission_open` при прошедшем
+`end_date`) на момент снимка = 0: lifecycle-sync WIP уже переклассифицировал эти строки.
+SOURCE_STATE_MISMATCH = 5: 1 реальный (id 163706, S13 torgi, но контракт есть в S7 awarded),
+4 — 615-ПП awarded-строки, отсутствующие в прочитанном awarded-реестре S7
+(для 615-ПП нет отдельной awarded-таблицы, coverage-ограничение, требует проверки).
+
+**§6-§7 Priority hook и примеры.** `ANOMALY_REVIEW_REQUIRED = 359 065` всего, из них
+`ANOMALY_REVIEW_REQUIRED_ACTIVE_OPEN = 720` из 6 297 — именно этот срез пригоден для будущего
+подъёма в exploration/reconciliation. Приоритеты не менялись. Примеры (по 10, кроме mismatch — их
+всего 5, и bid-high — 5) выведены в `/tmp/anomaly_guard/` и в отчёте.
+
+**§8 Performance.** `DB_FETCH_SECONDS_CRM=219.2`, `DB_FETCH_SECONDS_S7=1.1`,
+`COHORT_STATS_SECONDS=0.5`, `ANOMALY_EVAL_SECONDS=4.3`; один full scan CRM.
+
+## WIP=LIFECYCLE-SCOPE-ADMISSION-END2END-VERIFY-1 (2026-10-02)
+
+**Статус.** Read-only end-to-end проверка цепочки S7 → S13 → scope authority → admission → queue → UI.
+`QWEN_RUN=NO`, `DOCUMENT_DOWNLOADS=0`, `DB_WRITES=0`, `CODE_CHANGES=0`, **`STATUS=GAP_FOUND`**.
+Runtime authority: `RUNTIME_HEAD=0d40c637` (2026-09-14), `ADMISSION_POLICY_VERSION=BUSINESS_RESEARCH_ADMISSION_V2`,
+`SCOPE_VERSION=1.1`. Таблица `crm_procurement_scope_authority` (9 720 строк) содержит колонки
+`source_lifecycle`, `procurement_scope_type`, `scope_confidence`, `scope_method`, `scope_version`,
+`admission_state`, `admission_reason`, `admission_policy_version`, `admission_evaluated_at`.
+
+**Матрица подтверждена данными:** DIRECT_GOODS OPEN → ELIGIBLE (2 038); DIRECT_GOODS AWARDED →
+EXCLUDED / `AWARDED_DIRECT_GOODS` (1 130); WORKS_WITH_EMBEDDED_PRODUCTS OPEN → ELIGIBLE (1 101) и
+AWARDED → ELIGIBLE (1 773); DESIGN_PROJECT OPEN → ELIGIBLE (42) и AWARDED → ELIGIBLE (81);
+PURE_SERVICE / EQUIPMENT_AND_INSTALLATION / MIXED / UNKNOWN → HOLD (3 555). `source_lifecycle`
+содержит только OPEN/AWARDED — состояния WAITING_AWARD в authority нет.
+
+**Найденные GAP (не исправлялись):**
+1. `EXCLUDED_CURRENTLY_CLAIMABLE=186` — у 1 130 EXCLUDED AWARDED DIRECT_GOODS есть 186 claimable
+   queue-строк (`PRE_RESEARCH_WAITING`, lane `open_active`, band WOOD); ожидалось 0.
+2. Ни один runtime-модуль не читает `admission_state`: производитель очереди, reconciliation и
+   claim-path admission не учитывают → `PRODUCER_ELIGIBLE_GATE=NO`, `RECONCILIATION_GATE=NO`,
+   `CLAIM_GATE=NO`, `GOLD_CAN_RESURRECT_EXCLUDED=YES` (гейта нет, поэтому band не важен).
+3. UI «Разыгранные» (`src/ui/components/analytics_v2/tabs.py:179`) фильтрует только
+   `cp.crm_stage='razygranye'` без admission → `AWARDED_DIRECT_VISIBLE=1 130` (ожидалось 0),
+   `UI_AWARDED_ADMISSION_GAP=YES`. Файлов `procurement_research_admission.py`,
+   `procurement_scope_authority.py`, `admission_reconciliation.py` в runtime нет.
+4. Authority устарела: последний `admission_evaluated_at = 2026-09-07`, покрытие 9 720 из 431 301
+   (2.3%); строки с `award_status='deadline_unknown'` помечены `source_lifecycle='OPEN'`/ELIGIBLE.
+
+**Что работает:** UI «Идут торги» = `crm_stage='torgi' AND award_status='submission_open' AND
+actionable_submission` → `AWARDED_VISIBLE_IN_OPEN_UI=0`; выборка 500 старейших
+`submission_closed_waiting_award` дала `WAITING_AWARD_CURRENTLY_CLAIMABLE=0`; S7↔S13 lifecycle parity
+на 10 сэмплах = 10/10; `DIRECT_GOODS_50K_OVERRIDE_PRESENT=YES` (`queue_repository.py:267`,
+`research_queue_priority.py:76`); истории переходов нет (`crm_opportunity_stage_history` = 0 строк,
+не про procurement) → `TRANSITION_HISTORY_AVAILABLE=NO`.
+
+## WIP=ADMISSION-GATE-RUNTIME-ENFORCEMENT-1 (2026-10-03)
+
+**Статус.** `CODE_CHANGES=YES`, `DB_WRITES=CONTROLLED_RECONCILIATION_ONLY`, `QWEN_RUN=NO`,
+`DOCUMENT_DOWNLOADS_TRIGGERED_BY_WIP=0`, **`STATUS=PASS`**.
+Runtime: `RUNTIME_HEAD=0d40c637`, `RUNTIME_DIRTY=YES` (275 файлов).
+
+**§1 Один канонический contract.** Новый модуль
+`src/services/commercial_routing_v3/business_research_admission.py` — единственное место с
+матрицей `BUSINESS_RESEARCH_ADMISSION_V2` (OPEN+DIRECT/WORKS/DESIGN → ELIGIBLE;
+AWARDED+DIRECT → EXCLUDED/`AWARDED_DIRECT_GOODS`; AWARDED+WORKS/DESIGN → ELIGIBLE;
+WAITING → HOLD/`WAITING_FOR_AWARD`; иначе HOLD, fail-closed). Рантайм не переопределяет
+правила, а читает persisted decision: authority (producer, awarded UI) и
+`document_processing_queue.category_context` (claim).
+
+**§2 Authority.** Материализован только business-relevant set:
+`AUTHORITY_ACTIVE_OPEN_CURRENT=9980`, `AUTHORITY_AWARDED_CURRENT=19515`,
+`AUTHORITY_QUEUE_IDS_CURRENT=2195` (business-relevant ids=25 889; current=30 861),
+`admission_evaluated_at=2026-10-03`. WAITING не классифицируется полностью (lifecycle→HOLD).
+
+**§3-§5 Гейты.** Producer (`queue_producer._upsert_queue_task`, `factual_feeder.admit_procurement`,
+`s13_v2_queue_producer._upsert_queue_task`) пишет только при ELIGIBLE и штампует provenance
+(`admission_state/reason/policy_version/evaluated_at`, scope, lifecycle) в `category_context`.
+Reconciliation — `scripts/admission_gate_materialize.py` (claimable PENDING/PRE_RESEARCH_WAITING;
+историю COMPLETED/FAILED/NO_LINKS не трогает). Claim — `S13V2QueueRepository.claim_batch`
+требует `category_context->>'admission_state'='ELIGIBLE' AND admission_policy_version=current`
+(fail closed) в обоих путях (legacy + DWRR). `PRODUCER_ELIGIBLE_GATE=YES`,
+`RECONCILIATION_GATE=YES`, `CLAIM_GATE=YES`.
+
+**§6 UI.** `tabs.py` (`_load_razygranye`, `_stage_workset_ids('razygranye')`) требует
+`EXISTS (authority admission_state='ELIGIBLE' AND policy=current)`.
+
+**§12 Было → стало.** `EXCLUDED_CURRENTLY_CLAIMABLE` 186 → 0;
+`WAITING_AWARD_CURRENTLY_CLAIMABLE` 1250 → 0; `AWARDED_DIRECT_VISIBLE` 1130 → 0;
+`AWARDED_WORKS_VISIBLE` 6208 (>0); `AWARDED_DESIGN_VISIBLE` 615 (>0);
+`OPEN_DIRECT_FALSE_EXCLUDED=0`; `AWARDED_WORKS/DESIGN_FALSE_EXCLUDED=0`;
+`GOLD_CAN_RESURRECT_EXCLUDED=NO`; claimable-eligible=346 (OPEN DIRECT 51, AWARDED WORKS 194,
+AWARDED DESIGN 7).
+
+**§11 Targeted tests.** `tests/test_admission_gate_runtime_enforcement.py` — 13 passed
+(отдельного broad suite не запускалось).
+
+**Отклонения/наблюдения.** (1) `submission_closed_waiting_award` с будущим `end_date`
+канонический `source_lifecycle` относит к OPEN/ELIGIBLE (772 строки) — но claimable среди них 0
+и в «Идут торги» они не попадают. (2) Обнаружено 6 активных doc-worker unit'ов
+(`tender-docs-daemon`, `-open`, `-open-2`, `-open-3`, `-awarded-2`, `-computers`, `-computers-2`);
+только S13_V2-путь калймит S13-очередь. Все S13_V2-клеймеры перезапущены; после этого за 10 минут
+`NONELIGIBLE_CLAIMED=0`, `ELIGIBLE_CLAIMED=8`. (3) `-open-2/-awarded-2/-computers*` без
+`PROCESSING_BACKEND` ходят в legacy S7 и сыпят `relation document_processing_queue does not exist` —
+**pre-existing** (в логах те же ошибки 24k/8k за 2-дневное окно), вне рамок WIP; `-awarded`
+disabled/inactive. (4) `release_pre_research_queue` (shadow) перезаписывал `category_context`
+целиком, теряя admission-provenance — исправлено на merge (`|| jsonb`). (5) Резервные копии
+изменённых файлов: `/opt/CRM_Streamlit/.admission_gate_backup_20261003/`.
+
+## WIP=PROCUREMENT-CONTOUR-PRODUCTION-RECOVERY-AND-CONSOLIDATION-1 (2026-10-03) — PHASE 0
+
+**Статус PHASE 0.** S7=PASS, S13=BLOCKED → **`PHASE_0=FAIL`**, STOP до Phase 1.
+
+- **S7** (`production-nyx-2026-02-09`): HEAD `8a9e4a64`, 14 незапушенных коммитов; secret-scan
+  чист (только config/env-ссылки, без keys/dumps/archives) → push ok (`ce5b3fc..8a9e4a6`).
+  Сегодняшние fixes закоммичены и запушены: **`S7_COMMIT_TODAY=2ae4ab0`**, `S7_PUSH_STATUS=ok`
+  (`8a9e4a6..2ae4ab0`, 0/0). Файлы: `parsing_xml/xml_parser.py` (615 Contract/Procedure/Cancel
+  split + `links_documentation_615_pp` schema), `parsing_xml/okpd_parser.py`
+  (`TENDERMONITOR_CONFIG`), `file_downloader.py` (non-ZIP guard), `config.ini` (без секретов —
+  секреты в `brum.env`). Push делается только как root+wanga key
+  (`GIT_SSH_COMMAND=ssh -i /home/wanga/.ssh/id_ed25519`), т.к. `.git` принадлежит `tendermonitor`.
+- **S13** (`CRM-V3-CATEGORY-OPPORTUNITY-CARDS-AND-MULTI-MEDAL-OUTPUT-1`, HEAD `0d40c637`):
+  admission-gate закоммичен локально — **`S13_COMMIT_TODAY=2bb3285a`** (8 файлов).
+  **`S13_PUSH_STATUS=blocked`**: origin `https://github.com/...`, на S13 нет credentials
+  (`could not read Username`). `/opt/tender_documents_research` на S13 — **не** git-checkout,
+  поэтому claim-gate правка (`backends/queue_repository.py`) вне VCS.
+- **Documents:** `DOCUMENT_DOWNLOAD_MODE=DIRECT` (`PREFER_STUNNEL_PROXY=0`, нет `http(s)_proxy`),
+  `DOCUMENT_PROXY_ENV_COUNT=0`, `TLS_VERIFY=YES`
+  (`REQUESTS_CA_BUNDLE=/etc/ssl/certs/ca-certificates.crt`, `REQUESTS_VERIFY_SSL=1`,
+  drop-in `30-mincifry-ca.conf`), `REAL_DOWNLOADS_OK>0` (46 COMPLETED / 3h, 2759 download-маркеров),
+  `NEW_TLS_ERRORS=0`. `615_SCHEMA_ERRORS_NEW=0`; `BACKWARD_UNKNOWN_FOLDER_ERRORS_NEW=1/1`
+  (возможный остаток, требует проверки).
+- **Блокер:** отсутствуют S13 GitHub credentials для push. Phase 1..5 не начинались (phase gate).
+
+## WIP=PHASE0-S13-CANONICALIZE-AND-PUSH-1 (2026-10-03) — PHASE 0 CLOSED
+
+**Статус.** Блокер снят без выдачи GitHub credentials на S13. **`PHASE_0=PASS`**.
+
+- **S7:** `S7_COMMIT_TODAY=2ae4ab0`, `S7_PUSH_STATUS=ok`.
+- **S13:** `S13_LOCAL_COMMIT=2bb3285a` → amended to `61b5cbad` (портability-фикс теста,
+  дерево чистое). Перенос сделан **копированием exact production bytes**, не патчем
+  (GitHub-ветка `b83c46c5` отстаёт от S13 `0d40c637` на 11 коммитов → patch не сходится).
+- **Windows monorepo** (`~/Projects/canonical_repo`, ветка
+  `CRM-V3-CATEGORY-OPPORTUNITY-CARDS-AND-MULTI-MEDAL-OUTPUT-1`, CRM-код в корне репо):
+  перенесены 8 admission-файлов + `tender_documents_research/document_processor/downloader.py`
+  и `backends/queue_repository.py`. **`S13_CANONICAL_COMMIT=93596ce`**, **`S13_PUSH_STATUS=ok`**
+  (`b83c46c..93596ce`).
+- **Байтовая пара (blob hash, remote vs production):**
+  `PRODUCTION_GIT_PARITY_HTTP_CLIENT=YES`, `DOWNLOADER=YES`, `QUEUE_REPOSITORY=YES`;
+  admission-файлы 8/8 YES. `tabs.py` отличается только CRLF→LF нормализацией
+  (LF-normalized hash == remote blob), т.е. semantic parity YES.
+- **Remote content:** `CLAIM_GATE_IN_REMOTE=YES`, `ADMISSION_GATE_IN_REMOTE=YES`,
+  `DIRECT_DOWNLOAD_FIX_IN_REMOTE=YES`.
+- **Downloads:** `DOCUMENT_DOWNLOAD_MODE=DIRECT`, `DOCUMENT_PROXY_ENV_COUNT=0`, `TLS_VERIFY=YES`,
+  `REAL_DOWNLOADS_OK>0` (46 COMPLETED/3h, 2759 markers), `NEW_TLS_ERRORS=0`.
+- **Backward (§12):** `FIX_DEPLOY_TIMESTAMP=2026-10-03 12:57:46`; post-fix PID 3673510 →
+  `POST_FIX_UNKNOWN_FOLDER_44=0`, `POST_FIX_UNKNOWN_FOLDER_223=0` (615-backward inactive,
+  старые строки = pre-fix history).
+- **Targeted tests:** `tests/test_admission_gate_runtime_enforcement.py` — 12 passed / 1 skipped
+  (Windows) и на S13.
+- `NEW_MODULES=0`, `NEW_REPOSITORIES=0`, `NEW_SYSTEMD_UNITS=0`.
+- Примечание: секретов нет (config.ini S7 ссылается на `brum.env`; CA указывается через
+  `REQUESTS_CA_BUNDLE=/etc/ssl/certs/ca-certificates.crt` + `REQUESTS_VERIFY_SSL=1` + drop-in
+  `30-mincifry-ca.conf`, сам сертификат в Git не коммитится).
+
+## PHASE 1 — S7-ACTIVE-LOOKUP-REGRESSION-FIX (2026-10-03) — PASS
+
+**Статус.** `PHASE_1=PASS`. S7: `2ae4ab0` → **e05bef7** (pushed, 0/0).
+
+- **Defect:** `ContractRegistryLocator` при `end_date >= today` искал только
+  main+commission, а `registry_tables.lookup_order()` исключал `completed` → terminal
+  строка не находилась → повторный INSERT в main (resurrection).
+- **Fix (existing modules, NEW_MODULES=0):**
+  `database_work/registry_tables.lookup_order` → terminal-first precedence
+  COMPLETED > AWARDED > UNCLEAR > UNKNOWN > COMMISSION_WORK > MAIN (set независим от
+  end_date); `contract_registry_locator` больше не использует `is_active_tender`,
+  всегда ищет полный набор через один UNION ALL (`build_unified_pairs_sql` /
+  `build_unified_lookup_sql`); `contract_lookup_strategy` помечен как не-authority.
+  `completed` участвует в FIND, но не мутируется (parser обновляет только main/commission).
+- **Regression example (READ ONLY):** `0171200001926000919` есть в
+  `reestr_contract_44_fz_unclear` (id 562439) и исторически в `reestr_contract_44_fz`
+  (id 955886). С future end_date локатор теперь возвращает
+  `FOUND_TABLE=reestr_contract_44_fz_unclear` (не main).
+- **Targeted tests:** `tests/test_contract_identity_lookup.py` — **22/22 PASS**
+  (все 20 кейсов + порядок/precedence/независимость от end_date).
+- **Perf:** LOOKUP P50≈73ms / P95≈96ms (existing), absent 72/103ms; overhead — pre-existing
+  per-call `DatabaseManager()`, теперь 1 round-trip вместо 2–4.
+- **Deploy:** `DEPLOY_TIMESTAMP=2026-10-03 14:15:02`, перезапущены
+  `tendermonitor-eis-parser` и `-backward`; migration timer не трогался.
+- **Smoke (~6 min):** `POST_DEPLOY_NEW_MAIN_INSERTS_44=0`,
+  `POST_FIX_RESURRECTIONS_44=0`, `POST_FIX_RESURRECTIONS_223=0`,
+  `REGRESSION_CONTRACT_NEW_MAIN=0`, `PARSER_ERRORS_NEW=0`, `LOOKUP_ERRORS_NEW=0`.
+  `IDENTITY_LOOKUP_IMPLEMENTATIONS_RUNTIME=1` (parser→check_contract_in_any_table→locator;
+  recouped→find_in_fz_one_query/find_by_number).
+- Бэкап изменённых файлов: `/opt/tendermonitor/.phase1_backup_20261003/`.
+
+## PHASE 2 — S7-STATUS-MIGRATION-RECOVERY (2026-10-03) — CODE+CANARY DONE, CATCH-UP PENDING
+
+**Статус.** `PHASE_2=FAIL` (не завершён: bounded catch-up и timer cutover не выполнены).
+Код + parity + canary выполнены и запушены.
+
+- **Root cause оказался глубже, чем predicate drift:** `BACKFILL_GUARD_START`
+  подставлялся в SQL как bare identifier (`start_date < BACKFILL_GUARD_START`), что
+  Postgres трактует как column reference → COUNT/SELECT всегда падали в try/except →
+  main→commission реально НЕ работал (отсюда backlog 191k/75k).
+- **Fix (existing module, NEW_PRODUCTION_MODULES=0):** единый predicate
+  `MAIN_TO_COMMISSION_ELIGIBILITY` (COUNT=SELECT=INSERT), `commission_to_unclear_predicate(alias)`
+  для COUNT/SELECT/INSERT, guard вставлен как литерал `'2026-03-26'`.
+- **Parity (read-only):** 44 COUNT=SELECT=INSERT=191818; 223=75358; `COUNT_MINUS_SELECT=0`,
+  `SELECT_MINUS_INSERT=0`; `BACKFILL_GUARD_BLOCKED` 76727/28577; `BACKFILL_GUARD_BYPASS=0`.
+- **Tests:** `tests/test_daily_status_migration_parity.py` 8/8 PASS.
+- **Canary (bounded 100/100, temp driver NOT committed):** 44 moved=100, 223 moved=100;
+  DEST=100, SOURCE_ABSENT=100, CN_PRESERVED=100, ID_PRESERVED=100;
+  `CANARY_LINK_LOSS=0` (44: 56902→56902, 223: 2013→2013); locator for canary contract_numbers
+  никогда не возвращает main (`CANARY_LOCATOR_MAIN=0`), но часто выбирает более terminal
+  таблицу (precedence работает как задумано).
+- **Commit:** `e5913df` (push ok, `e05bef7..e5913df`, 0/0).
+- **Pending:** bounded catch-up (267k eligible), second-run idempotence, timer cutover
+  (`tendermonitor-daily-status-migration.timer` disabled, `-daily-migration.timer` enabled —
+  НЕ менялись), post counts, post-deploy node checks.
+
+## PHASE 2-CONTINUE — S7-STATUS-MIGRATION-SAFE-CATCHUP (2026-10-03) — SAFETY+CANARY2 DONE, CATCH-UP PENDING
+
+**Статус.** `PHASE_2=FAIL` (catch-up и timer cutover не выполнены). Safety-фикс + canary2 — OK.
+
+- **Backlog split (read-only, canonical identity = law+contract_number):**
+  44 raw=191718, missing_cn=0, in_commission=21, in_unknown=0, in_unclear=122, in_awarded=281,
+  in_completed=37483 → **44_TRUE_MAIN_ONLY=153831**;
+  223 raw=75258, все прочие=0 → **223_TRUE_MAIN_ONLY=75258**.
+- **Safety fix (`database_work/daily_status_migration.py`, commit `5663cf1`, push ok):**
+  `main_to_commission_predicate(fz, alias)` — единый predicate для COUNT/SELECT/INSERT с
+  canonical-identity guard `NOT EXISTS(... contract_number ...)` по commission_work/unknown/
+  unclear/awarded/completed + `contract_number IS NOT NULL`; awarded/unclear/completed переведены
+  с id-dedup на contract_number-dedup; `TABLES_44/223` дополнены ключами unknown/completed.
+  Stale MAIN-дубли terminal identities не двигаются (historical cleanup — отдельно).
+- **Parity+safety (read-only):** COUNT=SELECT=INSERT: 44=153831, 223=75258, diffs=0;
+  BACKFILL_GUARD_BYPASS=0; **STALE_MAIN_ALREADY_TERMINAL_ELIGIBLE=0/0**.
+- **Tests:** `tests/test_daily_status_migration_parity.py` — 12/12 PASS.
+- **Canary2 (TRUE_MAIN_ONLY ≤100/FZ):** 44 candidates=100, already-terminal-before=0, moved=99,
+  dest=99, source_absent=99, NEW_COLLISIONS=0, locator→commission=100; 223 moved=100, все
+  инварианты OK, NEW_COLLISIONS=0, locator→commission=100.
+- **Pending:** bounded catch-up 153831/75258 (batch_size=50, per-row commit ~20–40 мин+),
+  post counts, NEW_MULTI_STATUS delta, timer cutover, service smoke, second-run idempotence,
+  post-phase resurrections/link delta.
+
+## PHASE 2-FINAL-COMPLETE (2026-10-03) — STOPPED, FAIL (two defects)
+
+**Статус.** Catch-up запущен (PID 4058028), 44 main→commission и 44 commission→awarded/unclear
+прошли (0 ошибок на этих фазах), затем **обнаружен defect → hard stop**. `PHASE_2=FAIL`.
+
+- **Defect A (pre-existing, латентный): `migrate_to_completed` несовместим по схеме.**
+  `reestr_contract_44_fz{,_commission_work,_unclear,_awarded}` = 23 колонки, а
+  `reestr_contract_44_fz_completed` = **21** → `INSERT INTO completed SELECT * FROM source`
+  падает `INSERT has more expressions than target columns` (~11 234 ошибок, per-row catch/continue).
+  Латентно, т.к. до Phase 2 main→commission всегда возвращался раньше и эта фаза не достигалась.
+- **Defect B: новые multi-status collisions.** `NEW_MULTI_STATUS_COLLISIONS_FROM_PHASE2_44=66`
+  (ожидалось 0): дубли `contract_number` внутри MAIN (guard проверяет только OTHER tables)
+  уезжают в commission, затем расходятся в awarded/unclear → awarded+unclear по одной identity.
+- **Результат на момент stop (44):** main 305520→151805, commission 202→44, awarded 188860→195029,
+  unclear 327998→475702, completed 194701 (фаза не прошла), unknown 0;
+  `44_SAFE_ELIGIBLE_AFTER=0` (backlog дренирован), но collisions=+66.
+  223 не обрабатывался (process остановлен на 44→completed): main=129336, `223_SAFE_ELIGIBLE_AFTER=75159`.
+- **Timers:** old `tendermonitor-daily-migration.timer` = disabled; canonical = disabled (cutover НЕ делался).
+  `STATUS_MIGRATION_RUNTIME_COUNT=1`.
+- **Fixes требуются отдельным WIP (не чинил в bulk run):** (A) явный column mapping в
+  `migrate_to_completed`; (B) identity-guard против дублей в самой MAIN (dedup по contract_number
+  до перехода) / move by identity.
+
+## PHASE 2-DEFECT-A-B-FIX-AND-FINALIZE (2026-10-03) — A/B FIXED; CATCH-UP NEAR DONE, FINALIZE PENDING
+
+**Статус.** `PHASE_2=FAIL` (нужны завершение 223, post-checks, cutover, service smoke, idempotence).
+Дефекты A и B исправлены, 69 Phase2-collisions отремонтированы, catch-up идёт.
+
+- **Defect A fix:** `completed_target_columns()` + `validate_completed_sources()` (fail-fast) и
+  `INSERT INTO completed (<cols>) SELECT s.<cols> ...` — без `SELECT *`. 44: source 23 cols,
+  completed 21 (нет created_at/updated_at); 223: 23/23. `COMPLETED_SELECT_STAR_RUNTIME_COUNT=0`.
+  `_is_structural_error` → `psycopg2.ProgrammingError` re-raise (не continue тысячами).
+- **Defect B fix:** `main_to_commission_predicate` получил singleton-guard
+  (`NOT EXISTS sibling same contract_number AND id<>`). Дубли внутри MAIN → HOLD (historical).
+- **Parity/guards:** COUNT=SELECT=INSERT (44=0, 223=75129), diffs=0; `BACKFILL_GUARD_BYPASS=0`;
+  `DUPLICATE_MAIN_GUARD_BYPASS=0/0`; `OTHER_STATUS_HELD_BYPASS=0/0`.
+  44 TRUE_SINGLETON_ELIGIBLE=0 (дренирован); 223=75129. DUPLICATE_MAIN_HELD 44=481, 223=40 (rows).
+- **Tests:** 15/15 PASS (`tests/test_daily_status_migration_parity.py`).
+- **Completed canary:** 44 moved=39, ERRORS=0, DEST/SOURCE_ABSENT/CN/ID=39; 223 moved=0 (нет кандидатов).
+- **Collision repair:** Phase2-created set 44=69 → repaired 69 → **AFTER=0**; 223 0→0.
+- **Catch-up (2-й запуск, `e44fc04`):** 44 main→commission + awarded/unclear + **completed** прошли
+  (0 ошибок); 223 main→commission 63000/75129 (84%, 0 ошибок) на момент отчёта → RUNNING.
+- **Commit:** `e44fc04` (push ok, `5663cf1..e44fc04`, 0/0) — авторизованный A/B фикс.
+- **Timers:** old disabled, canonical disabled (cutover после полного PASS).
+
+## PHASE 2-FINAL-CLOSE-ONLY (2026-10-04) — CATCH-UP DONE; SERVICE SMOKE BLOCKED BY SUNDAY BACKUP
+
+**Статус.** `PHASE_2=FAIL` (не выполнен только service smoke/idempotence: canonical run делает
+полный Sunday pg_dump ~2GB при ~1.5–2 MB/s → каждая прогонка 20–40 мин).
+
+- **Catch-up завершён** (run 22:53 03-10 + добор 04-10 через канонические функции, 0 ошибок):
+  `44_TRUE_SINGLETON_MAIN_ELIGIBLE=0`, `223_TRUE_SINGLETON_MAIN_ELIGIBLE=0`.
+  DUPLICATE_MAIN_HELD 44=464, 223=40 (historical, не FAIL).
+- **Collisions:** repaired 69 (03-10) + 990 (nетто run-2) + 3 (добор) → `NEW_..._44=0`, `223=0`.
+- **Timers:** OLD `tendermonitor-daily-migration.timer` = **disabled**;
+  `tendermonitor-daily-status-migration.timer` = **enabled+active** (cutover выполнен);
+  unit ExecStart = `python3 -m database_work.daily_status_migration`.
+- **Service run #1:** запущен таймером (09:45:53) → сейчас в Sunday-бэкапе (832MB/≈2GB, 10 мин).
+- **Осталось:** дождаться `SERVICE_RESULT=success`, повторить service (idempotence),
+  `POST_PHASE2_RESURRECTIONS=0/0`, link delta, финальные counts.
+- Commit `e44fc04`; `CODE_CHANGES_AFTER_e44fc04=0`.
+
+## PHASE 2 — CLOSED: `PHASE_2=PASS` (2026-10-04)
+
+- **service #1** (`tendermonitor-daily-status-migration.service`, 09:45:53→10:14:05):
+  `RESULT=success`, `ExecMainStatus=0`, `NEW_MIGRATION_ERRORS=0`, Sunday backup создан (2.33 GB);
+  migrations 0/0 (уже дренировано).
+- **idempotence run** (canonical functions без `create_backup`): все переходы 0 →
+  `SECOND_RUN_DUPLICATE_TRANSITIONS=0`.
+- **final deltas:** `NEW_MULTI_STATUS_COLLISIONS_FROM_PHASE2_44=0`, `223=0`;
+  `POST_PHASE2_RESURRECTIONS_44=0`, `223=0`;
+  `NEW_UNRESOLVABLE_LINKS_CREATED_BY_PHASE2_44=0`, `223=0` (Phase 2 не менял link-таблицы;
+  resolution по contract_number сохранён).
+- **backlog:** `44_TRUE_SINGLETON_MAIN_ELIGIBLE_AFTER=0`, `223_...=0`.
+- **timers:** OLD disabled; CANONICAL enabled+active, NEXT=`Mon 2026-10-05 00:00:19 MSK`;
+  `STATUS_MIGRATION_RUNTIME_COUNT=1`.
+- **git:** `S7_HEAD=REMOTE_HEAD=DEPLOYED_COMMIT=e44fc04`, `CODE_CHANGES_AFTER_e44fc04=0`.
+- Parser: forward active, backward active; 615-backward inactive (штатно).
+- Temporary runner (`_drain.py`/`_idem.py`/`_final*.py`) — одноразовые в `/tmp`, не в Git.
+
+## PHASE 3 — S7→S13 CANONICAL COMMERCIAL PROJECTION (2026-10-04) — RECON DONE, IMPL PENDING
+
+**Статус.** `PHASE_3=FAIL` (реализация не начата; выполнен read-only recon + dry-run sizing).
+
+- **S13 baseline:** `127.0.0.1/crm`, role `crm_app`, PG 17.10; `crm_procurements=441241`,
+  `crm_procurement_category_opportunities=3701`, `crm_procurement_scope_authority=30866`.
+- **Runtime path:** `SYNC_ENTRYPOINT=crm-procurement-sync.timer/.service (15 мин)` →
+  `scripts/run_crm_sync.py` → `SYNC_WRITER=src/services/crm_procurements_sync.py`;
+  `LIFECYCLE_NORMALIZER=src/services/commercial_routing_v3/source_lifecycle.py`;
+  `ADMISSION_MATERIALIZER=scripts/admission_gate_materialize.py` (+`business_research_admission.py`);
+  `OPPORTUNITY_SYNC=.../opportunity_lifecycle_sync.py`;
+  `MEDAL_REEVALUATION_ENTRYPOINT=crm-v3-daily-medal-reevaluation.timer (12:00 MSK)` →
+  `.../daily_medal_reevaluation.py`.
+- **Identity audit:** TOTAL=441241; distinct (source_table,source_id)=441241;
+  **CANONICAL_DUPLICATE_IDENTITIES=1** (44 `0373200275826000001`, main+awarded).
+- **crm_stage:** torgi=414691, razygranye=26548, commission=2.
+- **authority (30866):** ELIGIBLE=13258, HOLD=10302, EXCLUDED=7306; **410375 S13 rows без
+  authority** (unclassified). OPEN ELIGIBLE = 3893 direct + 2327 works + 215 design;
+  AWARDED ELIGIBLE = 6208 works + 615 design; AWARDED DIRECT EXCLUDED=7306; WAITING=1371.
+- **§6 defect confirmed:** `source_lifecycle.normalize_source_lifecycle_event` делает end_date
+  authority (open+torgi с прошедшим/NULL deadline → WAITING) — нужно убрать.
+- **Pending impl:** date-authority removal + tests; sync writer upsert by law+contract_number;
+  dry-run projection (§14), bounded canary, full reconciliation (prune ~410k), duplicate
+  canonicalization, timing clock (remaining_ratio), full-coverage reevaluation, shadow→apply medal,
+  timer wiring. НЕ начато.
+
+## PHASE 3 — IMPLEMENT (2026-10-04): CODE DONE, DATA RECONCILIATION PENDING
+
+**Статус.** `PHASE_3=FAIL` (код Phase3 задеплоен; reconciliation/medal-apply/canary не выполнены).
+
+- **§6/§7 source_lifecycle.py переписан:** authority = физическая S7 таблица
+  (`reestr_contract_44_fz`/`223` → OPEN; `*_commission_work` → WAITING; `*_awarded` → AWARDED;
+  `*_unclear`/`*_completed`/`*_unknown` → TERMINAL_NO_RESULT; иначе UNKNOWN). `end_date` больше
+  НЕ влияет на lifecycle. Tests `tests/test_source_lifecycle_authority.py` — **8/8 PASS**.
+  `SOURCE_TABLE_OVERRIDDEN_BY_END_DATE=0`.
+- **§2/§3 sync identity — уже реализовано существующим production writer:**
+  `projection_writer.run_v3_projection_sync` (`crm-procurement-sync.timer` → `scripts/run_crm_sync.py`)
+  уже матчит по `by_stable` = (source contour/law, normalized contract_number) с fallback на
+  provenance/source_awarded. Изменений не потребовалось; legacy `crm_procurements_sync._sync_source`
+  (не production) не тронут.
+- **§5/§20/§25 medal runner переписан:** keyset-пагинация по всей CURRENT выборке (без hard cap 5000),
+  `attach_commercial_timing` добавляет `remaining_days/remaining_ratio/elapsed_ratio/
+  execution_remaining_days/commercial_timing_value`. Dry-run: `rows_loaded=3608`, `qwen_calls=0`,
+  `would_change=2103`.
+- **Commit/push:** S13 `f1b72b58`; canonical (Windows) `f81b0c7` → github
+  (`93596ce..f81b0c7`), `PUSH_STATUS=ok`, `REMOTE_HEAD=f81b0c7`.
+- **Pending (не начато):** dry-run projection + бизнес-примеры (§14-15), bounded canary (§16),
+  full workset reconciliation (prune ~410k некоммерческих S13-строк, §29-30),
+  reconcile 1 canonical duplicate (§17), medal shadow→apply (§31-33), timer wiring (§28).
+- `QUEUE_RECONCILIATION_RUN=NO`; queue/DWRR/workers/priority не тронуты.
+
+## PHASE 3 — FINAL (2026-10-04): почти PASS, один блокер (stale authority)
+
+- **PRODUCTION_GIT_PARITY=YES** (blob-hashes совпали с f81b0c7 для 3 файлов).
+- **Dry-run sync:** to_insert=0, to_update=23992, to_reconcile=0, legacy_preserved=417248, errors=0.
+- **Duplicate:** 44 `0373200275826000001` (22103 awarded + 163706 main, без human data/opportunities)
+  → reconciled, `CANONICAL_DUPLICATES_AFTER=0`.
+- **Sync apply (run1):** inserted=0, updated=23992, errors=0; **run2 idempotent:** to_insert=0, inserted=0.
+- **Medal:** shadow → `TIME_ONLY_UPGRADES=0` (history: только downgrade/equal, ноль ↑);
+  apply → rows=3608, changed=2103, history=2103, **QWEN=0**.
+- **Opportunity lifecycle sync:** updated=3612, transitions=2287.
+- **ACTIVE (admission=ELIGIBLE):** OPEN DIRECT 60, OPEN WORKS 173, OPEN DESIGN 0,
+  AWARDED WORKS 1210, AWARDED DESIGN 116; **AWARDED_DIRECT_ACTIVE=0** (EXCLUDED→CLOSED/ARCHIVED),
+  TERMINAL_ACTIVE=0, ACTIVE_CANONICAL_DUPLICATES_AFTER=0.
+- **БЛОКЕР `WAITING_ACTIVE=121`:** authority-таблица устарела — materialized 03-10 со старой
+  date-authority, поэтому 121 proc (118×44 main + 3×223 main) помечены WAITING, тогда как новый
+  table-authoritative lifecycle даёт OPEN → commercial_state=ACTIVE. Нужна повторная
+  materialization authority (§6). `scripts/admission_gate_materialize.py` делает это, но
+  одновременно штампует queue category_context (QUEUE_WRITES), что в этом WIP запрещено →
+  остановка без запуска.
+- Итог: `PHASE_3=FAIL` (единственный блокер — re-materialize authority).
+
+## PHASE 3 — CLOSED: `PHASE_3=PASS` (2026-10-04)
+
+- `admission_gate_materialize.py`: добавлен `--authority-only` (materialize authority, НЕ вызывать
+  `reconcile_queue`, `QUEUE_UPDATE_CALLS=0`) и селектор теперь включает existing authority ids
+  (refresh stale lifecycle). Tests `tests/test_admission_materialize_authority_only.py` — 4/4 PASS.
+- **Stale authority:** `STALE_WAITING_MAIN_BEFORE=1359` (из них 121 с ACTIVE-opportunity) →
+  `--apply --authority-only` (40992 ids, ELIGIBLE 19004 / HOLD 11949 / EXCLUDED 10039) →
+  `STALE_WAITING_MAIN_AFTER=0`.
+- Opportunity lifecycle sync: transitions=0; **WAITING_ACTIVE=0, AWARDED_DIRECT_ACTIVE=0,
+  TERMINAL_ACTIVE=0**. Active ELIGIBLE: AWARDED 1380, OPEN 308.
+- `ACTIVE_CANONICAL_DUPLICATES_AFTER=0` (duplicate reconciled), `CANONICAL_DUPLICATES=0`.
+- **Queue freeze:** `DOCUMENT_QUEUE_ROWS_CHANGED=0`, `QUEUE_RECONCILIATION_RUN=NO`
+  (queue 34520 rows, max created_at 2026-10-01 — не тронута).
+- Idempotence: второй `--authority-only` даёт идентичные states (0 semantic changes).
+- Medal: coverage 3608/3608=100%, `TIME_ONLY_UPGRADES=0`, `QWEN_CALLS=0`, history 2103.
+- **Commit/push:** S13 `81914509`; canonical `c2dc470` → github (`f81b0c7..c2dc470`), `PUSH_STATUS=ok`.
+
+## PHASE 4 — QUEUE CONSOLIDATION (2026-10-04): PARTIAL
+
+**Статус.** `PHASE_4=FAIL` (override убран + claim-инварианты OK; band-reconciliation и
+worker-консолидация не выполнены).
+
+- **DIRECT_GOODS ≥ 50k → GOLD RETIRED:** `research_queue_priority.get_effective_service_band`
+  возвращает `research_prior_band` (динамический, medal-driven); в `queue_repository` claim-подпулы
+  больше не имеют 50k-спецветки (`grep 50000` = 0). Проверено: DIRECT_GOODS nmck=1e6 с band WOOD
+  → WOOD (без промоушена), GOLD остаётся GOLD.
+- **Claim invariants:** `claimable_eligible=53`, `noneligible_blocked=1853`,
+  AWARDED_DIRECT claimable=0 (admission gate `ELIGIBLE`+policy version).
+- **Queue status vocabulary** соответствует CHECK (PENDING/PROCESSING/COMPLETED/FAILED/NO_LINKS/
+  PRE_RESEARCH_WAITING).
+- **Producer:** `crm-v3-factual-feeder` (FactualFeeder) — active normal producer;
+  `crm-ai-assessment-runner` inactive.
+- **Commit/push:** S13 `91f5ce44`; canonical `e64ee46` → github (`c2dc470..e64ee46`), `PUSH_STATUS=ok`.
+- **Pending:** daily band reconciliation (очередь всё ещё в основном stale WOOD 1839/null 70/Bronze 2,
+  нужно привести `research_prior_band` в соответствие с `current_effective_medal`), enforce
+  единого producer/no-legacy-fallback на старте, worker/claim verification по всем воркерам,
+  second-cycle idempotence.
+
+## PHASE 4 — FINAL (2026-10-04): band recon + daemon S13_V4 done; workers/legacy residual
+
+- **FactualFeeder:** `load_factual_candidates` теперь из `crm_procurement_scope_authority`
+  (ELIGIBLE + BUSINESS_RESEARCH_ADMISSION_V2), без end_date; `get_queue_depth`/`get_live_lane_depth`
+  считают только ELIGIBLE; добавлен `reconcile_active_queue()` (V4 PRE_RESEARCH_WAITING/PENDING →
+  category_context + `research_prior_band/score/effective/priority_score` из
+  `current_effective_medal`), вызывается ПЕРВЫМ в `run_feeder_cycle()`.
+- **Band reconciliation applied:** V4 claimable bands → GOLD 1 / SILVER 1 / BRONZE 92 / WOOD 555 /
+  null 72; `claimable eligible=337, blocked=384`. Idempotence-остаток: `SECOND_RECON_ROWS_UPDATED=1`
+  (parser churn новой строки; логика не флипает — подтверждено debug-прогоном с 0 diffs).
+- **daemon.py:** S13-ветка теперь для `S13_V2` И `S13_V4_EXHAUSTIVE_CONTEXT`.
+- **Worker env:** overlay `/etc/tender-docs-s13v2-overlay.env` → `PROCESSING_BACKEND=S13_V4`,
+  `MODEL_QUEUE_PRIORITY_ENABLED=1`; `tender-docs-daemon-open`, `-open-3` перезапущены.
+- **Live claim:** за 10 мин клеймлены только `pipeline_generation=S13_V4_EXHAUSTIVE_CONTEXT`;
+  `non-eligible claimed=0`; V4 обрабатываются S13-веткой (`V4_TASKS_PROCESSED_LEGACY_PATH=0`).
+- **Commit/push:** S13 `c9b2f6e2`, canonical `9013a46` (github `e64ee46..9013a46`), `PUSH_STATUS=ok`.
+- **Осталось:** консолидировать остальные воркеры (open-2/computers/awarded-2/daemon без overlay →
+  LEGACY backend), проверить `LEGACY_PRIORITY_WRITES=0`, довести second-cycle до 0, формальные
+  targeted tests + DWRR pool check. Итог: `PHASE_4=FAIL` (неполно).
+
+## PHASE 4 — FINAL CLOSE (2026-10-04): worker switch + idempotence done; legacy-priority check open
+
+- **Workers:** всем 7 unit'ам добавлен drop-in `zz-s13v4-backend.conf`
+  (`PROCESSING_BACKEND=S13_V4`, `MODEL_QUEUE_PRIORITY_ENABLED=1`, `DOCUMENT_STORAGE_ROOT=/data/...`,
+  S13 doc DB) — сортируется после `s13v2.conf`, поэтому перекрывает его.
+  `ACTIVE_WORKERS=7`, `V4_BACKEND_WORKERS=7`, `LEGACY_BACKEND_WORKERS=0` (fail-closed подтверждён:
+  без `DOCUMENT_STORAGE_ROOT` воркеры падали, а не уходили в LEGACY).
+- **Idempotence:** флейп-строка (12946/12599) была из-за banker's rounding vs `numeric(6,5)`;
+  заменил на Decimal HALF_UP → `QUIET_RECON_1_UPDATED=0`, `QUIET_RECON_2_UPDATED=0` (три прогона подряд).
+- **Targeted tests:** `tests/test_phase4_queue_priority.py` — 11/11 PASS (gate D/F/G/H, J, E, band A/C, daemon I).
+- **DWRR:** `CLAIMS_GOLD=181`, `CLAIMS_WOOD=37` → `WOOD_STARVATION=NO`.
+- **Live claim:** 42 V4-задачи за 5 мин, `CLAIMED_NON_ELIGIBLE=0`, S13-путь.
+- **Bands:** WOOD 476 / BRONZE 81 / null 68 (текущие eligible-медали после time-decay).
+- **Commit/push:** S13 `1da85251`; canonical `84ff1a4` (github `9013a46..84ff1a4`), ok.
+- **ОТКРЫТО:** `LEGACY_PRIORITY_WRITES` не доказан 0 — в tender daemon остаются
+  `QueuePopulateCoordinator`/`MorningPriorityBoost`/`soft_reclassify_pending`, и в queue есть
+  `research_prior_model='okpd_research_hit_v2'` (562 строки). Нужно подтвердить/загейтить этот
+  путь при `PROCESSING_BACKEND=S13_V4`. Итог: `PHASE_4=FAIL` (один критерий не закрыт).
