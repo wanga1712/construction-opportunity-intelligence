@@ -96,7 +96,10 @@ def select_candidates(
         rank_cte = ""
         source = "cand"
         rank_filter = ""
-    params.append(limit)
+    limit_sql = ""
+    if limit and limit > 0:
+        limit_sql = "LIMIT %s"
+        params.append(limit)
     return _rows(
         cur,
         f"""
@@ -118,7 +121,7 @@ def select_candidates(
         SELECT * FROM {source}
         {rank_filter}
         ORDER BY category_code, amount DESC NULLS LAST, procurement_id
-        LIMIT %s
+        {limit_sql}
         """,
         params,
     )

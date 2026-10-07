@@ -102,6 +102,17 @@ BUILTIN_TERMS: Dict[str, Dict[str, Tuple[str, ...]]] = {
 
 _WS = re.compile(r"\s+")
 
+# Computers: a kit must win over its parts. If a "host" signal (desktop /
+# system unit / personal computer) co-occurs with a monitor, a peripheral or a
+# kit marker ("в комплекте", "комплект "), the primary subcategory is a
+# workstation kit — never computer_peripherals / monitors / desktop_computers.
+COMPUTER_KIT_PHRASES: Tuple[str, ...] = ("в комплекте", "комплект ")
+_COMPUTER_HOST_CODES = ("desktop_computers", "workstation_kits")
+_COMPUTER_UNIT_CODES = (
+    "desktop_computers", "workstation_kits", "laptops",
+    "all_in_one_computers", "servers",
+)
+
 
 @dataclass(frozen=True)
 class Resolution:
@@ -235,12 +246,40 @@ def _resolve_term_match(inp: ResolverInput, ctx: ResolverContext) -> Resolution:
     if not scores:
         return Resolution(None, 0.0, None, "no_match")
 
+    if inp.category_code == "computers":
+        override, scores = _computer_precedence(text, scores)
+        if override and override in product:
+            return Resolution(override, 0.75, SOURCE_TERM_MATCH,
+                              "computer_kit_precedence")
+        hits = {c: h for c, h in hits.items() if c in scores}
+        if not scores:
+            return Resolution(None, 0.0, None, "no_match")
+
     ranked = sorted(scores.items(), key=lambda kv: (-kv[1], kv[0]))
     best_code, best_score = ranked[0]
     if len(ranked) > 1 and ranked[1][1] >= best_score:
         return Resolution(None, 0.0, None, "ambiguous_term")
     confidence = round(min(0.95, 0.60 + 0.05 * max(0, hits[best_code] - 1)), 4)
     return Resolution(best_code, confidence, SOURCE_TERM_MATCH, "term match")
+
+
+def _computer_precedence(
+    text: str, scores: Dict[str, float]
+) -> Tuple[Optional[str], Dict[str, float]]:
+    """Apply the computer kit/peripheral precedence to matched subcategories."""
+    host = any(code in scores for code in _COMPUTER_HOST_CODES)
+    monitor = "monitors" in scores
+    peripheral = "computer_peripherals" in scores
+    kit_marker = any(_matches(text, phrase) for phrase in COMPUTER_KIT_PHRASES)
+
+    if host and (monitor or peripheral or kit_marker):
+        return "workstation_kits", scores
+
+    # peripherals must never pull a whole unit/kit
+    if peripheral and any(code in scores for code in _COMPUTER_UNIT_CODES):
+        filtered = {c: v for c, v in scores.items() if c != "computer_peripherals"}
+        return None, filtered
+    return None, scores
 
 
 def resolve(inp: ResolverInput, ctx: ResolverContext) -> Resolution:

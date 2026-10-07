@@ -14,7 +14,8 @@ def _ctx() -> r.ResolverContext:
         product_by_category={
             "computers": {
                 "servers", "all_in_one_computers", "network_equipment",
-                "desktop_computers", "laptops",
+                "desktop_computers", "laptops", "workstation_kits",
+                "monitors", "computer_peripherals",
             },
             "lighting": {
                 "lighting_poles", "street_luminaires", "floodlights",
@@ -27,6 +28,12 @@ def _ctx() -> r.ResolverContext:
             "computers": {
                 "servers": {"search": [("сервер", 100)]},
                 "all_in_one_computers": {"search": [("моноблок", 100)]},
+                "desktop_computers": {"search": [
+                    ("системный блок", 100), ("персональная эвм", 100),
+                    ("настольный компьютер", 100)]},
+                "monitors": {"search": [("монитор", 100)]},
+                "computer_peripherals": {"search": [
+                    ("клавиатура", 100), ("мышь", 100)]},
             },
             "lighting": {},
         },
@@ -65,3 +72,16 @@ def test_sentinel_is_unclassified():
     assert r.is_unclassified(None) is True
     assert r.is_unclassified("") is True
     assert r.is_unclassified("servers") is False
+
+
+def test_pc_kit_prefers_workstation():
+    res = _resolve(
+        "computers",
+        "Персональные ЭВМ: системный блок, клавиатура, мышь, монитор",
+    )
+    assert res.subcategory_code == "workstation_kits"
+
+
+def test_keyboard_mouse_kit_is_peripherals():
+    res = _resolve("computers", "Комплект клавиатура и мышь")
+    assert res.subcategory_code == "computer_peripherals"

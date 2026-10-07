@@ -1,3 +1,15 @@
+## CURRENT WIP — 2026-10-07 (FIX-COMPUTER-PRIMARY-PRODUCT-PRECEDENCE-SAFE-MASS-BACKFILL-1)
+
+**FIX-COMPUTER-PRIMARY-PRODUCT-PRECEDENCE-SAFE-MASS-BACKFILL-1** — `[x]` **PASS / STOP**. Scope: computer kit precedence fix + safe mass backfill (computers массово; lighting/waterproofing/flooring/drainage — только DOC_FACT + DIRECT_SUPPLY TERM_MATCH). Qwen, medals, opportunities, object/category classifier — не трогались.
+
+- **BASE_COMMIT.** Предыдущий WIP зафиксирован отдельным коммитом `ca1d8c8` (без amend). Этот WIP — следующий отдельный коммит (FIX_COMMIT).
+- **Computer precedence.** `product_subcategory_resolver.py`: если есть host-сигнал (`системный блок`/`настольный компьютер`/`персональная эвм`, т.е. desktop_computers или workstation_kits) и одновременно монитор, периферия или маркер комплекта (`в комплекте`, `комплект `) → primary = `workstation_kits`; `computer_peripherals` подавляется, если есть любой unit-сигнал (desktop, kit, laptops, all_in_one, servers). Тесты 5→**7 passed**.
+- **COMPUTER_DRY_RUN** (`--dry-run --category computers --limit 100`): selected=100, resolved=35, ambiguous=1, no_match=64. Acceptance: `409451→workstation_kits`, `337694→servers`, `448275→all_in_one_computers`, `17723→network_equipment`; `17451/19696/209011→NULL`. Canary-строки сброшены в NULL и переразрешены исправленным resolver.
+- **COMPUTERS_MASS.** `--apply --category computers --limit 0`: selected=609, resolved=204 (TERM_MATCH 198 + COMPUTER_STRUCTURED 6), ambiguous=8, no_match=397, applied=204. Coverage BEFORE 2.56% (16/625) → AFTER **35.20%** (220/625), remaining unclassified 405.
+- **SAFE_MASS.** `lighting`: doc_fact=5 (canary) + direct_supply_term=10 → 3.62% (33 classified, 879 unclassified). `flooring`: doc_fact=6 → 0.66% (6/914). `drainage_water_management`: doc_fact=8 → 0.72% (10/1388). `waterproofing`: doc_fact=1 → 0.12% (2/1717). Works/embedded/unknown строки не классифицировались по generic title.
+- **CATEGORY_SUSPECTS** (неправильная родительская категория, НЕ исправлялось — отдельная parent-category reclassification): `17451` (выключатели 220кВ), `209011` (шкафы АСУ ТП), `19696` (электронно-лучевое напыление), `18430` (телемеханизация КТП), `451350` (запчасти АСУ ТП). Все оставлены NULL.
+- **Инварианты.** `OBJECT_CONTEXT_USED_AS_PRODUCT=0`, `MEDALS_CHANGED=0`, `QWEN_CALLS=0`, `DRAIN_STATUS=UNCHANGED` (streamlit health=200, drain pid работает). `PUSH=NOT_ATTEMPTED`.
+
 ## CURRENT WIP — 2026-10-07 (CANONICAL-PRODUCT-TAXONOMY-DETERMINISTIC-BACKFILL-1)
 
 **CANONICAL-PRODUCT-TAXONOMY-DETERMINISTIC-BACKFILL-1** — `[x]` **PASS (шаги 1–9) / STOP перед массовым backfill / WAITING_USER_REVIEW**. Scope: additive semantic-kind migration + approved PRODUCT subcategories + deterministic (non-model) subcategory backfill canary. Qwen, initial-pass, runner/timer, medals/temporal, document queue, object/category classifier и category overview UI — не трогались.
