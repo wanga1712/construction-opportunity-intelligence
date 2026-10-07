@@ -7,7 +7,7 @@ new classifier tables and does not download or mutate anything.
 """
 from __future__ import annotations
 
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional
 
 
 _MEDALS = ("GOLD", "SILVER", "BRONZE", "WOOD")
@@ -141,6 +141,7 @@ def get_category_overview(crm_db: Any) -> Dict[str, Any]:
                 procurement_id,
                 amount
             FROM opp
+            WHERE subcategory_code IS NOT NULL
         ),
         sub_form AS (
             SELECT DISTINCT
@@ -149,6 +150,7 @@ def get_category_overview(crm_db: Any) -> Dict[str, Any]:
                 procurement_id,
                 opportunity_track
             FROM opp
+            WHERE subcategory_code IS NOT NULL
         ),
         sub_form_agg AS (
             SELECT
@@ -188,6 +190,23 @@ def get_category_overview(crm_db: Any) -> Dict[str, Any]:
         """
     ) or []
 
+    unclassified_rows = crm_db.execute_query(
+        _opp_cte()
+        + """,
+        unclassified_proc AS (
+            SELECT DISTINCT category_code, procurement_id, amount
+            FROM opp
+            WHERE subcategory_code IS NULL
+        )
+        SELECT
+            category_code,
+            COUNT(DISTINCT procurement_id) AS procurement_count,
+            COALESCE(SUM(amount), 0) AS total_amount
+        FROM unclassified_proc
+        GROUP BY category_code
+        """
+    ) or []
+
     agg_by_category = {
         str(row.get("category_code") or ""): row for row in agg_rows
     }
@@ -206,6 +225,14 @@ def get_category_overview(crm_db: Any) -> Dict[str, Any]:
                 ),
             }
         )
+
+    unclassified_by_category = {
+        str(row.get("category_code") or ""): {
+            "procurement_count": int(row.get("procurement_count") or 0),
+            "total_amount": float(row.get("total_amount") or 0),
+        }
+        for row in unclassified_rows
+    }
 
     categories: List[Dict[str, Any]] = []
     for row in category_rows:
@@ -243,6 +270,9 @@ def get_category_overview(crm_db: Any) -> Dict[str, Any]:
                 "current_medals": current,
                 "confirmed_medals": _empty_medals(),
                 "subcategories": subs_by_category.get(code, []),
+                "unclassified": unclassified_by_category.get(
+                    code, {"procurement_count": 0, "total_amount": 0}
+                ),
             }
         )
     return {"categories": categories}
@@ -313,10 +343,21 @@ def _mode_from_track(track: Any) -> str:
 def get_category_procurements(
     crm_db: Any,
     category_code: str,
+    subcategory_code: Optional[str] = None,
     limit: int = 200,
 ) -> List[Dict[str, Any]]:
+    if subcategory_code is None:
+        return []
+
+    if subcategory_code == "__unclassified__":
+        subcategory_sql = "AND o.commercial_subcategory_code IS NULL"
+        params = (category_code, limit)
+    else:
+        subcategory_sql = "AND o.commercial_subcategory_code = %s"
+        params = (category_code, subcategory_code, limit)
+
     rows = crm_db.execute_query(
-        """
+        f"""
         SELECT DISTINCT ON (o.procurement_id, o.commercial_category_code)
             o.procurement_id,
             p.auction_name,
@@ -344,10 +385,11 @@ def get_category_procurements(
             )
         WHERE o.status = 'CURRENT'
           AND o.commercial_category_code = %s
+          {subcategory_sql}
         ORDER BY o.procurement_id, o.commercial_category_code, o.id DESC
         LIMIT %s
         """,
-        (category_code, limit),
+        params,
     ) or []
     return [
         {

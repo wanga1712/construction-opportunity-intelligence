@@ -175,49 +175,88 @@ def _render_category_detail(crm_db, categories, category_code, medal_view) -> No
     with top_right:
         if st.button("← К категориям", key="category_back", use_container_width=True):
             st.session_state["analytics_category_code"] = None
+            st.session_state["analytics_subcategory_code"] = None
             st.rerun()
 
     with top_left:
         st.markdown(f"## {category.get('category_name')}")
 
-    medals = _medal_counts(category, medal_view)
-    metric_cols = st.columns(6)
-    metric_cols[0].metric("Закупок", category.get("procurement_count", 0))
-    metric_cols[1].metric("Сумма", _format_amount(category.get("total_amount", 0)))
-    metric_cols[2].metric("Прямая поставка", category.get("direct_supply_count", 0))
-    metric_cols[3].metric(
-        "В составе работ", category.get("works_with_products_count", 0)
-    )
-    medal_total = sum(medals.values())
-    metric_cols[4].metric("Медалей", medal_total)
-    metric_cols[5].metric("Gold", medals.get("gold", 0))
-
-    st.subheader("Подкатегории")
     subcategories = category.get("subcategories") or []
-    if subcategories:
-        st.dataframe(
-            [
-                {
-                    "Подкатегория": sub.get("subcategory_name")
-                    or sub.get("subcategory_code"),
-                    "Закупок": sub.get("procurement_count", 0),
-                    "Сумма": _format_amount(sub.get("total_amount", 0)),
-                    "Прямая поставка": sub.get("direct_supply_count", 0),
-                    "В составе работ": sub.get("works_with_products_count", 0),
-                }
-                for sub in subcategories
-            ],
-            use_container_width=True,
-            hide_index=True,
-        )
-    else:
-        st.caption("Подкатегории не найдены.")
+    unclassified = category.get("unclassified") or {
+        "procurement_count": 0,
+        "total_amount": 0,
+    }
+    selected_subcategory = st.session_state.get("analytics_subcategory_code")
 
-    st.subheader("Закупки")
+    if selected_subcategory is None:
+        st.subheader("Подкатегории")
+        for sub in subcategories:
+            label = sub.get("subcategory_name") or sub.get("subcategory_code")
+            cols = st.columns([4, 1, 1, 1])
+            with cols[0]:
+                st.markdown(f"**{label}**")
+            with cols[1]:
+                st.caption(f"{sub.get('procurement_count', 0)} закупок")
+            with cols[2]:
+                st.caption(_format_amount(sub.get("total_amount", 0)))
+            with cols[3]:
+                if st.button(
+                    "Открыть",
+                    key=f"subcat_open_{sub.get('subcategory_code')}",
+                    use_container_width=True,
+                ):
+                    st.session_state["analytics_subcategory_code"] = sub.get(
+                        "subcategory_code"
+                    )
+                    st.rerun()
+
+        if unclassified.get("procurement_count") or unclassified.get("total_amount"):
+            cols = st.columns([4, 1, 1, 1])
+            with cols[0]:
+                st.markdown("**Не классифицировано**")
+            with cols[1]:
+                st.caption(f"{unclassified.get('procurement_count', 0)} закупок")
+            with cols[2]:
+                st.caption(_format_amount(unclassified.get("total_amount", 0)))
+            with cols[3]:
+                if st.button(
+                    "Открыть",
+                    key="subcat_open_unclassified",
+                    use_container_width=True,
+                ):
+                    st.session_state["analytics_subcategory_code"] = "__unclassified__"
+                    st.rerun()
+        return
+
+    sub_info = next(
+        (sub for sub in subcategories if sub.get("subcategory_code") == selected_subcategory),
+        None,
+    )
+    if selected_subcategory == "__unclassified__":
+        sub_label = "Не классифицировано"
+        sub_count = unclassified.get("procurement_count", 0)
+        sub_amount = unclassified.get("total_amount", 0)
+    else:
+        sub_label = (sub_info or {}).get("subcategory_name") or selected_subcategory
+        sub_count = (sub_info or {}).get("procurement_count", 0)
+        sub_amount = (sub_info or {}).get("total_amount", 0)
+
+    if st.button("← Все подкатегории", key="subcategory_back", use_container_width=True):
+        st.session_state["analytics_subcategory_code"] = None
+        st.rerun()
+
+    st.markdown(
+        f"Все категории → {category.get('category_name')} → {sub_label}"
+    )
+    st.metric("Закупок", sub_count)
+    st.metric("Сумма", _format_amount(sub_amount))
+
     try:
         from src.services.category_overview_service import get_category_procurements
 
-        procurements = get_category_procurements(crm_db, category_code)
+        procurements = get_category_procurements(
+            crm_db, category_code, selected_subcategory
+        )
     except Exception as exc:
         st.error(f"Не удалось загрузить закупки: {exc}")
         procurements = []
@@ -244,7 +283,7 @@ def _render_category_detail(crm_db, categories, category_code, medal_view) -> No
             hide_index=True,
         )
     else:
-        st.caption("Закупки по категории не найдены.")
+        st.caption("Закупки по подкатегории не найдены.")
 
 
 def render_analytics_contour_v2_page(service) -> None:

@@ -115,7 +115,7 @@ def test_get_category_summary_selects_medal_view():
 
 def test_get_category_procurements_normalizes_direct_supply():
     db = _FakeDb()
-    rows = get_category_procurements(db, "lighting")
+    rows = get_category_procurements(db, "lighting", "road_street")
 
     assert len(rows) == 1
     assert rows[0]["procurement_mode"] == "direct_supply"
