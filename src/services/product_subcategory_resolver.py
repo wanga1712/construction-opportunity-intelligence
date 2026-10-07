@@ -22,8 +22,13 @@ import re
 from dataclasses import dataclass, field
 from typing import Dict, List, Optional, Sequence, Tuple
 
+from src.services.procurement_title_normalizer import (
+    normalize_procurement_title_v1,
+)
+
 SOURCE_COMPUTER_STRUCTURED = "COMPUTER_STRUCTURED"
 SOURCE_DOC_FACT = "DOC_FACT"
+SOURCE_APPROVED_TITLE_RULE = "APPROVED_TITLE_RULE"
 SOURCE_TERM_MATCH = "TERM_MATCH"
 
 # The literal sentinel that used to sit in commercial_subcategory_code. It is
@@ -150,6 +155,11 @@ class ResolverContext:
     builtin_terms: Dict[str, Dict[str, Tuple[str, ...]]] = field(
         default_factory=lambda: {k: dict(v) for k, v in BUILTIN_TERMS.items()}
     )
+    # approved exact-title rules:
+    # (current_category_code, normalized_title) -> (subcategory_code, conf, reason)
+    approved_title_rules: Dict[Tuple[str, str], Tuple[str, float, str]] = field(
+        default_factory=dict
+    )
 
 
 def _norm(value: Optional[str]) -> str:
@@ -210,6 +220,28 @@ def _resolve_doc_fact(inp: ResolverInput, ctx: ResolverContext) -> Optional[Reso
     if len(codes) > 1:
         return Resolution(None, 0.0, None, "ambiguous_doc_fact")
     return None
+
+
+def _resolve_approved_title(
+    inp: ResolverInput, ctx: ResolverContext
+) -> Optional[Resolution]:
+    """Human-approved exact-title rule; category-scoped and fail-safe.
+
+    Stronger than generic TERM_MATCH, but weaker than COMPUTER_STRUCTURED and
+    DOC_FACT evidence (see ``resolve`` ordering).
+    """
+    if not ctx.approved_title_rules:
+        return None
+    key = (inp.category_code, normalize_procurement_title_v1(inp.title))
+    entry = ctx.approved_title_rules.get(key)
+    if not entry:
+        return None
+    code, confidence, reason = entry
+    product = ctx.product_by_category.get(inp.category_code, set())
+    if code not in product:
+        return None
+    return Resolution(code, float(confidence), SOURCE_APPROVED_TITLE_RULE,
+                      reason or "approved exact title")
 
 
 def _resolve_term_match(inp: ResolverInput, ctx: ResolverContext) -> Resolution:
@@ -296,6 +328,10 @@ def resolve(inp: ResolverInput, ctx: ResolverContext) -> Resolution:
         result = _resolve_doc_fact(inp, ctx)
         if result is not None:
             return result
+
+    approved = _resolve_approved_title(inp, ctx)
+    if approved is not None:
+        return approved
 
     if not inp.allow_term_match:
         return Resolution(None, 0.0, None, "non_product_track")

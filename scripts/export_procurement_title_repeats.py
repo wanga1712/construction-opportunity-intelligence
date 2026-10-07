@@ -28,9 +28,7 @@ import hashlib
 import io
 import math
 import os
-import re
 import sys
-import unicodedata
 import zipfile
 from collections import Counter, OrderedDict, defaultdict
 from datetime import datetime, timezone
@@ -46,46 +44,17 @@ load_dotenv(os.path.join(REPO_ROOT, ".env"))
 import psycopg2  # noqa: E402
 
 from src.services.crm_db_runtime import require_crm_db_connect_kwargs  # noqa: E402
+from src.services.procurement_title_normalizer import (  # noqa: E402
+    normalize_procurement_title_v1,
+)
 
 UNCLASSIFIED = "UNCLASSIFIED"
 UNCLASSIFIED_RAW = {None, "", "SUBCATEGORY_NOT_ASSIGNED"}
-_WS_RE = re.compile(r"\s+")
 
 
 # --------------------------------------------------------------------------- #
-# Normalization (conservative, v1)
+# Group ids
 # --------------------------------------------------------------------------- #
-def normalize_procurement_title_v1(title):
-    """Safe, conservative title normalization.
-
-    Order: Unicode NFKC -> lowercase -> ё->е -> NBSP->space -> newlines->space
-    -> punctuation->space -> collapse repeated spaces -> strip.
-
-    Digits are never removed. Model names, powers, voltages, sizes, years and
-    equipment numbers are preserved verbatim (normalization only touches
-    case/space/punctuation).
-    """
-    if title is None:
-        return ""
-    text = unicodedata.normalize("NFKC", str(title))
-    text = text.lower()
-    text = text.replace("\u0451", "\u0435")  # ё -> е
-    # Non-breaking / narrow / fixed-width spaces and line separators -> space.
-    for ch in ("\u00a0", "\u202f", "\u2007", "\u2009", "\u200a", "\ufeff",
-               "\r", "\n", "\t", "\u2028", "\u2029", "\v", "\f"):
-        text = text.replace(ch, " ")
-    chars = []
-    for ch in text:
-        cat = unicodedata.category(ch)
-        if cat.startswith("P"):  # punctuation -> space (keeps digits and letters)
-            chars.append(" ")
-        else:
-            chars.append(ch)
-    text = "".join(chars)
-    text = _WS_RE.sub(" ", text)
-    return text.strip()
-
-
 def _sha1_16(value):
     return hashlib.sha1(value.encode("utf-8")).hexdigest()[:16]
 
