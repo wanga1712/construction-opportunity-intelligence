@@ -83,8 +83,9 @@ def get_category_overview(crm_db: Any) -> Dict[str, Any]:
             SELECT
                 procurement_id,
                 commercial_category_code,
-                MAX(candidate_medal) AS candidate_medal,
-                MAX(confirmed_base_medal) AS confirmed_base_medal
+                MAX(candidate_initial_medal) AS initial_medal,
+                MAX(current_effective_medal) AS current_medal,
+                MAX(confirmed_base_medal) AS confirmed_medal
             FROM crm_procurement_category_opportunities
             WHERE status = 'CURRENT'
             GROUP BY procurement_id, commercial_category_code
@@ -92,14 +93,18 @@ def get_category_overview(crm_db: Any) -> Dict[str, Any]:
         medal_agg AS (
             SELECT
                 do.category_code,
-                COUNT(*) FILTER (WHERE mr.candidate_medal = 'GOLD') AS candidate_gold,
-                COUNT(*) FILTER (WHERE mr.candidate_medal = 'SILVER') AS candidate_silver,
-                COUNT(*) FILTER (WHERE mr.candidate_medal = 'BRONZE') AS candidate_bronze,
-                COUNT(*) FILTER (WHERE mr.candidate_medal = 'WOOD') AS candidate_wood,
-                COUNT(*) FILTER (WHERE mr.confirmed_base_medal = 'GOLD') AS confirmed_gold,
-                COUNT(*) FILTER (WHERE mr.confirmed_base_medal = 'SILVER') AS confirmed_silver,
-                COUNT(*) FILTER (WHERE mr.confirmed_base_medal = 'BRONZE') AS confirmed_bronze,
-                COUNT(*) FILTER (WHERE mr.confirmed_base_medal = 'WOOD') AS confirmed_wood
+                COUNT(*) FILTER (WHERE mr.initial_medal = 'GOLD') AS initial_gold,
+                COUNT(*) FILTER (WHERE mr.initial_medal = 'SILVER') AS initial_silver,
+                COUNT(*) FILTER (WHERE mr.initial_medal = 'BRONZE') AS initial_bronze,
+                COUNT(*) FILTER (WHERE mr.initial_medal = 'WOOD') AS initial_wood,
+                COUNT(*) FILTER (WHERE mr.current_medal = 'GOLD') AS current_gold,
+                COUNT(*) FILTER (WHERE mr.current_medal = 'SILVER') AS current_silver,
+                COUNT(*) FILTER (WHERE mr.current_medal = 'BRONZE') AS current_bronze,
+                COUNT(*) FILTER (WHERE mr.current_medal = 'WOOD') AS current_wood,
+                COUNT(*) FILTER (WHERE mr.confirmed_medal = 'GOLD') AS confirmed_gold,
+                COUNT(*) FILTER (WHERE mr.confirmed_medal = 'SILVER') AS confirmed_silver,
+                COUNT(*) FILTER (WHERE mr.confirmed_medal = 'BRONZE') AS confirmed_bronze,
+                COUNT(*) FILTER (WHERE mr.confirmed_medal = 'WOOD') AS confirmed_wood
             FROM distinct_opp do
             LEFT JOIN medal_rows mr
               ON mr.procurement_id = do.procurement_id
@@ -142,10 +147,14 @@ def get_category_overview(crm_db: Any) -> Dict[str, Any]:
             ca.total_amount,
             ca.direct_supply_count,
             ca.works_with_products_count,
-            ma.candidate_gold,
-            ma.candidate_silver,
-            ma.candidate_bronze,
-            ma.candidate_wood,
+            ma.initial_gold,
+            ma.initial_silver,
+            ma.initial_bronze,
+            ma.initial_wood,
+            ma.current_gold,
+            ma.current_silver,
+            ma.current_bronze,
+            ma.current_wood,
             ma.confirmed_gold,
             ma.confirmed_silver,
             ma.confirmed_bronze,
@@ -231,13 +240,22 @@ def get_category_overview(crm_db: Any) -> Dict[str, Any]:
     for row in category_rows:
         code = str(row.get("category_code") or "")
         agg = agg_by_category.get(code, {})
-        candidate = _empty_medals()
-        candidate.update(
+        initial = _empty_medals()
+        initial.update(
             {
-                "gold": int(agg.get("candidate_gold") or 0),
-                "silver": int(agg.get("candidate_silver") or 0),
-                "bronze": int(agg.get("candidate_bronze") or 0),
-                "wood": int(agg.get("candidate_wood") or 0),
+                "gold": int(agg.get("initial_gold") or 0),
+                "silver": int(agg.get("initial_silver") or 0),
+                "bronze": int(agg.get("initial_bronze") or 0),
+                "wood": int(agg.get("initial_wood") or 0),
+            }
+        )
+        current = _empty_medals()
+        current.update(
+            {
+                "gold": int(agg.get("current_gold") or 0),
+                "silver": int(agg.get("current_silver") or 0),
+                "bronze": int(agg.get("current_bronze") or 0),
+                "wood": int(agg.get("current_wood") or 0),
             }
         )
         confirmed = _empty_medals()
@@ -259,10 +277,135 @@ def get_category_overview(crm_db: Any) -> Dict[str, Any]:
                 "works_with_products_count": int(
                     agg.get("works_with_products_count") or 0
                 ),
-                "candidate_medals": candidate,
+                "initial_medals": initial,
+                "current_medals": current,
                 "confirmed_medals": confirmed,
                 "subcategories": subs_by_category.get(code, []),
             }
         )
 
     return {"categories": categories}
+
+
+def get_category_summary(crm_db: Any, medal_view: str = "initial") -> Dict[str, Any]:
+    """One-row summary for the category-first analytics screen."""
+    if medal_view not in {"initial", "current"}:
+        raise ValueError(f"unsupported medal_view: {medal_view!r}")
+
+    medal_column = "mr.initial_medal" if medal_view == "initial" else "mr.current_medal"
+    rows = crm_db.execute_query(
+        f"""
+        WITH opp_proc AS (
+            SELECT
+                o.category_code,
+                p.id AS procurement_id,
+                p.initial_price AS amount
+            FROM crm_procurement_opportunities o
+            JOIN crm_procurements p
+              ON p.source_table = o.registry_type
+             AND p.source_id = o.tender_id
+        ),
+        distinct_opp AS (
+            SELECT DISTINCT category_code, procurement_id
+            FROM opp_proc
+        ),
+        proc_amounts AS (
+            SELECT DISTINCT procurement_id, amount
+            FROM opp_proc
+        ),
+        medal_rows AS (
+            SELECT
+                procurement_id,
+                commercial_category_code,
+                MAX(candidate_initial_medal) AS initial_medal,
+                MAX(current_effective_medal) AS current_medal
+            FROM crm_procurement_category_opportunities
+            WHERE status = 'CURRENT'
+            GROUP BY procurement_id, commercial_category_code
+        )
+        SELECT
+            (SELECT COUNT(*) FROM crm_product_categories WHERE is_active = TRUE)
+                AS category_count,
+            (SELECT COUNT(*) FROM distinct_opp) AS opportunity_count,
+            COALESCE((SELECT SUM(amount) FROM proc_amounts), 0) AS total_amount,
+            COUNT(*) FILTER (WHERE {medal_column} = 'GOLD') AS gold,
+            COUNT(*) FILTER (WHERE {medal_column} = 'SILVER') AS silver,
+            COUNT(*) FILTER (WHERE {medal_column} = 'BRONZE') AS bronze,
+            COUNT(*) FILTER (WHERE {medal_column} = 'WOOD') AS wood
+        FROM distinct_opp do
+        LEFT JOIN medal_rows mr
+          ON mr.procurement_id = do.procurement_id
+         AND mr.commercial_category_code = do.category_code
+        """
+    ) or []
+
+    row = rows[0] if rows else {}
+    return {
+        "category_count": int(row.get("category_count") or 0),
+        "opportunity_count": int(row.get("opportunity_count") or 0),
+        "total_amount": float(row.get("total_amount") or 0),
+        "medals": {
+            "gold": int(row.get("gold") or 0),
+            "silver": int(row.get("silver") or 0),
+            "bronze": int(row.get("bronze") or 0),
+            "wood": int(row.get("wood") or 0),
+        },
+    }
+
+
+def get_category_procurements(
+    crm_db: Any,
+    category_code: str,
+    limit: int = 200,
+) -> List[Dict[str, Any]]:
+    """Procurement-level rows for a selected category."""
+    rows = crm_db.execute_query(
+        """
+        SELECT
+            o.object_key,
+            o.subcategory_code,
+            o.subcategory_name,
+            o.product_name,
+            o.quantity,
+            o.unit,
+            o.taxonomy_action,
+            o.confidence,
+            o.repeat_signature,
+            p.id AS procurement_id,
+            p.auction_name,
+            p.initial_price,
+            p.customer,
+            p.okpd_code,
+            p.okpd_name,
+            pc.procurement_mode,
+            pc.object_present,
+            pc.object_type,
+            pc.work_type,
+            m.candidate_initial_medal,
+            m.current_effective_medal,
+            m.confirmed_base_medal
+        FROM crm_procurement_opportunities o
+        JOIN crm_procurements p
+          ON p.source_table = o.registry_type
+         AND p.source_id = o.tender_id
+        LEFT JOIN crm_procurement_classifications pc
+          ON pc.object_key = o.object_key
+        LEFT JOIN LATERAL (
+            SELECT
+                candidate_initial_medal,
+                current_effective_medal,
+                confirmed_base_medal
+            FROM crm_procurement_category_opportunities
+            WHERE procurement_id = p.id
+              AND commercial_category_code = o.category_code
+              AND status = 'CURRENT'
+            ORDER BY id DESC
+            LIMIT 1
+        ) m ON TRUE
+        WHERE o.category_code = %s
+        ORDER BY p.id
+        LIMIT %s
+        """,
+        (category_code, limit),
+    ) or []
+    return [dict(row) for row in rows]

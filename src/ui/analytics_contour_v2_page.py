@@ -3,12 +3,7 @@ from __future__ import annotations
 
 import streamlit as st
 
-from src.ui.components.analytics_v2.control_room import render_control_room
 from src.ui.components.analytics_v2.control_room_links import apply_control_room_links
-from src.ui.components.analytics_v2.command_center import render_command_center
-from src.ui.components.analytics_v2.header import render_header
-from src.ui.components.analytics_v2.quick_filters import render_quick_filters
-from src.ui.components.analytics_v2.tabs_lazy_dispatch import render_tabs
 
 _STICKY_CSS = """
 <style>
@@ -32,41 +27,258 @@ _STICKY_CSS = """
 
 
 def render_analytics_contour_v2_page(service) -> None:
-    """Верх страницы: бизнес-обзор (закупки / новые / документы / результат модели).
+    """Первый экран — реальная коммерческая очередь «Очередь возможностей».
 
-    Техническая диагностика вынесена вниз в один collapsed expander и по
-    умолчанию пользователю не показывается.
+    Тяжёлая аналитика (KPI, графики, lifecycle worksets, иерархия категорий,
+    документы, AI payload) живёт за явным открытием в конце ленты.
     """
-    st.markdown(_STICKY_CSS, unsafe_allow_html=True)
-
     # URL-навигация панели управления (?cr_cat / ?cr_open) на рабочую область.
     apply_control_room_links()
 
-    render_header()
+    from src.ui.queue_first_page import render_queue_first_page
 
-    # Бизнес-обзор: закупки, новые за 24 часа, документы, результат модели.
-    render_command_center()
+    render_queue_first_page(service)
 
+
+def _analytics_crm_db(service):
+    """Return a CRM database handle without changing page/dependency wiring."""
+    crm_db = getattr(service, "crm_db", None) if service is not None else None
+    if crm_db is not None:
+        return crm_db
+    from src.services.db_bootstrap import connect_databases
+
+    _radar, _tender, crm_db, _warn = connect_databases()
+    return crm_db
+
+
+def _load_category_overview(crm_db):
+    from src.services.category_overview_service import get_category_overview
+
+    if crm_db is None:
+        return {"categories": []}
+    try:
+        return get_category_overview(crm_db)
+    except Exception as exc:
+        st.error(f"Не удалось загрузить товарные категории: {exc}")
+        return {"categories": []}
+
+
+def _load_category_summary(crm_db, medal_view):
+    from src.services.category_overview_service import get_category_summary
+
+    if crm_db is None:
+        return {
+            "category_count": 0,
+            "opportunity_count": 0,
+            "total_amount": 0,
+            "medals": {"gold": 0, "silver": 0, "bronze": 0, "wood": 0},
+        }
+    try:
+        return get_category_summary(crm_db, medal_view=medal_view)
+    except Exception as exc:
+        st.error(f"Не удалось загрузить сводку: {exc}")
+        return {
+            "category_count": 0,
+            "opportunity_count": 0,
+            "total_amount": 0,
+            "medals": {"gold": 0, "silver": 0, "bronze": 0, "wood": 0},
+        }
+
+
+def _format_amount(value) -> str:
+    try:
+        number = float(value or 0)
+    except (TypeError, ValueError):
+        number = 0.0
+    if number >= 1_000_000:
+        return f"{number / 1_000_000:.1f} млн ₽"
+    if number >= 1_000:
+        return f"{number / 1_000:.1f} тыс ₽"
+    return f"{number:,.0f} ₽"
+
+
+def _medal_counts(category, medal_view):
+    if medal_view == "initial":
+        return category.get("initial_medals") or {
+            "gold": 0,
+            "silver": 0,
+            "bronze": 0,
+            "wood": 0,
+        }
+    return category.get("current_medals") or {
+        "gold": 0,
+        "silver": 0,
+        "bronze": 0,
+        "wood": 0,
+    }
+
+
+def _render_summary(summary) -> None:
+    medals = summary.get("medals") or {}
+    columns = st.columns(7)
+    columns[0].metric("Категорий", summary.get("category_count", 0))
+    columns[1].metric("Возможностей", summary.get("opportunity_count", 0))
+    columns[2].metric("Сумма закупок", _format_amount(summary.get("total_amount", 0)))
+    columns[3].metric("🥇 Gold", medals.get("gold", 0))
+    columns[4].metric("🥈 Silver", medals.get("silver", 0))
+    columns[5].metric("🥉 Bronze", medals.get("bronze", 0))
+    columns[6].metric("🪵 Wood", medals.get("wood", 0))
+
+
+def _render_category_cards(categories, medal_view) -> None:
+    if not categories:
+        st.info("Активные товарные категории пока не найдены.")
+        return
+    for category in categories:
+        medals = _medal_counts(category, medal_view)
+        with st.container(border=True):
+            left, right = st.columns([4, 1])
+            with left:
+                st.markdown(
+                    f"### {category.get('category_name') or category.get('category_code')}"
+                )
+                st.caption(
+                    f"{category.get('procurement_count', 0)} закупок · "
+                    f"{_format_amount(category.get('total_amount', 0))} · "
+                    f"прямая поставка {category.get('direct_supply_count', 0)} · "
+                    f"в составе работ {category.get('works_with_products_count', 0)}"
+                )
+                st.caption(
+                    "Медали: "
+                    f"Gold {medals.get('gold', 0)} · "
+                    f"Silver {medals.get('silver', 0)} · "
+                    f"Bronze {medals.get('bronze', 0)} · "
+                    f"Wood {medals.get('wood', 0)}"
+                )
+            with right:
+                if st.button(
+                    "Открыть",
+                    key=f"category_open_{category.get('category_code')}",
+                    use_container_width=True,
+                ):
+                    st.session_state["analytics_category_code"] = category.get(
+                        "category_code"
+                    )
+                    st.rerun()
+
+
+def _render_category_detail(crm_db, categories, category_code, medal_view) -> None:
+    category = next(
+        (item for item in categories if item.get("category_code") == category_code),
+        None,
+    )
+    if category is None:
+        st.warning("Категория не найдена.")
+        return
+
+    top_left, top_right = st.columns([5, 1])
+    with top_right:
+        if st.button("← К категориям", key="category_back", use_container_width=True):
+            st.session_state["analytics_category_code"] = None
+            st.rerun()
+
+    with top_left:
+        st.markdown(f"## {category.get('category_name')}")
+
+    medals = _medal_counts(category, medal_view)
+    metric_cols = st.columns(6)
+    metric_cols[0].metric("Закупок", category.get("procurement_count", 0))
+    metric_cols[1].metric("Сумма", _format_amount(category.get("total_amount", 0)))
+    metric_cols[2].metric("Прямая поставка", category.get("direct_supply_count", 0))
+    metric_cols[3].metric(
+        "В составе работ", category.get("works_with_products_count", 0)
+    )
+    medal_total = sum(medals.values())
+    metric_cols[4].metric("Медалей", medal_total)
+    metric_cols[5].metric("Gold", medals.get("gold", 0))
+
+    st.subheader("Подкатегории")
+    subcategories = category.get("subcategories") or []
+    if subcategories:
+        st.dataframe(
+            [
+                {
+                    "Подкатегория": sub.get("subcategory_name")
+                    or sub.get("subcategory_code"),
+                    "Закупок": sub.get("procurement_count", 0),
+                    "Сумма": _format_amount(sub.get("total_amount", 0)),
+                    "Прямая поставка": sub.get("direct_supply_count", 0),
+                    "В составе работ": sub.get("works_with_products_count", 0),
+                }
+                for sub in subcategories
+            ],
+            use_container_width=True,
+            hide_index=True,
+        )
+    else:
+        st.caption("Подкатегории не найдены.")
+
+    st.subheader("Закупки")
+    try:
+        from src.services.category_overview_service import get_category_procurements
+
+        procurements = get_category_procurements(crm_db, category_code)
+    except Exception as exc:
+        st.error(f"Не удалось загрузить закупки: {exc}")
+        procurements = []
+
+    if procurements:
+        st.dataframe(
+            [
+                {
+                    "Закупка": row.get("auction_name"),
+                    "Подкатегория": row.get("subcategory_name"),
+                    "Товар": row.get("product_name"),
+                    "Кол-во": row.get("quantity"),
+                    "Ед.": row.get("unit"),
+                    "Сумма": _format_amount(row.get("initial_price")),
+                    "Режим": row.get("procurement_mode"),
+                    "Объект": row.get("object_type"),
+                    "Работы": row.get("work_type"),
+                    "Первичная медаль": row.get("candidate_initial_medal"),
+                    "Текущая медаль": row.get("current_effective_medal"),
+                }
+                for row in procurements
+            ],
+            use_container_width=True,
+            hide_index=True,
+        )
+    else:
+        st.caption("Закупки по категории не найдены.")
+
+
+def render_analytics_contour_v2_page(service) -> None:
+    """Category-first start screen for the analytics contour."""
+    crm_db = _analytics_crm_db(service)
+    overview = _load_category_overview(crm_db)
+    categories = overview.get("categories") or []
+
+    st.title("Аналитический контур")
+    st.caption("Товарные категории и коммерческие возможности")
+
+    view_label = st.segmented_control(
+        "Показатель",
+        ["Первичные", "Текущие"],
+        default="Первичные",
+        key="analytics_medal_view",
+    )
+    medal_view = "initial" if view_label != "Текущие" else "current"
+
+    selected_category = st.session_state.get("analytics_category_code")
+    if selected_category:
+        _render_category_detail(crm_db, categories, selected_category, medal_view)
+        return
+
+    summary = _load_category_summary(crm_db, medal_view)
+    _render_summary(summary)
     st.divider()
-
-    left, right = st.columns([1, 3], gap="medium")
-
-    with left:
-        _render_filters()
-
-    with right:
-        render_quick_filters()
-        render_tabs()
-
-    st.divider()
-
-    with st.expander("Техническая информация", expanded=False):
-        st.caption("CRM build: 53075f6+analytics-v2-overview")
-        _render_technical_diagnostics()
+    _render_category_cards(categories, medal_view)
 
 
 def _render_technical_diagnostics() -> None:
     """Служебная диагностика: heartbeat очереди и состояние контура."""
+    from src.ui.components.analytics_v2.control_room import render_control_room
+
     render_control_room()
 
 
