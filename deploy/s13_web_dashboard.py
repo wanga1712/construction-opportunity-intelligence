@@ -454,6 +454,7 @@ footer{padding:8px 22px;color:#484f58;font-size:16px}
 <header><h1 id="host">S13</h1><div class="small" id="clock"></div><div class="small" id="up"></div></header>
 <div class="grid">
  <div class="card" style="grid-column:span 4"><h2>OPPORTUNITIES</h2><div id="opps"></div></div>
+ <div class="card" style="grid-column:span 4"><h2>CURRENT INFO</h2><div id="info"></div></div>
  <div class="card"><h2>CPU</h2><div class="val" id="cpu">-</div><div class="bar"><span id="cpub"></span></div><canvas id="cchart"></canvas><div class="small">load <span id="load"></span></div></div>
  <div class="card"><h2>RAM</h2><div class="val" id="ram">-</div><div class="bar"><span id="ramb"></span></div><div class="small" id="ramt"></div><div class="row small"><span>SWAP</span><span id="swap"></span></div><div class="bar"><span id="swapb"></span></div></div>
  <div class="card"><h2>GPU</h2><div class="val" id="gpu">-</div><div class="bar"><span id="gpub"></span></div><canvas id="gchart"></canvas><div class="small" id="gput"></div></div>
@@ -525,6 +526,19 @@ $('cool').innerHTML=`<div class="cool-row">${fansHtml}${tempsHtml}</div>`;
   +'<div class="lanes">REMOVED · EXPIRED '+rem.expired+' · NO COMMERCIAL '+rem.no_commercial+' · DIRECT GOODS '+rem.direct_goods_excluded+'</div>'
   +'<div class="lanes">NOT CLASSIFIED · OPEN '+nc.open+' · AWARDED '+nc.awarded+'</div>'
   +'<div class="lanes">MEDAL FLOW 60m · ↑ '+flow.up+' · ↓ '+flow.down+' · × '+flow.removed+' · ↻ '+flow.lifecycle_reset+'</div>';
+
+ const svcInfo=(m.services||[]).map(s=>s.id+':'+s.state).join(', ');
+ const infoLines=[
+  'host '+(m.host||'-')+' · up '+m.uptime,
+  'load '+m.load.join(' ')+' · cpu '+m.cpu+'% · ram '+m.mem.pct+'%'+(m.gpu?' · gpu '+m.gpu.util+'%':''),
+  'pipeline waiting '+pip.waiting.total+' · processing '+pip.processing.total+' · completed '+pip.completed.total+' · failed '+pip.failed.total+' · no_links '+pip.no_links.total,
+  'open GOLD '+open.GOLD+' SILVER '+open.SILVER+' BRONZE '+open.BRONZE+' WOOD '+open.WOOD,
+  'awarded GOLD '+awd.GOLD+' SILVER '+awd.SILVER+' BRONZE '+awd.BRONZE+' WOOD '+awd.WOOD,
+  'removed expired '+rem.expired+' · no_commercial '+rem.no_commercial+' · direct_goods '+rem.direct_goods_excluded,
+  'not_classified open '+nc.open+' · awarded '+nc.awarded,
+  'services '+svcInfo
+ ].join('\n');
+ $('info').innerHTML='<pre style="white-space:pre-wrap;font-size:18px;line-height:1.55;margin:0;color:#c9d1d9">'+infoLines+'</pre>';
 
  const pd=pip.delta||{};
  $('pipe').innerHTML='<div class="pipe">'+pstage('Waiting',pip.waiting,'w',pd.waiting)+parr+pstage('Processing',pip.processing,'p',pd.processing)+parr+pstage('Completed',pip.completed,'c',pd.completed)+parr+pstage('Failed',pip.failed,'f',pd.failed)+parr+pstage('No links',pip.no_links,'n')+'</div><div class="lanes">waiting lanes: '+(lanes||'-')+'</div>';
