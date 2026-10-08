@@ -27,6 +27,162 @@
 - **Тесты.** `tests/test_product_subcategory_resolver.py` — 5 passed (узкий прогон только этого файла; полный pytest не гонялся).
 - **Отклонения/долги.** (1) Canary-строка `409451` («Персональные ЭВМ (системный блок, клавиатура, мышь, монитор)») → `computer_peripherals` (сматчились клавиатура/мышь) — кандидат на ревью/пересмотр. (2) lighting canary резолвится только через DOC_FACT, т.к. крупнейшие unclassified — стройработы (правильно NULL). (3) Массовый backfill НЕ запускался. `COMMIT`/`PUSH` не выполнялись. `STATUS=PASS / STOP`.
 
+## CURRENT WIP — 2026-10-08 (SYSTEM-HEALTH-PASS1-PROGRESS-PANEL-1)
+
+**SYSTEM-HEALTH-PASS1-PROGRESS-PANEL-1** — `[x]` **PASS / STOP**. Physical System Health overview (ОБЗОР) показывает PASS1 progress: DONE/RUNNING/REMAINING, OPEN/AWARDED, throughput/ETA, category coverage; UI snapshot-only, `EXTRA_UI_DB_QUERIES=0`; production acceptance PASS. Read-only telemetry + UI. Routing/drain/classifier/taxonomy НЕ менялись.
+- **Новый модуль** `src/services/system_health_pass1.py` (collector-only): читает `routing_status.json` (с коллектор-кэшем последнего backlog — `max_runtime`-финиш drain'а теряет backlog-ключи), bounded read-only SELECT'ы по CRM (DONE/RUNNING/terminal FAILED, throughput 15/60м, last activity, категории), Qwen/det rate из journal, ETA с учётом nightly suspend 23:00–06:00. Fail-safe: любая ошибка → `available:false`, коллектор не падает.
+- **Collector** `src/services/system_health_collector.py`: `snap["pass1"] = collect_pass1_telemetry()` раз в `PASS1_INTERVAL_SEC=45` (между циклами переиспользуется предыдущий блок). `src/services/system_health_config.py`: `PASS1_INTERVAL_SEC / PASS1_ROUTING_STATUS_PATH / PASS1_STALL_AFTER_SEC`.
+- **UI** `src/ui/system_health_page.py`: `_render_pass1_panel(snap)` в `_render_overview` сразу после SERVER 13/7, не в expander. KPI: Обработано/Осталось/Прогресс/Скорость/ETA + progress bar; вторая строка OPEN done/rem, AWARDED done/rem, Review, Failed; компактная таблица покрытия категорий. UI snapshot-only.
+- **Acceptance (live, 2026-10-08):** `remaining=2708` == drain `TOTAL_ROUTING_ELIGIBLE_BACKLOG`; `open_remaining=0` == `ACTIVE_BACKLOG`; `awarded_remaining=2708` == `AWARDED_BACKLOG`; `done 3448 + running 0 + remaining 2708 = workset 6156`; `computers` 696/279/417 совпадает с DB. `EXTRA_UI_DB_QUERIES=0` (в page нет DB-импортов). AppTest страницы: `EXCEPTIONS=0`, панель рендерится (9 метрик, таблица категорий).
+- **Не делалось:** нет изменений routing/drain/classifier/taxonomy; git/push не выполнялись (в scope не входило).
+
+## NEXT ARCHITECTURE:
+## HUMAN FEEDBACK → DOCUMENT TRUTH → SPECIALIZED MODELS
+
+**Статус:** PLANNED (docs-only roadmap). Production code / routing / drain / taxonomy не меняются;
+обучение, Qwen-прогоны и миграции не запускаются. Roadmap стартует ПОСЛЕ закрытия
+current PASS1 + medal lifecycle production acceptance.
+
+Текущий **Qwen2.5:7b** остаётся временным production classifier / fallback, но НЕ является
+целевой архитектурой массовой классификации. Причины:
+
+- latency ~20–60 sec на сложный AWARDED case;
+- throughput ограничивает backlog drain;
+- большая часть задач — classification/ranking, а не generative reasoning;
+- система уже начинает накапливать human/document verified labels.
+
+Целевая архитектура:
+`deterministic gates → small specialized classifiers → document verifier → Qwen fallback/arbitration only for uncertain cases`.
+
+### FUTURE WIP: HUMAN-CATEGORY-DISPUTE-DOCUMENT-RECHECK-1
+
+**HUMAN-CATEGORY-DISPUTE-DOCUMENT-RECHECK-1** — `[ ]` **PLANNED**.
+
+Пользователь прямо в `procurement × category` таблице может отметить «Не относится к этой
+категории». Это НЕ окончательная переклассификация: human signal **category-specific**, а
+не глобальный `OUT_OF_CATEGORY`. Пример: procurement «Интерактивная панель», model →
+`computers / all_in_one_computers`, human → `NOT_THIS_CATEGORY`.
+
+После этого: (1) сохранить versioned expert signal; (2) не уничтожать исходную model
+hypothesis; (3) пометить именно эту `procurement × category` связь disputed; (4) убрать её
+из обычного чистого category view; (5) поставить low-priority `HUMAN_CATEGORY_RECHECK`;
+(6) использовать уже существующие документы/evidence; (7) если документов нет — дождаться
+document processing; (8) независимо перепроверить human hypothesis; (9) сохранить verified
+outcome.
+
+Expected outcomes: `USER_REJECTION_CONFIRMED` · `CATEGORY_CONFIRMED_BY_DOCUMENTS` ·
+`MOVE_CATEGORY_SUGGESTED` · `NO_EVIDENCE_FOR_CATEGORY` · `NEED_DOCUMENT_RESEARCH`.
+
+**Human click ≠ ground truth.** Ground truth появляется только после document/model/expert
+verification. Использовать существующую инфраструктуру: `crm_v3_expert_annotations`,
+`rejected_model_opportunities`, `crm_v3_document_observations`, `document_match_details`,
+`document_evidence`, `structured_entities`, existing V4 queue. Параллельную annotation
+subsystem НЕ создавать.
+
+### ARCHITECTURAL INVARIANT: OBJECT REMAINS MULTI-CATEGORY
+
+**ONE OBJECT → MANY INDEPENDENT COMMERCIAL CATEGORIES.**
+
+Пример `OBJECT=BRIDGE` — одновременно могут существовать `waterproofing`, `lighting`,
+`composite_structures / railings`, `road barriers`, `drainage_water_management`,
+`cable_support_systems`, `expansion joints`, `concrete repair` и другие реально применимые
+категории. Это НЕ competing classification: наличие `waterproofing` не исключает `lighting`;
+наличие `lighting` не исключает `drainage`.
+
+Canonical entity — `procurement × commercial_category`. Каждая opportunity имеет собственные
+`category/subcategory`, `candidate_initial`, `confirmed_base`, `current_effective`,
+`opportunity_track`, `document evidence`, `human dispute`, `verification state`. Human
+rejection одной category НЕ влияет на остальные categories procurement.
+
+### TECHNICAL DEBT: REMOVE OBJECT CATEGORY HARD CAP
+
+Текущий object-mode содержит hard truncation `build_object_mode_hypotheses(max_hypotheses=5)`
+и downstream `business_hyps[:5]`. Это временное ограничение. Целевая модель — НЕ «top 5
+categories», а `all applicable categories passing independent threshold / applicability
+rules`. `OBJECT CONTEXT` может создавать candidate/research hypothesis, но НЕ является
+direct product evidence. `OBJECT_CONTEXT_USED_AS_PRODUCT=0` остаётся hard invariant.
+
+### FUTURE WIP: MULTILABEL-OBJECT-CATEGORIES-AND-SMALL-MODEL-1
+
+**MULTILABEL-OBJECT-CATEGORIES-AND-SMALL-MODEL-1** — `[ ]` **PLANNED**.
+Production сразу НЕ переключать. Целевая схема:
+
+- **STAGE A — procurement form classifier.** INPUT: title, OKPD, factual metadata. OUTPUT: `DIRECT_GOODS | WORKS | DESIGN | …`.
+- **STAGE B — object classifier.** INPUT: title, OKPD, form, context. OUTPUT: object sector/type/stage.
+- **STAGE C — multi-label commercial category classifier.** INPUT: title, OKPD, form, object, deterministic context. OUTPUT: independent probability for EACH active category. Использовать **sigmoid / multi-label semantics, НЕ softmax multiclass.** Пример (BRIDGE): `waterproofing=0.94`, `lighting=0.91`, `composite_structures=0.87`, `drainage_water_management=0.84`, `…`.
+- **STAGE D — hierarchical subcategory classifier.** INPUT: title, OKPD, selected parent category, document facts where available. OUTPUT: subcategory probabilities only inside that parent category.
+- **STAGE E — document/category verifier.** INPUT: category, subcategory, title, OKPD, human dispute, document quote, structured facts. OUTPUT: `CONFIRMED | REJECTED | INSUFFICIENT`.
+
+### QWEN FUTURE ROLE
+
+Qwen 7B НЕ удаляется сразу. Целевой routing:
+
+- `DETERMINISTIC_HIGH_CONFIDENCE` → accept without model;
+- `SMALL_MODEL_HIGH_CONFIDENCE` → accept without Qwen;
+- `SMALL_MODEL_UNCERTAIN` → Qwen fallback;
+- `HUMAN/DOCUMENT CONFLICT` → verifier → Qwen arbitration only if unresolved.
+
+Целевой KPI: `QWEN_REQUIRED_PCT` должно снижаться по мере роста verified dataset. Никакого
+production cutover без benchmark + shadow acceptance.
+
+### TRAINING DATASET AUTHORITY (hierarchy of truth)
+
+Raw Qwen output НЕ считать ground truth. Training labels по приоритету:
+
+1. HUMAN + DOCUMENT VERIFIED
+2. TRUSTED DOCUMENT EVIDENCE / STRUCTURED FACT
+3. APPROVED EXPERT ANNOTATION
+4. APPROVED REPEAT-TITLE / TAXONOMY RULE
+5. SAFE DETERMINISTIC LABEL
+6. HISTORICAL_FILTERED / MODEL_SELECTED — только как biased signal
+7. RAW MODEL OUTPUT — **никогда не authoritative truth**
+
+Существующие historical thousands использовать с provenance; НЕ смешивать их с unbiased
+holdout.
+
+### RETRAIN POLICY
+
+Никакого uncontrolled online learning. Human correction → pending signal → verification →
+trusted dataset event. После накопления verified examples: versioned dataset → train →
+frozen holdout → compare vs production → shadow → promote. Production model всегда имеет
+version. Никакого «пользователь кликнул → модель сразу сама переобучилась».
+
+### BENCHMARK BEFORE CUTOVER
+
+Для small model обязательно сравнить на одном frozen verified dataset: `Qwen2.5:7b` vs
+small classifier. Метрики: procurement_form accuracy, object accuracy, category precision,
+category recall, micro/macro F1, multi-label exact match, false positive rate, false negative
+rate, subcategory accuracy. Performance: latency p50, latency p95, items/sec, VRAM/RAM usage.
+Особенно следить за **FALSE POSITIVE category**, т.к. лишняя категория создаёт ненужную
+research queue.
+
+### CONTROL BUSINESS CASES
+
+- **CASE A — BRIDGE.** Одна procurement/object должна одновременно иметь несколько opportunities: waterproofing, lighting, drainage, railings/composites, barriers — без max-medal/category collapse.
+- **CASE B — INTERACTIVE PANEL.** «Интерактивная панель» не должна автоматически считаться `all_in_one_computers` только из-за computer-context. Human dispute → document recheck → rejection can be confirmed.
+- **CASE C — TRUE MONOBLOCK.** «Персональный компьютер моноблок», human ошибочно dispute, documents confirm monoblock → `CATEGORY_CONFIRMED_BY_DOCUMENTS`.
+- **CASE D — SOFTWARE.** Software procurement, случайно попавшая в hardware category → category-specific dispute → low-priority verification → reject hardware category или suggest another EXISTING category.
+
+### RELATION TO CURRENT PASS1
+
+CURRENT PASS1 DRAIN НЕ ОСТАНАВЛИВАЕТСЯ ради этого roadmap. Qwen2.5:7b продолжает завершать
+текущий первичный backlog. Roadmap стартует ПОСЛЕ закрытия current PASS1/medal lifecycle
+production acceptance. При этом новые human/document verified examples начинают накапливаться
+сразу после реализации `HUMAN-CATEGORY-DISPUTE-DOCUMENT-RECHECK-1`.
+
+### РЕКОМЕНДУЕМЫЙ ПОРЯДОК БУДУЩИХ WIP
+
+1. CURRENT PASS1 drain completion + medal lifecycle production close
+2. `HUMAN-CATEGORY-DISPUTE-DOCUMENT-RECHECK-1`
+3. remove/replace object-mode category hard cap + prove `procurement × category` independence
+4. build verified training dataset v1
+5. train small multi-label category model
+6. train hierarchical subcategory model
+7. document verifier
+8. benchmark against Qwen2.5:7b
+9. shadow mode
+10. production cutover only after PASS
+
 ## CURRENT WIP — 2026-10-05 (CRM-V4-QUEUE-FIRST-MANAGER-SHELL-1)
 
 **CRM-V4-QUEUE-FIRST-MANAGER-SHELL-1** — `[x]` **PASS (реализация + production-верификация по локальному контуру) / WAITING_USER_REVIEW**. Первый экран аналитического контура V2 (`objects_v2`) больше не рендерит KPI/графики/worksets/category hierarchy на старте — он показывает реальную коммерческую очередь «Очередь возможностей». UI только читает готовый production truth; lifecycle/admission/category/medal/priority на UI не пересчитываются.
