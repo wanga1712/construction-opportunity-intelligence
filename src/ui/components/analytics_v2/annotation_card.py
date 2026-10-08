@@ -28,6 +28,13 @@ from src.services.annotation_readiness import (
     training_eligibility_reasons,
 )
 from src.services.annotation_card_view import load_annotation_card_view
+from src.services.category_dispute_service import (
+    REASON_CODES,
+    STATE_PENDING_RECHECK,
+    cancel_category_dispute,
+    capture_category_dispute,
+    get_category_dispute_state,
+)
 from src.ui.components.analytics_v2.card_tabs_ai_expert_form import (
     _assemble_payload,
     _renumber,
@@ -443,7 +450,7 @@ def render_annotation_card(
     with model_tab:
         _render_ai_block(assessment)
         _render_business_block(assessment)
-        _render_category_verdicts(procurement_id, assessment, categories, cat_codes, cat_labels)
+        _render_category_verdicts(procurement_id, assessment, categories, cat_codes, cat_labels, crm_db)
     with documents_tab:
         render_documents(procurement_id, card_view["documents"], priority_state, card_view["orphan_observations"])
     with history_tab:
@@ -495,7 +502,7 @@ def render_annotation_section(
     if section in ("Модель / Категории", "Возможности"):
         _render_ai_block(assessment)
         _render_business_block(assessment)
-        _render_category_verdicts(procurement_id, assessment, categories, cat_codes, cat_labels)
+        _render_category_verdicts(procurement_id, assessment, categories, cat_codes, cat_labels, crm_db)
         return
     card_view = load_annotation_card_view(procurement_id, header, crm_db)
     if section == "Документы":
@@ -641,6 +648,7 @@ def _render_category_verdicts(
     categories: list[dict],
     cat_codes: list[str],
     cat_labels: list[str],
+    crm_db: Any,
 ) -> None:
     st.markdown("---")
     st.markdown("##### 👤 ЭКСПЕРТНАЯ РАЗМЕТКА")
@@ -655,16 +663,44 @@ def _render_category_verdicts(
         if st.session_state.get(_sk(procurement_id, "absence_confirmed")):
             st.success("Эксперт подтвердил: коммерческих категорий нет")
     else:
+        created_by = st.session_state.get("user_name") or _CREATED_BY_FALLBACK
         for row in rows:
             code = row["category_code"]
-            c1, c2, c3 = st.columns([3, 1, 1])
-            c1.markdown(f"**{code}**")
+            sub = row.get("subcategory_code")
+            dstate = get_category_dispute_state(procurement_id, code, sub, crm_db)
+            pending = dstate == STATE_PENDING_RECHECK
+            c1, c2, c3, c4 = st.columns([3, 1, 1, 1])
+            c1.markdown(f"**{code}**" + (f" / `{sub}`" if sub else "") + ("  ⚠ _На перепроверке_" if pending else ""))
             if c2.button("✓ ВЕРНО", key=_sk(procurement_id, f"ok_{code}")):
                 _mark_category_correct(procurement_id, code)
                 st.rerun()
             if c3.button("✕ НЕВЕРНО", key=_sk(procurement_id, f"bad_{code}")):
                 _mark_category_wrong(procurement_id, code)
                 st.rerun()
+            dkey = f"{code}_{sub or ''}"
+            if pending:
+                if c4.button("↩ Отменить отметку", key=_sk(procurement_id, f"undispute_{dkey}")):
+                    cancel_category_dispute(
+                        procurement_id=procurement_id, category_code=code, subcategory_code=sub,
+                        created_by=created_by, crm_db=crm_db,
+                    )
+                    st.rerun()
+            elif c4.button("⚠ Не эта категория", key=_sk(procurement_id, f"dispute_{dkey}")):
+                st.session_state[_sk(procurement_id, f"dopen_{dkey}")] = True
+            if (not pending) and st.session_state.get(_sk(procurement_id, f"dopen_{dkey}")):
+                with st.form(key=_sk(procurement_id, f"dform_{dkey}")):
+                    st.caption(f"Не относится к категории: {code}" + (f" / {sub}" if sub else ""))
+                    _reason = st.selectbox("Причина", REASON_CODES, key=_sk(procurement_id, f"dreason_{dkey}"))
+                    _comment = st.text_input("Комментарий (необязательно)", key=_sk(procurement_id, f"dcomment_{dkey}"))
+                    _submitted = st.form_submit_button("Отправить на перепроверку")
+                if _submitted:
+                    capture_category_dispute(
+                        procurement_id=procurement_id, category_code=code, subcategory_code=sub,
+                        reason_code=_reason, comment=_comment, created_by=created_by,
+                        crm_db=crm_db, assessment=assessment,
+                    )
+                    st.session_state[_sk(procurement_id, f"dopen_{dkey}")] = False
+                    st.rerun()
 
     if st.button("+ ДОБАВИТЬ ПРОПУЩЕННУЮ КАТЕГОРИЮ", key=_sk(procurement_id, "add_missed")):
         st.session_state[_sk(procurement_id, "show_add_missed")] = True
