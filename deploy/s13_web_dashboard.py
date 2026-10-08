@@ -558,18 +558,18 @@ footer{padding:8px 22px;color:#484f58;font-size:16px}
 <header><h1 id="host">S13</h1><div class="small" id="clock"></div><div class="small" id="up"></div></header>
 <div class="grid">
  <div class="card" style="grid-column:span 4"><h2>АНАЛИТИЧЕСКИЙ КОНТУР <span id="cage" class="small"></span></h2><div id="contour"></div></div>
- <div class="card" style="grid-column:span 4"><h2>OPPORTUNITIES</h2><div id="opps"></div></div>
- <div class="card" style="grid-column:span 4"><h2>CURRENT INFO</h2><div id="info"></div></div>
- <div class="card"><h2>CPU</h2><div class="val" id="cpu">-</div><div class="bar"><span id="cpub"></span></div><canvas id="cchart"></canvas><div class="small">load <span id="load"></span></div></div>
- <div class="card"><h2>RAM</h2><div class="val" id="ram">-</div><div class="bar"><span id="ramb"></span></div><div class="small" id="ramt"></div><div class="row small"><span>SWAP</span><span id="swap"></span></div><div class="bar"><span id="swapb"></span></div></div>
+ <div class="card" style="grid-column:span 4"><h2>ВОЗМОЖНОСТИ</h2><div id="opps"></div></div>
+ <div class="card" style="grid-column:span 4"><h2>ТЕКУЩАЯ ИНФО</h2><div id="info"></div></div>
+ <div class="card"><h2>CPU</h2><div class="val" id="cpu">-</div><div class="bar"><span id="cpub"></span></div><canvas id="cchart"></canvas><div class="small">нагрузка <span id="load"></span></div></div>
+ <div class="card"><h2>ОЗУ</h2><div class="val" id="ram">-</div><div class="bar"><span id="ramb"></span></div><div class="small" id="ramt"></div><div class="row small"><span>Подкачка</span><span id="swap"></span></div><div class="bar"><span id="swapb"></span></div></div>
  <div class="card"><h2>GPU</h2><div class="val" id="gpu">-</div><div class="bar"><span id="gpub"></span></div><canvas id="gchart"></canvas><div class="small" id="gput"></div></div>
- <div class="card"><h2>Disks - health &amp; free space</h2><div id="disks"></div></div>
-  <div class="card" style="grid-column:span 2"><h2>Cooling - fans &amp; temperatures</h2><div id="cool"></div></div>
+ <div class="card"><h2>Диски — здоровье и место</h2><div id="disks"></div></div>
+  <div class="card" style="grid-column:span 2"><h2>Охлаждение — вентиляторы и температуры</h2><div id="cool"></div></div>
  
- <div class="card" style="grid-column:span 2"><h2>Today on S13 - new records / queue / categories</h2><div id="daily"></div></div>
- <div class="card" style="grid-column:span 2"><h2>Queue - waiting for parsing</h2><div id="q"></div></div>
- <div class="card" style="grid-column:span 2"><h2>In progress now</h2><div id="qp"></div></div>
- <div class="card" style="grid-column:span 4"><h2>Pipeline - document queue (conveyor)</h2><div id="pipe"></div></div>
+ <div class="card" style="grid-column:span 2"><h2>Сегодня на S13 — записи / очередь / категории</h2><div id="daily"></div></div>
+ <div class="card" style="grid-column:span 2"><h2>Очередь — ожидают парсинга</h2><div id="q"></div></div>
+ <div class="card" style="grid-column:span 2"><h2>В работе сейчас</h2><div id="qp"></div></div>
+ <div class="card" style="grid-column:span 4"><h2>Конвейер — очередь документов</h2><div id="pipe"></div></div>
 </div><footer id="foot">?</footer>
 <script>
 const $=id=>document.getElementById(id);
@@ -583,17 +583,17 @@ function line(cv,arr,color){const c=cv.getContext('2d');const w=cv.width=cv.clie
 async function tick(){try{const m=await (await fetch('/api/metrics')).json();
  $('host').textContent='S13: '+m.host;$('clock').textContent=m.time;$('up').textContent='up '+m.uptime;
  $('cpu').textContent=m.cpu+'%';setbar($('cpub'),m.cpu);$('load').textContent=m.load.join(' ');
- $('ram').textContent=m.mem.pct+'%';setbar($('ramb'),m.mem.pct);$('ramt').textContent=m.mem.used+'G / '+m.mem.total+'G (avail '+m.mem.avail+'G)';
+ $('ram').textContent=m.mem.pct+'%';setbar($('ramb'),m.mem.pct);$('ramt').textContent=m.mem.used+'G / '+m.mem.total+'G (свободно '+m.mem.avail+'G)';
  $('swap').textContent=m.mem.swap_used+'G / '+m.mem.swap_total+'G';setbar($('swapb'),m.mem.swap_pct);
  if(m.gpu){$('gpu').textContent=m.gpu.util+'%';setbar($('gpub'),m.gpu.util);$('gput').textContent='VRAM '+m.gpu.vram_used+'/'+m.gpu.vram_total+' MiB ('+m.gpu.vram_pct+'%), '+m.gpu.power+'/'+m.gpu.limit+' W, '+m.gpu.temp+' C';}
- else{$('gpu').textContent='n/a';}
- $('disks').innerHTML='<div class="disks">'+m.disks.map(d=>{const prob=d.health!='PASSED'||(d.pending||0)>0||(d.realloc||0)>0;const pct=d.pct!=null?d.pct:0;const colp=pct>=85?'#da3633':pct>=70?'#d29922':'#2ea043';const info=[];if(d.pending)info.push('pending '+d.pending);if(d.realloc)info.push('realloc '+d.realloc);const ring=d.pct!=null?`<svg viewBox="0 0 42 42" class="donut"><circle cx="21" cy="21" r="15.9" fill="none" stroke="#21262d" stroke-width="6"/><circle cx="21" cy="21" r="15.9" fill="none" stroke="${colp}" stroke-width="6" stroke-dasharray="${pct} ${100-pct}" stroke-dashoffset="25" stroke-linecap="round"/><text x="21" y="24.5" text-anchor="middle" font-size="10.5" fill="#e6edf3">${pct}%</text></svg>`:`<svg viewBox="0 0 42 42" class="donut"><circle cx="21" cy="21" r="15.9" fill="none" stroke="#30363d" stroke-width="6"/><text x="21" y="24.5" text-anchor="middle" font-size="10" fill="#8b949e">n/a</text></svg>`;return `<div class="disk">${ring}<div class="dname">${prob?'<span class="warn">&#9888;</span> ':''}${d.dev}</div><div class="dsub">${d.mount?d.mount:'unmounted'}</div>${prob&&info.length?`<div class="dinfo">${info.join(' / ')}</div>`:''}</div>`;}).join('')+'</div>';
+ else{$('gpu').textContent='н/д';}
+ $('disks').innerHTML='<div class="disks">'+m.disks.map(d=>{const prob=d.health!='PASSED'||(d.pending||0)>0||(d.realloc||0)>0;const pct=d.pct!=null?d.pct:0;const colp=pct>=85?'#da3633':pct>=70?'#d29922':'#2ea043';const info=[];if(d.pending)info.push('ожид. '+d.pending);if(d.realloc)info.push('переназн. '+d.realloc);const ring=d.pct!=null?`<svg viewBox="0 0 42 42" class="donut"><circle cx="21" cy="21" r="15.9" fill="none" stroke="#21262d" stroke-width="6"/><circle cx="21" cy="21" r="15.9" fill="none" stroke="${colp}" stroke-width="6" stroke-dasharray="${pct} ${100-pct}" stroke-dashoffset="25" stroke-linecap="round"/><text x="21" y="24.5" text-anchor="middle" font-size="10.5" fill="#e6edf3">${pct}%</text></svg>`:`<svg viewBox="0 0 42 42" class="donut"><circle cx="21" cy="21" r="15.9" fill="none" stroke="#30363d" stroke-width="6"/><text x="21" y="24.5" text-anchor="middle" font-size="10" fill="#8b949e">н/д</text></svg>`;return `<div class="disk">${ring}<div class="dname">${prob?'<span class="warn">&#9888;</span> ':''}${d.dev}</div><div class="dsub">${d.mount?d.mount:'не смонтирован'}</div>${prob&&info.length?`<div class="dinfo">${info.join(' / ')}</div>`:''}</div>`;}).join('')+'</div>';
 
  const dl=m.daily||{};
  const md=dl.medals||{};
  const drow=(lbl,v,tone)=>`<div class="row"><span>${lbl}</span><b class="${tone||''}" style="font-size:28px">${v==null?'...':v}</b></div>`;
- const medchips=['GOLD','SILVER','BRONZE','WOOD','NULL'].filter(k=>md[k]).map(k=>`<span class="chip"><b style="color:${bc[k]||'#8b949e'}">${k==='NULL'?'no medal':k}</b> ${md[k]}</span>`).join('');
- $('daily').innerHTML=drow('New records today',dl.new_s7)+drow('Queued today',dl.queued)+drow('Completed today',dl.completed)+'<div class="chips">'+(medchips||'<span class="small">medals today: -</span>')+'</div><div class="lanes">updated '+(dl.ts||'-')+' (every 2 min)</div>';
+ const medchips=['GOLD','SILVER','BRONZE','WOOD','NULL'].filter(k=>md[k]).map(k=>`<span class="chip"><b style="color:${bc[k]||'#8b949e'}">${k==='NULL'?'без медали':k}</b> ${md[k]}</span>`).join('');
+ $('daily').innerHTML=drow('Новые записи сегодня',dl.new_s7)+drow('В очередь сегодня',dl.queued)+drow('Завершено сегодня',dl.completed)+'<div class="chips">'+(medchips||'<span class="small">медали сегодня: -</span>')+'</div><div class="lanes">обновлено '+(dl.ts||'-')+' (каждые 2 мин)</div>';
 
  const ct=m.contour||{};
  if(ct.available&&ct.latest){const L=ct.latest;const D=ct.delta||{};
@@ -607,22 +607,22 @@ async function tick(){try{const m=await (await fetch('/api/metrics')).json();
   const n=(v)=>v==null?'-':Number(v).toLocaleString('ru-RU');
   let ch=`<div class="pipe">${big('ОБРАБОТАНО',n(L.processed_total)+' / '+n(L.eligible_total),'<div class="small">'+pct+'% '+dlx('processed_total')+'</div>')}${big('ОСТАЛОСЬ',n(L.remaining_total),'<div class="small">'+dtxt+' '+dlx('remaining_total')+'</div>')}</div>`;
   ch+=`<div class="bar" style="height:30px;margin:10px 0"><span class="g" style="width:${Math.min(100,pct)}%"></span></div>`;
-  ch+=`<div class="lanes">в работе ${n(L.in_progress)} · retry/error ${n(L.failed)} · blocked ${n(L.blocked)} · drain backlog ${n(L.backlog_drain_remaining)}</div>`;
-  ch+=`<div class="pipe" style="margin-top:8px">${big('DETERMINISTIC',n(L.deterministic_accept),'<div class="small">'+dlx('deterministic_accept')+'</div>')}${big('NO COMMERCIAL',n(L.no_commercial_entry),'<div class="small">'+dlx('no_commercial_entry')+'</div>')}${big('QWEN',n(L.qwen_processed),'<div class="small">'+dlx('qwen_processed')+'</div>')}</div>`;
+  ch+=`<div class="lanes">в работе ${n(L.in_progress)} · перезапуск/ошибка ${n(L.failed)} · заблок. ${n(L.blocked)} · очередь drain ${n(L.backlog_drain_remaining)}</div>`;
+  ch+=`<div class="pipe" style="margin-top:8px">${big('ДЕТЕРМИН.',n(L.deterministic_accept),'<div class="small">'+dlx('deterministic_accept')+'</div>')}${big('НЕТ КОММЕРЦИИ',n(L.no_commercial_entry),'<div class="small">'+dlx('no_commercial_entry')+'</div>')}${big('QWEN',n(L.qwen_processed),'<div class="small">'+dlx('qwen_processed')+'</div>')}</div>`;
   ch+=`<div class="lanes" style="margin-top:8px">МЕДАЛИ · GOLD ${n(L.gold)}${dlx('gold')} · SILVER ${n(L.silver)}${dlx('silver')} · BRONZE ${n(L.bronze)}${dlx('bronze')} · WOOD ${n(L.wood)}${dlx('wood')}</div>`;
-  const cats=ct.categories||[];if(cats.length){ch+='<div class="lanes" style="margin-top:8px">КАТЕГОРИИ · coverage</div>'+cats.map(c=>`<div class="row small"><span>${c.category_code}</span><span>${n(c.classified)}/${n(c.total)} · ${c.coverage_pct==null?'-':c.coverage_pct+'%'}${c.coverage_delta_pp!=null?' <b style="color:#2ea043">'+c.coverage_delta_pp+'pp</b>':''}</span></div>`).join('');}
-  ch+=`<div class="lanes" style="margin-top:8px">ДОКУМЕНТЫ · pending ${n(L.document_pending)} · processing ${n(L.document_processing)} · completed ${n(L.document_completed_total)}${dlx('document_completed_total')} · no_links ${n(L.document_no_links)} · failed ${n(L.document_failed)}</div>`;
+  const cats=ct.categories||[];if(cats.length){ch+='<div class="lanes" style="margin-top:8px">КАТЕГОРИИ · покрытие</div>'+cats.map(c=>`<div class="row small"><span>${c.category_code}</span><span>${n(c.classified)}/${n(c.total)} · ${c.coverage_pct==null?'-':c.coverage_pct+'%'}${c.coverage_delta_pp!=null?' <b style="color:#2ea043">'+c.coverage_delta_pp+'pp</b>':''}</span></div>`).join('');}
+  ch+=`<div class="lanes" style="margin-top:8px">ДОКУМЕНТЫ · в очереди ${n(L.document_pending)} · в работе ${n(L.document_processing)} · готово ${n(L.document_completed_total)}${dlx('document_completed_total')} · без связей ${n(L.document_no_links)} · ошибок ${n(L.document_failed)}</div>`;
   $('contour').innerHTML=ch;$('cage').textContent='срез: '+fresh+(src==='24h'?' · Δ24h':(src==='baseline'?' · с baseline':' · накопление'));
  }else{$('contour').innerHTML='<div class="small">нет снапшотов</div>';$('cage').textContent='';}
 
-const qbars=(arr)=>{const a=arr||[];const mx=Math.max(20,...a.map(x=>x.count));return a.length?a.map(x=>`<div class="qt"><span class="nm">${x.band}</span><span class="bar" style="flex:1"><span class="${cls(x.count/mx*100)}" style="width:${x.count/mx*100}%"></span></span><span>${x.count}</span></div>`).join(''):'<div class="small">nothing</div>';};
+const qbars=(arr)=>{const a=arr||[];const mx=Math.max(20,...a.map(x=>x.count));return a.length?a.map(x=>`<div class="qt"><span class="nm">${x.band}</span><span class="bar" style="flex:1"><span class="${cls(x.count/mx*100)}" style="width:${x.count/mx*100}%"></span></span><span>${x.count}</span></div>`).join(''):'<div class="small">пусто</div>';};
  $('q').innerHTML=qbars(m.queue.waiting);
  $('qp').innerHTML=qbars(m.queue.processing);
 
  const span=(v)=>Math.max(0.15,2.1-1.9*Math.min(1,Math.max(0,v)));
  const fanSvg=(dur,color)=>`<svg class="blades" style="animation-duration:${dur}s" viewBox="0 0 100 100"><g fill="${color}"><path d="M50 50 L49 6 A44 44 0 0 1 80 20 Z"/><path d="M50 50 L94 49 A44 44 0 0 1 80 80 Z" opacity=".85"/><path d="M50 50 L51 94 A44 44 0 0 1 20 80 Z"/><path d="M50 50 L6 51 A44 44 0 0 1 20 20 Z" opacity=".85"/></g><circle cx="50" cy="50" r="9" fill="#e6edf3"/></svg>`;
  let fansHtml=(m.cooling&&m.cooling.fans?m.cooling.fans:[]).map(f=>`<div class="fan">${fanSvg(span(f.rpm/3500).toFixed(2),'#58a6ff')}<div class="small">${f.label}<br><b style="font-size:24px">${f.rpm}</b> RPM</div></div>`).join('');
- if(m.gpu&&m.gpu.fan!=null){fansHtml+=`<div class="fan">${fanSvg(span(m.gpu.fan/100).toFixed(2),'#3fb950')}<div class="small">GPU fan<br><b style="font-size:24px">${m.gpu.fan}</b> %</div></div>`;}
+ if(m.gpu&&m.gpu.fan!=null){fansHtml+=`<div class="fan">${fanSvg(span(m.gpu.fan/100).toFixed(2),'#3fb950')}<div class="small">Вентилятор GPU<br><b style="font-size:24px">${m.gpu.fan}</b> %</div></div>`;}
 const gpuT=(m.gpu?m.gpu.temp:null);
 const tcol=v=>v>=80?'#da3633':v>=70?'#d29922':'#2ea043';
 const iconCpu=`<svg viewBox="0 0 48 48" class="ico"><g fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><rect x="12" y="12" width="24" height="24" rx="3"/><rect x="19" y="19" width="10" height="10"/><path d="M18 6v6M24 6v6M30 6v6M18 36v6M24 36v6M30 36v6M6 18h6M6 24h6M6 30h6M36 18h6M36 24h6M36 30h6"/></g></svg>`;
@@ -647,30 +647,30 @@ $('cool').innerHTML=`<div class="cool-row">${fansHtml}${tempsHtml}</div>`;
  const od=opp.open_delta||{}, ad=opp.awarded_delta||{};
  const mtile=(lbl,v,d,col)=>`<div class="mtile" style="border-color:${col}"><div class="mname" style="color:${col}">${lbl}</div><div class="mnum">${v}${dsup(d)}</div></div>`;
  const stageBlock=(title,meds,del)=>{const cols={GOLD:'#d4a017',SILVER:'#a8b3bd',BRONZE:'#b06a2b',WOOD:'#6e4b2a'};return `<div class="stage"><div class="stitle">${title}</div><div class="mtiles">${['GOLD','SILVER','BRONZE','WOOD'].map(k=>mtile(k,meds[k]||0,del[k],cols[k])).join('')}</div></div>`;};
- $('opps').innerHTML='<div class="pipe">'+stageBlock('OPEN',open,od)+stageBlock('AWARDED',awd,ad)+'</div>'
-  +'<div class="lanes">REMOVED · EXPIRED '+rem.expired+' · NO COMMERCIAL '+rem.no_commercial+' · DIRECT GOODS '+rem.direct_goods_excluded+'</div>'
-  +'<div class="lanes">NOT CLASSIFIED · OPEN '+nc.open+' · AWARDED '+nc.awarded+'</div>'
-  +'<div class="lanes">MEDAL FLOW 60m · ↑ '+flow.up+' · ↓ '+flow.down+' · × '+flow.removed+' · ↻ '+flow.lifecycle_reset+'</div>';
+ $('opps').innerHTML='<div class="pipe">'+stageBlock('ОТКРЫТО',open,od)+stageBlock('РОЗЫГРАНО',awd,ad)+'</div>'
+  +'<div class="lanes">УБРАНО · ИСТЕКЛО '+rem.expired+' · НЕТ КОММЕРЦИИ '+rem.no_commercial+' · ПРЯМАЯ ПОСТАВКА '+rem.direct_goods_excluded+'</div>'
+  +'<div class="lanes">НЕ РАЗМЕЧЕНО · ОТКРЫТО '+nc.open+' · РОЗЫГРАНО '+nc.awarded+'</div>'
+  +'<div class="lanes">ПОТОК МЕДАЛЕЙ 60м · ↑ '+flow.up+' · ↓ '+flow.down+' · × '+flow.removed+' · ↻ '+flow.lifecycle_reset+'</div>';
 
  const svcInfo=(m.services||[]).map(s=>s.id+':'+s.state).join(', ');
  const infoLines=[
-  'host '+(m.host||'-')+' · up '+m.uptime,
-  'load '+m.load.join(' ')+' · cpu '+m.cpu+'% · ram '+m.mem.pct+'%'+(m.gpu?' · gpu '+m.gpu.util+'%':''),
-  'pipeline waiting '+pip.waiting.total+' · processing '+pip.processing.total+' · completed '+pip.completed.total+' · failed '+pip.failed.total+' · no_links '+pip.no_links.total,
-  'open GOLD '+open.GOLD+' SILVER '+open.SILVER+' BRONZE '+open.BRONZE+' WOOD '+open.WOOD,
-  'awarded GOLD '+awd.GOLD+' SILVER '+awd.SILVER+' BRONZE '+awd.BRONZE+' WOOD '+awd.WOOD,
-  'removed expired '+rem.expired+' · no_commercial '+rem.no_commercial+' · direct_goods '+rem.direct_goods_excluded,
-  'not_classified open '+nc.open+' · awarded '+nc.awarded,
-  'services '+svcInfo
+  'хост '+(m.host||'-')+' · аптайм '+m.uptime,
+  'нагрузка '+m.load.join(' ')+' · CPU '+m.cpu+'% · ОЗУ '+m.mem.pct+'%'+(m.gpu?' · gpu '+m.gpu.util+'%':''),
+  'конвейер: ожидают '+pip.waiting.total+' · в работе '+pip.processing.total+' · готово '+pip.completed.total+' · ошибки '+pip.failed.total+' · без связей '+pip.no_links.total,
+  'открыто  GOLD '+open.GOLD+' SILVER '+open.SILVER+' BRONZE '+open.BRONZE+' WOOD '+open.WOOD,
+  'розыграно  GOLD '+awd.GOLD+' SILVER '+awd.SILVER+' BRONZE '+awd.BRONZE+' WOOD '+awd.WOOD,
+  'убрано: истекло '+rem.expired+' · нет коммерции '+rem.no_commercial+' · прямая поставка '+rem.direct_goods_excluded,
+  'не размечено: открыто '+nc.open+' · розыграно '+nc.awarded,
+  'сервисы '+svcInfo
  ].join('\n');
  $('info').innerHTML='<pre style="white-space:pre-wrap;font-size:18px;line-height:1.55;margin:0;color:#c9d1d9">'+infoLines+'</pre>';
 
  const pd=pip.delta||{};
- $('pipe').innerHTML='<div class="pipe">'+pstage('Waiting',pip.waiting,'w',pd.waiting)+parr+pstage('Processing',pip.processing,'p',pd.processing)+parr+pstage('Completed',pip.completed,'c',pd.completed)+parr+pstage('Failed',pip.failed,'f',pd.failed)+parr+pstage('No links',pip.no_links,'n')+'</div><div class="lanes">waiting lanes: '+(lanes||'-')+'</div>';
+ $('pipe').innerHTML='<div class="pipe">'+pstage('Ожидают',pip.waiting,'w',pd.waiting)+parr+pstage('В работе',pip.processing,'p',pd.processing)+parr+pstage('Завершено',pip.completed,'c',pd.completed)+parr+pstage('Ошибки',pip.failed,'f',pd.failed)+parr+pstage('Без связей',pip.no_links,'n')+'</div><div class="lanes">очередь (полосы): '+(lanes||'-')+'</div>';
 
  line($('cchart'),m.hist.cpu,'#58a6ff');line($('gchart'),m.hist.gpu,'#3fb950');
- $('foot').textContent='updated '+m.time+' ? refresh 2s';
-}catch(e){$('foot').textContent='error: '+e;}}
+ $('foot').textContent='обновлено '+m.time+' · авто 2s';
+}catch(e){$('foot').textContent='ошибка: '+e;}}
 tick();setInterval(tick,2000);window.addEventListener('resize',()=>tick());
 </script></body></html>"""
 
