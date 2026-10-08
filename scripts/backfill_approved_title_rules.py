@@ -81,6 +81,7 @@ def scan(cur, rules):
     ready = []                 # (opp_id, target_sub, conf, rule_id)
     per_rule = defaultdict(lambda: {"matched": 0, "ready": 0, "already": 0, "conflict": 0})
     assign_ready = assign_already = assign_conflict = 0
+    conflicts = []  # (category, normalized_title, existing_code) for non-null mismatches
     claimed = set()  # (proc_id, cat, track, version, target) written once per batch
     for r in rows:
         scanned += 1
@@ -116,6 +117,8 @@ def scan(cur, rules):
         else:
             assign_conflict += 1
             bucket["conflict"] += 1
+            conflicts.append((r["commercial_category_code"], normalized,
+                              str(r["commercial_subcategory_code"]).strip()))
     stats = {
         "CURRENT_SCANNED": scanned,
         "TITLE_RULE_MATCHED": matched,
@@ -128,7 +131,7 @@ def scan(cur, rules):
         "ASSIGN_CONFLICTING_CLASSIFIED": assign_conflict,
         "NO_RULE": scanned - matched,
     }
-    return stats, ready, per_rule
+    return stats, ready, per_rule, conflicts
 
 
 SNAPSHOT_SQL = """
@@ -223,7 +226,7 @@ def main(argv=None):
     conn = connect_crm()
     cur = conn.cursor()
     rules = load_exact_title_rules(cur)
-    stats, ready, per_rule = scan(cur, rules)
+    stats, ready, per_rule, conflicts = scan(cur, rules)
 
     for k in ("CURRENT_SCANNED", "TITLE_RULE_MATCHED", "ASSIGN_MATCHED",
               "KEEP_MATCHED", "MOVE_MATCHED", "REMOVE_MATCHED",
@@ -235,6 +238,10 @@ def main(argv=None):
     for norm, b in sorted(per_rule.items()):
         print(f"  {norm}: matched={b['matched']} unclassified_ready={b['ready']} "
               f"already_classified={b['already']} conflicts={b['conflict']}")
+
+    print(f"\nEXISTING_ASSIGNMENT_CONFLICTS={len(conflicts)}")
+    for cat, norm, existing in sorted(conflicts):
+        print(f"  CONFLICT {cat}/{norm} existing={existing}")
 
     if args.canary or args.apply:
         batch = ready[: args.canary_limit] if args.canary else ready

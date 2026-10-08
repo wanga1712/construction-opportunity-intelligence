@@ -86,3 +86,46 @@ def test_existing_non_null_subcategory_not_overwritten():
     assert is_unclassified("") is True
     assert is_unclassified("SUBCATEGORY_NOT_ASSIGNED") is True
     assert is_unclassified("monitors") is False
+
+
+# --- TAXONOMY GAPS V1: upgraded KEEP -> ASSIGN_SUBCATEGORY rules ---------------
+def _gap_resolve(category, title, normalized_key, subcategory):
+    rule = {
+        "id": 99, "action": "ASSIGN_SUBCATEGORY", "target_category_code": category,
+        "target_subcategory_code": subcategory, "confidence": 0.99,
+        "execution_enabled": True, "reason": "taxonomy_gap_v1",
+    }
+    ctx = ResolverContext(
+        product_by_category={category: {subcategory}},
+        approved_title_rules=resolver_rules_from({(category, normalized_key): rule}),
+    )
+    return resolve(ResolverInput(category_code=category, title=title), ctx)
+
+
+def test_gap_printing_consumables():
+    res = _gap_resolve("computers", "Поставка картриджей.", "поставка картриджей",
+                       "printing_consumables")
+    assert res.subcategory_code == "printing_consumables"
+    assert res.source == SOURCE_APPROVED_TITLE_RULE
+
+
+def test_gap_projectors():
+    res = _gap_resolve("computers", "Проектор", "проектор", "projectors")
+    assert res.subcategory_code == "projectors"
+
+
+def test_gap_generic_luminaires():
+    res = _gap_resolve("lighting", "Поставка светильников", "поставка светильников",
+                       "generic_luminaires")
+    assert res.subcategory_code == "generic_luminaires"
+
+
+def test_gap_led_lamps():
+    res = _gap_resolve("lighting", "Лампа светодиодная", "лампа светодиодная", "led_lamps")
+    assert res.subcategory_code == "led_lamps"
+
+
+def test_gap_culvert_pipes():
+    res = _gap_resolve("drainage_water_management", "Водопропускная труба",
+                       "водопропускная труба", "culvert_pipes")
+    assert res.subcategory_code == "culvert_pipes"
