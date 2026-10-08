@@ -337,6 +337,109 @@ def pipeline_with_delta():
     return pipe
 
 
+_CONTOUR_COLS = (
+    "captured_at", "eligible_total", "processed_total", "remaining_total",
+    "in_progress", "deterministic_accept", "no_commercial_entry", "qwen_processed",
+    "classified_total", "backlog_drain_remaining", "gold", "silver", "bronze", "wood",
+    "failed", "blocked", "document_pending", "document_processing",
+    "document_completed_total", "document_no_links", "document_failed",
+)
+
+
+def _parse_snapshot_line(line, keys):
+    parts = line.split("|")
+    if len(parts) != len(keys):
+        return None
+    d = {}
+    for k, v in zip(keys, parts):
+        v = v.strip()
+        if v in ("", "NULL", "None"):
+            d[k] = None
+            continue
+        try:
+            d[k] = float(v) if "." in v or "-" in v[1:] else int(v)
+        except ValueError:
+            d[k] = v
+    return d
+
+
+def _contour_snapshot_rows():
+    cols = ", ".join(_CONTOUR_COLS)
+    sql = (
+        "(SELECT " + cols + ", EXTRACT(EPOCH FROM (NOW()-captured_at))::int AS age_sec, 'latest' AS tag "
+        "FROM crm_contour_progress_snapshots ORDER BY captured_at DESC LIMIT 1) "
+        "UNION ALL "
+        "(SELECT " + cols + ", NULL, 'd24' FROM crm_contour_progress_snapshots "
+        "WHERE captured_at BETWEEN NOW()-INTERVAL '24 hours 30 minutes' AND NOW()-INTERVAL '23 hours 30 minutes' "
+        "ORDER BY abs(EXTRACT(EPOCH FROM (captured_at-(NOW()-INTERVAL '24 hours')))) LIMIT 1) "
+        "UNION ALL "
+        "(SELECT " + cols + ", EXTRACT(EPOCH FROM (NOW()-captured_at))::int, 'baseline' "
+        "FROM crm_contour_progress_snapshots ORDER BY captured_at ASC LIMIT 1)"
+    )
+    keys = list(_CONTOUR_COLS) + ["age_sec", "tag"]
+    rows = {}
+    for line in _run_crm(sql, 12).splitlines():
+        d = _parse_snapshot_line(line, keys)
+        if d:
+            rows[d["tag"]] = d
+    return rows
+
+
+def _contour_categories():
+    sql = (
+        "SELECT category_code, total, classified, unclassified, coverage_pct, "
+        "EXTRACT(EPOCH FROM (NOW()-captured_at))::int AS age_sec, tag FROM ("
+        " (SELECT category_code, total, classified, unclassified, coverage_pct, captured_at, 'latest' AS tag "
+        "  FROM crm_contour_category_snapshots WHERE captured_at=(SELECT max(captured_at) FROM crm_contour_category_snapshots)) "
+        " UNION ALL "
+        " (SELECT category_code, total, classified, unclassified, coverage_pct, captured_at, 'd24' AS tag "
+        "  FROM crm_contour_category_snapshots "
+        "  WHERE captured_at BETWEEN NOW()-INTERVAL '24 hours 30 minutes' AND NOW()-INTERVAL '23 hours 30 minutes')"
+        ") s ORDER BY tag, coverage_pct DESC NULLS LAST"
+    )
+    out = {"latest": [], "d24": {}}
+    for line in _run_crm(sql, 10).splitlines():
+        d = _parse_snapshot_line(line, ["category_code", "total", "classified",
+                                        "unclassified", "coverage_pct", "age_sec", "tag"])
+        if not d:
+            continue
+        if d["tag"] == "latest":
+            out["latest"].append(d)
+        elif d["tag"] == "d24":
+            out["d24"][d["category_code"]] = d
+    return out
+
+
+def contour():
+    rows = _contour_snapshot_rows()
+    latest = rows.get("latest")
+    out = {"available": bool(latest), "latest": latest,
+           "d24": rows.get("d24"), "baseline": rows.get("baseline"),
+           "delta": {}, "delta_source": None}
+    if not latest:
+        return out
+    ref = rows.get("d24")
+    source = "24h"
+    if not ref:
+        base = rows.get("baseline")
+        if base and base.get("captured_at") != latest.get("captured_at"):
+            ref, source = base, "baseline"
+    if ref:
+        for k in ("processed_total", "remaining_total", "gold", "silver", "bronze",
+                  "wood", "deterministic_accept", "no_commercial_entry", "qwen_processed",
+                  "document_completed_total"):
+            if latest.get(k) is not None and ref.get(k) is not None:
+                out["delta"][k] = latest[k] - ref[k]
+        out["delta_source"] = source
+    cats = _contour_categories()
+    for c in cats["latest"]:
+        prev = cats["d24"].get(c["category_code"])
+        if prev and c.get("coverage_pct") is not None and prev.get("coverage_pct") is not None:
+            c["coverage_delta_pp"] = round(c["coverage_pct"] - prev["coverage_pct"], 1)
+    out["categories"] = cats["latest"]
+    return out
+
+
 _daily = {"data": {"new_s7": None, "queued": None, "completed": None, "medals": {}, "ts": None}}
 
 def _compute_daily():
@@ -391,7 +494,8 @@ def snapshot():
     return {"host":socket.gethostname(),"time":time.strftime("%Y-%m-%d %H:%M:%S"),
             "uptime":up,"load":load,"cpu":c,"temp":temp_c(),"mem":mem(),"gpu":g,
             "disks":disks(),"services":services(),"queue":queue(),"cooling":cooling(),"pipeline":pipe,
-            "opportunities":opp,"torgi":torgi_medals(),"daily":_daily["data"],"hist":h}
+            "opportunities":opp,"torgi":torgi_medals(),"daily":_daily["data"],"hist":h,
+            "contour":contour()}
 
 PAGE = r"""<!doctype html><html><head><meta charset="utf-8">
 <title>S13</title><style>
@@ -453,6 +557,7 @@ footer{padding:8px 22px;color:#484f58;font-size:16px}
 </style></head><body>
 <header><h1 id="host">S13</h1><div class="small" id="clock"></div><div class="small" id="up"></div></header>
 <div class="grid">
+ <div class="card" style="grid-column:span 4"><h2>АНАЛИТИЧЕСКИЙ КОНТУР <span id="cage" class="small"></span></h2><div id="contour"></div></div>
  <div class="card" style="grid-column:span 4"><h2>OPPORTUNITIES</h2><div id="opps"></div></div>
  <div class="card" style="grid-column:span 4"><h2>CURRENT INFO</h2><div id="info"></div></div>
  <div class="card"><h2>CPU</h2><div class="val" id="cpu">-</div><div class="bar"><span id="cpub"></span></div><canvas id="cchart"></canvas><div class="small">load <span id="load"></span></div></div>
@@ -489,6 +594,26 @@ async function tick(){try{const m=await (await fetch('/api/metrics')).json();
  const drow=(lbl,v,tone)=>`<div class="row"><span>${lbl}</span><b class="${tone||''}" style="font-size:28px">${v==null?'...':v}</b></div>`;
  const medchips=['GOLD','SILVER','BRONZE','WOOD','NULL'].filter(k=>md[k]).map(k=>`<span class="chip"><b style="color:${bc[k]||'#8b949e'}">${k==='NULL'?'no medal':k}</b> ${md[k]}</span>`).join('');
  $('daily').innerHTML=drow('New records today',dl.new_s7)+drow('Queued today',dl.queued)+drow('Completed today',dl.completed)+'<div class="chips">'+(medchips||'<span class="small">medals today: -</span>')+'</div><div class="lanes">updated '+(dl.ts||'-')+' (every 2 min)</div>';
+
+ const ct=m.contour||{};
+ if(ct.available&&ct.latest){const L=ct.latest;const D=ct.delta||{};
+  const pct=L.eligible_total?Math.round(1000*L.processed_total/L.eligible_total)/10:0;
+  const src=ct.delta_source;
+  const dlx=(k)=>D[k]==null?'':` <span style="font-size:.62em;color:${D[k]>=0?'#2ea043':'#da3633'}">${D[k]>=0?'+':''}${D[k]}</span>`;
+  const age=L.age_sec==null?null:Math.round(L.age_sec/60);
+  const fresh=age==null?'-':(L.age_sec>1800?'STALE':age+' мин');
+  const big=(t,v,sub)=>`<div class="stage"><div class="stitle">${t}</div><div class="snum">${v}</div>${sub||''}</div>`;
+  const dtxt=src==='24h'?'за 24ч':(src==='baseline'?'с baseline':'накопление истории');
+  const n=(v)=>v==null?'-':Number(v).toLocaleString('ru-RU');
+  let ch=`<div class="pipe">${big('ОБРАБОТАНО',n(L.processed_total)+' / '+n(L.eligible_total),'<div class="small">'+pct+'% '+dlx('processed_total')+'</div>')}${big('ОСТАЛОСЬ',n(L.remaining_total),'<div class="small">'+dtxt+' '+dlx('remaining_total')+'</div>')}</div>`;
+  ch+=`<div class="bar" style="height:30px;margin:10px 0"><span class="g" style="width:${Math.min(100,pct)}%"></span></div>`;
+  ch+=`<div class="lanes">в работе ${n(L.in_progress)} · retry/error ${n(L.failed)} · blocked ${n(L.blocked)} · drain backlog ${n(L.backlog_drain_remaining)}</div>`;
+  ch+=`<div class="pipe" style="margin-top:8px">${big('DETERMINISTIC',n(L.deterministic_accept),'<div class="small">'+dlx('deterministic_accept')+'</div>')}${big('NO COMMERCIAL',n(L.no_commercial_entry),'<div class="small">'+dlx('no_commercial_entry')+'</div>')}${big('QWEN',n(L.qwen_processed),'<div class="small">'+dlx('qwen_processed')+'</div>')}</div>`;
+  ch+=`<div class="lanes" style="margin-top:8px">МЕДАЛИ · GOLD ${n(L.gold)}${dlx('gold')} · SILVER ${n(L.silver)}${dlx('silver')} · BRONZE ${n(L.bronze)}${dlx('bronze')} · WOOD ${n(L.wood)}${dlx('wood')}</div>`;
+  const cats=ct.categories||[];if(cats.length){ch+='<div class="lanes" style="margin-top:8px">КАТЕГОРИИ · coverage</div>'+cats.map(c=>`<div class="row small"><span>${c.category_code}</span><span>${n(c.classified)}/${n(c.total)} · ${c.coverage_pct==null?'-':c.coverage_pct+'%'}${c.coverage_delta_pp!=null?' <b style="color:#2ea043">'+c.coverage_delta_pp+'pp</b>':''}</span></div>`).join('');}
+  ch+=`<div class="lanes" style="margin-top:8px">ДОКУМЕНТЫ · pending ${n(L.document_pending)} · processing ${n(L.document_processing)} · completed ${n(L.document_completed_total)}${dlx('document_completed_total')} · no_links ${n(L.document_no_links)} · failed ${n(L.document_failed)}</div>`;
+  $('contour').innerHTML=ch;$('cage').textContent='срез: '+fresh+(src==='24h'?' · Δ24h':(src==='baseline'?' · с baseline':' · накопление'));
+ }else{$('contour').innerHTML='<div class="small">нет снапшотов</div>';$('cage').textContent='';}
 
 const qbars=(arr)=>{const a=arr||[];const mx=Math.max(20,...a.map(x=>x.count));return a.length?a.map(x=>`<div class="qt"><span class="nm">${x.band}</span><span class="bar" style="flex:1"><span class="${cls(x.count/mx*100)}" style="width:${x.count/mx*100}%"></span></span><span>${x.count}</span></div>`).join(''):'<div class="small">nothing</div>';};
  $('q').innerHTML=qbars(m.queue.waiting);

@@ -1,0 +1,14 @@
+[Unit]
+Description=CRM analytical contour progress snapshot (measurement only)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=sergey
+Group=sergey
+WorkingDirectory=/opt/CRM_Streamlit
+Environment=PYTHONPATH=/opt/CRM_Streamlit
+Environment=CRM_SYSTEM_HEALTH_DIR=/var/lib/crm-system-health
+ExecStart=/opt/CRM_Streamlit/.venv313/bin/python /opt/CRM_Streamlit/scripts/capture_contour_progress_snapshot.py
+Nice=10
