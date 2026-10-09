@@ -25,6 +25,11 @@ from src.services.commercial_routing_v3.post_award_execution_timing import (
     clock_to_audit_dict,
     late_entry_hard_cap,
 )
+from src.services.commercial_routing_v3.category_admission import (
+    ADMISSION_POLICY_VERSION,
+    has_admissible_category_signal,
+    rejection_record,
+)
 
 CANDIDATE_SCORING_VERSION = "v2_post_award_execution_20260814"
 
@@ -419,8 +424,16 @@ def apply_candidate_scoring_to_hypotheses(
     procurement: Dict[str, Any],
     normalized: Dict[str, Any],
     source_data_quality: str = "OK",
+    apply_category_admission: bool = True,
+    admission_rejections: Optional[List[Dict[str, Any]]] = None,
 ) -> List[Dict[str, Any]]:
-    """Score all hypotheses; attach audit fields; medal derived ONLY from final_score."""
+    """Admit then score hypotheses; attach audit fields; medal derived ONLY from final_score.
+
+    CATEGORY ADMISSION runs before SCORING: a hypothesis without a positive
+    category signal is rejected and never scored, so generic default components
+    cannot create a medal on their own. Rejections are recorded in
+    ``admission_rejections`` when a list is supplied.
+    """
     mi = procurement.get("v3_model_input") if isinstance(procurement.get("v3_model_input"), dict) else {}
     try:
         price = float(procurement.get("price") or mi.get("initial_price") or 0)
@@ -454,8 +467,18 @@ def apply_candidate_scoring_to_hypotheses(
 
     out: List[Dict[str, Any]] = []
     for h in hypotheses:
+        if apply_category_admission:
+            admissible, signal_source = has_admissible_category_signal(h)
+            if not admissible:
+                if admission_rejections is not None:
+                    admission_rejections.append(rejection_record(h))
+                continue
+        else:
+            signal_source = None
         row = dict(h)
         result = score_hypothesis(row, ctx)
+        row["category_admission_policy"] = ADMISSION_POLICY_VERSION
+        row["category_admission_signal"] = signal_source
         row["commercial_priority_score"] = int(round(result.final_score))
         row["research_value_score"] = int(round(result.base_score))
         row["candidate_score"] = result.final_score

@@ -182,6 +182,7 @@ class RoutingDecisionV3:
     empty_hypothesis_status: Optional[str] = None
     empty_hypothesis_reason_codes: List[str] = field(default_factory=list)
     rejected_category_codes: List[str] = field(default_factory=list)
+    category_admission_rejections: List[Dict[str, Any]] = field(default_factory=list)
     preferred_opportunity_track: Optional[str] = None
     review_required: bool = False
     routing_mode: Optional[str] = None
@@ -225,6 +226,7 @@ class RoutingDecisionV3:
             "discovery_required": self.discovery_required,
             "overall_research_action": self.overall_research_action.value,
             "empty_hypothesis_status": self.empty_hypothesis_status,
+            "category_admission_rejections": self.category_admission_rejections,
             "routing_mode": self.routing_mode,
             "object_classification": self.object_classification,
             "document_research_priority": self.document_research_priority,
