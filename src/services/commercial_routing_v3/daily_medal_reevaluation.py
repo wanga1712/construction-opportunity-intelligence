@@ -17,6 +17,9 @@ from src.services.commercial_routing_v3.medal_lineage import (
 from src.services.commercial_routing_v3.post_award_execution_timing import (
     clock_from_model_input,
 )
+from src.services.commercial_routing_v3.project_lifecycle import (
+    compute_project_clock,
+)
 
 PROPOSED_PRODUCTION_CADENCE = (
     "Minimum daily 06:00 Europe/Moscow after overnight source projection. "
@@ -60,6 +63,16 @@ def reevaluate_opportunity(
     clock = None
     if lc == "AWARDED":
         clock = clock_from_model_input(mi or row, as_of=as_of)
+    # PROJECT LIFECYCLE V1: daily reevaluation refreshes project end/active state.
+    project_clock = compute_project_clock(
+        {
+            "execution_start_at": row.get("execution_start_at") or mi.get("execution_start_at"),
+            "delivery_start_date": row.get("delivery_start_date") or mi.get("delivery_start_date"),
+            "execution_end_at": row.get("execution_end_at") or mi.get("execution_end_at"),
+            "delivery_end_date": row.get("delivery_end_date") or mi.get("delivery_end_date"),
+        },
+        as_of=as_of,
+    )
     reason = decay_reason_for_lifecycle(lc, previous_lifecycle=previous_lifecycle)
     if source_data_changed:
         reason = REASON_SOURCE_CHANGE
@@ -75,6 +88,7 @@ def reevaluate_opportunity(
         if row.get("remaining_days") is not None
         else mi.get("remaining_days"),
         execution_clock=clock,
+        project_clock=project_clock,
         source_origin=row.get("source_origin") or mi.get("source_origin"),
         source_data_quality=str(row.get("source_data_quality") or "OK"),
         initial_price=float(row.get("initial_price") or mi.get("initial_price") or 0.0),
@@ -100,6 +114,7 @@ def reevaluate_opportunity(
         "reason": reason,
         "scoring_version": CANDIDATE_SCORING_VERSION,
         "daily_reevaluation_version": DAILY_REEVALUATION_VERSION,
+        "project_clock": project_clock.as_dict(),
     }
 
 
