@@ -371,7 +371,9 @@ def get_category_procurements(
             o.opportunity_track,
             o.candidate_initial_medal,
             o.current_effective_medal,
-            o.confirmed_base_medal
+            o.confirmed_base_medal,
+            o.expected_category_value,
+            o.category_value_basis
         FROM crm_procurement_category_opportunities o
         JOIN crm_procurements p ON p.id = o.procurement_id
         LEFT JOIN crm_product_subcategories s
@@ -413,6 +415,8 @@ def get_category_procurements(
             "candidate_initial_medal": row.get("candidate_initial_medal"),
             "current_effective_medal": row.get("current_effective_medal"),
             "confirmed_base_medal": row.get("confirmed_base_medal"),
+            "expected_category_value": row.get("expected_category_value"),
+            "category_value_basis": row.get("category_value_basis"),
         }
         for row in rows
     ]

@@ -162,6 +162,20 @@ def _render_category_cards(categories, medal_view) -> None:
                     st.rerun()
 
 
+def _document_category_value(row):
+    """Confirmed DOCUMENT category value only; never falls back to НМЦК."""
+    basis = str(row.get("category_value_basis") or "").strip().upper()
+    val = row.get("expected_category_value")
+    if val is None or not basis.startswith("DOCUMENT_"):
+        return None
+    return val
+
+
+def _fmt_doc_category_value(row):
+    v = _document_category_value(row)
+    return _format_amount(v) if v is not None else "—"
+
+
 def _render_category_detail(crm_db, categories, category_code, medal_view) -> None:
     category = next(
         (item for item in categories if item.get("category_code") == category_code),
@@ -249,7 +263,9 @@ def _render_category_detail(crm_db, categories, category_code, medal_view) -> No
         f"Все категории → {category.get('category_name')} → {sub_label}"
     )
     st.metric("Закупок", sub_count)
-    st.metric("Сумма", _format_amount(sub_amount))
+    _amt1, _amt2 = st.columns(2)
+    _amt1.metric("НМЦК закупок", _format_amount(sub_amount))
+    _amt2.metric("Подтверждено по проектной документации", "—")
 
     try:
         from src.services.category_overview_service import get_category_procurements
@@ -270,7 +286,8 @@ def _render_category_detail(crm_db, categories, category_code, medal_view) -> No
                     "Товар": row.get("product_name"),
                     "Кол-во": row.get("quantity"),
                     "Ед.": row.get("unit"),
-                    "Сумма": _format_amount(row.get("initial_price")),
+                    "НМЦК закупки": _format_amount(row.get("initial_price")),
+                    "Подтверждено по проектной документации": _fmt_doc_category_value(row),
                     "Режим": row.get("procurement_mode"),
                     "Объект": row.get("object_type"),
                     "Работы": row.get("work_type"),
