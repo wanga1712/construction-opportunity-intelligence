@@ -13,7 +13,7 @@ from typing import Any, Dict, List, Optional
 
 
 ROUTING_VERSION = "v3"
-PROMPT_VERSION = "v3_category_centric_routing_7b_v5"
+PROMPT_VERSION = "v3_category_centric_routing_7b_v5_signals1"
 
 
 class SourceContour(StrEnum):
@@ -50,6 +50,86 @@ class OpportunityTrack(StrEnum):
     DESIGN_INFLUENCE = "DESIGN_INFLUENCE"
     NO_COMMERCIAL_ENTRY = "NO_COMMERCIAL_ENTRY"
     UNKNOWN = "UNKNOWN"
+
+
+class ObjectStage(StrEnum):
+    """OBJECT_STAGE — object lifecycle stage (business name: «Стадия объекта»).
+
+    Canonical axis added by WIP OBJECT-STAGE-SERVICE-TYPE-IMPLEMENTATION-V1.
+
+    NOT the legacy ``crm_object_ai_classifications.project_stage`` column: that
+    one records the tender/publication stage and must never be bound to
+    «Стадия объекта». See docs/PROCUREMENT_ROUTING_TAXONOMY_CONTRACT.md §3.
+    """
+
+    SURVEY = "SURVEY"                              # изыскания / геодезия / геология / топография, до проекта
+    DESIGN = "DESIGN"                              # разработка проектной документации / ПСД
+    WORKING_DOCUMENTATION = "WORKING_DOCUMENTATION"  # РД либо ПД + РД
+    EXPERTISE = "EXPERTISE"                        # экспертиза ПД / результатов изысканий
+    CONSTRUCTION = "CONSTRUCTION"                  # строительство / реконструкция / капремонт / ремонт / монтаж
+    OPERATION = "OPERATION"                        # эксплуатация / обслуживание существующего объекта
+    UNKNOWN = "UNKNOWN"                            # нельзя уверенно определить
+
+
+class ServiceType(StrEnum):
+    """SERVICE_TYPE — service subtype axis, independent from OBJECT_STAGE.
+
+    Only service-bearing procurement forms (today: SERVICES_OTHER) may carry a
+    value other than NONE / UNKNOWN.
+    """
+
+    CONSTRUCTION_CONTROL = "CONSTRUCTION_CONTROL"  # строительный контроль / технический надзор
+    AUTHOR_SUPERVISION = "AUTHOR_SUPERVISION"      # авторский надзор
+    TECHNICAL_SURVEY = "TECHNICAL_SURVEY"          # обследование технического состояния объекта
+    ENGINEERING_SURVEY = "ENGINEERING_SURVEY"      # геодезия / геология / топография / изыскания
+    LAB_TESTING = "LAB_TESTING"                    # лабораторные испытания / исследования
+    MAINTENANCE_SERVICE = "MAINTENANCE_SERVICE"    # эксплуатация / ТО / сервисное обслуживание
+    OTHER_SERVICE = "OTHER_SERVICE"                # другая распознанная услуга
+    NONE = "NONE"                                  # закупка не является услугой
+    UNKNOWN = "UNKNOWN"                            # услуга есть, subtype не определён
+
+
+#: WORK_STAGE is a SEPARATE axis (nature of works), NOT the object lifecycle.
+#: Producers: classify_work_stage() and the routing prompts (v6* emit SUPPLY).
+WORK_STAGE_VALUES: tuple[str, ...] = (
+    "SURVEY_AND_DESIGN",
+    "DESIGN",
+    "CAPITAL_REPAIR",
+    "REPAIR",
+    "NEW_CONSTRUCTION",
+    "RECONSTRUCTION",
+    "SUPPLY",
+    "SERVICE",
+    "UNKNOWN",
+)
+
+OBJECT_STAGE_VALUES: tuple[str, ...] = tuple(s.value for s in ObjectStage)
+SERVICE_TYPE_VALUES: tuple[str, ...] = tuple(s.value for s in ServiceType)
+
+#: Explicit reminder for readers of persisted legacy rows.
+LEGACY_PROJECT_STAGE_IS_NOT_OBJECT_STAGE = True
+
+OBJECT_STAGE_UI_LABELS: dict[str, str] = {
+    ObjectStage.SURVEY.value: "Изыскания",
+    ObjectStage.DESIGN.value: "Проектирование",
+    ObjectStage.WORKING_DOCUMENTATION.value: "Рабочая документация",
+    ObjectStage.EXPERTISE.value: "Экспертиза",
+    ObjectStage.CONSTRUCTION.value: "Строительство / ремонт",
+    ObjectStage.OPERATION.value: "Эксплуатация / ТО",
+    ObjectStage.UNKNOWN.value: "Не определено",
+}
+
+SERVICE_TYPE_UI_LABELS: dict[str, str] = {
+    ServiceType.CONSTRUCTION_CONTROL.value: "Строительный контроль",
+    ServiceType.AUTHOR_SUPERVISION.value: "Авторский надзор",
+    ServiceType.TECHNICAL_SURVEY.value: "Техническое обследование",
+    ServiceType.ENGINEERING_SURVEY.value: "Инженерные изыскания",
+    ServiceType.LAB_TESTING.value: "Лабораторные испытания",
+    ServiceType.MAINTENANCE_SERVICE.value: "ТО / обслуживание",
+    ServiceType.OTHER_SERVICE.value: "Прочая услуга",
+    ServiceType.NONE.value: "Не услуга",
+    ServiceType.UNKNOWN.value: "Не определено",
+}
 
 
 class ResearchAction(StrEnum):
@@ -182,6 +262,7 @@ class RoutingDecisionV3:
     empty_hypothesis_status: Optional[str] = None
     empty_hypothesis_reason_codes: List[str] = field(default_factory=list)
     rejected_category_codes: List[str] = field(default_factory=list)
+    category_admission_rejections: List[Dict[str, Any]] = field(default_factory=list)
     preferred_opportunity_track: Optional[str] = None
     review_required: bool = False
     routing_mode: Optional[str] = None
@@ -225,6 +306,7 @@ class RoutingDecisionV3:
             "discovery_required": self.discovery_required,
             "overall_research_action": self.overall_research_action.value,
             "empty_hypothesis_status": self.empty_hypothesis_status,
+            "category_admission_rejections": self.category_admission_rejections,
             "routing_mode": self.routing_mode,
             "object_classification": self.object_classification,
             "document_research_priority": self.document_research_priority,

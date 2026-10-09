@@ -27,6 +27,15 @@ from src.services.commercial_routing_v3.research_queue_lifecycle import (
 from src.services.commercial_routing_v3.document_lane_authority import (
     apply_current_opportunity_authority,
 )
+from src.services.commercial_routing_v3.category_admission import (
+    has_admissible_category_signal,
+)
+from src.services.commercial_routing_v3.project_lifecycle import (
+    PROJECT_DOCUMENT_ADMISSION_POLICY,
+    PROJECT_LIFECYCLE_POLICY_VERSION,
+    compute_project_clock,
+    evaluate_project_admission,
+)
 
 logger = logging.getLogger("commercial_routing_v3.queue_producer")
 
@@ -417,6 +426,221 @@ class CommercialRoutingV3QueueProducer:
             "errors": errors,
             "total_processed": inserted + updated + skipped_already_active + skipped_out_of_target + skipped_unknown_okpd + errors,
             "dry_run": dry_run,
+        }
+
+    # ------------------------------------------------------------------
+    # PROJECT LIFECYCLE V1: bounded admission for ACTIVE construction projects.
+    # A closed/awarded tender does not close an active embedded-supplier window.
+    # ------------------------------------------------------------------
+
+    _PROJECT_ADMISSION_SQL = """
+        SELECT o.id AS opportunity_id, o.procurement_id,
+               o.commercial_category_code, o.opportunity_track,
+               o.category_confidence, o.positive_evidence, o.reason_codes,
+               o.semantic_hypothesis, o.current_effective_medal, o.candidate_medal,
+               o.research_action, o.commercial_priority_score,
+               p.source_table, p.source_id, p.contract_number,
+               p.crm_stage, p.award_status,
+               p.delivery_start_date, p.delivery_end_date,
+               p.execution_start_at, p.execution_end_at,
+               COALESCE(p.execution_end_at, p.delivery_end_date) AS project_end
+        FROM crm_procurement_category_opportunities o
+        JOIN crm_procurements p ON p.id = o.procurement_id
+        WHERE o.status = 'CURRENT'
+          AND o.opportunity_track = 'EMBEDDED_MATERIAL'
+          AND COALESCE(p.execution_end_at, p.delivery_end_date) >= CURRENT_DATE
+        ORDER BY COALESCE(p.execution_end_at, p.delivery_end_date) ASC,
+                 o.commercial_priority_score DESC, o.procurement_id ASC
+        LIMIT %s
+    """
+
+    def _already_downloaded(self, doc_conn, procurement_id: int) -> int:
+        with doc_conn.cursor() as cur:
+            cur.execute(
+                """
+                SELECT COUNT(*) FROM document_files
+                 WHERE procurement_id = %s
+                   AND download_status = 'COMPLETED'
+                   AND local_deleted_at IS NULL
+                """,
+                (procurement_id,),
+            )
+            return int(cur.fetchone()[0])
+
+    def populate_active_project_documents(
+        self,
+        *,
+        batch_size: int = 20,
+        dry_run: bool = True,
+    ) -> Dict[str, Any]:
+        """Bounded document admission for active EMBEDDED_MATERIAL projects.
+
+        Preconditions (fail-closed): project track + positive category signal +
+        project_end_date >= today. Never a mass download (bounded batch), never
+        re-downloads unchanged documents (ALREADY_DOWNLOADED), never bypasses the
+        category admission gate. Default dry_run=True.
+        """
+        from src.services.commercial_routing_v3.document_links import count_document_links
+
+        admitted = inserted = updated = 0
+        skipped_no_signal = skipped_completed_project = skipped_no_links = 0
+        skipped_already_downloaded = skipped_already_queued = 0
+        tasks: List[Dict[str, Any]] = []
+        errors = 0
+
+        crm = psycopg2.connect(**self._crm_dsn)
+        doc_conn = psycopg2.connect(**self._doc_dsn)
+        doc_conn.autocommit = False
+        try:
+            with crm.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+                cur.execute(self._PROJECT_ADMISSION_SQL, (int(batch_size),))
+                rows = [dict(r) for r in (cur.fetchall() or [])]
+
+            for row in rows:
+                try:
+                    hyp = row.get("semantic_hypothesis") or {}
+                    if isinstance(hyp, str):
+                        hyp = {}
+                    signal_ok, signal_source = has_admissible_category_signal(
+                        {
+                            "commercial_category_code": row.get("commercial_category_code"),
+                            "category_confidence": row.get("category_confidence"),
+                            "positive_evidence": row.get("positive_evidence"),
+                            "reason_codes": row.get("reason_codes"),
+                            "evidence_role": hyp.get("evidence_role"),
+                            "direct_product_evidence_sources": hyp.get(
+                                "direct_product_evidence_sources"
+                            ),
+                        }
+                    )
+                    clock = compute_project_clock(
+                        {
+                            "execution_start_at": row.get("execution_start_at"),
+                            "delivery_start_date": row.get("delivery_start_date"),
+                            "execution_end_at": row.get("execution_end_at"),
+                            "delivery_end_date": row.get("delivery_end_date"),
+                        }
+                    )
+                    decision = evaluate_project_admission(
+                        track=row.get("opportunity_track"),
+                        has_positive_category_signal=signal_ok,
+                        project_clock=clock,
+                    )
+                    if not decision["project_active"]:
+                        skipped_completed_project += 1
+                        continue
+                    if not decision["document_admission"]:
+                        skipped_no_signal += 1
+                        continue
+                    admitted += 1
+
+                    pid = int(row["procurement_id"])
+                    link_count = count_document_links(
+                        source_table=str(row.get("source_table") or ""),
+                        source_id=row.get("source_id"),
+                        contract_number=row.get("contract_number"),
+                    )
+                    downloaded = self._already_downloaded(doc_conn, pid)
+                    if downloaded > 0:
+                        # Existing downloaded documents are reused, never re-fetched.
+                        skipped_already_downloaded += 1
+                        continue
+                    if link_count == 0:
+                        skipped_no_links += 1
+                        continue
+
+                    with doc_conn.cursor() as cur:
+                        cur.execute(
+                            """
+                            SELECT status FROM document_processing_queue
+                             WHERE procurement_id = %s AND pipeline_generation = %s
+                            """,
+                            (pid, PIPELINE_GENERATION),
+                        )
+                        existing = cur.fetchone()
+                    if existing and str(existing[0]).upper() in (
+                        "PENDING", "PROCESSING", "COMPLETED"
+                    ):
+                        skipped_already_queued += 1
+                        continue
+
+                    remaining = clock.remaining_project_days or 0.0
+                    freshness = min(20, int(max(0.0, remaining) // 30))
+                    medal_rank = {
+                        "GOLD": 4, "SILVER": 3, "BRONZE": 2, "WOOD": 1,
+                    }.get(str(row.get("current_effective_medal") or "").upper(), 1)
+                    priority = 50 + medal_rank * 5 + freshness
+
+                    task = {
+                        "procurement_id": pid,
+                        "source_table": row.get("source_table") or "",
+                        "source_id": row.get("source_id"),
+                        "contract_number": row.get("contract_number"),
+                        "assessment_id": None,
+                        "category_codes": [row.get("commercial_category_code")],
+                        "category_context": {
+                            "populate_method": "PROJECT_LIFECYCLE_V1_ACTIVE_PROJECT",
+                            "project_lifecycle": clock.as_dict(),
+                            "project_admission": decision,
+                            "category_admission_signal": signal_source,
+                            "project_end_source": "execution_end_at|delivery_end_date",
+                            "project_document_admission_policy": PROJECT_DOCUMENT_ADMISSION_POLICY,
+                            "link_count": link_count,
+                        },
+                        "candidate_level": row.get("current_effective_medal")
+                        or row.get("candidate_medal"),
+                        "candidate_score": None,
+                        "research_action": "PRIORITY_DOCS",
+                        "research_depth": "deep",
+                        "queue_lane": "crm_active_hot",
+                        "priority_score": priority,
+                        "opportunity_track": "EMBEDDED_MATERIAL",
+                        "dispatchable": True,
+                    }
+                    if dry_run:
+                        tasks.append({**task, "action": "dry_run"})
+                        continue
+                    result = self._upsert_queue_task(
+                        task, status="PRE_RESEARCH_WAITING", conn=doc_conn
+                    )
+                    action = result.get("action")
+                    if action == "inserted":
+                        inserted += 1
+                    elif action == "updated":
+                        updated += 1
+                    tasks.append({**task, "action": action})
+                except Exception as exc:
+                    errors += 1
+                    logger.exception(
+                        "project admission failed pid=%s: %s", row.get("procurement_id"), exc
+                    )
+            if not dry_run:
+                doc_conn.commit()
+        except Exception:
+            doc_conn.rollback()
+            raise
+        finally:
+            doc_conn.close()
+            crm.close()
+
+        return {
+            "pipeline": PIPELINE_GENERATION,
+            "populate_method": "PROJECT_LIFECYCLE_V1_ACTIVE_PROJECT",
+            "PROJECT_LIFECYCLE_POLICY_VERSION": PROJECT_LIFECYCLE_POLICY_VERSION,
+            "PROJECT_DOCUMENT_ADMISSION_POLICY": PROJECT_DOCUMENT_ADMISSION_POLICY,
+            "batch_size": batch_size,
+            "dry_run": dry_run,
+            "candidates_scanned": len(rows),
+            "admitted": admitted,
+            "inserted": inserted,
+            "updated": updated,
+            "skipped_no_signal": skipped_no_signal,
+            "skipped_completed_project": skipped_completed_project,
+            "skipped_no_links": skipped_no_links,
+            "skipped_already_downloaded": skipped_already_downloaded,
+            "skipped_already_queued": skipped_already_queued,
+            "errors": errors,
+            "tasks": tasks,
         }
 
     def upsert(

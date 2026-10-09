@@ -25,6 +25,12 @@ from src.services.commercial_routing_v3.post_award_execution_timing import (
     clock_to_audit_dict,
     late_entry_hard_cap,
 )
+from src.services.commercial_routing_v3.category_admission import (
+    ADMISSION_POLICY_VERSION,
+    has_admissible_category_signal,
+    rejection_record,
+)
+from src.services.commercial_routing_v3.project_lifecycle import is_project_track
 
 CANDIDATE_SCORING_VERSION = "v2_post_award_execution_20260814"
 
@@ -54,10 +60,16 @@ _OBJECT_CATEGORY_FIT: Dict[Tuple[str, str], float] = {
     ("ROAD", "lighting"): 68.0,
     ("ROAD", "waterproofing"): 52.0,
     ("ROAD", "composite_structures"): 48.0,
+    # Legacy ad-hoc object types (model echo / old rows) — kept for back-compat.
     ("GAS_PIPELINE", "composite_structures"): 55.0,
     ("BUILDING_OR_STRUCTURE", "waterproofing"): 60.0,
     ("BUILDING_OR_STRUCTURE", "flooring"): 58.0,
     ("BUILDING_OR_STRUCTURE", "lighting"): 55.0,
+    # Canonical equivalents (see src/services/expert_object_taxonomy.py).
+    ("UTILITY_NETWORKS", "composite_structures"): 55.0,
+    ("OTHER_OBJECT", "waterproofing"): 60.0,
+    ("OTHER_OBJECT", "flooring"): 58.0,
+    ("OTHER_OBJECT", "lighting"): 55.0,
 }
 
 _EVIDENCE_ROLE_FACTOR: Dict[str, float] = {
@@ -91,6 +103,11 @@ class CandidateScoringContext:
     final_contract_price: Optional[float] = None
     category_confidence: float = 0.0
     execution_clock: Optional[ExecutionClock] = None
+    # PROJECT LIFECYCLE V1: active-project runway (only for EMBEDDED_MATERIAL).
+    project_active: bool = False
+    project_timing_value: Optional[float] = None
+    project_remaining_days: Optional[float] = None
+    project_end_at: Optional[str] = None
 
 
 @dataclass
@@ -193,10 +210,19 @@ def _commercial_timing_score(
     ctx: CandidateScoringContext,
     *,
     category: str = "",
+    track: str = "",
 ) -> Tuple[float, str, str]:
     suspect = str(ctx.source_data_quality or "").upper() == "SUSPECT"
     lc = str(ctx.normalized_lifecycle or "").upper()
     timing_raw = _parse_timing_value(ctx.commercial_timing_value)
+
+    # PROJECT LIFECYCLE V1: an active embedded-material project keeps its own
+    # freshness (project_end_date). A spent submission window must not decay a
+    # live construction project to WOOD (policy mismatch fix). Checked before the
+    # AWARDED branch so awarded projects use the same execution-window runway.
+    if is_project_track(track) and ctx.project_active:
+        if ctx.project_timing_value is not None:
+            return _clamp(float(ctx.project_timing_value)), "USED", "PROJECT_LIFECYCLE"
 
     if lc == "AWARDED":
         return _awarded_timing_score(ctx, category)
@@ -303,11 +329,15 @@ def score_hypothesis(
         final_contract_price=ctx.final_contract_price,
         category_confidence=conf,
         execution_clock=ctx.execution_clock,
+        project_active=ctx.project_active,
+        project_timing_value=ctx.project_timing_value,
+        project_remaining_days=ctx.project_remaining_days,
+        project_end_at=ctx.project_end_at,
     )
 
     obj_fit = _object_category_fit(category, ctx.object_classification)
     timing_score, timing_status, execution_timing_status = _commercial_timing_score(
-        ctx, category=category
+        ctx, category=category, track=track
     )
     exec_phase = (
         ctx.execution_clock.execution_phase
@@ -361,7 +391,12 @@ def score_hypothesis(
             final += 4.0
             boosts.append("post_award_early_execution_runway")
 
-    if ctx.remaining_days is not None and float(ctx.remaining_days) < 1:
+    project_track_active = is_project_track(track) and ctx.project_active
+    if (
+        not project_track_active
+        and ctx.remaining_days is not None
+        and float(ctx.remaining_days) < 1
+    ):
         final -= 15.0
         downgrades.append("procedure_near_expiry")
 
@@ -389,6 +424,10 @@ def score_hypothesis(
             if ctx.execution_clock is not None
             else None
         ),
+        "project_active": bool(ctx.project_active),
+        "project_timing_value": ctx.project_timing_value,
+        "project_remaining_days": ctx.project_remaining_days,
+        "project_end_at": ctx.project_end_at,
         "execution_phase": (
             exec_phase.value if exec_phase is not None else None
         ),
@@ -419,8 +458,16 @@ def apply_candidate_scoring_to_hypotheses(
     procurement: Dict[str, Any],
     normalized: Dict[str, Any],
     source_data_quality: str = "OK",
+    apply_category_admission: bool = True,
+    admission_rejections: Optional[List[Dict[str, Any]]] = None,
 ) -> List[Dict[str, Any]]:
-    """Score all hypotheses; attach audit fields; medal derived ONLY from final_score."""
+    """Admit then score hypotheses; attach audit fields; medal derived ONLY from final_score.
+
+    CATEGORY ADMISSION runs before SCORING: a hypothesis without a positive
+    category signal is rejected and never scored, so generic default components
+    cannot create a medal on their own. Rejections are recorded in
+    ``admission_rejections`` when a list is supplied.
+    """
     mi = procurement.get("v3_model_input") if isinstance(procurement.get("v3_model_input"), dict) else {}
     try:
         price = float(procurement.get("price") or mi.get("initial_price") or 0)
@@ -436,6 +483,24 @@ def apply_candidate_scoring_to_hypotheses(
     if lc.upper() == "AWARDED":
         execution_clock = clock_from_model_input(mi, source_data_quality=source_data_quality)
 
+    # PROJECT LIFECYCLE V1: project runway from audited execution/delivery dates.
+    from src.services.commercial_routing_v3.project_lifecycle import (
+        compute_project_clock,
+    )
+
+    project_clock = compute_project_clock(
+        {
+            "execution_start_at": procurement.get("execution_start_at")
+            or mi.get("execution_start_at"),
+            "delivery_start_date": procurement.get("delivery_start_date")
+            or mi.get("delivery_start_date"),
+            "execution_end_at": procurement.get("execution_end_at")
+            or mi.get("execution_end_at"),
+            "delivery_end_date": procurement.get("delivery_end_date")
+            or mi.get("delivery_end_date"),
+        }
+    )
+
     ctx = CandidateScoringContext(
         procurement_form=str(normalized.get("procurement_form") or ""),
         routing_mode=normalized.get("routing_mode"),
@@ -450,12 +515,28 @@ def apply_candidate_scoring_to_hypotheses(
         initial_price=price,
         final_contract_price=final_p,
         execution_clock=execution_clock,
+        project_active=project_clock.project_active,
+        project_timing_value=project_clock.timing_value,
+        project_remaining_days=project_clock.remaining_project_days,
+        project_end_at=project_clock.project_end_at,
     )
 
     out: List[Dict[str, Any]] = []
     for h in hypotheses:
+        if apply_category_admission:
+            admissible, signal_source = has_admissible_category_signal(
+                h, title=h.get("auction_name") or h.get("title"), okpd_name=h.get("okpd_name")
+            )
+            if not admissible:
+                if admission_rejections is not None:
+                    admission_rejections.append(rejection_record(h))
+                continue
+        else:
+            signal_source = None
         row = dict(h)
         result = score_hypothesis(row, ctx)
+        row["category_admission_policy"] = ADMISSION_POLICY_VERSION
+        row["category_admission_signal"] = signal_source
         row["commercial_priority_score"] = int(round(result.final_score))
         row["research_value_score"] = int(round(result.base_score))
         row["candidate_score"] = result.final_score
@@ -472,6 +553,8 @@ def apply_candidate_scoring_to_hypotheses(
         row["execution_timing_status"] = result.execution_timing_status
         if result.execution_audit:
             row["execution_clock"] = result.execution_audit
+        if project_clock.project_end_at is not None:
+            row["project_clock"] = project_clock.as_dict()
         if not row.get("candidate_initial_medal"):
             row["candidate_initial_score"] = result.final_score
             row["candidate_initial_medal"] = result.candidate_medal.value

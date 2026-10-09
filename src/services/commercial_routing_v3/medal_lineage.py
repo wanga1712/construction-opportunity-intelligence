@@ -361,6 +361,7 @@ def scoring_ctx_from_timing(
     commercial_timing_value: Optional[float],
     remaining_days: Optional[float],
     execution_clock=None,
+    project_clock=None,
     source_origin: Optional[str] = None,
     source_data_quality: str = "OK",
     initial_price: float = 0.0,
@@ -381,4 +382,8 @@ def scoring_ctx_from_timing(
         initial_price=initial_price,
         final_contract_price=final_contract_price,
         execution_clock=execution_clock,
+        project_active=bool(getattr(project_clock, "project_active", False)),
+        project_timing_value=getattr(project_clock, "timing_value", None),
+        project_remaining_days=getattr(project_clock, "remaining_project_days", None),
+        project_end_at=getattr(project_clock, "project_end_at", None),
     )

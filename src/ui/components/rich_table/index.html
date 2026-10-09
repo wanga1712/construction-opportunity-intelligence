@@ -1,0 +1,57 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <style>
+    html, body { margin: 0; padding: 0; background: transparent;
+      font-family: "Source Sans Pro", system-ui, sans-serif; }
+  </style>
+</head>
+<body>
+  <div id="root"></div>
+  <script>
+    function sendMsg(type, data) {
+      window.parent.postMessage(
+        Object.assign({ isStreamlitMessage: true, type: type }, data), "*");
+    }
+
+    function render(args) {
+      var styleEl = document.getElementById("tw-css");
+      if (!styleEl) {
+        styleEl = document.createElement("style");
+        styleEl.id = "tw-css";
+        document.head.appendChild(styleEl);
+      }
+      styleEl.textContent = args.css || "";
+
+      var root = document.getElementById("root");
+      root.innerHTML = args.html || "";
+      var rows = root.querySelectorAll("tr[data-pid]");
+      for (var i = 0; i < rows.length; i++) {
+        (function (tr) {
+          tr.style.cursor = "pointer";
+          tr.addEventListener("click", function () {
+            var pid = tr.getAttribute("data-pid");
+            if (!pid) return;
+            for (var j = 0; j < rows.length; j++) { rows[j].style.background = ""; }
+            tr.style.background = "#d7e8fb";
+            sendMsg("streamlit:setComponentValue", { value: pid, dataType: "json" });
+          });
+        })(rows[i]);
+      }
+      var h = Number(args.height) || 520;
+      var measured = document.body.scrollHeight;
+      sendMsg("streamlit:setFrameHeight", { height: Math.max(h, measured) });
+    }
+
+    // Слушатель вешаем ДО componentReady, иначе первый render может быть потерян.
+    window.addEventListener("message", function (event) {
+      var d = event.data;
+      if (!d || !d.isStreamlitMessage) return;
+      if (d.type === "streamlit:render") { render(d.args || {}); }
+    });
+
+    sendMsg("streamlit:componentReady", { apiVersion: 1 });
+  </script>
+</body>
+</html>

@@ -97,7 +97,7 @@ class CommercialRoutingV3Engine:
             procurement,
             registry=registry,
             okpd_priors=priors,
-            routing_signals=[],
+            routing_signals=self._load_signals(),
             procurement_form_prior=form.value,
         )
 
@@ -239,13 +239,16 @@ class CommercialRoutingV3Engine:
             or business.get("commercial_category_hypotheses")
             or []
         )
+        admission_rejections: List[Dict[str, Any]] = []
         scored = apply_candidate_scoring_to_hypotheses(
             score_hyps,
             procurement=procurement,
             normalized=business,
             source_data_quality=sq,
+            admission_rejections=admission_rejections,
         )
         business["business_category_hypotheses"] = scored
+        business["category_admission_rejections"] = admission_rejections
         # Keep MODEL commercial_category_hypotheses free of medals/scores.
         business["commercial_category_hypotheses"] = copy.deepcopy(
             model_validated.get("commercial_category_hypotheses") or []
@@ -350,6 +353,9 @@ class CommercialRoutingV3Engine:
                 normalized.get("empty_hypothesis_reason_codes") or []
             ),
             rejected_category_codes=list(normalized.get("rejected_category_codes") or []),
+            category_admission_rejections=list(
+                normalized.get("category_admission_rejections") or []
+            ),
             preferred_opportunity_track=normalized.get("preferred_opportunity_track"),
             review_required=False
             if empty_st == "NO_COMMERCIAL_ENTRY" and not scored
@@ -382,6 +388,7 @@ class CommercialRoutingV3Engine:
                     normalized.get("contextual_prior_hypotheses") or []
                 ),
                 "business_category_hypotheses": list(scored),
+                "category_admission_rejections": list(admission_rejections),
                 "business_overall_research_action": getattr(
                     decision.overall_research_action, "value", decision.overall_research_action
                 ),

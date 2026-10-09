@@ -15,6 +15,8 @@ from src.ui.ai_review_page import render_ai_review_page
 from src.ui.analytics_contour_copy_page import render_analytics_contour_copy_page
 from src.ui.analytics_contour_page import render_analytics_contour_page
 from src.ui.analytics_contour_v2_page import render_analytics_contour_v2_page
+from src.ui.analytics_table_workspace_page import render_analytics_table_workspace_page
+from src.ui.procurement_card_page import render_procurement_card_page
 from src.ui.category_registry_page import render_category_registry_page
 from src.ui.companies_page import render_companies_page
 from src.ui.computers_page import render_computers_page
@@ -128,6 +130,10 @@ def _render_page(page: str, service: Optional[CompaniesService]) -> None:
         render_analytics_contour_copy_page(service)
     elif page == "objects_v2":
         render_analytics_contour_v2_page(service)
+    elif page == "table_workspace":
+        render_analytics_table_workspace_page(service)
+    elif page == "procurement_card":
+        render_procurement_card_page(service)
     elif page == "analytics_v3":
         render_v3_analytics_page(service)
     elif page == "opportunity_radar":
@@ -142,6 +148,9 @@ def _render_page(page: str, service: Optional[CompaniesService]) -> None:
         render_infrastructure_page(service)
     elif page == "system_health":
         render_system_health_page(None)
+    elif page == "pipeline":
+        from src.ui.pipeline_page import render_pipeline_page
+        render_pipeline_page(None)
     elif page == "customers":
         render_customers_page()
     elif page == "export_pdf":

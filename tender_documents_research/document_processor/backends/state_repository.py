@@ -159,10 +159,21 @@ class S13V2StateRepository(ProcessingStateRepository):
             row = None
             if canonical_source_document_id is not None:
                 cur.execute(
-                    "SELECT id FROM document_files WHERE canonical_source_document_id=%s AND pipeline_generation=%s LIMIT 1",
+                    "SELECT id, url_hash FROM document_files WHERE canonical_source_document_id=%s AND pipeline_generation=%s LIMIT 1",
                     (canonical_source_document_id, self.pipeline_generation)
                 )
                 row = cur.fetchone()
+                # Archive members share the parent's canonical source id but
+                # have their own deterministic child hash. Do not overwrite
+                # the parent row when the hash identifies a different file,
+                # and do not reuse canonical_source_document_id on insert.
+                # Archive members share the parent's canonical id but have their
+                # own child hash. Never reuse the canonical id when it is already
+                # taken by a different file — including the case of an empty
+                # url_hash (otherwise the INSERT hits uq_canonical_source_file_gen).
+                if row is not None and (not url_hash or row[1] != url_hash):
+                    row = None
+                    canonical_source_document_id = None
             
             # If not found, check by url_hash
             if row is None and url_hash:
@@ -196,6 +207,16 @@ class S13V2StateRepository(ProcessingStateRepository):
                        (queue_id, procurement_id, source_table, source_id, url, url_hash, file_name,
                         download_status, pipeline_generation, canonical_source_document_id, physical_download_key)
                        VALUES (%s,%s,%s,%s,%s,%s,%s,'PENDING',%s,%s,%s)
+                       ON CONFLICT (canonical_source_document_id, pipeline_generation) DO UPDATE SET
+                         queue_id=EXCLUDED.queue_id,
+                         procurement_id=EXCLUDED.procurement_id,
+                         source_table=EXCLUDED.source_table,
+                         source_id=COALESCE(document_files.source_id, EXCLUDED.source_id),
+                         file_name=COALESCE(document_files.file_name, EXCLUDED.file_name),
+                         url=EXCLUDED.url,
+                         url_hash=COALESCE(document_files.url_hash, EXCLUDED.url_hash),
+                         physical_download_key=COALESCE(document_files.physical_download_key,
+                                                        EXCLUDED.physical_download_key)
                     """,
                     (queue_id, procurement_id, table_source, source_id, url, url_hash, file_name, self.pipeline_generation, canonical_source_document_id, physical_download_key)
                 )
