@@ -9,6 +9,7 @@ from document_processor.matching.table_row_enricher import TableRowEnricher
 from document_processor.matching.composite_drainage_rule import match_composite_drainage
 from document_processor.matching.normalization import normalize_ocr_line
 from document_processor.matching.dto_mapper import to_match_detail
+from document_processor.matching.provenance import build_provenance
 
 logger = logging.getLogger(__name__)
 
@@ -70,6 +71,11 @@ class MatchEngine:
         try:
             compound_matches = match_composite_drainage(lines, line_meta=meta)
             if compound_matches:
+                for compound in compound_matches:
+                    ln = int(compound.get("line_number") or -1)
+                    compound["_source_line_start"] = ln if ln > 0 else None
+                    compound["_source_line_end"] = ln if ln > 0 else None
+                    compound["_matched_text"] = compound.get("matched_line") or ""
                 matches.extend(compound_matches)
         except Exception as exc:
             logger.error(f"compound_rule composite_drainage error: {exc}", exc_info=True)
@@ -81,20 +87,27 @@ class MatchEngine:
 
         for keyword in self.keywords:
             if use_table_multi:
-                matches.extend(
-                    self._table_row_matcher.match_keyword(
-                        keyword,
-                        lines=lines,
-                        lines_lower=lines_lower,
-                        meta=meta,
-                        min_score=self.min_score,
-                        custom_thresholds=self.custom_thresholds,
-                        normalize_line=normalize_ocr_line,
-                        is_blocked_by_stop_phrase=self._is_blocked_by_stop_phrase,
-                        text_lower=text_lower,
-                        bm_strict_pattern=bm_strict_pattern,
-                    )
+                table_hits = self._table_row_matcher.match_keyword(
+                    keyword,
+                    lines=lines,
+                    lines_lower=lines_lower,
+                    meta=meta,
+                    min_score=self.min_score,
+                    custom_thresholds=self.custom_thresholds,
+                    normalize_line=normalize_ocr_line,
+                    is_blocked_by_stop_phrase=self._is_blocked_by_stop_phrase,
+                    text_lower=text_lower,
+                    bm_strict_pattern=bm_strict_pattern,
                 )
+                for hit in table_hits:
+                    ln = int(hit.get("line_number") or -1)
+                    hit.setdefault("_source_line_start", ln if ln > 0 else None)
+                    hit.setdefault("_source_line_end", ln if ln > 0 else None)
+                    hit.setdefault(
+                        "_matched_text",
+                        hit.get("matched_cell_text") or hit.get("matched_line") or "",
+                    )
+                matches.extend(table_hits)
                 continue
 
             is_bm_keyword = bool(bm_strict_pattern.match(keyword))
@@ -218,12 +231,16 @@ class MatchEngine:
             if best_line_idx < len(lines):
                 matched_line = lines[best_line_idx]
                 line_number = best_line_idx + 1
+                span_start = span_end = line_number
             elif best_line_idx < len(combined_originals):
+                merged_idx = best_line_idx - len(lines)
                 matched_line = combined_originals[best_line_idx]
-                line_number = (best_line_idx - len(lines)) + 1
+                line_number = merged_idx + 1
+                span_start, span_end = merged_idx + 1, merged_idx + 2
             else:
                 matched_line = ""
                 line_number = -1
+                span_start = span_end = None
 
             level = "green" if best_score >= 95 else "yellow"
             item: Dict[str, Any] = {
@@ -234,6 +251,9 @@ class MatchEngine:
                 "matched_line": matched_line,
                 "match_method": match_method,
                 "validation_status": "UNKNOWN",
+                "_matched_text": matched_line,
+                "_source_line_start": span_start,
+                "_source_line_end": span_end,
             }
             if line_number in meta:
                 extra = meta[line_number]
@@ -302,5 +322,17 @@ class MatchEngine:
                 matches = TableRowEnricher().enrich(matches, lines, meta)
             except Exception as exc:
                 logger.error(f"Table enrich error: {exc}", exc_info=True)
+
+        for match in matches:
+            try:
+                match["provenance"] = build_provenance(match, text, min_score=self.min_score)
+            except Exception as exc:  # noqa: BLE001 - provenance must never abort retrieval
+                logger.error(f"Provenance build error: {exc}", exc_info=True)
+                match["provenance"] = {
+                    "rule_term": match.get("keyword"),
+                    "matched_text": match.get("_matched_text"),
+                    "provenance_status": "INVALID",
+                    "provenance_reason": "provenance_build_error",
+                }
 
         return [to_match_detail(m, self.keyword_meta) for m in matches]

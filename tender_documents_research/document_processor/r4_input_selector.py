@@ -8,6 +8,7 @@ build_source_document_context(candidate) from context_validator.py.
 """
 
 import hashlib
+import os
 import psycopg2.extras
 from typing import Any, Dict, List, Optional, Tuple
 
@@ -16,6 +17,12 @@ from tender_documents_research.document_processor.context_validator import (
 )
 
 R4_INPUT_AUTHORITY = "TRUSTED_V4_CONFIRMED_DETAIL"
+
+# Retrieval provenance barrier (WIP point 0): a CONFIRMED fact may only be
+# extracted when the underlying raw match has VERIFIED provenance.
+REQUIRE_VERIFIED_PROVENANCE = os.getenv("REQUIRE_VERIFIED_PROVENANCE", "1").strip().lower() not in (
+    "0", "false", "no", "off",
+)
 
 def build_r4_source_snapshot(candidate: Dict[str, Any]) -> str:
     """
@@ -76,6 +83,8 @@ def get_r4_input_candidates(conn, category_code: Optional[str] = None) -> List[D
           AND LOWER(d.validator_version) = 'v4'
           AND UPPER(d.validation_method) = 'QWEN_CONTEXT_V4'
     """
+    if REQUIRE_VERIFIED_PROVENANCE:
+        sql += " AND d.provenance_status = 'VERIFIED'"
     params: List[Any] = []
     if category_code:
         sql += " AND d.category_code = %s"

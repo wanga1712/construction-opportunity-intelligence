@@ -1,6 +1,7 @@
 import logging
 import psycopg2
 import json
+from datetime import datetime, timezone
 from typing import Optional
 
 from document_processor.dto import TaskProcessResult, ProcessingOutcome
@@ -17,6 +18,87 @@ class S13V2TaskPersistenceService:
     def __init__(self, db: DatabaseManager, pipeline_generation: str = "S13_V2"):
         self.db = db
         self.pipeline_generation = pipeline_generation
+        self._provenance_ready: Optional[bool] = None
+
+    def _provenance_schema_ready(self, cursor) -> bool:
+        """Detects the retrieval-provenance migration once per service instance."""
+        if self._provenance_ready is None:
+            cursor.execute("""
+                SELECT 1
+                FROM information_schema.columns
+                WHERE table_schema = 'public'
+                  AND table_name = 'document_match_details'
+                  AND column_name = 'provenance_status'
+                LIMIT 1
+            """)
+            self._provenance_ready = cursor.fetchone() is not None
+        return self._provenance_ready
+
+    def _insert_match_detail(self, cursor, *, match_id, procurement_id, file_id, detail, provenance_ready):
+        """Inserts one raw match detail, fail-closed on retrieval provenance."""
+        columns = [
+            "match_id", "procurement_id", "category_code", "subcategory_code",
+            "matched_term", "term_type", "score", "row_data", "page_or_sheet",
+            "row_number", "context_before", "context_after", "match_method",
+            "validation_status", "validation_method", "validation_reason",
+            "validated_at", "validator_name", "validator_version", "pipeline_generation",
+        ]
+        values = [
+            match_id, procurement_id, detail.category_code, detail.subcategory_code,
+            detail.matched_term, detail.term_type, detail.score,
+            json.dumps(detail.row_data), detail.page_or_sheet, detail.row_number,
+            json.dumps(detail.context_before), json.dumps(detail.context_after),
+            getattr(detail, "match_method", "UNKNOWN") or "UNKNOWN",
+            getattr(detail, "validation_status", "UNKNOWN") or "UNKNOWN",
+            getattr(detail, "validation_method", None),
+            getattr(detail, "validation_reason", None),
+            getattr(detail, "validated_at", None),
+            getattr(detail, "validator_name", None),
+            getattr(detail, "validator_version", None),
+            self.pipeline_generation,
+        ]
+
+        if provenance_ready:
+            prov = getattr(detail, "provenance", None) or {}
+            status = str(prov.get("provenance_status") or "INVALID").upper()
+            if status not in ("VERIFIED", "INVALID", "LEGACY_UNVERIFIED"):
+                status = "INVALID"
+            chunk_id = None
+            if file_id:
+                chunk_id = f"{file_id}:{detail.page_or_sheet}:{detail.row_number}"
+            columns += [
+                "rule_term", "matched_text", "matched_text_normalized", "source_span",
+                "char_start", "char_end", "document_id", "table_index",
+                "source_row_index", "source_col_index", "column_letter", "cell_address",
+                "chunk_id", "provenance_status", "provenance_method", "provenance_reason",
+                "provenance_checked_at",
+            ]
+            values += [
+                prov.get("rule_term") or detail.matched_term,
+                prov.get("matched_text"),
+                prov.get("matched_text_normalized"),
+                prov.get("source_span"),
+                prov.get("char_start"),
+                prov.get("char_end"),
+                file_id,
+                prov.get("table_index"),
+                prov.get("source_row_index"),
+                prov.get("source_col_index"),
+                prov.get("column_letter"),
+                prov.get("cell_address"),
+                chunk_id,
+                status,
+                prov.get("provenance_method"),
+                prov.get("provenance_reason"),
+                prov.get("provenance_checked_at") or datetime.now(timezone.utc),
+            ]
+
+        placeholders = ", ".join(["%s"] * len(values))
+        sql = (
+            f"INSERT INTO document_match_details ({', '.join(columns)}) "
+            f"VALUES ({placeholders})"
+        )
+        cursor.execute(sql, tuple(values))
 
     def persist_task_result(self, result: TaskProcessResult):
         """
@@ -96,26 +178,17 @@ class S13V2TaskPersistenceService:
                             ))
                             match_id = cursor.fetchone()[0]
 
+                            provenance_ready = self._provenance_schema_ready(cursor)
                             for match in file_matches:
                                 for detail in match.details:
-                                    cursor.execute("""
-                                        INSERT INTO document_match_details
-                                        (match_id, procurement_id, category_code, subcategory_code, matched_term, term_type, score, row_data, page_or_sheet, row_number, context_before, context_after, match_method, validation_status, validation_method, validation_reason, validated_at, validator_name, validator_version, pipeline_generation)
-                                        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
-                                    """, (
-                                        match_id, result.procurement_id, detail.category_code, detail.subcategory_code,
-                                        detail.matched_term, detail.term_type, detail.score,
-                                        json.dumps(detail.row_data), detail.page_or_sheet, detail.row_number,
-                                        json.dumps(detail.context_before), json.dumps(detail.context_after),
-                                        getattr(detail, "match_method", "UNKNOWN") or "UNKNOWN",
-                                        getattr(detail, "validation_status", "UNKNOWN") or "UNKNOWN",
-                                        getattr(detail, "validation_method", None),
-                                        getattr(detail, "validation_reason", None),
-                                        getattr(detail, "validated_at", None),
-                                        getattr(detail, "validator_name", None),
-                                        getattr(detail, "validator_version", None),
-                                        self.pipeline_generation
-                                    ))
+                                    self._insert_match_detail(
+                                        cursor,
+                                        match_id=match_id,
+                                        procurement_id=result.procurement_id,
+                                        file_id=file_id,
+                                        detail=detail,
+                                        provenance_ready=provenance_ready,
+                                    )
 
                 # 3. Persist Evidence (Only for explicitly confirmed evidence)
                 for ev in result.evidence:

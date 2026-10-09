@@ -47,6 +47,14 @@ load_dotenv("/opt/CRM_Streamlit/.env")
 logger = logging.getLogger("document_processor.context_validator_service")
 PIPELINE_GENERATION = "S13_V4_EXHAUSTIVE_CONTEXT"
 
+# Retrieval provenance barrier (WIP point 0). Fail-closed by default: only
+# matches whose stored span provably reproduces the matcher decision may reach
+# semantic validation. Set REQUIRE_VERIFIED_PROVENANCE=0 only for legacy
+# diagnostics against a pre-migration corpus.
+REQUIRE_VERIFIED_PROVENANCE = os.getenv("REQUIRE_VERIFIED_PROVENANCE", "1").strip().lower() not in (
+    "0", "false", "no", "off",
+)
+
 DEFAULT_TARGET_REFRESH_SECONDS = 60.0
 _TARGET_IDS_CACHE: Dict[str, Any] = {"ids": None, "refreshed_at": 0.0}
 
@@ -169,6 +177,8 @@ def claim_unvalidated_candidates(
             AND d.pipeline_generation = %s
         """
         params: List[Any] = [generation]
+        if REQUIRE_VERIFIED_PROVENANCE:
+            query += " AND d.provenance_status = 'VERIFIED'"
         if target_procurement_ids is not None:
             query += " AND d.procurement_id = ANY(%s)"
             params.append(target_procurement_ids)

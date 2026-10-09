@@ -26,6 +26,7 @@ class MatchDetailResult:
     validated_at: Optional[Any] = None
     validator_name: Optional[str] = None
     validator_version: Optional[str] = None
+    provenance: Dict[str, Any] = field(default_factory=dict)
 
 @dataclass
 class MatchResult:
