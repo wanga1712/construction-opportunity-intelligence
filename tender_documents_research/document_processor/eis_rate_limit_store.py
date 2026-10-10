@@ -71,17 +71,21 @@ class MemoryEisStateStore:
         xid: Optional[str],
         snapshot: Dict[str, Any],
         config: Dict[str, Any],
+        cascade_seconds: Optional[list[int]] = None,
     ) -> Dict[str, Any]:
         with self._lock:
             state = self._state(host)
-            cooldown = max(3600, int(retry_after or 0))
+            cascade = cascade_seconds or [300, 900, 1800, 3600, 7200, 10800]
+            next_count = int(state.get("consecutive_blocks") or 0) + 1
+            cascade_index = min(next_count - 1, len(cascade) - 1)
+            cooldown = max(cascade[cascade_index], int(retry_after or 0))
             state.update(
                 blocked_since=state.get("blocked_since") or now,
                 blocked_until=now + timedelta(seconds=cooldown),
                 last_429_at=now,
                 last_429_xid=xid,
                 last_retry_after=retry_after,
-                consecutive_blocks=int(state.get("consecutive_blocks") or 0) + 1,
+                consecutive_blocks=next_count,
                 updated_at=now,
             )
             open_incident = next(
@@ -128,6 +132,7 @@ class MemoryEisStateStore:
                 blocked_since=None,
                 last_probe_at=now,
                 last_probe_status="SUCCESS",
+                consecutive_blocks=0,
                 updated_at=now,
             )
             incident = next(
@@ -363,8 +368,8 @@ class PostgresEisStateStore:
         xid: Optional[str],
         snapshot: Dict[str, Any],
         config: Dict[str, Any],
+        cascade_seconds: Optional[list[int]] = None,
     ) -> Dict[str, Any]:
-        cooldown = max(3600, int(retry_after or 0))
         with self._tx() as cur:
             cur.execute(
                 "SELECT * FROM eis_rate_limit_state WHERE host=%s FOR UPDATE", (host,)
@@ -381,6 +386,10 @@ class PostgresEisStateStore:
                 )
                 current = self._as_dict(cur.fetchone())
             blocked_since = current.get("blocked_since") or now
+            cascade = cascade_seconds or [300, 900, 1800, 3600, 7200, 10800]
+            next_count = int(current.get("consecutive_blocks") or 0) + 1
+            cascade_index = min(next_count - 1, len(cascade) - 1)
+            cooldown = max(cascade[cascade_index], int(retry_after or 0))
             cur.execute(
                 """
                 UPDATE eis_rate_limit_state
@@ -507,7 +516,8 @@ class PostgresEisStateStore:
                 """
                 UPDATE eis_rate_limit_state
                    SET blocked_until=NULL, blocked_since=NULL,
-                       last_probe_at=%s, last_probe_status='SUCCESS', updated_at=%s
+                       last_probe_at=%s, last_probe_status='SUCCESS',
+                       consecutive_blocks=0, updated_at=%s
                  WHERE host=%s RETURNING *
                 """,
                 (now, now, host),

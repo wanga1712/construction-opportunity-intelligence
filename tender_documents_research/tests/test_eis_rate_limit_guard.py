@@ -77,7 +77,7 @@ def test_429_blocks_all_new_requests_immediately():
     assert guard_two.state()["consecutive_blocks"] == 1
 
 
-def test_retry_after_over_60_minutes_extends_cooldown():
+def test_retry_after_over_5_minutes_extends_cooldown():
     guard, _ = make_guard()
     before = utcnow()
     state = guard.record_429(
@@ -85,6 +85,26 @@ def test_retry_after_over_60_minutes_extends_cooldown():
     )
     blocked_until = state["blocked_until"]
     assert blocked_until >= before + timedelta(minutes=119)
+
+
+def test_cascade_escalates_to_three_hours_and_resets_after_recovery():
+    guard, store = make_guard()
+    expected_minutes = [5, 15, 30, 60, 120, 180, 180]
+    for expected in expected_minutes:
+        before = utcnow()
+        state = guard.record_429("https://zakupki.gov.ru/x")
+        actual = (state["blocked_until"] - before).total_seconds() / 60.0
+        assert expected <= actual <= expected + 1
+
+    make_due(store)
+    result = guard.maybe_run_probe(lambda: {"ok": True, "status": "SUCCESS"})
+    assert result["status"] == "RECOVERED"
+    assert guard.state()["consecutive_blocks"] == 0
+
+    before = utcnow()
+    state = guard.record_429("https://zakupki.gov.ru/x")
+    actual = (state["blocked_until"] - before).total_seconds() / 60.0
+    assert 5 <= actual <= 6
 
 
 def test_only_one_process_can_probe():

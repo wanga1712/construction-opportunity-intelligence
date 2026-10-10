@@ -16,8 +16,24 @@ from .eis_rate_limit_store import (
 )
 
 LOGGER = logging.getLogger("document_processor.eis_rate_limit_guard")
-MINIMUM_COOLDOWN_SECONDS = 3600
-DEFAULT_PROBE_ERROR_RETRY_SECONDS = 3600
+MINIMUM_COOLDOWN_SECONDS = 300
+DEFAULT_PROBE_ERROR_RETRY_SECONDS = 300
+DEFAULT_BLOCK_CASCADE_MINUTES = "5,15,30,60,120,180"
+
+
+def block_cascade_seconds() -> list[int]:
+    raw = os.getenv("EIS_BLOCK_CASCADE_MINUTES", DEFAULT_BLOCK_CASCADE_MINUTES)
+    values: list[int] = []
+    for part in raw.split(","):
+        try:
+            minutes = float(part.strip())
+        except ValueError:
+            continue
+        if minutes > 0:
+            values.append(int(minutes * 60))
+    if not values:
+        values = [5 * 60, 15 * 60, 30 * 60, 60 * 60, 120 * 60, 180 * 60]
+    return sorted(values)
 
 
 def utcnow() -> datetime:
@@ -204,7 +220,13 @@ class EisRateLimitGuard:
         active_downloads: int = 0,
     ) -> Dict[str, Any]:
         now = utcnow()
-        cooldown = max(MINIMUM_COOLDOWN_SECONDS, int(retry_after or 0))
+        cascade = block_cascade_seconds()
+        try:
+            previous = int(self._fetch_state().get("consecutive_blocks") or 0)
+        except Exception:
+            previous = 0
+        next_index = min(previous, len(cascade) - 1)
+        cooldown = max(cascade[next_index], int(retry_after or 0))
         self._set_local_block(now + timedelta(seconds=cooldown))
         state: Dict[str, Any] = {"host": self.host}
         try:
@@ -216,7 +238,11 @@ class EisRateLimitGuard:
                 xid,
                 snapshot,
                 self._config_snapshot(active_downloads),
+                cascade,
             )
+            blocked_until = _as_datetime(state.get("blocked_until"))
+            if blocked_until:
+                self._set_local_block(blocked_until)
         except Exception as exc:
             LOGGER.critical("EIS 429 block could not be persisted: %s", exc)
         LOGGER.critical(
