@@ -106,6 +106,36 @@ SUPERUSER, выбирать случайный `postgres/root` login или ме
   только для явно разрешённого DDL, не для смены ownership;
 - owner менять в рамках documentation WIP запрещено.
 
+### DDL в `document_intelligence` и блокировки (проверено 2026-10-10)
+
+- Owner таблицы `document_processing_queue` — роль `doc_worker`; фактический
+  DDL-route для документной БД остаётся approved:
+  `sudo -n -u postgres psql -d document_intelligence --single-transaction`.
+- Воркеры держат таблицу очереди в состоянии **idle in transaction** (счётчик
+  статусов), поэтому `ALTER TABLE` может упасть по `lock_timeout`. Порядок,
+  который сработал: остановить писателей
+  (`tender-docs-daemon-open`, `tender-docs-daemon-awarded`,
+  `crm-v3-context-validator`), завершить `idle in transaction` бэкенды
+  (`pg_terminate_backend`), применить DDL с `SET LOCAL lock_timeout`, поднять
+  сервисы обратно и проверить `systemctl is-active`.
+- Допустимые статусы `document_processing_queue.status` (CHECK-констрейнт):
+  `PENDING`, `PROCESSING`, `COMPLETED`, `FAILED`, `NO_LINKS`,
+  `PRE_RESEARCH_WAITING`, `SKIPPED_NOISE` (терминальный пропуск по политике
+  файлов; воркеры его не клеймят — claim выбирает только `PENDING` и
+  `PRE_RESEARCH_WAITING`).
+
+### Retention и учёт файлов (2026-10-10)
+
+- Политика: разобрали → удаляем (сырые файлы не копим). Retention-скрипт
+  `tender_documents_research/scripts/document_retention_cleanup.py`
+  (таймер `tender-docs-retention.timer`, `--days 3 --delete --peer-psql`)
+  обязан проставлять `document_files.local_deleted_at` при фактическом
+  удалении — иначе база показывает файлы, которых на диске нет (выявлено и
+  вычищено: 85 009 «фантомных» записей).
+- Следствие для контура: **весь разбор обязан происходить в момент парсинга**
+  (`document_processor/parse_extractors.py`), потому что после retention файл
+  уже не восстановить без повторного скачивания.
+
 ## Production service identity inventory
 
 Read-only inventory получен через `systemctl show` 2026-08-16. Пустой
