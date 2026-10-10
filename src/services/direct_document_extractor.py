@@ -1,0 +1,116 @@
+"""DIRECT-экстрактор: смета / техпараметры / требования из документов закупки.
+
+Без внешних зависимостей: .docx читается как zip + XML (works в любом venv).
+Никаких записей — только чтение локальных файлов, уже скачанных документным
+контуром. Нормализация названий через ИИ — следующий этап.
+"""
+from __future__ import annotations
+
+import logging
+import os
+import re
+import zipfile
+from typing import Any, Dict, List, Optional
+from xml.etree import ElementTree as ET
+
+import psycopg2
+import psycopg2.extras
+
+logger = logging.getLogger("crm.direct_extractor")
+
+_NS = {"w": "http://schemas.openxmlformats.org/wordprocessingml/2006/main"}
+_MAX_ROWS = 400
+
+
+def _cell_text(cell: ET.Element) -> str:
+    parts = [t.text or "" for t in cell.iter("{http://schemas.openxmlformats.org/wordprocessingml/2006/main}t")]
+    return re.sub(r"\s+", " ", " ".join(parts)).strip()
+
+
+def _docx_tables(path: str) -> List[List[List[str]]]:
+    """Все таблицы документа: [таблица][строка][ячейка]."""
+    try:
+        with zipfile.ZipFile(path) as zf:
+            with zf.open("word/document.xml") as fh:
+                root = ET.parse(fh).getroot()
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("docx read failed %s: %s", path, exc)
+        return []
+    tables = []
+    for tbl in root.iter("{http://schemas.openxmlformats.org/wordprocessingml/2006/main}tbl"):
+        rows = []
+        for tr in tbl.findall("w:tr", _NS):
+            cells = [_cell_text(tc) for tc in tr.findall("w:tc", _NS)]
+            if any(cells):
+                rows.append(cells)
+        if rows:
+            tables.append(rows[:_MAX_ROWS])
+    return tables
+
+
+def _header(rows: List[List[str]]) -> str:
+    return re.sub(r"\s+", " ", " ".join(rows[0] if rows else [])).lower()
+
+
+def _classify(rows: List[List[str]]) -> Optional[str]:
+    head = _header(rows)
+    if "характеристик" in head and ("значени" in head or "единица" in head):
+        return "tech"
+    if "требован" in head and ("национальн" in head or "окпд" in head or "режим" in head):
+        return "requirements"
+    if ("наименован" in head or "наименование" in head) and (
+        "кол-во" in head or "количество" in head or "окпд" in head or "реестр" in head
+    ):
+        return "spec"
+    return None
+
+
+def extract_tables(local_paths: List[str]) -> Dict[str, List[Dict[str, Any]]]:
+    """Спека / техпараметры / требования по всем .docx закупки."""
+    out: Dict[str, List[Dict[str, Any]]] = {"spec": [], "tech": [], "requirements": []}
+    for path in local_paths:
+        if not path or not os.path.exists(path) or not path.lower().endswith(".docx"):
+            continue
+        name = os.path.basename(path)
+        for rows in _docx_tables(path):
+            kind = _classify(rows)
+            if not kind:
+                continue
+            header = rows[0]
+            for row in rows[1:]:
+                if not any(c.strip() for c in row):
+                    continue
+                out[kind].append({"source_file": name, "header": header, "cells": row})
+    return out
+
+
+def _di_conn() -> Any:
+    from src.services.crm_db_runtime import require_crm_db_connect_kwargs
+    kw = dict(require_crm_db_connect_kwargs())
+    kw["dbname"] = os.getenv("S13_DOCUMENT_DB_NAME", "document_intelligence")
+    kw.setdefault("connect_timeout", 8)
+    return psycopg2.connect(**kw)
+
+
+def load_direct_extraction(procurement_id: int) -> Dict[str, Any]:
+    """Смета/техпараметры/требования для закупки (read-only)."""
+    empty = {"spec": [], "tech": [], "requirements": [], "files": 0}
+    try:
+        conn = _di_conn()
+        try:
+            with conn.cursor() as cur:
+                cur.execute(
+                    """SELECT local_path FROM document_files
+                        WHERE procurement_id = %s AND download_status = 'COMPLETED'
+                          AND local_path IS NOT NULL""",
+                    (int(procurement_id),),
+                )
+                paths = [r[0] for r in cur.fetchall() if r and r[0]]
+        finally:
+            conn.close()
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("direct extraction DI query failed: %s", exc)
+        return empty
+    data = extract_tables(paths)
+    data["files"] = len(paths)
+    return data

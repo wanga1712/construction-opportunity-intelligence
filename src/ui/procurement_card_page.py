@@ -376,13 +376,28 @@ def _render_dossier(d: Dict[str, Any], db: Any = None) -> None:
         unsafe_allow_html=True,
     )
 
-    tab_overview, tab_docs, tab_find, tab_supply, tab_history, tab_queue = st.tabs([
-        "Обзор", f"Документы ({counts.get('documents', 0)})",
-        f"Находки ({counts.get('findings', 0)})",
-        f"Что можно поставить ({len(d.get('supply_candidates') or [])})",
-        "История / Модель",
-        "Очередь",
-    ])
+    try:
+        from src.services.direct_document_extractor import load_direct_extraction
+        _direct = load_direct_extraction(pid)
+    except Exception:  # noqa: BLE001
+        _direct = {}
+    _spec = _direct.get("spec") or []
+    _tech = _direct.get("tech") or []
+    _req = _direct.get("requirements") or []
+    _titles = ["Обзор", f"Документы ({counts.get('documents', 0)})",
+               f"Находки ({counts.get('findings', 0)})",
+               f"Что можно поставить ({len(d.get('supply_candidates') or [])})"]
+    if _spec or _tech or _req:
+        _titles.append(f"Смета и требования ({len(_spec) + len(_tech) + len(_req)})")
+    _titles += ["История / Модель", "Очередь"]
+    _tabs = st.tabs(_titles)
+    tab_overview, tab_docs, tab_find, tab_supply = _tabs[0], _tabs[1], _tabs[2], _tabs[3]
+    _idx = 4
+    tab_direct = None
+    if _spec or _tech or _req:
+        tab_direct = _tabs[_idx]
+        _idx += 1
+    tab_history, tab_queue = _tabs[_idx], _tabs[_idx + 1]
 
     with tab_overview:
         c1, c2 = st.columns(2, gap="medium")
@@ -534,6 +549,35 @@ def _render_dossier(d: Dict[str, Any], db: Any = None) -> None:
 
     with tab_history:
         _render_history_tab(pid, db)
+
+    if tab_direct is not None:
+        with tab_direct:
+            st.markdown('<div class="pc-muted">Извлечено напрямую из документов закупки '
+                        '(таблицы), без ИИ-нормализации. Нормализация — следующий этап.</div>',
+                        unsafe_allow_html=True)
+            if _spec:
+                st.markdown("**Смета / спецификация**")
+                _h = _spec[0].get("header") or []
+                st.markdown(_table(
+                    [_fmt(x) for x in (_h if _h else ["Данные"])] or ["Данные"],
+                    [[_fmt(c) for c in it.get("cells") or []] + [""] * max(0, len(_h) - len(it.get("cells") or []))
+                     for it in _spec[:200]],
+                    wrap=True), unsafe_allow_html=True)
+            if _tech:
+                st.markdown(f"**Технические параметры ({len(_tech)})**")
+                _h = _tech[0].get("header") or []
+                st.markdown(_table(
+                    [_fmt(x) for x in (_h if _h else ["Данные"])] or ["Данные"],
+                    [[_fmt(c) for c in it.get("cells") or []] for it in _tech[:300]],
+                    wrap=True), unsafe_allow_html=True)
+            if _req:
+                st.markdown(f"**Требования / условия участия ({len(_req)})**")
+                _h = _req[0].get("header") or []
+                st.markdown(_table(
+                    [_fmt(x) for x in (_h if _h else ["Данные"])] or ["Данные"],
+                    [[_fmt(c) for c in it.get("cells") or []] for it in _req[:200]],
+                    wrap=True), unsafe_allow_html=True)
+            st.caption("Источник: локальные документы закупки (document_files.local_path).")
 
     with tab_queue:
         msg = st.session_state.pop("pcard_msg", None)
