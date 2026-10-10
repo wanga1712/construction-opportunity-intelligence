@@ -48,6 +48,69 @@ def _docx_tables(path: str) -> List[List[List[str]]]:
     return tables
 
 
+def _docx_paragraphs(path: str) -> List[str]:
+    """Все абзацы документа (в т.ч. внутри таблиц), по порядку."""
+    try:
+        with zipfile.ZipFile(path) as zf:
+            with zf.open("word/document.xml") as fh:
+                root = ET.parse(fh).getroot()
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("docx paragraphs failed %s: %s", path, exc)
+        return []
+    out = []
+    for par in root.iter("{http://schemas.openxmlformats.org/wordprocessingml/2006/main}p"):
+        text = re.sub(
+            r"\s+", " ",
+            " ".join(t.text or "" for t in par.iter(
+                "{http://schemas.openxmlformats.org/wordprocessingml/2006/main}t")),
+        ).strip()
+        if text:
+            out.append(text)
+    return out
+
+
+#: Секции требований: (ключ, подписи-заголовки).
+_SECTIONS = (
+    ("participant", ("требования к участник", "требование к участник",
+                     "участник закупки", "требования к участникам")),
+    ("product", ("общие требования", "требования к товар", "технические требования",
+                 "требования к поставляемому")),
+    ("participation", ("условия участия", "порядок подачи", "заявка на участие",
+                       "порядок проведения")),
+    ("security", ("обеспечение исполнения", "обеспечение заявки", "обеспечение договора")),
+    ("national", ("национальн", "преференц", "преимуществ")),
+)
+
+
+def extract_text_sections(local_paths: List[str]) -> Dict[str, List[Dict[str, Any]]]:
+    """Текстовые требования секциями: участник / товар / участие / обеспечение / нацрежим.
+
+    Заголовок секции — абзац, содержащий одну из подписей; тело — абзацы до
+    следующего заголовка (или до конца документа).
+    """
+    out: Dict[str, List[Dict[str, Any]]] = {key: [] for key, _ in _SECTIONS}
+    for path in local_paths:
+        if not path or not os.path.exists(path) or not path.lower().endswith(".docx"):
+            continue
+        name = os.path.basename(path)
+        paras = _docx_paragraphs(path)
+        current = None
+        for text in paras:
+            low = text.lower()
+            hit = None
+            if len(text) <= 120:
+                for key, labels in _SECTIONS:
+                    if any(lbl in low for lbl in labels):
+                        hit = key
+                        break
+            if hit:
+                current = hit
+                continue
+            if current and len(text) > 20:
+                out[current].append({"source_file": name, "text": text})
+    return out
+
+
 def _header(rows: List[List[str]]) -> str:
     return re.sub(r"\s+", " ", " ".join(rows[0] if rows else [])).lower()
 
@@ -94,7 +157,7 @@ def _di_conn() -> Any:
 
 def load_direct_extraction(procurement_id: int) -> Dict[str, Any]:
     """Смета/техпараметры/требования для закупки (read-only)."""
-    empty = {"spec": [], "tech": [], "requirements": [], "files": 0}
+    empty = {"spec": [], "tech": [], "requirements": [], "sections": {}, "files": 0}
     try:
         conn = _di_conn()
         try:
@@ -112,5 +175,6 @@ def load_direct_extraction(procurement_id: int) -> Dict[str, Any]:
         logger.warning("direct extraction DI query failed: %s", exc)
         return empty
     data = extract_tables(paths)
+    data["sections"] = extract_text_sections(paths)
     data["files"] = len(paths)
     return data
