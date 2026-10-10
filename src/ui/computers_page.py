@@ -2,9 +2,6 @@
 from __future__ import annotations
 
 import json
-import subprocess
-import sys
-from pathlib import Path
 
 import streamlit as st
 
@@ -14,9 +11,6 @@ from src.services.computers_service import (
     load_computer_cards,
     load_computer_tenders,
 )
-
-_PROJECT_ROOT = Path(__file__).resolve().parents[2]
-
 
 def render_computers_page(service) -> None:
     st.title("Компьютеры / ИТ")
@@ -51,54 +45,14 @@ def render_computers_page(service) -> None:
         "`/opt/tender_documents_research`. Отбор: ОКПД **26.20*** + только открытые "
         "реестры (не awarded). Если EIS на 7-м ещё догоняет дату — список может быть пуст."
     )
-    d1, d2, d3 = st.columns([1, 1, 2])
-    with d1:
-        run_once = st.button("▶ Прогнать пакет сейчас", type="primary", use_container_width=True)
-    with d2:
-        batch_limit = st.number_input("Размер пакета", min_value=1, max_value=50, value=15)
-    with d3:
-        st.caption(
-            "`crm-computer-tz-loop.service` (постоянный контур) · "
-            "`python scripts/computer_tz_daemon.py --once --only-open --strict-tz-only`"
-        )
-
-    if run_once:
-        with st.spinner("Демон: скачивание ТЗ и разбор моделью…"):
-            try:
-                cmd = [
-                    sys.executable,
-                    str(_PROJECT_ROOT / "scripts" / "computer_tz_daemon.py"),
-                    "--once",
-                    "--only-open",
-                    "--limit",
-                    str(int(batch_limit)),
-                ]
-                if not only_open:
-                    cmd = [
-                        sys.executable,
-                        str(_PROJECT_ROOT / "scripts" / "computer_tz_daemon.py"),
-                        "--once",
-                        "--include-awarded",
-                        "--limit",
-                        str(int(batch_limit)),
-                    ]
-                proc = subprocess.run(
-                    cmd,
-                    cwd=str(_PROJECT_ROOT),
-                    capture_output=True,
-                    text=True,
-                    timeout=1200,
-                )
-                if proc.returncode == 0:
-                    st.success("Пакет завершён")
-                else:
-                    st.error(f"exit {proc.returncode}")
-                if proc.stdout:
-                    st.code(proc.stdout[-3000:])
-                if proc.stderr:
-                    st.code(proc.stderr[-2000:])
-            except Exception as exc:
-                st.error(str(exc))
+    st.warning(
+        "Ручной запуск пакета отключён. Старый `crm-computer-tz-loop` "
+        "выведен из эксплуатации: он ходил в ЕИС мимо общего EIS guard."
+    )
+    st.caption(
+        "Карточки ниже остаются доступны для просмотра. Новый контур будет "
+        "подключён после общего document/normalization pipeline."
+    )
 
     if not service.tender_db:
         st.error("Tender DB недоступна")
