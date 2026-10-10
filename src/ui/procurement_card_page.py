@@ -577,13 +577,44 @@ def _render_dossier(d: Dict[str, Any], db: Any = None) -> None:
 
     if tab_spec is not None:
         with tab_spec:
-            _h = (_spec[0].get("header") or []) if _spec else []
-            st.markdown(_table_html(
-                [_fmt(x) for x in (_h or ["Данные"])],
-                [[_fmt(c) for c in it.get("cells") or []]
-                 + [""] * max(0, len(_h) - len(it.get("cells") or []))
-                 for it in _spec[:200]], wrap=True), unsafe_allow_html=True)
-            st.caption("Закупка состоит из этих позиций (как есть, из документов).")
+            def _short(x: str) -> str:
+                low = str(x).lower()
+                if "наимен" in low:
+                    return "Наименование"
+                if "реестр" in low:
+                    return "Реестр РЭП"
+                if "окпд" in low:
+                    return "ОКПД2"
+                if "кол" in low:
+                    return "Кол-во"
+                if "№" in str(x):
+                    return "№"
+                return str(x)[:22]
+
+            _h = [_short(x) for x in ((_spec[0].get("header") or []) if _spec else [])] or ["Данные"]
+            _rows = []
+            for _it in _spec:
+                _cells = [str(c).strip() for c in (_it.get("cells") or [])]
+                _joined = " ".join(_cells).lower()
+                if "итого" in _joined or _joined.strip(" —-") == "":
+                    continue
+                _cells = [("" if c in ("—", "-", "") else escape(c)) for c in _cells]
+                _rows.append(_cells + [""] * max(0, len(_h) - len(_cells)))
+            st.markdown(_table_html(_h, _rows, wrap=True), unsafe_allow_html=True)
+            _qty = 0
+            for _c in _rows:
+                for _v in _c:
+                    if str(_v).strip().isdigit():
+                        _qty = max(_qty, int(str(_v).strip()))
+            _nmck = (d.get("money_and_dates") or {}).get("initial_price")
+            _tail = ""
+            if _qty and _nmck:
+                try:
+                    _tail = (f" · ≈ {_money(float(_nmck) / _qty)} за единицу "
+                             f"(расчёт из НМЦК, не из документов)")
+                except (TypeError, ValueError):
+                    _tail = ""
+            st.caption(f"Позиций: {len(_rows)}{_tail}")
 
     if tab_tech is not None:
         with tab_tech:
