@@ -20,6 +20,14 @@ logger = logging.getLogger("crm.direct_extractor")
 
 _NS = {"w": "http://schemas.openxmlformats.org/wordprocessingml/2006/main"}
 _MAX_ROWS = 400
+#: Служебные файлы Word/Excel и подписи — не документы закупки.
+_SKIP_PREFIXES = ("~$",)
+_SKIP_SUFFIXES = (".sig", ".sign", ".cer", ".dbf", ".dwg", ".cdr", ".jpg", ".png")
+
+
+def _is_junk(path: str) -> bool:
+    name = os.path.basename(path or "").lower()
+    return name.startswith(_SKIP_PREFIXES) or name.endswith(_SKIP_SUFFIXES)
 
 
 def _cell_text(cell: ET.Element) -> str:
@@ -69,6 +77,58 @@ def _docx_paragraphs(path: str) -> List[str]:
     return out
 
 
+_XLSX_NS = "{http://schemas.openxmlformats.org/spreadsheetml/2006/main}"
+
+
+def _xlsx_tables(path: str) -> List[List[List[str]]]:
+    """Таблицы всех листов .xlsx/.xlsm без внешних библиотек: [лист][строка][ячейка]."""
+    try:
+        with zipfile.ZipFile(path) as zf:
+            names = set(zf.namelist())
+            shared: List[str] = []
+            if "xl/sharedStrings.xml" in names:
+                root = ET.fromstring(zf.read("xl/sharedStrings.xml"))
+                for si in root.findall(_XLSX_NS + "si"):
+                    shared.append("".join(t.text or "" for t in si.iter(_XLSX_NS + "t")))
+            sheets = sorted(n for n in names if re.match(r"xl/worksheets/sheet\d+\.xml$", n))
+            tables: List[List[List[str]]] = []
+            for sheet in sheets:
+                root = ET.fromstring(zf.read(sheet))
+                rows: List[List[str]] = []
+                for row in root.iter(_XLSX_NS + "row"):
+                    cells: List[str] = []
+                    for c in row.findall(_XLSX_NS + "c"):
+                        kind = c.get("t")
+                        value = c.find(_XLSX_NS + "v")
+                        if kind == "s" and value is not None and (value.text or "").isdigit():
+                            idx = int(value.text)
+                            text = shared[idx] if idx < len(shared) else ""
+                        elif kind == "inlineStr":
+                            text = "".join(x.text or "" for x in c.iter(_XLSX_NS + "t"))
+                        else:
+                            text = (value.text if value is not None else "") or ""
+                        cells.append(re.sub(r"\s+", " ", text).strip())
+                    if any(cells):
+                        rows.append(cells)
+                    if len(rows) >= _MAX_ROWS:
+                        break
+                if rows:
+                    tables.append(rows)
+            return tables
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("xlsx read failed %s: %s", path, exc)
+        return []
+
+
+def _tables_for(path: str) -> List[List[List[str]]]:
+    lower = path.lower()
+    if lower.endswith(".docx"):
+        return _docx_tables(path)
+    if lower.endswith((".xlsx", ".xlsm")):
+        return _xlsx_tables(path)
+    return []
+
+
 #: Секции требований: (ключ, подписи-заголовки).
 _SECTIONS = (
     ("participant", ("требования к участник", "требование к участник",
@@ -90,7 +150,9 @@ def extract_text_sections(local_paths: List[str]) -> Dict[str, List[Dict[str, An
     """
     out: Dict[str, List[Dict[str, Any]]] = {key: [] for key, _ in _SECTIONS}
     for path in local_paths:
-        if not path or not os.path.exists(path) or not path.lower().endswith(".docx"):
+        if not path or not os.path.exists(path) or _is_junk(path):
+            continue
+        if not path.lower().endswith(".docx"):
             continue
         name = os.path.basename(path)
         paras = _docx_paragraphs(path)
@@ -115,33 +177,134 @@ def _header(rows: List[List[str]]) -> str:
     return re.sub(r"\s+", " ", " ".join(rows[0] if rows else [])).lower()
 
 
+def _norm_cell(value: Any) -> str:
+    return re.sub(r"\s+", " ", str(value or "")).strip()
+
+
+def _find_col(header_low: List[str], *markers: str) -> int:
+    """Индекс первой колонки, чьё название содержит любой из маркеров."""
+    for idx, title in enumerate(header_low):
+        if any(marker in title for marker in markers):
+            return idx
+    return -1
+
+
+def _cell(row: List[str], idx: int) -> str:
+    return row[idx] if 0 <= idx < len(row) else ""
+
+
+def _find_item_col(header_low: List[str]) -> int:
+    """Колонка товара/позиции — не путать с колонкой «наименование характеристики»."""
+    for idx, title in enumerate(header_low):
+        if ("наименован" in title or "товар" in title) and "характеристик" not in title:
+            return idx
+    for idx, title in enumerate(header_low):
+        if "товар" in title and ("характеристик" in title or "описан" in title):
+            return idx
+    return -1
+
+
 def _classify(rows: List[List[str]]) -> Optional[str]:
-    head = _header(rows)
-    if "характеристик" in head and ("значени" in head or "единица" in head):
-        return "tech"
+    header = [_norm_cell(c).lower() for c in (rows[0] if rows else [])]
+    head = " ".join(header)
+    item_col = _find_item_col(header)
+    has_char = any("характеристик" in h for h in header)
+    has_value = any(("значени" in h or "параметр" in h or "единица" in h or "требуем" in h)
+                    for h in header)
+    if has_char and has_value:
+        return "spec_tech" if item_col >= 0 else "tech"
     if "требован" in head and ("национальн" in head or "окпд" in head or "режим" in head):
         return "requirements"
-    if ("наименован" in head or "наименование" in head) and (
-        "кол-во" in head or "количество" in head or "окпд" in head or "реестр" in head
-    ):
+    if item_col >= 0 and ("кол-во" in head or "количество" in head or "окпд" in head or "реестр" in head):
+        return "spec"
+    if item_col >= 0 and ("цена" in head or "сумма" in head or "стоимость" in head):
         return "spec"
     return None
 
 
+def _classify_with_offset(rows: List[List[str]]) -> "tuple[Optional[str], int]":
+    """Искать шапку таблицы не только в первой строке (Excel/Word с заголовком сверху)."""
+    for offset in range(min(8, len(rows))):
+        kind = _classify(rows[offset:])
+        if kind:
+            return kind, offset
+    return None, 0
+
+
+_SPEC_HEADER = ["Наименование", "Код ОКПД2", "Кол-во"]
+_TECH_HEADER = ["Параметр", "Значение", "Единица"]
+
+
+def _emit_spec_tech(out: Dict[str, List[Dict[str, Any]]], data_rows: List[List[str]],
+                    header: List[str], name: str) -> None:
+    """Комбинированная таблица ТЗ: строка = товар + характеристика + значение."""
+    header_low = [_norm_cell(h).lower() for h in header]
+    i_name = _find_item_col(header_low)
+    i_char = _find_col(header_low, "характеристик")
+    i_val = _find_col(header_low, "значени", "параметр")
+    i_unit = _find_col(header_low, "единица", "ед. изм")
+    i_qty = _find_col(header_low, "кол-во", "количество")
+    i_okpd = _find_col(header_low, "окпд", "код")
+    seen: set = set()
+    for row in data_rows:
+        if not any(_norm_cell(c) for c in row):
+            continue
+        item = _norm_cell(_cell(row, i_name))
+        if not item:
+            continue
+        if item.lower() not in seen:
+            seen.add(item.lower())
+            out["spec"].append({
+                "source_file": name, "header": _SPEC_HEADER,
+                "cells": [item, _norm_cell(_cell(row, i_okpd)), _norm_cell(_cell(row, i_qty))],
+            })
+        char = _norm_cell(_cell(row, i_char))
+        value = _norm_cell(_cell(row, i_val))
+        if not value:
+            continue
+        param = item if not char or char == item else "%s — %s" % (item, char)
+        out["tech"].append({
+            "source_file": name, "header": _TECH_HEADER,
+            "cells": [param, value, _norm_cell(_cell(row, i_unit))],
+        })
+
+
 def extract_tables(local_paths: List[str]) -> Dict[str, List[Dict[str, Any]]]:
-    """Спека / техпараметры / требования по всем .docx закупки."""
+    """Спека / техпараметры / требования по .docx и .xlsx закупки."""
     out: Dict[str, List[Dict[str, Any]]] = {"spec": [], "tech": [], "requirements": []}
     for path in local_paths:
-        if not path or not os.path.exists(path) or not path.lower().endswith(".docx"):
+        if not path or not os.path.exists(path) or _is_junk(path):
             continue
         name = os.path.basename(path)
-        for rows in _docx_tables(path):
-            kind = _classify(rows)
+        for rows in _tables_for(path):
+            kind, offset = _classify_with_offset(rows)
             if not kind:
                 continue
-            header = rows[0]
-            for row in rows[1:]:
-                if not any(c.strip() for c in row):
+            header = rows[offset]
+            data_rows = rows[offset + 1:]
+            if kind == "spec_tech":
+                _emit_spec_tech(out, data_rows, header, name)
+                continue
+            if kind == "tech":
+                header_low = [_norm_cell(h).lower() for h in header]
+                i_name = _find_col(header_low, "наименован", "характеристик", "параметр")
+                i_val = _find_col(header_low, "значени", "требуем")
+                i_unit = _find_col(header_low, "единица", "ед. изм")
+                for row in data_rows:
+                    if not any(_norm_cell(c) for c in row):
+                        continue
+                    if i_name >= 0:
+                        out["tech"].append({
+                            "source_file": name, "header": _TECH_HEADER,
+                            "cells": [_norm_cell(_cell(row, i_name)),
+                                      _norm_cell(_cell(row, i_val)),
+                                      _norm_cell(_cell(row, i_unit))],
+                        })
+                    else:
+                        out["tech"].append({"source_file": name, "header": header, "cells": row})
+                continue
+            for row in data_rows:
+                if not any(_norm_cell(c) for c in row):
                     continue
                 out[kind].append({"source_file": name, "header": header, "cells": row})
     return out
