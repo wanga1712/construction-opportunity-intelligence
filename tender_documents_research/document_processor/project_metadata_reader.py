@@ -58,18 +58,26 @@ class MetadataHit:
     section_code: Optional[str] = None
 
 
-def _first(pattern_group, text: str) -> Optional[tuple]:
+def _find_value(text: str, patterns) -> Optional[str]:
+    for rx in patterns:
+        found = rx.search(text)
+        if found:
+            return found.group(0)
+    return None
+
+
+def _first(pattern_group, text: str, *, prefer: str) -> Optional[tuple]:
+    """First role label with its value. ``prefer`` picks which pattern family is
+    tried first, but the other family is used as a fallback so a line like
+    "Генеральный директор ООО «X» Иванов И.И." still yields a value."""
     for bucket, rx in pattern_group.items():
         for match in rx.finditer(text):
             tail = text[match.end():]
-            for name_rx in NAME_PATTERNS:
-                found = name_rx.search(tail)
-                if found:
-                    return bucket, found.group(0)
-            for org_rx in ORG_PATTERNS:
-                found = org_rx.search(tail)
-                if found:
-                    return bucket, found.group(0)
+            order = (NAME_PATTERNS, ORG_PATTERNS) if prefer == "name" else (ORG_PATTERNS, NAME_PATTERNS)
+            for family in order:
+                value = _find_value(tail, family)
+                if value:
+                    return bucket, value
     return None
 
 
@@ -80,11 +88,16 @@ def scan_lines(lines: List[str], *, page: Optional[str] = None) -> List[Metadata
         line = " ".join(str(raw_line or "").split())
         if len(line) < 5:
             continue
-        person = _first(PERSON_LABELS, line)
+        person = _first(PERSON_LABELS, line, prefer="name")
+        org = _first(ORG_LABELS, line, prefer="org")
         if person:
             hits.append(MetadataHit("PERSON", person[0], person[1], line, page))
-            continue
-        org = _first(ORG_LABELS, line)
+            # A signature line often names both the person and the organization;
+            # capture the organization even when the role label is personal.
+            if not org:
+                found = _find_value(line, ORG_PATTERNS)
+                if found:
+                    org = (person[0], found)
         if org:
             hits.append(MetadataHit("ORGANIZATION", org[0], org[1], line, page))
     return hits
