@@ -467,31 +467,21 @@ class LegacyQueueRepository(QueueRepository):
         return int(rows[0][0]) if rows else 0
 
     def requeue_no_links_with_links(self) -> int:
+        """Requeue rows that previously had no links.
+
+        Link existence is resolved at download time by DocumentationLinksLoader
+        (source tables `links_documentation_44_fz` / `_223_fz` on S7, looked up
+        by contract number) — the pipeline does not duplicate links locally.
+        The previous implementation referenced `q.contract_reg_number` (a column
+        that does not exist; the table has `contract_number`) and undefined local
+        link tables, so it could never run. Genuinely link-less rows are returned
+        to NO_LINKS by the worker after a failed resolution.
+        """
         sql = """
-            WITH has_links AS (
-                SELECT DISTINCT q.id
-                FROM document_processing_queue q
-                WHERE q.status = 'no_links'
-                  AND q.table_source LIKE '%44%'
-                  AND (
-                    EXISTS (
-                        SELECT 1 FROM links_documentation_44_fz l
-                        WHERE l.contract_number = q.contract_reg_number
-                    )
-                    OR EXISTS (
-                        SELECT 1 FROM links_documentation_44_fz l
-                        WHERE l.contract_id IN (
-                            SELECT r.id FROM reestr_contract_44_fz r WHERE r.contract_number = q.contract_reg_number
-                            UNION ALL
-                            SELECT r.id FROM reestr_contract_44_fz_awarded r WHERE r.contract_number = q.contract_reg_number
-                        )
-                    )
-                  )
-            ),
-            updated AS (
+            WITH updated AS (
                 UPDATE document_processing_queue
-                SET status = 'pending', worker_id = NULL, started_at = NULL, error_message = NULL
-                WHERE id IN (SELECT id FROM has_links)
+                SET status = 'PENDING', worker_id = NULL, started_at = NULL, last_error = NULL
+                WHERE status = 'NO_LINKS' AND contract_number IS NOT NULL
                 RETURNING id
             )
             SELECT COUNT(*) FROM updated
