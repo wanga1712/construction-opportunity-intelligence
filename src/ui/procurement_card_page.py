@@ -393,8 +393,15 @@ def _render_dossier(d: Dict[str, Any], db: Any = None) -> None:
     if not _is_direct_track:
         _titles.append(f"Находки ({counts.get('findings', 0)})")
     _titles.append(f"Что можно поставить ({len(d.get('supply_candidates') or [])})")
-    if _spec or _tech or _req:
-        _titles.append(f"Смета и требования ({len(_spec) + len(_tech) + len(_req)})")
+    _direct_specs = []
+    if _spec:
+        _direct_specs.append(("spec", f"Смета ({len(_spec)})"))
+    if _tech:
+        _direct_specs.append(("tech", f"Техпараметры ({len(_tech)})"))
+    if _req or any((_direct.get("sections") or {}).values()):
+        _req_total = len(_req) + sum(len(v or []) for v in (_direct.get("sections") or {}).values())
+        _direct_specs.append(("req", f"Требования ({_req_total})"))
+    _titles += [t for _, t in _direct_specs]
     _titles += ["История / Модель", "Очередь"]
     _tabs = st.tabs(_titles)
     _idx = 0
@@ -404,9 +411,14 @@ def _render_dossier(d: Dict[str, Any], db: Any = None) -> None:
     if not _is_direct_track:
         tab_find = _tabs[_idx]; _idx += 1
     tab_supply = _tabs[_idx]; _idx += 1
-    tab_direct = None
-    if _spec or _tech or _req:
-        tab_direct = _tabs[_idx]
+    tab_spec = tab_tech = tab_req = None
+    for _key, _ in _direct_specs:
+        if _key == "spec":
+            tab_spec = _tabs[_idx]
+        elif _key == "tech":
+            tab_tech = _tabs[_idx]
+        else:
+            tab_req = _tabs[_idx]
         _idx += 1
     tab_history, tab_queue = _tabs[_idx], _tabs[_idx + 1]
 
@@ -562,65 +574,49 @@ def _render_dossier(d: Dict[str, Any], db: Any = None) -> None:
     with tab_history:
         _render_history_tab(pid, db)
 
-    if tab_direct is not None:
-        with tab_direct:
-            st.markdown('<div class="pc-muted">Извлечено напрямую из документов закупки. '
-                        'ИИ-нормализация названий — следующий этап.</div>',
-                        unsafe_allow_html=True)
-            _secs = _direct.get("sections") or {}
-            _req_total = sum(len(v or []) for v in _secs.values()) + len(_req)
-            _d1, _d2, _d3 = st.tabs([
-                f"Смета ({len(_spec)})",
-                f"Техпараметры ({len(_tech)})",
-                f"Требования ({_req_total})",
-            ])
-            with _d1:
-                if _spec:
-                    _h = _spec[0].get("header") or []
-                    st.markdown(_table_html(
-                        [_fmt(x) for x in (_h if _h else ["Данные"])] or ["Данные"],
-                        [[_fmt(c) for c in it.get("cells") or []]
-                         + [""] * max(0, len(_h) - len(it.get("cells") or []))
-                         for it in _spec[:200]],
-                        wrap=True), unsafe_allow_html=True)
-                else:
-                    st.markdown('<div class="pc-muted">Спецификация не найдена.</div>',
-                                unsafe_allow_html=True)
-            with _d2:
-                if _tech:
-                    _h = _tech[0].get("header") or []
-                    st.markdown(_table_html(
-                        [_fmt(x) for x in (_h if _h else ["Данные"])] or ["Данные"],
-                        [[_fmt(c) for c in it.get("cells") or []] for it in _tech[:300]],
-                        wrap=True), unsafe_allow_html=True)
-                else:
-                    st.markdown('<div class="pc-muted">Технические параметры не найдены.</div>',
-                                unsafe_allow_html=True)
-            with _d3:
-                _SEC_TITLES = {
-                    "participant": "Требования к участнику",
-                    "product": "Требования к товару и поставке",
-                    "participation": "Условия участия",
-                    "security": "Обеспечение",
-                    "national": "Национальный режим",
-                }
-                if _req:
-                    _h = _req[0].get("header") or []
-                    st.markdown("**Национальный режим (таблица)**")
-                    st.markdown(_table_html(
-                        [_fmt(x) for x in (_h if _h else ["Данные"])] or ["Данные"],
-                        [[_fmt(c) for c in it.get("cells") or []] for it in _req[:200]],
-                        wrap=True), unsafe_allow_html=True)
-                for _key, _title in _SEC_TITLES.items():
-                    _items = _secs.get(_key) or []
-                    if not _items:
-                        continue
-                    with st.expander(f"{_title} ({len(_items)})"):
-                        for _it in _items[:40]:
-                            st.markdown(f"- {_fmt(_it.get('text'))} "
-                                        f"<span class='pc-muted'>· {_fmt(_it.get('source_file'))}</span>",
-                                        unsafe_allow_html=True)
-            st.caption("Источник: локальные документы закупки (document_files.local_path).")
+    if tab_spec is not None:
+        with tab_spec:
+            _h = (_spec[0].get("header") or []) if _spec else []
+            st.markdown(_table_html(
+                [_fmt(x) for x in (_h or ["Данные"])],
+                [[_fmt(c) for c in it.get("cells") or []]
+                 + [""] * max(0, len(_h) - len(it.get("cells") or []))
+                 for it in _spec[:200]], wrap=True), unsafe_allow_html=True)
+            st.caption("Закупка состоит из этих позиций (как есть, из документов).")
+
+    if tab_tech is not None:
+        with tab_tech:
+            _h = (_tech[0].get("header") or []) if _tech else []
+            st.markdown(_table_html(
+                [_fmt(x) for x in (_h or ["Данные"])],
+                [[_fmt(c) for c in it.get("cells") or []] for it in _tech[:300]],
+                wrap=True), unsafe_allow_html=True)
+
+    if tab_req is not None:
+        with tab_req:
+            if _req:
+                _h = _req[0].get("header") or []
+                st.markdown("**Национальный режим (таблица)**")
+                st.markdown(_table_html(
+                    [_fmt(x) for x in (_h or ["Данные"])],
+                    [[_fmt(c) for c in it.get("cells") or []] for it in _req[:200]],
+                    wrap=True), unsafe_allow_html=True)
+            _SEC_TITLES = {
+                "participant": "Требования к участнику",
+                "product": "Требования к товару и поставке",
+                "participation": "Условия участия",
+                "security": "Обеспечение",
+                "national": "Национальный режим",
+            }
+            for _key, _title in _SEC_TITLES.items():
+                _items = _secs.get(_key) or []
+                if not _items:
+                    continue
+                with st.expander(f"{_title} ({len(_items)})"):
+                    for _it in _items[:40]:
+                        st.markdown(f"- {_fmt(_it.get('text'))} "
+                                    f"<span class=\"pc-muted\">· {_fmt(_it.get('source_file'))}</span>",
+                                    unsafe_allow_html=True)
 
     with tab_queue:
         msg = st.session_state.pop("pcard_msg", None)
