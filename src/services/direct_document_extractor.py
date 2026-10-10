@@ -178,3 +178,44 @@ def load_direct_extraction(procurement_id: int) -> Dict[str, Any]:
     data["sections"] = extract_text_sections(paths)
     data["files"] = len(paths)
     return data
+
+
+def normalize_spec_positions(items: List[str]) -> List[Dict[str, Any]]:
+    """ИИ-нормализация позиций сметы: имя + категория реестра (кандидаты).
+
+    Локальная модель через Ollama; ничего не пишет в БД.
+    """
+    import json as _json
+    import urllib.request
+
+    from src.services.manual_category_service import list_categories
+
+    names = [str(x).strip() for x in items if str(x or "").strip()][:20]
+    if not names:
+        return []
+    cats = list_categories(db=None)
+    cat_list = "; ".join(f'{c["category_code"]}={c.get("category_name")}' for c in cats)
+    prompt = (
+        "Ты нормализуешь позиции сметы закупки. Верни СТРОГО JSON-массив объектов вида "
+        '{"raw": "...", "normalized": "...", "category_code": "...", '
+        '"subcategory_hint": "...", "confidence": 0..1}.\n'
+        f"Разрешённые категории: {cat_list}.\n"
+        'Если позиция не относится ни к одной — category_code = "OTHER".\n\n'
+        "Позиции:\n" + "\n".join(f"- {x}" for x in names) + "\n\nJSON:"
+    )
+    try:
+        body = _json.dumps({"model": "qwen2.5:7b", "prompt": prompt, "stream": False,
+                            "options": {"temperature": 0}}).encode("utf-8")
+        req = urllib.request.Request("http://127.0.0.1:11434/api/generate", data=body,
+                                     headers={"Content-Type": "application/json"})
+        with urllib.request.urlopen(req, timeout=300) as resp:
+            raw = _json.loads(resp.read().decode("utf-8")).get("response", "")
+        cleaned = raw.strip()
+        if cleaned.startswith("```"):
+            cleaned = re.sub(r"^```[a-zA-Z]*\n?|```$", "", cleaned).strip()
+        start, end = cleaned.find("["), cleaned.rfind("]")
+        if start >= 0 and end > start:
+            return _json.loads(cleaned[start:end + 1])
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("normalize_spec_positions failed: %s", exc)
+    return []
