@@ -36,6 +36,7 @@ from .task_completion import can_complete_tender_files
 from .match_engine import MatchEngine
 from .dto import ProcessingOutcome
 from .backends.s13_persistence import S13V2TaskPersistenceService
+from .eis_rate_limit_guard import EisRateLimitBlocked, EisRateLimited
 
 class DocumentProcessorDaemon:
     def __init__(self, db_configs: Optional[dict] = None):
@@ -109,6 +110,7 @@ class DocumentProcessorDaemon:
         self.worker_id = int(os.getenv("WORKER_ID", "1"))
         self.batch_size = int(os.getenv("BATCH_SIZE", "10"))
         self.sleep_seconds = int(os.getenv("DAEMON_SLEEP_SECONDS", "5"))
+        self._last_eis_report_at = 0.0
         self.memory_limit_bytes = int(os.getenv("MEMORY_LIMIT_BYTES", str(4 * 1024 ** 3)))
         self.temp_max_bytes = int(os.getenv("TEMP_DIR_MAX_BYTES", str(30 * 1024 ** 3)))
 
@@ -275,6 +277,18 @@ class DocumentProcessorDaemon:
             pending_count = 0
             pass
 
+        eis_guard = getattr(self.downloader, "eis_guard", None)
+        if eis_guard is not None:
+            now_monotonic = time.monotonic()
+            if now_monotonic - self._last_eis_report_at >= 300:
+                self.logger.warning("\n" + eis_guard.operational_report())
+                self._last_eis_report_at = now_monotonic
+            if eis_guard.is_blocked():
+                self.logger.warning(
+                    "[EIS] Global rate-limit block is active; claim is paused."
+                )
+                return False
+
         try:
             pass # bypassed
         except Exception as exc:
@@ -351,7 +365,14 @@ class DocumentProcessorDaemon:
             if pending_future is not None and pending_task is not None and pending_task["id"] == task_id:
                 try:
                     batch = pending_future.result()
-                    files = batch.files
+                    if getattr(batch, "rate_limited", False):
+                        self.queue_manager.mark_requeue_pending(
+                            task_id, "EIS_RATE_LIMIT_PAUSED"
+                        )
+                        files = []
+                        skip_processing = True
+                    else:
+                        files = batch.files
                     msg = f"[{task_id}] Download done: {len(files)} files"
                     self.logger.info(msg)
                     print(msg, flush=True)
@@ -375,7 +396,14 @@ class DocumentProcessorDaemon:
                 print(f"[{task_id}] Downloading {contract_reg_number}...", flush=True)
                 try:
                     batch = self.pipeline.prefetch_task(task_id, contract_reg_number, table_source)
-                    files = batch.files
+                    if getattr(batch, "rate_limited", False):
+                        self.queue_manager.mark_requeue_pending(
+                            task_id, "EIS_RATE_LIMIT_PAUSED"
+                        )
+                        files = []
+                        skip_processing = True
+                    else:
+                        files = batch.files
                     msg = f"[{task_id}] Download done: {len(files)} files"
                     self.logger.info(msg)
                     print(msg, flush=True)
@@ -544,7 +572,12 @@ class DocumentProcessorDaemon:
                     source_id=task.get("source_id"),
                 )
                 files = batch.files
-                
+                if getattr(batch, "rate_limited", False) and not files:
+                    self.logger.warning(
+                        f"[S13_V2][{task_id}] EIS rate-limit pause; task stays pending."
+                    )
+                    backend.queue.mark_pending(task_id, "EIS_RATE_LIMIT_PAUSED")
+                    return
                 if batch.failed_count > 0:
                     has_transient = any((f.error_class or "").upper() == "TRANSIENT" for f in batch.failures)
                     if has_transient:
@@ -557,6 +590,12 @@ class DocumentProcessorDaemon:
                         self.logger.error(f"[S13_V2][{task_id}] {msg}")
                         backend.queue.mark_failed(task_id, msg)
                         return
+            except (EisRateLimited, EisRateLimitBlocked):
+                self.logger.warning(
+                    f"[S13_V2][{task_id}] EIS rate-limit pause; task stays pending."
+                )
+                backend.queue.mark_pending(task_id, "EIS_RATE_LIMIT_PAUSED")
+                return
             except Exception as dl_exc:
                 msg = str(dl_exc)
                 if "NoDocumentLinksError" in type(dl_exc).__name__:
@@ -593,6 +632,17 @@ class DocumentProcessorDaemon:
                 match_engine=self._scoped_engine(procurement_id),
                 category_codes=None,
             )
+            if getattr(batch, "rate_limited", False):
+                if proc_result.files:
+                    try:
+                        self.s13_persistence.persist_task_result(proc_result)
+                    except Exception as persist_exc:
+                        self.logger.warning(
+                            f"[S13_V2][{task_id}] Local parse persisted partially "
+                            f"before EIS pause: {persist_exc}"
+                        )
+                backend.queue.mark_pending(task_id, "EIS_RATE_LIMIT_PAUSED")
+                return
             if proc_result.outcome == "FAILED":
                 backend.queue.mark_failed(task_id, proc_result.error_message)
                 return

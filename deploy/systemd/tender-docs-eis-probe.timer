@@ -1,0 +1,12 @@
+[Unit]
+Description=Run the EIS recovery probe every five minutes
+
+[Timer]
+OnBootSec=2min
+OnUnitActiveSec=5min
+AccuracySec=30s
+Persistent=true
+Unit=tender-docs-eis-probe.service
+
+[Install]
+WantedBy=timers.target

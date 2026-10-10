@@ -1,0 +1,32 @@
+[Unit]
+Description=EIS rate-limit recovery probe (one controlled request)
+Wants=network-online.target
+After=network-online.target postgresql@17-main.service
+RequiresMountsFor=/data
+
+[Service]
+Type=oneshot
+User=sergey
+Group=sergey
+WorkingDirectory=/opt/tender_documents_research
+EnvironmentFile=/opt/tender_documents_research/.env
+EnvironmentFile=-/etc/tender-docs-db.env
+EnvironmentFile=-/etc/tender-docs-s13-local-db.env
+EnvironmentFile=-/etc/tender-docs-worker-open.env
+Environment=PROCESSING_BACKEND=S13_V4
+Environment=DOCUMENT_STORAGE_ROOT=/data/tender-documents
+Environment=DOCUMENT_DOWNLOAD_DIR=/data/tender-documents/downloads
+Environment=S13_DOCUMENT_DB_HOST=127.0.0.1
+Environment=S13_DOCUMENT_DB_PORT=5432
+Environment=S13_DOCUMENT_DB_NAME=document_intelligence
+Environment=REQUESTS_CA_BUNDLE=/etc/ssl/certs/ca-certificates.crt
+Environment=REQUESTS_VERIFY_SSL=1
+ExecStart=/opt/tender_documents_research/.venv/bin/python /opt/tender_documents_research/scripts/eis_rate_limit_probe.py
+Nice=10
+Slice=crm-background-compute.slice
+UMask=0027
+NoNewPrivileges=true
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target

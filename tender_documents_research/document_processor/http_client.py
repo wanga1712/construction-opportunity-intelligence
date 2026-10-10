@@ -1,59 +1,52 @@
 import os
-import random
 import re
 import threading
 import time
+from contextlib import nullcontext
 from pathlib import Path
-from typing import Optional
+from typing import Any, Callable, Dict, Optional
 from urllib.parse import parse_qs, unquote, urljoin, urlsplit
 
 import requests
 
-
-#: Общий на процесс «отбой» после HTTP 429: все потоки ждут, а не долбят источник
-#: (иначе воркеры держат блок по IP — так и получается устойчивый 429 от zakupki.gov.ru).
-_COOLDOWN_LOCK = threading.Lock()
-_COOLDOWN_UNTIL = 0.0
-
-
-def _cooldown_wait() -> None:
-    while True:
-        with _COOLDOWN_LOCK:
-            remaining = _COOLDOWN_UNTIL - time.time()
-        if remaining <= 0:
-            return
-        time.sleep(min(remaining, 5.0))
-
-
-def _cooldown_set(seconds: float) -> None:
-    global _COOLDOWN_UNTIL
-    with _COOLDOWN_LOCK:
-        _COOLDOWN_UNTIL = max(_COOLDOWN_UNTIL, time.time() + max(0.0, float(seconds)))
-
-
-def _retry_after_seconds(response) -> float:
-    default = float(os.getenv("HTTP_429_BACKOFF_SECONDS", "60"))
-    cap = float(os.getenv("HTTP_429_MAX_SLEEP", "900"))
-    raw = (response.headers.get("Retry-After") or "").strip()
-    try:
-        delay = float(raw) if raw else default
-    except ValueError:
-        delay = default
-    return max(1.0, min(delay, cap)) + random.uniform(0.0, 3.0)
+from .concurrency_manager import get_current_eis_concurrency
+from .eis_rate_limit_guard import (
+    EisRateLimitBlocked,
+    EisRateLimited,
+    extract_xid,
+    get_eis_guard,
+    is_eis_url,
+    parse_retry_after,
+)
 
 
 class HttpFileClient:
-    """
-    ???????? ?? ?????????? ?????? ?? HTTP/HTTPS (?????? ??????????, ????? ??????, ?????? HTML ????????).
-    ????? ???????? ??????? ??? ?????? ? ??????? ??????.
-    """
-    def __init__(self, proxy_url: Optional[str], proxy_mode: Optional[str], logger):
+    """HTTP download client. Every EIS request passes the same global gate."""
+
+    def __init__(
+        self,
+        proxy_url: Optional[str],
+        proxy_mode: Optional[str],
+        logger,
+        guard=None,
+    ):
         self.proxy_url = proxy_url
         self.proxy_mode = proxy_mode
         self.logger = logger
-        self.download_start_parallel = max(1, int(os.getenv("DOWNLOAD_START_PARALLEL", "1")))
-        self._download_start_gate = threading.BoundedSemaphore(self.download_start_parallel)
+        self.guard = guard or get_eis_guard()
+        self.download_start_parallel = max(
+            1, int(os.getenv("DOWNLOAD_START_PARALLEL", "1"))
+        )
+        self._download_start_gate = threading.BoundedSemaphore(
+            self.download_start_parallel
+        )
+        self._request_gate: Callable[[str], Any] = (
+            lambda request_type: nullcontext()
+        )
         self.session = self._create_download_session()
+
+    def set_request_gate(self, request_gate: Callable[[str], Any]) -> None:
+        self._request_gate = request_gate
 
     def _create_download_session(self) -> requests.Session:
         session = requests.Session()
@@ -70,16 +63,18 @@ class HttpFileClient:
 
             adapter = SSLAdapter()
             session.mount("https://", adapter)
-        except Exception as e:
-            self.logger.warning(f"Could not create SSLAdapter: {e}")
+        except Exception as exc:
+            self.logger.warning(f"Could not create SSLAdapter: {exc}")
         return session
 
     def _is_zakupki_download(self, url: str) -> bool:
-        return "zakupki.gov.ru" in (url or "")
+        return is_eis_url(url)
 
     def _build_timeout(self, url: str, prefix: str) -> tuple[int, int]:
         if self._is_zakupki_download(url):
-            connect_timeout = int(os.getenv(f"{prefix}_CONNECT_TIMEOUT_ZAKUPKI", "75"))
+            connect_timeout = int(
+                os.getenv(f"{prefix}_CONNECT_TIMEOUT_ZAKUPKI", "75")
+            )
             read_timeout = int(os.getenv(f"{prefix}_READ_TIMEOUT_ZAKUPKI", "300"))
             return connect_timeout, read_timeout
         connect_timeout = int(os.getenv(f"{prefix}_CONNECT_TIMEOUT", "20"))
@@ -89,9 +84,6 @@ class HttpFileClient:
     def _acquire_download_start(self, url: str) -> bool:
         if not self._is_zakupki_download(url):
             return False
-        self.logger.debug(
-            f"???????? ????? ?????? ?????????? ??? {url} (limit={self.download_start_parallel})"
-        )
         self._download_start_gate.acquire()
         return True
 
@@ -99,408 +91,485 @@ class HttpFileClient:
         if acquired:
             self._download_start_gate.release()
 
-    def try_download_direct(self, task_dir: Path, url: str, suggested_filename: Optional[str] = None) -> Optional[Path]:
-        """?????? ??????????: ???????????????? ?????, ????? ???????????? ???????? ????."""
-        start_acquired = False
-        try:
-            headers = {
-                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-                "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7",
-                "Accept-Language": "ru-RU,ru;q=0.9,en;q=0.8",
-                "Accept-Encoding": "gzip, deflate, br",
-                "DNT": "1",
-                "Connection": "keep-alive",
-                "Upgrade-Insecure-Requests": "1",
-                "Sec-Fetch-Dest": "document",
-                "Sec-Fetch-Mode": "navigate",
-                "Sec-Fetch-Site": "none",
-                "Sec-Fetch-User": "?1",
-                "Cache-Control": "max-age=0"
-            }
-            if "zakupki.gov.ru" in url:
-                headers["Referer"] = "https://zakupki.gov.ru/"
-            self.logger.debug(f"?????? ??????????: {url}")
+    def _request(
+        self,
+        method: str,
+        url: str,
+        *,
+        request_type: str = "DOWNLOAD",
+        eis_url: Optional[str] = None,
+        **kwargs,
+    ):
+        """Execute one HTTP request; 429 raises immediately without retry."""
+        guarded_url = eis_url or url
+        if not self._is_zakupki_download(guarded_url):
+            return self.session.request(method, url, **kwargs)
 
-            timeout_tuple = self._build_timeout(url, "DIRECT")
-            verify = self._get_verify_param()
-            attempts = max(1, int(os.getenv("HTTP_429_RETRIES", "3")) + 1)
-            response = None
-            for attempt in range(attempts):
-                _cooldown_wait()
-                start_acquired = self._acquire_download_start(url)
-                response = self.session.get(
+        event_id = 0
+        started = time.monotonic()
+        start_acquired = False
+        with self._request_gate(request_type):
+            self.guard.ensure_request_allowed(request_type)
+            event_id = self.guard.record_request_start(
+                request_type,
+                guarded_url,
+                get_current_eis_concurrency(),
+            )
+            try:
+                start_acquired = self._acquire_download_start(guarded_url)
+                response = self.session.request(method, url, **kwargs)
+            except Exception as exc:
+                self.guard.record_request_finish(
+                    event_id,
+                    None,
+                    duration_ms=int((time.monotonic() - started) * 1000),
+                    error_class=type(exc).__name__,
+                )
+                raise
+            finally:
+                self._release_download_start(start_acquired)
+
+        duration_ms = int((time.monotonic() - started) * 1000)
+        if response.status_code == 429:
+            retry_after = parse_retry_after(response.headers.get("Retry-After"))
+            try:
+                body_sample = (response.text or "")[:4096]
+            except Exception:
+                body_sample = ""
+            xid = extract_xid(body_sample)
+            response_headers = dict(response.headers)
+            self.guard.record_request_finish(
+                event_id,
+                429,
+                duration_ms=duration_ms,
+                xid=xid,
+                retry_after=retry_after,
+            )
+            self.guard.record_429(
+                guarded_url,
+                retry_after,
+                xid,
+                get_current_eis_concurrency(),
+            )
+            response.close()
+            raise EisRateLimited(
+                guarded_url, retry_after, xid, response_headers
+            )
+        self.guard.record_request_finish(
+            event_id,
+            response.status_code,
+            duration_ms=duration_ms,
+        )
+        return response
+
+    def request_head(self, url: str, request_type: str = "HEAD", **kwargs):
+        return self._request("HEAD", url, request_type=request_type, **kwargs)
+
+    def _write_response(self, task_dir: Path, url: str, response, suggested_filename=None) -> Path:
+        filename = (
+            self.sanitize_name(suggested_filename)
+            if suggested_filename
+            else self._resolve_filename(url, response.headers)
+        )
+        local_path = task_dir / filename
+        with local_path.open("wb") as handle:
+            for chunk in response.iter_content(chunk_size=8192):
+                if chunk:
+                    handle.write(chunk)
+        return local_path
+
+    def try_download_direct(
+        self,
+        task_dir: Path,
+        url: str,
+        suggested_filename: Optional[str] = None,
+        request_type: str = "DOWNLOAD",
+    ) -> Optional[Path]:
+        headers = {
+            "User-Agent": (
+                "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+                "AppleWebKit/537.36 (KHTML, like Gecko) "
+                "Chrome/120.0.0.0 Safari/537.36"
+            ),
+            "Accept": (
+                "text/html,application/xhtml+xml,application/xml;q=0.9,"
+                "image/avif,image/webp,image/apng,*/*;q=0.8"
+            ),
+            "Accept-Language": "ru-RU,ru;q=0.9,en;q=0.8",
+            "Accept-Encoding": "gzip, deflate, br",
+            "DNT": "1",
+            "Connection": "keep-alive",
+            "Upgrade-Insecure-Requests": "1",
+            "Sec-Fetch-Dest": "document",
+            "Sec-Fetch-Mode": "navigate",
+            "Sec-Fetch-Site": "none",
+            "Sec-Fetch-User": "?1",
+            "Cache-Control": "max-age=0",
+        }
+        if is_eis_url(url):
+            headers["Referer"] = "https://zakupki.gov.ru/"
+        try:
+            response = self._request(
+                "GET",
+                url,
+                request_type=request_type,
+                headers=headers,
+                timeout=self._build_timeout(url, "DIRECT"),
+                stream=True,
+                verify=self._get_verify_param(),
+            )
+            with response:
+                if not response.ok:
+                    self.logger.warning(
+                        f"Direct download failed with {response.status_code}"
+                    )
+                    return None
+                content_type = (response.headers.get("Content-Type") or "").lower()
+                url_path = url.split("?", 1)[0].lower()
+                if "text/html" in content_type and not url_path.endswith(".html"):
+                    length = response.headers.get("Content-Length")
+                    if length is not None and int(length) < 50000:
+                        self.logger.warning(
+                            "Rejected small HTML response: "
+                            f"{content_type}, length={length}"
+                        )
+                        return None
+                return self._write_response(
+                    task_dir, url, response, suggested_filename
+                )
+        except (EisRateLimited, EisRateLimitBlocked):
+            raise
+        except Exception as exc:
+            self.logger.warning(f"Direct download failed: {exc}")
+            return None
+
+    def try_download_with_proxy(
+        self,
+        task_dir: Path,
+        url: str,
+        suggested_filename: Optional[str] = None,
+        request_type: str = "DOWNLOAD",
+    ) -> Optional[Path]:
+        if not self.proxy_url:
+            return None
+        headers = {
+            "User-Agent": (
+                "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+                "AppleWebKit/537.36 (KHTML, like Gecko) "
+                "Chrome/120.0.0.0 Safari/537.36"
+            )
+        }
+        host = self.extract_host(url)
+        if host:
+            headers["Host"] = host
+        mode = (self.proxy_mode or "endpoint").lower()
+        verify = self._get_verify_param()
+        timeout_tuple = self._build_timeout(url, "PROXY")
+        try:
+            if mode in ("http", "proxy", "http_proxy"):
+                proxies = {"http": self.proxy_url, "https": self.proxy_url}
+                response = self._request(
+                    "GET",
                     url,
+                    request_type=request_type,
+                    eis_url=url,
                     headers=headers,
                     timeout=timeout_tuple,
                     stream=True,
+                    proxies=proxies,
                     verify=verify,
                 )
-                self._release_download_start(start_acquired)
-                start_acquired = False
-                if response.status_code != 429:
-                    break
-                delay = _retry_after_seconds(response)
-                _cooldown_set(delay)
-                response.close()
-                response = None
-                self.logger.warning(
-                    "HTTP 429 (rate limit): пауза %.0f c перед повтором %d/%d",
-                    delay, attempt + 1, attempts - 1,
-                )
-            if response is None:
-                return None
-
-            with response:
-                if not response.ok:
-                    self.logger.warning(f"?????? ?????? ?????? ??? {response.status_code}")
-                    return None
-
-                ct = (response.headers.get("Content-Type") or "").lower()
-                url_path = url.split("?", 1)[0].lower()
-                if "text/html" in ct and not url_path.endswith(".html"):
-                    cl_header = response.headers.get("Content-Length")
-                    if cl_header is not None and int(cl_header) < 50000:
-                        self.logger.warning(
-                            f"????????, ????????? ???????? ?????? ????? (Content-Type: {ct}, Content-Length: {cl_header})"
-                        )
-                        return None
-
-                filename = self.sanitize_name(suggested_filename) if suggested_filename else self._resolve_filename(url, response.headers)
-                local_path = task_dir / filename
-                with local_path.open("wb") as f:
-                    for chunk in response.iter_content(chunk_size=8192):
-                        if chunk:
-                            f.write(chunk)
-            return local_path
-        except Exception as e:
-            self.logger.warning(f"?????? ??????? ??????????: {e}")
-            return None
-        finally:
-            self._release_download_start(start_acquired)
-
-    def try_download_with_proxy(self, task_dir: Path, url: str, suggested_filename: Optional[str] = None) -> Optional[Path]:
-        _cooldown_wait()
-        if not self.proxy_url:
-            return None
-        start_acquired = False
-        try:
-            headers = {
-                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-            }
-            host = self.extract_host(url)
-            if host:
-                headers["Host"] = host
-            mode = (self.proxy_mode or "endpoint").lower()
-            verify = self._get_verify_param()
-            timeout_tuple = self._build_timeout(url, "PROXY")
-            if mode in ("http", "proxy", "http_proxy"):
-                self.logger.debug(f"?????????? ????? HTTP-??????: {self.proxy_url}")
-                proxies = {"http": self.proxy_url, "https": self.proxy_url}
-                start_acquired = self._acquire_download_start(url)
-                response = self.session.get(url, headers=headers, timeout=timeout_tuple, stream=True, proxies=proxies, verify=verify)
-                self._release_download_start(start_acquired)
-                start_acquired = False
-                with response:
-                    if not response.ok:
-                        self.logger.warning(f"HTTP-?????? ?????: {response.status_code}")
-                        return None
-                    filename = self.sanitize_name(suggested_filename) if suggested_filename else self._resolve_filename(url, response.headers)
-                    local_path = task_dir / filename
-                    with local_path.open("wb") as f:
-                        for chunk in response.iter_content(chunk_size=8192):
-                            if chunk:
-                                f.write(chunk)
-                return local_path
             elif mode in ("reverse", "revproxy", "reverse_proxy"):
                 parts = urlsplit(url)
                 path_and_query = parts.path or "/"
                 if parts.query:
                     path_and_query = f"{path_and_query}?{parts.query}"
                 target = f"{self.proxy_url.rstrip('/')}{path_and_query}"
-                self.logger.debug(f"?????????? ????? reverse-??????: {target}")
-                start_acquired = self._acquire_download_start(url)
-                response = self.session.get(target, headers=headers, timeout=timeout_tuple, stream=True, verify=verify)
-                self._release_download_start(start_acquired)
-                start_acquired = False
-                with response:
-                    if not response.ok:
-                        self.logger.warning(f"Reverse-?????? ?????: {response.status_code}")
-                        return None
-                    filename = self._resolve_filename(url, response.headers)
-                    local_path = task_dir / filename
-                    with local_path.open("wb") as f:
-                        for chunk in response.iter_content(chunk_size=8192):
-                            if chunk:
-                                f.write(chunk)
-                return local_path
+                response = self._request(
+                    "GET",
+                    target,
+                    request_type=request_type,
+                    eis_url=url,
+                    headers=headers,
+                    timeout=timeout_tuple,
+                    stream=True,
+                    verify=verify,
+                )
             else:
-                self.logger.debug(f"?????????? ????? endpoint-??????: {self.proxy_url}")
-                start_acquired = self._acquire_download_start(url)
-                response = self.session.get(self.proxy_url, params={"url": url}, headers=headers, timeout=timeout_tuple, stream=True, verify=verify)
-                self._release_download_start(start_acquired)
-                start_acquired = False
-                with response:
-                    if not response.ok:
-                        self.logger.warning(f"Endpoint-?????? ?????: {response.status_code}")
-                        return None
-                    filename = self._resolve_filename(url, response.headers)
-                    local_path = task_dir / filename
-                    with local_path.open("wb") as f:
-                        for chunk in response.iter_content(chunk_size=8192):
-                            if chunk:
-                                f.write(chunk)
-                return local_path
-        except Exception:
+                response = self._request(
+                    "GET",
+                    self.proxy_url,
+                    request_type=request_type,
+                    eis_url=url,
+                    params={"url": url},
+                    headers=headers,
+                    timeout=timeout_tuple,
+                    stream=True,
+                    verify=verify,
+                )
+            with response:
+                if not response.ok:
+                    self.logger.warning(
+                        f"Proxy download failed with {response.status_code}"
+                    )
+                    return None
+                return self._write_response(
+                    task_dir, url, response, suggested_filename
+                )
+        except (EisRateLimited, EisRateLimitBlocked):
+            raise
+        except Exception as exc:
+            self.logger.warning(f"Proxy download failed: {exc}")
             return None
-        finally:
-            self._release_download_start(start_acquired)
 
     def download_html_and_follow(self, task_dir: Path, page_url: str) -> Optional[Path]:
+        headers = {
+            "User-Agent": (
+                "Mozilla/5.0 (X11; Linux x86_64) "
+                "AppleWebKit/537.36 (KHTML, like Gecko) "
+                "Chrome/120.0.0.0 Safari/537.36"
+            ),
+            "Accept": "*/*",
+            "Accept-Encoding": "gzip, deflate, br",
+        }
         try:
-            headers = {
-                "User-Agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-                "Accept": "*/*",
-                "Accept-Encoding": "gzip, deflate, br",
-            }
-            self.logger.debug(f"Загрузка HTML страницы: {page_url}")
-            verify = self._get_verify_param()
-            with self.session.get(page_url, headers=headers, timeout=60, verify=verify) as resp:
-                if not resp.ok:
-                    self.logger.warning(f"HTML страница недоступна: {resp.status_code}")
+            with self._request(
+                "GET",
+                page_url,
+                request_type="HTML",
+                headers=headers,
+                timeout=60,
+                verify=self._get_verify_param(),
+            ) as response:
+                if not response.ok:
+                    self.logger.warning(
+                        f"HTML page unavailable: {response.status_code}"
+                    )
                     return None
-                html = resp.text or ""
+                html = response.text or ""
+        except (EisRateLimited, EisRateLimitBlocked):
+            raise
         except Exception:
             return None
 
         candidates: list[str] = []
         try:
-            for m in re.finditer(r'href=["\\\'](?P<h>[^"\\\']+)["\\\']', html, flags=re.IGNORECASE):
-                href = m.group("h")
-                if not href:
-                    continue
+            for match in re.finditer(
+                r'href=["\\\'](?P<h>[^"\\\']+)["\\\']', html, flags=re.IGNORECASE
+            ):
+                href = match.group("h")
                 low = href.lower()
-                if any(s in low for s in ("/filestore/public/1.0/download/", "/filestore/", "/download/")) and not low.endswith(".html"):
+                if any(
+                    token in low
+                    for token in (
+                        "/filestore/public/1.0/download/",
+                        "/filestore/",
+                        "/download/",
+                    )
+                ) and not low.endswith(".html"):
                     candidates.append(urljoin(page_url, href))
             if not candidates:
-                for m in re.finditer(r'href=["\\\'](?P<h>[^"\\\']+)["\\\']', html, flags=re.IGNORECASE):
-                    href = m.group("h")
-                    if not href:
-                        continue
+                for match in re.finditer(
+                    r'href=["\\\'](?P<h>[^"\\\']+)["\\\']',
+                    html,
+                    flags=re.IGNORECASE,
+                ):
+                    href = match.group("h")
                     low = href.lower()
-                    if any(low.endswith(ext) for ext in (".pdf", ".doc", ".docx", ".xls", ".xlsx", ".zip")):
+                    if any(
+                        low.endswith(ext)
+                        for ext in (".pdf", ".doc", ".docx", ".xls", ".xlsx", ".zip")
+                    ):
                         candidates.append(urljoin(page_url, href))
         except Exception:
             candidates = []
 
         if not candidates:
-            self.logger.debug("Не найдено ссылок на вложения в HTML")
             return None
-
-        for cand in candidates[:5]:
-            self.logger.debug(f"Пробую вложение: {cand}")
-            host = self.extract_host(cand) or ""
-            if "zakupki.gov.ru" in host and "/filestore/public/1.0/download/" in cand:
-                path = self.try_download_with_proxy(task_dir, cand)
-                if path: return path
-            path = self.try_download_direct(task_dir, cand)
-            if path: return path
-            path = self.try_download_with_proxy(task_dir, cand)
-            if path: return path
+        for candidate in candidates[:5]:
+            host = self.extract_host(candidate) or ""
+            if "zakupki.gov.ru" in host and "/filestore/public/1.0/download/" in candidate:
+                path = self.try_download_with_proxy(task_dir, candidate)
+                if path:
+                    return path
+            path = self.try_download_direct(task_dir, candidate)
+            if path:
+                return path
+            path = self.try_download_with_proxy(task_dir, candidate)
+            if path:
+                return path
         return None
 
     def is_proxy_alive(self) -> bool:
-        """Проверяет доступен ли прокси-сервер."""
         if not self.proxy_url:
             return True
         try:
             from urllib.parse import urlparse
             import socket
+
             parsed = urlparse(self.proxy_url)
             host = parsed.hostname or "127.0.0.1"
             port = parsed.port or 8080
             with socket.create_connection((host, port), timeout=3):
                 return True
-        except Exception as e:
-            self.logger.warning(f"Proxy check failed: {e}")
+        except Exception as exc:
+            self.logger.warning(f"Proxy check failed: {exc}")
             return False
 
     def extract_host(self, url: str) -> Optional[str]:
         try:
             without_scheme = url.split("://", 1)[1]
-            host_port = without_scheme.split("/", 1)[0]
-            return host_port
+            return without_scheme.split("/", 1)[0]
         except Exception:
             return None
 
     def _resolve_filename(self, url: str, headers: dict) -> str:
-        cd = headers.get("Content-Disposition") or headers.get("content-disposition")
-        if cd:
-            lower = cd.lower()
+        content_disposition = headers.get("Content-Disposition") or headers.get(
+            "content-disposition"
+        )
+        if content_disposition:
+            lower = content_disposition.lower()
             if "filename*=" in lower:
                 try:
-                    val = cd.split("filename*=", 1)[1].split(";", 1)[0].strip().strip('"').strip("'")
-                    if val.lower().startswith("utf-8''"):
-                        val = val[7:]
-                    name = unquote(val)
+                    value = (
+                        content_disposition.split("filename*=", 1)[1]
+                        .split(";", 1)[0]
+                        .strip()
+                        .strip('"')
+                        .strip("'")
+                    )
+                    if value.lower().startswith("utf-8''"):
+                        value = value[7:]
+                    name = unquote(value)
                     if name and not self._looks_mojibake(name):
                         return name
                 except Exception:
                     pass
-            parts = cd.split(";")
-            for p in parts:
-                p = p.strip()
-                if p.lower().startswith("filename="):
-                    name = p.split("=", 1)[1].strip().strip('\"')
+            for part in content_disposition.split(";"):
+                part = part.strip()
+                if part.lower().startswith("filename="):
+                    name = part.split("=", 1)[1].strip().strip('"')
                     if name:
                         if not self._looks_mojibake(name):
                             return name
-                        base_ext = os.path.splitext(name)[1]
-                        if base_ext:
+                        extension = os.path.splitext(name)[1]
+                        if extension:
                             uid = self._extract_uid(url) or ""
-                            return f"file_{uid}{base_ext}" if uid else f"file{base_ext}"
-        ct = headers.get("Content-Type") or headers.get("content-type") or ""
-        ext = ""
-        if "application/pdf" in ct:
-            ext = ".pdf"
-        elif "application/vnd.openxmlformats-officedocument.wordprocessingml.document" in ct:
-            ext = ".docx"
-        elif "application/msword" in ct:
-            ext = ".doc"
-        elif "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" in ct:
-            ext = ".xlsx"
-        elif "text/html" in ct:
-            ext = ".html"
+                            return f"file_{uid}{extension}" if uid else f"file{extension}"
+        content_type = (
+            headers.get("Content-Type") or headers.get("content-type") or ""
+        )
+        extension = ""
+        if "application/pdf" in content_type:
+            extension = ".pdf"
+        elif (
+            "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+            in content_type
+        ):
+            extension = ".docx"
+        elif "application/msword" in content_type:
+            extension = ".doc"
+        elif (
+            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+            in content_type
+        ):
+            extension = ".xlsx"
+        elif "text/html" in content_type:
+            extension = ".html"
         tail = url.split("/")[-1] or "file"
         if "?" in tail:
             tail = tail.split("?", 1)[0]
         if not tail:
             tail = "file"
-        if ext and not tail.endswith(ext):
-            tail = tail + ext
+        if extension and not tail.endswith(extension):
+            tail = tail + extension
         if self._looks_mojibake(tail):
             uid = self._extract_uid(url) or ""
             base = f"file_{uid}" if uid else "file"
-            tail = base + ext if ext else base
+            tail = base + extension if extension else base
         return tail
 
-    def _looks_mojibake(self, s: str) -> bool:
-        bad = ["Ð", "Ñ", "\ufffd"]
-        return any(ch in s for ch in bad)
+    def _looks_mojibake(self, value: str) -> bool:
+        return any(ch in value for ch in ["Гђ", "Г‘", "\ufffd"])
 
     def _extract_uid(self, url: str) -> Optional[str]:
         try:
-            qs = urlsplit(url).query
-            params = parse_qs(qs)
-            v = params.get("uid")
-            if v and v[0]:
-                return v[0]
+            params = parse_qs(urlsplit(url).query)
+            value = params.get("uid")
+            return value[0] if value and value[0] else None
         except Exception:
             return None
-        return None
 
     def predict_filename(self, url: str) -> str:
         tail = url.split("/")[-1] or "file"
         if "?" in tail:
             tail = tail.split("?", 1)[0]
-        if not tail:
-            tail = "file"
-        return tail
+        return tail or "file"
 
     def sanitize_name(self, name: str) -> str:
-        """
-        Очистка имени файла (допускает точки, подчеркивания, но убирает спецсимволы).
-        Используется для файлов.
-        """
         if not name:
             return "unknown_file"
-
-        # 1. Заменяем стандартные запрещенные символы и расширенный набор спецсимволов
-        forbidden_chars = [
+        forbidden = [
             "/", "\\", ":", "*", "?", "<", ">", "|", '"',
-            "+", "%", "#", "&", "{", "}", "[", "]", "=", ";", ",", "'", "@", "!", "$", "`", "^"
+            "+", "%", "#", "&", "{", "}", "[", "]", "=", ";", ",", "'",
+            "@", "!", "$", "`", "^",
         ]
-
         cleaned = name
-        for char in forbidden_chars:
+        for char in forbidden:
             cleaned = cleaned.replace(char, "_")
-
-        # 2. Убираем управляющие символы (0-31)
         cleaned = "".join(ch for ch in cleaned if ord(ch) >= 32)
-
-        # 3. Убираем скобки и тильды (по запросу пользователя)
         cleaned = cleaned.replace("(", "_").replace(")", "_").replace("~", "_")
-
-        # 4. Убираем двойные подчеркивания
         while "__" in cleaned:
             cleaned = cleaned.replace("__", "_")
-
         cleaned = cleaned.strip(" ._")
-
         if not cleaned:
             return "unknown_file"
-
-        # 5. Ограничиваем длину
         if len(cleaned) > 200:
-            base, ext = os.path.splitext(cleaned)
-            if len(ext) > 10:
-                ext = ""
-            limit = 200 - len(ext)
-            cleaned = base[:limit] + ext
-
+            base, extension = os.path.splitext(cleaned)
+            if len(extension) > 10:
+                extension = ""
+            cleaned = base[: 200 - len(extension)] + extension
         return cleaned
 
     def sanitize_folder_name(self, name: str) -> str:
-        """
-        Строгая очистка для имен папок (контрактов/реестров).
-        Оставляет ТОЛЬКО буквы и цифры.
-        Совместимо с логикой file_enhancer._sanitize_contract.
-        """
         if not name:
             return "unknown"
         return "".join(ch for ch in str(name) if ch.isalnum())
 
     def _setup_ssl_context(self):
-        """Настройка SSL контекста с пользовательскими сертификатами"""
         from urllib3.util.ssl_ import create_urllib3_context
 
-        ctx = create_urllib3_context()
+        context = create_urllib3_context()
         try:
-            ctx.set_ciphers('DEFAULT:@SECLEVEL=1')
-        except:
+            context.set_ciphers("DEFAULT:@SECLEVEL=1")
+        except Exception:
             pass
+        context.check_hostname = False
 
-        ctx.check_hostname = False
-
-        # Загружаем пользовательский сертификат
-        cert_path = os.getenv('CLIENT_CERT_PATH')
-        key_path = os.getenv('CLIENT_KEY_PATH')
-
+        cert_path = os.getenv("CLIENT_CERT_PATH")
+        key_path = os.getenv("CLIENT_KEY_PATH")
         if not cert_path:
-            # Ищем в стандартных местах
-            possible_paths = [
-                '/etc/stunnel/client.pem',
-                '/opt/tendermonitor/certs/client.pem',
-                '/home/tender/certs/client.pem'
-            ]
-            for path in possible_paths:
+            for path in (
+                "/etc/stunnel/client.pem",
+                "/opt/tendermonitor/certs/client.pem",
+                "/home/tender/certs/client.pem",
+            ):
                 if os.path.exists(path):
                     cert_path = path
                     break
-
         if cert_path and os.path.exists(cert_path):
             try:
                 if key_path and os.path.exists(key_path):
-                    ctx.load_cert_chain(cert_path, key_path)
+                    context.load_cert_chain(cert_path, key_path)
                 else:
-                    ctx.load_cert_chain(cert_path)
-                self.logger.info(f"Загружен пользовательский сертификат: {cert_path}")
-            except Exception as e:
-                self.logger.warning(f"Не удалось загрузить сертификат: {e}")
-
-        return ctx
+                    context.load_cert_chain(cert_path)
+                self.logger.info(f"Loaded client certificate: {cert_path}")
+            except Exception as exc:
+                self.logger.warning(f"Could not load client certificate: {exc}")
+        return context
 
     def _get_verify_param(self):
-        ca_bundle = os.getenv("REQUESTS_CA_BUNDLE") or os.getenv("CURL_CA_BUNDLE")
-        if ca_bundle and os.path.exists(ca_bundle):
-            return ca_bundle
+        bundle = os.getenv("REQUESTS_CA_BUNDLE") or os.getenv("CURL_CA_BUNDLE")
+        if bundle and os.path.exists(bundle):
+            return bundle
         return os.getenv("REQUESTS_VERIFY_SSL", "0") == "1"

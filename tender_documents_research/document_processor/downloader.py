@@ -13,6 +13,11 @@ from utils.logger_config import get_logger
 
 from .http_client import HttpFileClient
 from .concurrency_manager import DownloadCoordinator
+from .eis_rate_limit_guard import (
+    EisRateLimitBlocked,
+    EisRateLimited,
+    is_eis_url,
+)
 from .archive_extractor import ArchiveExtractor
 from .yandex_client import YandexDiskClient
 from .file_skip_list import filter_links
@@ -31,6 +36,9 @@ class DownloadFailure:
     http_status: Optional[int]
     error_message: str
     latency_ms: int
+    response_headers: Optional[dict] = None
+    retry_after: Optional[int] = None
+    xid: Optional[str] = None
 
 @dataclass
 class DownloadBatchResult:
@@ -41,6 +49,7 @@ class DownloadBatchResult:
     failed_count: int
     files: List[Path]
     failures: List[DownloadFailure]
+    rate_limited: bool = False
 
     @property
     def transient_failed_count(self) -> int:
@@ -98,6 +107,8 @@ class Downloader:
         self.links_loader = DocumentationLinksLoader(self.db, self.db_alias)
         self.document_router = DocumentRouter()
         self.download_coordinator = DownloadCoordinator(self.db_alias)
+        self.http_client.set_request_gate(self.download_coordinator.request_slot)
+        self.eis_guard = self.download_coordinator.guard
 
     def _resolve_approved_storage_root(self) -> Optional[Path]:
         if os.getenv("PROCESSING_BACKEND") != "S13_V2":
@@ -229,6 +240,7 @@ class Downloader:
 
         raw_files: List[Path] = []
         failures: List[DownloadFailure] = []
+        rate_limited = False
         remote_dir, safe_prefix = self.yandex_client.build_remote_dir_and_prefix(registry_type, contract_number, None)
 
         resolved_source_id: Optional[int] = source_id
@@ -239,9 +251,9 @@ class Downloader:
         tender_id: Optional[int] = procurement_id if procurement_id is not None else resolved_source_id
 
         try:
-            max_workers = int(os.getenv("DOWNLOAD_PARALLEL", "4"))
+            max_workers = int(os.getenv("DOWNLOAD_PARALLEL", "2"))
         except ValueError:
-            max_workers = 4
+            max_workers = 2
 
         file_identity_map = {}
 
@@ -262,6 +274,9 @@ class Downloader:
                 ), url))
 
             for future, source_url in futures:
+                if rate_limited:
+                    future.cancel()
+                    continue
                 try:
                     result_files, failure, canonical_id, phys_key, u_hash = future.result()
                     if result_files:
@@ -270,7 +285,12 @@ class Downloader:
                             file_identity_map[str(f_path)] = (canonical_id, phys_key, u_hash, source_url)
                     if failure:
                         failures.append(failure)
+                        if failure.error_class == "EIS_RATE_LIMITED":
+                            rate_limited = True
                 except Exception as exc:
+                    if isinstance(exc, (EisRateLimited, EisRateLimitBlocked)):
+                        rate_limited = True
+                        continue
                     self.logger.error(f"[{task_id}] Ошибка при параллельном скачивании файла: {exc}", exc_info=True)
 
         self.logger.info(f"[{task_id}] Скачано {len(raw_files)} файлов. Начинаю распаковку архивов...")
@@ -294,7 +314,7 @@ class Downloader:
                             self.state_repo.ensure_download_file(
                                 task_id, tender_id, table_source, url=parent_url, url_hash=child_hash, file_name=child.name,
                                 source_id=resolved_source_id,
-                                canonical_source_document_id=canonical_id,
+                                canonical_source_document_id=None,
                                 physical_download_key=phys_key
                             )
                             self.state_repo.finalize_download_status(
@@ -329,7 +349,8 @@ class Downloader:
             skipped_count=len(links) - len(effective_links),
             failed_count=len(failures),
             files=files,
-            failures=failures
+            failures=failures,
+            rate_limited=rate_limited,
         )
 
     @staticmethod
@@ -421,12 +442,88 @@ class Downloader:
         # Use DB filename if available as the suggested filename for download
         suggested_name_for_download = self.http_client.sanitize_name(db_file_name) if db_file_name else None
 
+        if is_eis_url(url) and self.eis_guard.is_blocked():
+            failure = DownloadFailure(
+                source_link_id=None,
+                source_url=url,
+                url_hash=url_hash,
+                error_class="EIS_RATE_LIMITED",
+                http_status=429,
+                error_message="EIS_RATE_LIMIT_BLOCKED",
+                latency_ms=0,
+            )
+            self.eis_guard.record_file_event(
+                result="FAILED",
+                source_url=url,
+                url_hash=url_hash,
+                file_name=safe_predicted,
+                error_class="EIS_RATE_LIMITED",
+                http_status=429,
+            )
+            return [], failure, canonical_source_document_id, physical_download_key, url_hash
+
+        self.eis_guard.record_file_event(
+            result="ATTEMPTED",
+            source_url=url,
+            url_hash=url_hash,
+            file_name=safe_predicted,
+        )
+
         for attempt in range(2):
             attempt_number = attempt + 1
             attempt_start = time.monotonic()
             self.logger.debug(f"[{task_id}] Скачивание из источника (попытка {attempt_number}/2): {url}")
-            local_path = self._download_single(task_dir, url, suggested_name_for_download)
+            rate_limit_exc: Optional[BaseException] = None
+            try:
+                local_path = self._download_single(task_dir, url, suggested_name_for_download)
+            except (EisRateLimited, EisRateLimitBlocked) as exc:
+                local_path = None
+                rate_limit_exc = exc
             duration_ms = int((time.monotonic() - attempt_start) * 1000)
+            if rate_limit_exc is not None:
+                http_status = getattr(rate_limit_exc, "http_status", 429)
+                retry_after = getattr(rate_limit_exc, "retry_after", None)
+                xid = getattr(rate_limit_exc, "xid", None)
+                response_headers = getattr(rate_limit_exc, "response_headers", None)
+                if tender_id is not None and table_source and self.state_repo:
+                    self.state_repo.record_download_attempt(
+                        task_id,
+                        tender_id,
+                        url,
+                        url_hash,
+                        attempt_number,
+                        "FAILED",
+                        error_class="EIS_RATE_LIMITED",
+                        http_status=http_status,
+                        duration_ms=duration_ms,
+                        response_headers=response_headers,
+                        retry_after=retry_after,
+                        xid=xid,
+                    )
+                self.eis_guard.record_file_event(
+                    result="FAILED",
+                    source_url=url,
+                    url_hash=url_hash,
+                    file_name=safe_predicted,
+                    error_class="EIS_RATE_LIMITED",
+                    http_status=http_status,
+                    retry_after=retry_after,
+                    xid=xid,
+                    duration_ms=duration_ms,
+                )
+                failure = DownloadFailure(
+                    source_link_id=None,
+                    source_url=url,
+                    url_hash=url_hash,
+                    error_class="EIS_RATE_LIMITED",
+                    http_status=http_status,
+                    error_message="EIS_RATE_LIMITED",
+                    latency_ms=duration_ms,
+                    response_headers=response_headers,
+                    retry_after=retry_after,
+                    xid=xid,
+                )
+                return [], failure, canonical_source_document_id, physical_download_key, url_hash
             if local_path is None:
                 self.logger.warning(f"[{task_id}] Не удалось скачать: {url}")
                 if tender_id is not None and table_source and self.state_repo:
@@ -486,12 +583,27 @@ class Downloader:
                     bytes_received=ok_file.stat().st_size if ok_file.exists() else bytes_received,
                     duration_ms=duration_ms,
                 )
+            self.eis_guard.record_file_event(
+                result="DOWNLOADED",
+                source_url=url,
+                url_hash=url_hash,
+                file_name=safe_predicted,
+                bytes_received=ok_file.stat().st_size if ok_file.exists() else bytes_received,
+                duration_ms=duration_ms,
+            )
             break
 
         if not ok_file:
             self.logger.warning(f"[{task_id}] Не удалось получить валидный файл по ссылке: {url}")
             if tender_id is not None and table_source and self.state_repo:
                 self.state_repo.finalize_download_status(tender_id, table_source, safe_predicted, url_hash, False, "download/validate failed")
+            self.eis_guard.record_file_event(
+                result="FAILED",
+                source_url=url,
+                url_hash=url_hash,
+                file_name=safe_predicted,
+                error_class="TRANSIENT" if "zakupki.gov.ru" in url else "PERMANENT",
+            )
             
             failure = DownloadFailure(
                 source_link_id=None,
@@ -500,7 +612,7 @@ class Downloader:
                 error_class="TRANSIENT" if "zakupki.gov.ru" in url else "PERMANENT",
                 http_status=None,
                 error_message="download/validate failed",
-                latency_ms=0
+                latency_ms=0,
             )
             return [], failure, canonical_source_document_id, physical_download_key, url_hash
 
@@ -513,13 +625,10 @@ class Downloader:
         return [ok_file], None, canonical_source_document_id, physical_download_key, url_hash
 
     def _download_single(self, task_dir: Path, url: str, suggested_filename: Optional[str] = None) -> Optional[Path]:
-        """
-        Улучшенное скачивание с приоритетом прямых запросов
-        """
+        """Download one URL. All EIS HTTP goes through the global guard."""
         host = self.http_client.extract_host(url) or ""
         is_zakupki_filestore = "zakupki.gov.ru" in host and "/filestore/public/1.0/download/" in url
 
-        # Задержка между запросами
         download_delay = float(os.getenv("DOWNLOAD_DELAY_SECONDS", "2.0"))
         max_retries = max(1, int(os.getenv("MAX_DOWNLOAD_RETRIES", "2")))
         bypass_proxy = os.getenv("BYPASS_PROXY_FOR_LARGE_FILES", "true").lower() == "true"
@@ -533,31 +642,31 @@ class Downloader:
 
         self.logger.info(f"Скачивание файла: {url}")
 
-        # Если настроен reverse-stunnel — сначала прокси (не нужен DNS zakupki.gov.ru)
         if prefer_proxy and proxy_url:
             path = self.http_client.try_download_with_proxy(task_dir, url, suggested_filename)
             if path:
                 self.logger.info(f"✅ Скачивание через прокси успешно: {path.name}")
                 return path
 
-        # Стратегия 1: Прямое скачивание (приоритет)
         if not prefer_proxy and (bypass_proxy or is_zakupki_filestore):
             for attempt in range(max_retries):
                 try:
                     self.logger.debug(f"Попытка прямого скачивания {attempt + 1}/{max_retries}")
-                    with self.download_coordinator.acquire_slot():
-                        direct = self.http_client.try_download_direct(task_dir, url, suggested_filename)
+                    direct = self.http_client.try_download_direct(
+                        task_dir, url, suggested_filename
+                    )
                     if direct:
                         file_size = direct.stat().st_size
                         self.logger.info(f"✅ Прямое скачивание успешно: {direct.name} ({file_size} байт)")
                         return direct
+                except (EisRateLimited, EisRateLimitBlocked):
+                    raise
                 except Exception as e:
                     self.logger.warning(f"Прямое скачивание неуспешно (попытка {attempt + 1}): {e}")
 
                 if attempt < max_retries - 1:
                     time.sleep(download_delay * (attempt + 1))
 
-        # Стратегия 2: Через прокси (только для небольших файлов)
         max_proxy_size = int(os.getenv("MAX_PROXY_FILE_SIZE", "10485760"))
 
         if prefer_proxy:
@@ -571,22 +680,31 @@ class Downloader:
                 headers["Referer"] = "https://zakupki.gov.ru/"
 
             verify = self.http_client._get_verify_param()
-            head_response = self.http_client.session.head(url, timeout=10, allow_redirects=True, headers=headers, verify=verify)
+            head_response = self.http_client.request_head(
+                url,
+                request_type="HEAD",
+                timeout=10,
+                allow_redirects=True,
+                headers=headers,
+                verify=verify,
+            )
             content_length = head_response.headers.get("Content-Length")
 
             if content_length and int(content_length) > max_proxy_size:
                 self.logger.info(f"Файл слишком большой для прокси ({content_length} байт), пропускаем прокси")
             else:
                 self.logger.debug("Попытка скачивания через прокси")
-                with self.download_coordinator.acquire_slot():
-                    path = self.http_client.try_download_with_proxy(task_dir, url, suggested_filename)
+                path = self.http_client.try_download_with_proxy(
+                    task_dir, url, suggested_filename
+                )
                 if path:
                     self.logger.info(f"✅ Скачивание через прокси успешно: {path.name}")
                     return path
+        except (EisRateLimited, EisRateLimitBlocked):
+            raise
         except Exception as e:
             self.logger.warning(f"Ошибка при скачивании через прокси: {e}")
 
-        # Стратегия 3: HTML страницы и редиректы
         time.sleep(download_delay)
         if url.lower().endswith(".html") or "download.html" in url.lower() or url.split("?", 1)[0].lower().endswith(".html"):
             try:
@@ -595,18 +713,22 @@ class Downloader:
                 if html_path:
                     self.logger.info(f"✅ HTML обработка успешна: {html_path.name}")
                     return html_path
+            except (EisRateLimited, EisRateLimitBlocked):
+                raise
             except Exception as e:
                 self.logger.warning(f"Ошибка обработки HTML: {e}")
 
-        # Стратегия 4: Последняя попытка прямого скачивания
-        if not bypass_proxy:  # Если еще не пробовали
+        if not bypass_proxy:
             try:
                 self.logger.debug("Финальная попытка прямого скачивания")
-                with self.download_coordinator.acquire_slot():
-                    direct_final = self.http_client.try_download_direct(task_dir, url, suggested_filename)
+                direct_final = self.http_client.try_download_direct(
+                    task_dir, url, suggested_filename
+                )
                 if direct_final:
                     self.logger.info(f"✅ Финальное прямое скачивание успешно: {direct_final.name}")
                     return direct_final
+            except (EisRateLimited, EisRateLimitBlocked):
+                raise
             except Exception as e:
                 self.logger.warning(f"Финальное прямое скачивание неуспешно: {e}")
 

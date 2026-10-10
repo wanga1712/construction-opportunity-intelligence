@@ -303,8 +303,9 @@ class S13V2QueueRepository(QueueRepository):
         with conn.cursor() as cur:
             cur.execute(
                 "UPDATE document_processing_queue"
-                " SET status='PENDING', worker_id=NULL, started_at=NULL WHERE id=%s",
-                (task_id,),
+                " SET status='PENDING', worker_id=NULL, started_at=NULL,"
+                " last_error=%s WHERE id=%s",
+                (message or None, task_id),
             )
         conn.commit()
 

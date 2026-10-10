@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import logging
 import threading
 from functools import wraps
@@ -40,7 +41,7 @@ class ProcessingStateRepository(ABC):
     @abstractmethod
     def finalize_download_status(self, procurement_id, table_source, file_name, url_hash, success, error_message=None, local_path=None): ...
 
-    def record_download_attempt(self, queue_id, procurement_id, source_url, url_hash, attempt_number, result, error_class=None, http_status=None, bytes_received=None, duration_ms=None):
+    def record_download_attempt(self, queue_id, procurement_id, source_url, url_hash, attempt_number, result, error_class=None, http_status=None, bytes_received=None, duration_ms=None, response_headers=None, retry_after=None, xid=None):
         return None
 
     @abstractmethod
@@ -279,7 +280,7 @@ class S13V2StateRepository(ProcessingStateRepository):
         conn.commit()
 
     @_rollback_on_error
-    def record_download_attempt(self, queue_id, procurement_id, source_url, url_hash, attempt_number, result, error_class=None, http_status=None, bytes_received=None, duration_ms=None):
+    def record_download_attempt(self, queue_id, procurement_id, source_url, url_hash, attempt_number, result, error_class=None, http_status=None, bytes_received=None, duration_ms=None, response_headers=None, retry_after=None, xid=None):
         conn = self._get_conn()
         with conn.cursor() as cur:
             cur.execute(
@@ -292,8 +293,9 @@ class S13V2StateRepository(ProcessingStateRepository):
                 """INSERT INTO download_attempts
                    (queue_id, procurement_id, file_id, source_url, url_hash, attempt_number,
                     started_at, finished_at, http_status, error_class, bytes, latency, result,
-                    duration_ms, bytes_received, pipeline_generation)
-                   VALUES (%s,%s,%s,%s,%s,%s,NOW(),NOW(),%s,%s,%s,%s,%s,%s,%s,%s)
+                    duration_ms, bytes_received, pipeline_generation,
+                    response_headers, retry_after, xid)
+                   VALUES (%s,%s,%s,%s,%s,%s,NOW(),NOW(),%s,%s,%s,%s,%s,%s,%s,%s,%s::jsonb,%s,%s)
                 """,
                 (
                     queue_id,
@@ -310,6 +312,9 @@ class S13V2StateRepository(ProcessingStateRepository):
                     duration_ms,
                     bytes_received,
                     self.pipeline_generation,
+                    json.dumps(response_headers) if response_headers is not None else None,
+                    retry_after,
+                    xid,
                 ),
             )
         conn.commit()
