@@ -260,7 +260,18 @@ class EisRateLimitGuard:
             if status == "SUCCESS":
                 self.store.apply_probe_success(self.host, now)
                 self._clear_local_block()
+            elif status in ("CANARY_STALE", "CANARY_OK"):
+                # Host reachability is proven; a stale saved canary URL is NOT a
+                # network failure and must not extend the rate-limit block.
+                self.store.apply_probe_success(self.host, now)
+                self.store.apply_probe_status(self.host, now, status)
+                self._clear_local_block()
+                return
             elif status == "HTTP_429":
+                self.store.apply_probe_status(self.host, now, status)
+            elif status in ("NETWORK_ERROR", "SOURCE_UNAVAILABLE", "ACCESS_BLOCK", "SOURCE_ERROR"):
+                # Record only: the block stays exactly as it is (no extension,
+                # no early recovery). 404/410 canaries never reach this branch.
                 self.store.apply_probe_status(self.host, now, status)
             else:
                 retry = int(
@@ -297,7 +308,10 @@ class EisRateLimitGuard:
                     self.store.apply_probe_started(self.host, now)
                     result = probe_fn() or {}
                     if result.get("ok"):
-                        self.record_probe_result("SUCCESS", result.get("detail"))
+                        probe_status = str(result.get("status") or "SUCCESS")
+                        if probe_status not in ("CANARY_OK", "CANARY_STALE"):
+                            probe_status = "SUCCESS"
+                        self.record_probe_result(probe_status, result.get("detail"))
                         return {**result, "status": "RECOVERED"}
                     status = str(result.get("status") or "SOURCE_ERROR")
                     self.record_probe_result(status, result.get("detail"))
