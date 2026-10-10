@@ -528,7 +528,6 @@ class DocumentProcessorDaemon:
                             self.downloader.cleanup(task_id)
                         except Exception:
                             pass
-                        import time
                         time.sleep(30)
                         break
 
