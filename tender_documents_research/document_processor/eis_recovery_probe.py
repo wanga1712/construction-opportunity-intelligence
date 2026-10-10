@@ -73,7 +73,11 @@ def run_recovery_probe(guard=None) -> Dict[str, Any]:
         guard=guard,
     )
     client.set_request_gate(coordinator.request_slot)
-    probe_url = os.getenv("EIS_PROBE_URL", "https://zakupki.gov.ru/")
+    canary_url = resolve_canary_url()
+    configured_probe_url = (os.getenv("EIS_PROBE_URL") or "").strip()
+    probe_url = configured_probe_url or canary_url
+    if not probe_url:
+        return {"status": "NO_CANARY", "detail": "No production EIS endpoint available"}
 
     def probe_fn() -> Dict[str, Any]:
         response = client.request_head(
@@ -96,7 +100,6 @@ def run_recovery_probe(guard=None) -> Dict[str, Any]:
                 "detail": f"HEAD {probe_url} -> {status}",
             }
 
-        canary_url = resolve_canary_url()
         if not canary_url:
             return {
                 "ok": False,
