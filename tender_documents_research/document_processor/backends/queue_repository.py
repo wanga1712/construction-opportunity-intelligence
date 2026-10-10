@@ -137,9 +137,11 @@ class S13V2QueueRepository(QueueRepository):
         if not model_priority_enabled:
             # Legacy path: simple SQL ORDER BY, no DWRR
             order_clause = f"""
+                q.work_tier ASC,
+                q.source_start_date DESC NULLS LAST,
                 {_LANE_RANK_SQL} ASC,
                 q.priority_score DESC,
-                q.id ASC
+                q.id DESC
             """
             sql = f"""
                 UPDATE document_processing_queue
@@ -183,12 +185,15 @@ class S13V2QueueRepository(QueueRepository):
                    q.research_action, q.research_depth, q.category_codes,
                    q.research_prior_model, q.research_prior_version, q.research_prior_score,
                    q.research_prior_percentile, q.research_prior_band, q.research_prior_effective_score,
-                   q.procurement_scope_type, q.normalized_nmck_rub"""
+                   q.procurement_scope_type, q.normalized_nmck_rub,
+                   q.work_tier, q.source_start_date"""
 
-        _ORDER = f"""{_LANE_RANK_SQL} ASC,
+        _ORDER = f"""q.work_tier ASC,
+            q.source_start_date DESC NULLS LAST,
+            {_LANE_RANK_SQL} ASC,
             COALESCE(q.research_prior_effective_score, q.priority_score) DESC,
             q.research_prior_score DESC NULLS LAST,
-            q.id ASC"""
+            q.id DESC"""
 
         _GEN_FILTER = " AND (q.pipeline_generation = %s OR q.pipeline_generation IS NULL)"
 
@@ -229,9 +234,18 @@ class S13V2QueueRepository(QueueRepository):
                 conn.commit()
                 return []
 
-            # Phase B: DWRR select
+            # Phase B: DWRR select, but freshness tier always dominates.
             policy = self._get_dwrr_policy()
-            selected_ids = policy.select_from_pool(pool_rows, batch_size)
+            selected_ids = []
+            remaining = batch_size
+            tier_key = lambda r: int(r.get("work_tier") if r.get("work_tier") is not None else 2)
+            for tier in sorted({tier_key(r) for r in pool_rows}):
+                if remaining <= 0:
+                    break
+                tier_rows = [r for r in pool_rows if tier_key(r) == tier]
+                picked = policy.select_from_pool(tier_rows, remaining)
+                selected_ids.extend(picked)
+                remaining -= len(picked)
 
             if not selected_ids:
                 conn.commit()

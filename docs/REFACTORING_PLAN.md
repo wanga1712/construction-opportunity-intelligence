@@ -1,3 +1,15 @@
+## CURRENT WIP — 2026-10-10 (DOCUMENT-CLAIM-FRESHNESS-WIP)
+
+**DOCUMENT-CLAIM-FRESHNESS-WIP** — `[~]` **ROOT CAUSE PROVEN: CASE A; FIX DEPLOYED; PREVIEW PASS; NETWORK CANARY PENDING**. Scope: доказать, почему document workers брали 404 URL вместо свежих закупок, и исправить claim order. Rate-limit policy, retention, physical identity, source parser, Qwen, PASS1, admission, lifecycle и normalization не менялись.
+
+- **Canary cohort.** 45 HTTP events, 45 distinct URL, 10 procurements; procurements start `2026-09-21…2026-09-28`; lifecycle `OPEN_NOW=1`, `CLOSED_NOW=8`, `AWARDED=1`; queue rows created `2026-09-29`. Это старый backlog, не свежие закупки.
+- **Claim preview before fix.** Top-20: `8_30D=14`, `LAST_7D=1`, `UNKNOWN=5`; top-100: `8_30D=55`, `LAST_7D=6`, `UNKNOWN=39`. Control `459670` (`0330100001126000018`, start `2026-10-08`, OPEN) — `NOT_IN_TOP100`. Effective ORDER BY не содержал source freshness; финальный tie-break был `q.id ASC`, поэтому низкие старые queue id выигрывали.
+- **Root cause.** `ROOT_CAUSE=DOCUMENT_CLAIM_NOT_FRESH_FIRST`; `CASE_A=YES`, `CASE_B=NO`. 404 — следствие: worker не выбирал свежие закупки, а шёл по старому backlog.
+- **Fix.** Additive migration `20261010_document_claim_freshness_v1.sql`: `source_start_date`, `work_tier`, partial index. `claim_freshness.compute_work_tier`: TIER 0 fresh/open, TIER 1 changed/awarded-live, TIER 2 backlog. Feeder пишет `source_start_date`/`work_tier`; claim order: `work_tier ASC, source_start_date DESC, lane, band, effective, id DESC`; DWRR применяется внутри tier, поэтому fresh tier доминирует.
+- **Backfill.** `scripts/backfill_document_queue_freshness.py`: `ROWS=250`, `TIER_0=96`, `TIER_1=25`, `TIER_2=129`.
+- **Preview after fix.** Top-30 — только `work_tier=0`; top-100: `LAST_3D=76`, `LAST_7D=6`, `8_30D=4`, `UNKNOWN=14`; `OLD_BACKLOG_AHEAD_OF_FRESH=0`. Control `459670` уже `COMPLETED`, поэтому в claim pool не участвует; для claim-order контроля использован свежий TIER0 cohort.
+- **Safety.** Workers stopped; EIS requests during audit = 0; `404/410 no-retry` preserved.
+
 ## CURRENT WIP — 2026-10-10 (EIS-RATE-LIMIT-SAFETY-V1)
 
 **EIS-RATE-LIMIT-SAFETY-V1** — `[~]` **DEPLOYED, RECOVERY VERIFIED; ACQUISITION STILL STOPPED BY CHOICE**. Scope: глобальный fail-safe для всех HTTP-запросов к `zakupki.gov.ru`; 429 — circuit breaker, не локальный retry. Категории, PASS1, медали, taxonomy, lifecycle, matching и business priority не менялись.
