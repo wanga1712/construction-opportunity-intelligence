@@ -615,28 +615,21 @@ def _render_dossier(d: Dict[str, Any], db: Any = None) -> None:
                 except (TypeError, ValueError):
                     _tail = ""
             st.caption(f"Позиций: {len(_rows)}{_tail}")
-            if st.button("Нормализовать позиции через ИИ", key=f"pc_norm_{pid}"):
-                from src.services.direct_document_extractor import normalize_spec_positions
-                _names = []
-                for _it in _spec:
-                    _cells = [str(c).strip() for c in (_it.get("cells") or [])]
-                    _name = next((c for c in _cells if c and len(c) > 5
-                                  and c.lower() not in ("итого",)), "")
-                    if _name:
-                        _names.append(_name)
-                with st.spinner("Нормализация…"):
-                    st.session_state[f"pc_normres_{pid}"] = normalize_spec_positions(_names)
-            _normres = st.session_state.get(f"pc_normres_{pid}")
-            if _normres:
-                st.markdown("**Нормализовано (кандидаты, без записи в прод)**")
-                st.markdown(_table_html(
-                    ["Как в документе", "Нормализовано", "Категория", "Подкатегория", "Conf"],
-                    [[_fmt(r.get("raw")), _fmt(r.get("normalized")),
-                      _fmt(r.get("category_code")), _fmt(r.get("subcategory_hint")),
-                      _fmt(r.get("confidence"))] for r in _normres],
-                    wrap=False), unsafe_allow_html=True)
-                st.caption("Дальше: сопоставление с реестром и запись search-тем — "
-                           "отдельным шагом, после подтверждения.")
+            try:
+                from src.services.direct_document_extractor import build_tkp_request
+                _tkp = build_tkp_request(_direct, d)
+            except Exception:  # noqa: BLE001
+                _tkp = ""
+            if _tkp:
+                st.markdown("**Запрос ТКП (смета + требования)**")
+                st.code(_tkp, language="text")
+                st.download_button(
+                    "Скачать ТКП (.txt)", data=_tkp.encode("utf-8"),
+                    file_name=f"TKP_{pid}.txt", mime="text/plain",
+                    key=f"pc_tkp_{pid}",
+                )
+                st.caption("ТКП собирается из сметы/техпараметров/требований детерминированно; "
+                           "ИИ-нормализация добавляется отдельным шагом.")
 
     if tab_tech is not None:
         with tab_tech:
