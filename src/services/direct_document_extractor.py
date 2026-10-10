@@ -153,20 +153,54 @@ def _cache_file(path: str) -> str:
     return os.path.join(_PARSE_CACHE, name)
 
 
+def _cache_read(path: str) -> Optional[Dict[str, Any]]:
+    try:
+        with open(_cache_file(path), "r", encoding="utf-8") as fh:
+            return json.load(fh)
+    except Exception:  # noqa: BLE001
+        return None
+
+
+def _cache_write(path: str, doc: Dict[str, Any]) -> None:
+    if doc.get("error"):
+        return
+    try:
+        os.makedirs(_PARSE_CACHE, exist_ok=True)
+        with open(_cache_file(path), "w", encoding="utf-8") as fh:
+            json.dump(doc, fh, ensure_ascii=False)
+    except Exception:  # noqa: BLE001
+        logger.debug("parse cache write skipped for %s", path)
+
+
+def _local_doc(path: str) -> Dict[str, Any]:
+    """Разбор файла средствами CRM-venv (.docx/.xlsx) в общий формат."""
+    lines = _docx_paragraphs(path) if path.lower().endswith(".docx") else []
+    return {"tables": _tables_for(path), "lines": lines, "error": None}
+
+
 def _external_docs(local_paths: List[str]) -> Dict[str, Dict[str, Any]]:
-    """Таблицы/строки для pdf/doc/xls: воркерный venv + дисковый кэш (fail-safe)."""
-    wanted = [p for p in local_paths
-              if p and os.path.exists(p) and not _is_junk(p)
-              and p.lower().endswith(_EXTERNAL_SUFFIXES)]
+    """Таблицы/строки по всем документам с дисковым кэшем (переживает retention).
+
+    pdf/doc/xls разбирает воркерный venv, .docx/.xlsx — здесь же; результат кэшируется,
+    поэтому после удаления файлов разобранные данные остаются доступны.
+    """
     out: Dict[str, Dict[str, Any]] = {}
     pending: List[str] = []
-    for path in wanted:
-        try:
-            with open(_cache_file(path), "r", encoding="utf-8") as fh:
-                out[path] = json.load(fh)
+    for path in local_paths:
+        if not path or _is_junk(path):
             continue
-        except Exception:  # noqa: BLE001
+        cached = _cache_read(path)
+        if cached is not None:
+            out[path] = cached
+            continue
+        if not os.path.exists(path):
+            continue
+        if path.lower().endswith(_EXTERNAL_SUFFIXES):
             pending.append(path)
+        else:
+            doc = _local_doc(path)
+            out[path] = doc
+            _cache_write(path, doc)
     if not pending or not os.path.exists(_PARSE_PY) or not os.path.exists(_PARSE_CLI):
         return out
     import tempfile
@@ -190,15 +224,114 @@ def _external_docs(local_paths: List[str]) -> Dict[str, Dict[str, Any]]:
     for path in pending:
         doc = docs.get(path) or {"tables": [], "lines": [], "error": "no_output"}
         out[path] = doc
-        if doc.get("error"):
-            continue
-        try:
-            os.makedirs(_PARSE_CACHE, exist_ok=True)
-            with open(_cache_file(path), "w", encoding="utf-8") as fh:
-                json.dump(doc, fh, ensure_ascii=False)
-        except Exception:  # noqa: BLE001
-            logger.debug("parse cache write skipped for %s", path)
+        _cache_write(path, doc)
     return out
+
+
+#: Явные подписи срока — строка остаётся кандидатом даже без разобранной даты.
+_TERM_STRONG = ("срок поставки", "сроки поставки", "срок исполнения", "срок оказания услуг",
+                "срок выполнения работ", "срок передачи товара", "сроки исполнения")
+#: Косвенные формулировки — берём только если в строке разобралась дата или длительность.
+_TERM_WEAK = ("поставка товара осуществляется", "поставка осуществляется",
+              "поставка товара производится", "товар поставляется")
+#: Ложные срабатывания — это не срок поставки.
+_TERM_SKIP = ("срок действия", "срок годности", "срок гарант", "гарантийн", "срок оплаты",
+              "срок рассмотрения", "срок предоставления обеспеч", "срок возврата",
+              "срок подписания", "срок размещения", "срок направления", "срок действия договора")
+_MONTHS = (("январ", 1), ("феврал", 2), ("март", 3), ("апрел", 4), ("мая", 5), ("май", 5),
+           ("июн", 6), ("июл", 7), ("август", 8), ("сентябр", 9), ("октябр", 10),
+           ("ноябр", 11), ("декабр", 12))
+_ANCHORS = ("с даты подписания", "с момента подписания", "с даты заключения",
+            "с момента заключения", "с даты поставки", "с момента поставки",
+            "со дня подписания", "со дня заключения", "с даты вступления")
+
+
+def _parse_term_dates(text: str) -> Dict[str, Any]:
+    """Детерминированно вытащить срок из формулировки: дата, длительность, точка отсчёта."""
+    low = re.sub(r"\s+", " ", text).lower()
+    compact = re.sub(r"\s+", "", low)
+    result: Dict[str, Any] = {"deadline": None, "duration_value": None,
+                              "duration_unit": None, "anchor": None}
+    numeric = re.search(r"(\d{1,2})[.\-/](\d{1,2})[.\-/](\d{2,4})", compact)
+    if numeric:
+        day, month, year = (int(part) for part in numeric.groups())
+        if year < 100:
+            year += 2000
+        if 1 <= day <= 31 and 1 <= month <= 12:
+            result["deadline"] = "%04d-%02d-%02d" % (year, month, day)
+    if not result["deadline"]:
+        worded = re.search(r"(\d{1,2})([а-яё]{3,})(\d{4})", compact)
+        if worded:
+            for stem, month in _MONTHS:
+                if worded.group(2).startswith(stem):
+                    result["deadline"] = "%04d-%02d-%02d" % (
+                        int(worded.group(3)), month, int(worded.group(1)))
+                    break
+    duration = re.search(
+        r"(?:в течение|не позднее чем через|в срок)(\d{1,3})(?:\([^)]*\))?"
+        r"(календарн\w*|рабоч\w*)?(дн\w+|месяц\w+|год\w+|лет)", compact)
+    if duration and not result["deadline"]:
+        unit = duration.group(3)
+        result["duration_value"] = int(duration.group(1))
+        result["duration_unit"] = "месяцев" if unit.startswith(("месяц", "лет", "год")) else "дней"
+        if duration.group(2):
+            result["duration_unit"] = ("%s %s" % (duration.group(2), result["duration_unit"])).strip()
+    for anchor in _ANCHORS:
+        if anchor in low:
+            result["anchor"] = anchor
+            break
+    return result
+
+
+def extract_delivery_terms(local_paths: List[str],
+                           external: Optional[Dict[str, Dict[str, Any]]] = None
+                           ) -> List[Dict[str, Any]]:
+    """Строки документов о сроке поставки/исполнения (сырьё для модели-нормализатора)."""
+    found: List[Dict[str, Any]] = []
+    seen: set = set()
+    for path in local_paths:
+        if not path or _is_junk(path):
+            continue
+        doc = (external or {}).get(path)
+        if doc is None and not os.path.exists(path):
+            continue
+        lines = [str(x) for x in ((doc or {}).get("lines") or [])]
+        if not lines:
+            lines = _paragraphs_for(path, external)
+        if not lines and path.lower().endswith(".docx") and os.path.exists(path):
+            lines = [" ".join(row) for table in _tables_for(path) for row in table]
+        source = os.path.basename(path)
+        for line in lines:
+            low = line.lower()
+            strong = any(marker in low for marker in _TERM_STRONG)
+            weak = any(marker in low for marker in _TERM_WEAK)
+            if not (strong or weak):
+                continue
+            # «срок исполнения» без привязки к поставке/работам — это не срок поставки.
+            if strong and "постав" not in low and "товар" not in low \
+                    and "работ" not in low and "услуг" not in low:
+                continue
+            if any(bad in low for bad in _TERM_SKIP):
+                continue
+            if not re.search(r"\d", low):
+                continue
+            text = re.sub(r"\s+", " ", line).strip()
+            parsed = _parse_term_dates(text)
+            dated = bool(parsed.get("deadline") or parsed.get("duration_value"))
+            # Косвенные формулировки и короткие заголовки без срока не информативны.
+            if not dated and (weak and not strong or len(text) < 40):
+                continue
+            key = text.lower()
+            if key in seen:
+                continue
+            seen.add(key)
+            term = {"source_file": source, "text": text[:300]}
+            term.update(parsed)
+            found.append(term)
+    # Сначала то, где есть конкретная дата или длительность.
+    found.sort(key=lambda item: (item.get("deadline") is None,
+                                 item.get("duration_value") is None, len(item["text"])))
+    return found[:10]
 
 
 #: Секции требований: (ключ, подписи-заголовки).
@@ -233,7 +366,9 @@ def extract_text_sections(local_paths: List[str],
     """
     out: Dict[str, List[Dict[str, Any]]] = {key: [] for key, _ in _SECTIONS}
     for path in local_paths:
-        if not path or not os.path.exists(path) or _is_junk(path):
+        if not path or _is_junk(path):
+            continue
+        if path not in (external or {}) and not os.path.exists(path):
             continue
         name = os.path.basename(path)
         paras = _paragraphs_for(path, external)
@@ -365,10 +500,12 @@ def extract_tables(local_paths: List[str],
     """Спека / техпараметры / требования по .docx/.xlsx и внешним pdf/doc (.venv воркера)."""
     out: Dict[str, List[Dict[str, Any]]] = {"spec": [], "tech": [], "requirements": []}
     for path in local_paths:
-        if not path or not os.path.exists(path) or _is_junk(path):
+        if not path or _is_junk(path):
             continue
         name = os.path.basename(path)
         doc = (external or {}).get(path)
+        if doc is None and not os.path.exists(path):
+            continue
         tables = doc.get("tables") if doc else None
         if not tables:
             tables = _tables_for(path)
@@ -436,7 +573,12 @@ def load_direct_extraction(procurement_id: int) -> Dict[str, Any]:
     external = _external_docs(paths)
     data = extract_tables(paths, external)
     data["sections"] = extract_text_sections(paths, external)
+    data["terms"] = extract_delivery_terms(paths, external)
+    data["delivery"] = next(
+        (term for term in data["terms"] if term.get("deadline") or term.get("duration_value")),
+        (data["terms"][0] if data["terms"] else None))
     data["files"] = len(paths)
+    data["parsed"] = len(external)
     return data
 
 
@@ -478,6 +620,47 @@ def normalize_spec_positions(items: List[str]) -> List[Dict[str, Any]]:
             return _json.loads(cleaned[start:end + 1])
     except Exception as exc:  # noqa: BLE001
         logger.warning("normalize_spec_positions failed: %s", exc)
+    return []
+
+
+def normalize_delivery_terms(terms: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    """ИИ-нормализация сроков поставки: дата ИЛИ длительность + точка отсчёта.
+
+    Локальная модель через Ollama; ничего не пишет в БД. Сырьё — строки документов,
+    собранные extract_delivery_terms().
+    """
+    import json as _json
+    import urllib.request
+
+    raw_lines = [str(t.get("text") or "").strip() for t in (terms or []) if str(t.get("text") or "").strip()]
+    if not raw_lines:
+        return []
+    prompt = (
+        "Ты нормализуешь условие о сроке поставки из документов закупки. "
+        "Верни СТРОГО JSON-массив объектов вида "
+        '{"raw": "...", "deadline": "YYYY-MM-DD"|null, "duration_value": число|null, '
+        '"duration_unit": "дней"|"месяцев"|null, "anchor": "с даты подписания договора"|null, '
+        '"confidence": 0..1}.\n'
+        "Если в строке конкретная календарная дата — заполни deadline и оставь duration null. "
+        "Если указан интервал — заполни duration. Если срок не про поставку — deadline и duration null.\n\n"
+        "Строки:\n" + "\n".join("- %s" % line[:300] for line in raw_lines[:20]) + "\n\nJSON:"
+    )
+    try:
+        body = _json.dumps({"model": os.getenv("DIRECT_TERM_MODEL", "qwen2.5:7b"),
+                            "prompt": prompt, "stream": False,
+                            "options": {"temperature": 0}}).encode("utf-8")
+        request = urllib.request.Request("http://127.0.0.1:11434/api/generate", data=body,
+                                         headers={"Content-Type": "application/json"})
+        with urllib.request.urlopen(request, timeout=300) as response:
+            raw = _json.loads(response.read().decode("utf-8")).get("response", "")
+        cleaned = raw.strip()
+        if cleaned.startswith("```"):
+            cleaned = re.sub(r"^```[a-zA-Z]*\n?|```$", "", cleaned).strip()
+        start, end = cleaned.find("["), cleaned.rfind("]")
+        if start >= 0 and end > start:
+            return _json.loads(cleaned[start:end + 1])
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("normalize_delivery_terms failed: %s", exc)
     return []
 
 

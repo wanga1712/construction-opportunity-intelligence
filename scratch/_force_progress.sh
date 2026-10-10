@@ -1,0 +1,10 @@
+#!/bin/bash
+PSQL="sudo -n -u postgres psql -d document_intelligence -Atc"
+echo "--- worker 77 ---"
+$PSQL "select id, procurement_id, contract_number, status, started_at from document_processing_queue where worker_id=77 order by id"
+echo "--- requeue mark ---"
+$PSQL "select status, count(*) from document_processing_queue where last_error='requeue:direct_missing_files' group by 1 order by 2 desc"
+echo "--- files for those contracts ---"
+$PSQL "select count(*) filter (where download_status='COMPLETED'), count(*) from document_files f join document_processing_queue q on q.procurement_id=f.procurement_id where q.last_error='requeue:direct_missing_files'"
+echo "--- files on disk for those pids (sample) ---"
+$PSQL "select f.procurement_id, f.download_status, f.local_path from document_files f join document_processing_queue q on q.procurement_id=f.procurement_id where q.last_error='requeue:direct_missing_files' order by f.id desc limit 5"

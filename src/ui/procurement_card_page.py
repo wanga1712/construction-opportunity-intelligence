@@ -437,6 +437,24 @@ def _render_dossier(d: Dict[str, Any], db: Any = None) -> None:
                             ["Адрес поставки", _fmt(md.get("delivery_address"))],
                         ]) + "</div>", unsafe_allow_html=True)
         with c2:
+            _delivery = (_direct.get("delivery") or {}) if isinstance(_direct, dict) else {}
+            _delivery_rows = []
+            if _delivery:
+                _deadline = _delivery.get("deadline")
+                _dur = _delivery.get("duration_value")
+                _unit = _delivery.get("duration_unit") or ""
+                _anchor = _delivery.get("anchor") or ""
+                if _deadline:
+                    _short = "не позднее %s" % _date(_deadline)
+                    if _anchor:
+                        _short += " · %s" % _anchor
+                elif _dur:
+                    _short = "в течение %s %s" % (_dur, _unit)
+                else:
+                    _short = (_delivery.get("text") or "")[:90]
+                _delivery_rows.append(["Срок поставки (док.)", _short])
+                if _delivery.get("source_file"):
+                    _delivery_rows.append(["Источник срока", _fmt(_delivery.get("source_file"))])
             st.markdown('<div class="pc-card"><div class="pc-sect">💰 Деньги и сроки</div>'
                         + _kv([
                             ["НМЦК", f'<b>{_money(md.get("initial_price"))}</b>'],
@@ -448,7 +466,7 @@ def _render_dossier(d: Dict[str, Any], db: Any = None) -> None:
                                                            or md.get("delivery_end_date"))],
                             ["Обеспечение", _money(md.get("guarantee_amount"))],
                             ["Гарантия", _fmt(md.get("warranty_size"))],
-                        ]) + "</div>", unsafe_allow_html=True)
+                        ] + _delivery_rows) + "</div>", unsafe_allow_html=True)
         c3, c4 = st.columns(2, gap="medium")
         with c3:
             st.markdown('<div class="pc-card"><div class="pc-sect">🏢 Стороны</div>' + _table_html(

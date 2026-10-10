@@ -1,11 +1,45 @@
 import os
+import random
 import re
 import threading
+import time
 from pathlib import Path
 from typing import Optional
 from urllib.parse import parse_qs, unquote, urljoin, urlsplit
 
 import requests
+
+
+#: Общий на процесс «отбой» после HTTP 429: все потоки ждут, а не долбят источник
+#: (иначе воркеры держат блок по IP — так и получается устойчивый 429 от zakupki.gov.ru).
+_COOLDOWN_LOCK = threading.Lock()
+_COOLDOWN_UNTIL = 0.0
+
+
+def _cooldown_wait() -> None:
+    while True:
+        with _COOLDOWN_LOCK:
+            remaining = _COOLDOWN_UNTIL - time.time()
+        if remaining <= 0:
+            return
+        time.sleep(min(remaining, 5.0))
+
+
+def _cooldown_set(seconds: float) -> None:
+    global _COOLDOWN_UNTIL
+    with _COOLDOWN_LOCK:
+        _COOLDOWN_UNTIL = max(_COOLDOWN_UNTIL, time.time() + max(0.0, float(seconds)))
+
+
+def _retry_after_seconds(response) -> float:
+    default = float(os.getenv("HTTP_429_BACKOFF_SECONDS", "60"))
+    cap = float(os.getenv("HTTP_429_MAX_SLEEP", "900"))
+    raw = (response.headers.get("Retry-After") or "").strip()
+    try:
+        delay = float(raw) if raw else default
+    except ValueError:
+        delay = default
+    return max(1.0, min(delay, cap)) + random.uniform(0.0, 3.0)
 
 
 class HttpFileClient:
@@ -89,16 +123,32 @@ class HttpFileClient:
 
             timeout_tuple = self._build_timeout(url, "DIRECT")
             verify = self._get_verify_param()
-            start_acquired = self._acquire_download_start(url)
-            response = self.session.get(
-                url,
-                headers=headers,
-                timeout=timeout_tuple,
-                stream=True,
-                verify=verify,
-            )
-            self._release_download_start(start_acquired)
-            start_acquired = False
+            attempts = max(1, int(os.getenv("HTTP_429_RETRIES", "3")) + 1)
+            response = None
+            for attempt in range(attempts):
+                _cooldown_wait()
+                start_acquired = self._acquire_download_start(url)
+                response = self.session.get(
+                    url,
+                    headers=headers,
+                    timeout=timeout_tuple,
+                    stream=True,
+                    verify=verify,
+                )
+                self._release_download_start(start_acquired)
+                start_acquired = False
+                if response.status_code != 429:
+                    break
+                delay = _retry_after_seconds(response)
+                _cooldown_set(delay)
+                response.close()
+                response = None
+                self.logger.warning(
+                    "HTTP 429 (rate limit): пауза %.0f c перед повтором %d/%d",
+                    delay, attempt + 1, attempts - 1,
+                )
+            if response is None:
+                return None
 
             with response:
                 if not response.ok:
@@ -129,6 +179,7 @@ class HttpFileClient:
             self._release_download_start(start_acquired)
 
     def try_download_with_proxy(self, task_dir: Path, url: str, suggested_filename: Optional[str] = None) -> Optional[Path]:
+        _cooldown_wait()
         if not self.proxy_url:
             return None
         start_acquired = False

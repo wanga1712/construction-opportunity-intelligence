@@ -1,0 +1,12 @@
+#!/bin/bash
+PSQL="sudo -n -u postgres psql -d document_intelligence -Atc"
+echo "--- attempts last 15 min ---"
+$PSQL "select status, count(*) from download_attempts where created_at > now() - interval '15 minutes' group by 1 order by 2 desc"
+echo "--- attempts per minute (last 15) ---"
+$PSQL "select date_trunc('minute', created_at), count(*) from download_attempts where created_at > now() - interval '15 minutes' group by 1 order by 1 desc limit 15"
+echo "--- pid 866 files ---"
+$PSQL "select download_status, count(*), max(downloaded_at) from document_files where procurement_id=866 group by 1"
+echo "--- files downloaded since 18:25 (all) ---"
+$PSQL "select count(*) from document_files where downloaded_at > timestamp '2026-10-10 18:25'"
+echo "--- errors today by reason (top) ---"
+$PSQL "select left(coalesce(error_message,''), 60) as reason, count(*) from document_files where download_status='FAILED' and downloaded_at > timestamp '2026-10-10 18:25' group by 1 order by 2 desc limit 8"
