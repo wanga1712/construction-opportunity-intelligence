@@ -494,11 +494,22 @@ def _classify(rows: List[List[str]]) -> Optional[str]:
     return None
 
 
-def _classify_with_offset(rows: List[List[str]]) -> "tuple[Optional[str], int]":
-    """Искать шапку таблицы не только в первой строке (Excel/Word с заголовком сверху)."""
-    for offset in range(min(8, len(rows))):
+def _classify_with_offset(rows: List[List[str]], window: int = 40) -> "tuple[Optional[str], int]":
+    """Искать шапку таблицы не только в первой строке.
+
+    Excel-ТЗ часто начинаются с блока «УТВЕРЖДАЮ…», а таблица характеристик идёт
+    ниже, поэтому окно поиска — первые 40 строк, а не первые 8.
+    """
+    for offset in range(min(window, len(rows))):
         kind = _classify(rows[offset:])
         if kind:
+            # Шапка должна быть настоящей: под ней идут табличные строки, а не
+            # абзацы требований (иначе «шапкой» станет заголовок текстового блока).
+            probe = [r for r in rows[offset + 1:offset + 4] if any(_norm_cell(c) for c in r)]
+            if probe and not any(
+                    len([c for c in r if _norm_cell(c)]) >= 2
+                    and max(len(_norm_cell(c)) for c in r) <= 200 for r in probe):
+                continue
             return kind, offset
     return None, 0
 
@@ -532,6 +543,56 @@ def _looks_like_unit(text: str) -> bool:
         return False
     head = re.split(r"[\s,;(]", low)[0]
     return any(low.startswith(word) or head == word for word in _UNIT_WORDS)
+
+
+def _looks_like_param(text: str) -> bool:
+    """Название характеристики: не пустое, не одно число и не служебная колонка."""
+    value = str(text or "").strip()
+    if len(value) < 4:
+        return False
+    if len(value) > 160 or len(value.split()) > 16:
+        return False
+    letters = re.findall(r"[A-Za-zА-Яа-яЁё]", value)
+    if len(letters) < 3:
+        return False
+    digits = re.findall(r"\d", value)
+    # Строки вида «2 — 3», «1» — это числовые колонки таблицы, а не параметр.
+    if digits and len(letters) <= 1:
+        return False
+    return True
+
+
+def _looks_like_value(text: str) -> bool:
+    """Значение характеристики: число/оператор сравнения/Да-Нет/единица измерения."""
+    value = str(text or "").strip()
+    if not value or len(value) > 160:
+        return False
+    low = value.lower()
+    if re.search(r"[≥≤<>]|\d", value):
+        return True
+    return low in ("да", "нет", "не требуется", "отсутствует") or _looks_like_unit(value)
+
+
+def _emit_pair_rows(out: Dict[str, List[Dict[str, Any]]], data_rows: List[List[str]],
+                    name: str) -> int:
+    """Характеристики из комбинированной таблицы: [показатель, значение, (ед. изм.)].
+
+    В ТЗ-таблицах позиция и её характеристики живут в одной таблице: строки вида
+    «Мощность блока питания, Вт | ≥ 500» не имеют ни позиции, ни количества.
+    """
+    added = 0
+    for row in data_rows:
+        cells = [_norm_cell(c) for c in row if _norm_cell(c)]
+        if len(cells) < 2:
+            continue
+        param, value = cells[0], cells[1]
+        unit = cells[2] if len(cells) > 2 and _looks_like_unit(cells[2]) else ""
+        if not _looks_like_param(param) or not _looks_like_value(value):
+            continue
+        out["tech"].append({"source_file": name, "header": _TECH_HEADER,
+                            "cells": [param, value, unit]})
+        added += 1
+    return added
 
 
 def _emit_spec_tech(out: Dict[str, List[Dict[str, Any]]], data_rows: List[List[str]],
@@ -587,6 +648,8 @@ def _emit_spec_tech(out: Dict[str, List[Dict[str, Any]]], data_rows: List[List[s
         if char and _is_instruction(char):
             char = ""
         param = item if not char or char == item else "%s — %s" % (item, char)
+        if not _looks_like_param(param):
+            continue
         out["tech"].append({
             "source_file": name, "header": _TECH_HEADER,
             "cells": [param, value, unit],
@@ -625,20 +688,32 @@ def extract_tables(local_paths: List[str],
                 for row in data_rows:
                     if not any(_norm_cell(c) for c in row):
                         continue
+                    # Строка нумерации колонок («1 | 2 | 3 | 4 …») — не данные.
+                    if all(re.fullmatch(r"\d{1,2}", _norm_cell(c)) or not _norm_cell(c)
+                           for c in row):
+                        continue
                     if i_name >= 0:
+                        param = _norm_cell(_cell(row, i_name))
+                        value = _norm_cell(_cell(row, i_val))
+                        if not _looks_like_param(param) or not value:
+                            continue
                         out["tech"].append({
                             "source_file": name, "header": _TECH_HEADER,
-                            "cells": [_norm_cell(_cell(row, i_name)),
-                                      _norm_cell(_cell(row, i_val)),
-                                      _norm_cell(_cell(row, i_unit))],
+                            "cells": [param, value, _norm_cell(_cell(row, i_unit))],
                         })
                     else:
+                        param = next((_norm_cell(c) for c in row if _looks_like_param(c)), "")
+                        if not param:
+                            continue
                         out["tech"].append({"source_file": name, "header": header, "cells": row})
                 continue
             for row in data_rows:
                 if not any(_norm_cell(c) for c in row):
                     continue
                 out[kind].append({"source_file": name, "header": header, "cells": row})
+            # Комбинированная таблица ТЗ: позиция + характеристики в одной таблице.
+            if kind == "spec":
+                _emit_pair_rows(out, data_rows, name)
     return out
 
 
