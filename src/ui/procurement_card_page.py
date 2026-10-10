@@ -505,6 +505,10 @@ def _render_dossier(d: Dict[str, Any], db: Any = None) -> None:
 
     with tab_find:
         finds = d.get("findings") or []
+        _is_direct = any(
+            str(o.get("opportunity_track") or "").upper() == "DIRECT_SUPPLY"
+            for o in (d.get("opportunities") or [])
+        )
         mode = st.radio("Показывать", ["Все", "VERIFIED", "INVALID/LEGACY"], horizontal=True,
                         key=f"pc_find_mode_{pid}", label_visibility="collapsed")
         if mode == "VERIFIED":
@@ -515,10 +519,7 @@ def _render_dossier(d: Dict[str, Any], db: Any = None) -> None:
         _v = sum(1 for f in _all_finds if f.get("provenance_status") == "VERIFIED")
         _l = sum(1 for f in _all_finds if f.get("provenance_status") == "LEGACY_UNVERIFIED")
         _i = sum(1 for f in _all_finds if f.get("provenance_status") == "INVALID")
-        st.caption(f"показано {len(finds)} из {counts.get('findings', 0)} · "
-                   f"VERIFIED {_v} · LEGACY {_l} · INVALID {_i} · "
-                   f"в модель можно отправлять только VERIFIED")
-        st.markdown(_table_html(
+        _table_md = _table_html(
             ["Термин", "Метод", "Score", "Provenance", "Строка", "matched_text", "Файл"],
             [
                 [_fmt(f.get("matched_term")), _fmt(f.get("match_method")), _fmt(f.get("score")),
@@ -527,7 +528,25 @@ def _render_dossier(d: Dict[str, Any], db: Any = None) -> None:
                  f'<span class="pc-mono">{escape(str(f.get("matched_text") or "")[:180])}</span>',
                  escape(str(f.get("file_name") or ""))]
                 for f in finds[:150]
-            ]), unsafe_allow_html=True)
+            ])
+        if _is_direct:
+            st.markdown(
+                '<div class="pc-muted">Для <b>прямой поставки</b> keyword-поиск не '
+                'используется: реальные доказательства — во вкладке '
+                '<b>«Смета и требования»</b> (спецификация, техпараметры, требования). '
+                f'Устаревший keyword-слой скрыт ({len(finds)} строк, '
+                f'VERIFIED {_v} / LEGACY {_l} / INVALID {_i}) и в решении не участвует.</div>',
+                unsafe_allow_html=True)
+            _show_legacy = st.toggle(
+                "показать устаревшие keyword-находки (диагностика)",
+                value=False, key=f"pc_legacy_{pid}")
+            if _show_legacy:
+                st.markdown(_table_md, unsafe_allow_html=True)
+        else:
+            st.caption(f"показано {len(finds)} из {counts.get('findings', 0)} · "
+                       f"VERIFIED {_v} · LEGACY {_l} · INVALID {_i} · "
+                       f"в модель можно отправлять только VERIFIED")
+            st.markdown(_table_md, unsafe_allow_html=True)
 
     with tab_supply:
         supply = d.get("supply_candidates") or []
