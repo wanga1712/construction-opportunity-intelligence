@@ -182,13 +182,22 @@ def process_one(tender_db, crm_db, row, *, force: bool = False, strict_tz_only: 
 
     combined = combine_document_texts(chunks)
     if not combined:
-        combined = (
-            f"Тексты файлов извлечь не удалось. Имена документов: {', '.join(names)}. "
-            f"Название закупки: {row.name}. ОКПД: {row.okpd_code} {row.okpd_name or ''}."
+        save_computer_card(
+            crm_db,
+            object_key=row.key,
+            payload={
+                "tender_id": row.tender_id,
+                "registry_type": row.registry_type,
+                "contract_number": row.contract_number,
+                "okpd_code": row.okpd_code,
+                "status": "partial",
+                "tz_file_names": names,
+                "error_message": "NO_TZ_TEXT",
+            },
         )
-        status_prefix = "partial"
-    else:
-        status_prefix = "ready"
+        return "partial"
+
+    status_prefix = "ready"
 
     try:
         card = analyze_tz_to_supplier_card(
