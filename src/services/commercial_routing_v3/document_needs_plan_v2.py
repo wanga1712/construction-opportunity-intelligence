@@ -24,7 +24,7 @@ from .document_classifier_v1 import (
 from .research_action_v2 import GROUP_DESIGN, GROUP_DIRECT, GROUP_EMBEDDED, GROUP_UNKNOWN
 
 DOCUMENT_NEEDS_POLICY_VERSION = "document_needs_plan_v2"
-DOCUMENT_SELECTION_POLICY_VERSION = "document_selection_v1"
+DOCUMENT_SELECTION_POLICY_VERSION = "document_selection_v2"
 
 
 class RequiredFact(str, Enum):
@@ -181,12 +181,35 @@ class FileSelection:
 
     @property
     def http_request_potential(self) -> int:
-        return 1 if self.selection_decision == SELECTED else 0
+        return 1 if self.selection_decision in (SELECTED, SELECTED_FALLBACK) else 0
 
 
 SELECTED = "SELECTED"
+SELECTED_FALLBACK = "SELECTED_FALLBACK"
 SKIPPED_NOT_RELEVANT = "SKIPPED_NOT_RELEVANT"
 UNKNOWN_NEEDS_REVIEW = "UNKNOWN_NEEDS_REVIEW"
+
+#: Fallback classes that are normally NOT requested, ordered by their measured
+#: contribution to historical positive recall (document_matches audit 2026-10-10).
+#: Used ONLY when a (procurement, category) unit has no accepted-class document.
+FALLBACK_CLASS_PRIORITY: tuple[DocumentClass, ...] = (
+    DocumentClass.CONTRACT_PROJECT,
+    DocumentClass.PARTICIPANT_REQUIREMENTS,
+    DocumentClass.NMCK_JUSTIFICATION,
+    DocumentClass.LEGAL_GENERAL,
+    DocumentClass.SECURITY_REQUIREMENTS,
+    DocumentClass.OTHER,
+)
+FALLBACK_MAX_PER_UNIT = 1
+
+
+def _fallback_rank(classification: DocumentClassification) -> int:
+    """Lower is better; non-documents are the very last resort."""
+    if not classification.is_document:
+        return len(FALLBACK_CLASS_PRIORITY) + 2
+    if classification.document_class in FALLBACK_CLASS_PRIORITY:
+        return FALLBACK_CLASS_PRIORITY.index(classification.document_class)
+    return len(FALLBACK_CLASS_PRIORITY) + 1
 
 
 def classes_for_facts(facts: Iterable[RequiredFact]) -> tuple[DocumentClass, ...]:
@@ -352,6 +375,71 @@ def decide_file_selection(
         required_facts=facts,
         selection_decision=decision,
         selection_reason=reason,
+    )
+
+
+def select_unit_documents(
+    plan: DocumentNeedsPlan,
+    *,
+    procurement_id: int,
+    category_code: str,
+    documents: Sequence[tuple[Optional[int], str, DocumentClassification]],
+) -> tuple[list[FileSelection], Optional[FileSelection]]:
+    """Recall-safe selection for ONE (procurement, category) unit.
+
+    Layer on top of :func:`decide_file_selection` (unchanged V1 semantics):
+    if the unit has no accepted-class document at all, exactly ONE fallback
+    document is promoted to SELECTED_FALLBACK. Classes and facts are untouched.
+    """
+    pairs = [
+        (
+            classification,
+            decide_file_selection(
+                plan,
+                classification,
+                procurement_id=procurement_id,
+                source_document_id=source_document_id,
+                file_name=file_name,
+                item_category=category_code,
+            ),
+        )
+        for source_document_id, file_name, classification in documents
+    ]
+    if any(selection.selection_decision == SELECTED for _, selection in pairs):
+        return [selection for _, selection in pairs], None
+    if not pairs:
+        return [], None
+
+    order = sorted(
+        range(len(pairs)),
+        key=lambda i: (
+            _fallback_rank(pairs[i][0]),
+            pairs[i][1].source_document_id if pairs[i][1].source_document_id is not None else 1 << 62,
+            pairs[i][1].file_name.lower(),
+        ),
+    )
+    promoted_index = order[0]
+    classification, selection = pairs[promoted_index]
+    promoted = FileSelection(
+        procurement_id=procurement_id,
+        source_document_id=selection.source_document_id,
+        file_name=selection.file_name,
+        document_class=classification.document_class,
+        classification_confidence=classification.confidence,
+        classification_reason=classification.reason,
+        required_by_categories=(category_code,),
+        required_facts=(),
+        selection_decision=SELECTED_FALLBACK,
+        selection_reason=f"FALLBACK_NO_ACCEPTED_DOC:{classification.document_class.value}",
+    )
+    pairs[promoted_index] = (classification, promoted)
+    return [item for _, item in pairs], promoted
+
+
+def http_request_potential(selections: Iterable[FileSelection]) -> int:
+    """Selected documents only (accepted + fallback promotions)."""
+    return sum(
+        1 for s in selections if s.selection_decision in (SELECTED, SELECTED_FALLBACK)
     )
 
 

@@ -35,13 +35,15 @@ from src.services.commercial_routing_v3.document_classifier_v1 import (  # noqa:
 from src.services.commercial_routing_v3.document_needs_plan_v2 import (  # noqa: E402
     DOCUMENT_NEEDS_POLICY_VERSION,
     DOCUMENT_SELECTION_POLICY_VERSION,
+    FALLBACK_MAX_PER_UNIT,
+    SELECTED_FALLBACK,
     SELECTED,
     SKIPPED_NOT_RELEVANT,
     UNKNOWN_NEEDS_REVIEW,
     adapt_category_registry,
     build_document_needs_plan,
     category_plan,
-    decide_file_selection,
+    select_unit_documents,
 )
 from src.services.commercial_routing_v3.research_action_v2 import (  # noqa: E402
     RESEARCH_ACTION_POLICY_VERSION,
@@ -64,19 +66,6 @@ SAMPLE_BUCKETS: Tuple[Tuple[str, str, int], ...] = (
 )
 MAX_MULTI_CATEGORY_PIDS = 10
 TRACE_PIDS = 6
-
-#: Classes that are NOT fetched by default, but are the only possible fallback
-#: when a procurement+category has no accepted-class document at all.
-#: (Diagnostic only: the selection policy itself is NOT changed by this WIP.)
-FALLBACK_PROMOTABLE_CLASSES = frozenset(
-    {
-        DocumentClass.CONTRACT_PROJECT,
-        DocumentClass.PARTICIPANT_REQUIREMENTS,
-        DocumentClass.LEGAL_GENERAL,
-        DocumentClass.NMCK_JUSTIFICATION,
-        DocumentClass.SECURITY_REQUIREMENTS,
-    }
-)
 
 #: (category, document_class) -> parser route, normalizer route.
 ROUTES: Dict[DocumentClass, Tuple[Optional[str], Optional[str]]] = {
@@ -116,10 +105,25 @@ ROUTES: Dict[DocumentClass, Tuple[Optional[str], Optional[str]]] = {
         "parsers.ExcelParser",
         "parse_estimate_corpus (nmck/price facts)",
     ),
-    DocumentClass.PARTICIPANT_REQUIREMENTS: (None, None),
-    DocumentClass.SECURITY_REQUIREMENTS: (None, None),
-    DocumentClass.LEGAL_GENERAL: (None, None),
-    DocumentClass.OTHER: (None, None),
+    # Fallback classes ride the generic pipeline: generic parser by extension and
+    # the generic category keyword/section matcher (this is exactly how the
+    # historical positive matches in these files were produced).
+    DocumentClass.PARTICIPANT_REQUIREMENTS: (
+        "parsers.WordParser / parsers.PdfParser (generic)",
+        "matcher.MatchEngine (generic category keyword matcher)",
+    ),
+    DocumentClass.SECURITY_REQUIREMENTS: (
+        "parsers.WordParser / parsers.PdfParser (generic)",
+        "matcher.MatchEngine (generic category keyword matcher)",
+    ),
+    DocumentClass.LEGAL_GENERAL: (
+        "parsers.WordParser / parsers.PdfParser (generic)",
+        "matcher.MatchEngine (generic category keyword matcher)",
+    ),
+    DocumentClass.OTHER: (
+        "parsers.* by extension + archive_extractor (generic)",
+        "matcher.MatchEngine (generic category keyword matcher)",
+    ),
 }
 
 
@@ -423,23 +427,30 @@ def main() -> int:
         unknown_unknown = 0
         unknown_when_required = 0
         same_url_multi_name = 0
+        fallback_units = 0
+        accepted_units = 0
+        fallback_violations = 0
+        fallback_reasons = Counter()
 
         for pid in all_pids:
             opps = opps_by_pid.get(pid, [])
-            plans = [
-                category_plan(o["category_code"], track_group(o["opportunity_track"]))
-                for o in opps
-            ]
-            plan = build_document_needs_plan(pid, plans)
-            if len({o["category_code"] for o in opps}) > 1:
-                multi_category_plans[pid] = plan
+            units: Dict[str, set] = defaultdict(set)
+            for o in opps:
+                units[o["category_code"]].add(track_group(o["opportunity_track"]))
+            if len(units) > 1:
+                multi_category_plans[pid] = build_document_needs_plan(
+                    pid,
+                    [
+                        category_plan(category, group)
+                        for category in sorted(units)
+                        for group in sorted(units[category])
+                    ],
+                )
             docs = dedupe_source_documents(docs_by_pid.get(pid, []))
             physical_keys_total += len(docs)
             docs = dedupe_by_file_name(docs)
             file_name_total += len(docs)
             http_before += len(docs)
-            per_pid_selected = 0
-            per_pid_unknown = 0
             names_by_url = defaultdict(set)
             for doc in docs:
                 names_by_url[doc.get("url_hash") or doc.get("url")].add(
@@ -447,56 +458,126 @@ def main() -> int:
                 )
             same_url_multi_name += sum(1 for names in names_by_url.values() if len(names) > 1)
             has_match = any((pid, o["category_code"]) in evidence_pairs for o in opps)
-            trace_files = []
-            for doc in docs:
-                classification = classify_document_metadata(
-                    doc.get("file_name"), source_table=doc.get("source_table")
+            classified = [
+                (
+                    doc,
+                    classify_document_metadata(
+                        doc.get("file_name"), source_table=doc.get("source_table")
+                    ),
                 )
-                selection = decide_file_selection(
-                    plan, classification, procurement_id=pid,
-                    source_document_id=doc.get("source_id"), file_name=doc.get("file_name") or "",
+                for doc in docs
+            ]
+            items = [
+                (doc.get("source_id"), doc.get("file_name") or "", classification)
+                for doc, classification in classified
+            ]
+
+            unit_plans: Dict[str, Any] = {}
+            unit_selections: Dict[str, list] = {}
+            for category in sorted(units):
+                unit_plan = build_document_needs_plan(
+                    pid, [category_plan(category, g) for g in sorted(units[category])]
                 )
-                sel_counts[selection.selection_decision] += 1
-                class_counts[selection.document_class.value] += 1
-                if classification.document_class not in plan.required_classes:
-                    invariant_violations += int(selection.selection_decision == SELECTED)
-                if selection.selection_decision == SELECTED:
+                unit_plans[category] = unit_plan
+                selections, promoted = select_unit_documents(
+                    unit_plan, procurement_id=pid, category_code=category, documents=items
+                )
+                unit_selections[category] = selections
+                if promoted is not None:
+                    fallback_units += 1
+                    fallback_reasons[
+                        promoted.selection_reason.split(":")[0] + ":" + promoted.document_class.value
+                    ] += 1
+                    if any(s.selection_decision == SELECTED for s in selections):
+                        fallback_violations += 1
+                else:
+                    accepted_units += 1
+
+            for category, selections in unit_selections.items():
+                unit_required = set(unit_plans[category].required_classes)
+                for selection in selections:
+                    if (
+                        selection.selection_decision == SELECTED
+                        and selection.document_class not in unit_required
+                    ):
+                        invariant_violations += 1
+
+            decision_rank = {
+                SELECTED: 0,
+                SELECTED_FALLBACK: 1,
+                UNKNOWN_NEEDS_REVIEW: 2,
+                SKIPPED_NOT_RELEVANT: 3,
+            }
+            best: Dict[str, str] = {}
+            best_class: Dict[str, str] = {}
+            best_reason: Dict[str, str] = {}
+            doc_by_key: Dict[str, Any] = {}
+            for category in sorted(units):
+                for (doc, _classification), selection in zip(
+                    classified, unit_selections[category]
+                ):
+                    key = (doc.get("file_name") or "").strip().lower()
+                    doc_by_key[key] = doc
+                    if key not in best or decision_rank[selection.selection_decision] < decision_rank[best[key]]:
+                        best[key] = selection.selection_decision
+                        best_class[key] = selection.document_class.value
+                        best_reason[key] = selection.selection_reason
+            per_pid_selected = 0
+            per_pid_fallback = 0
+            per_pid_unknown = 0
+            for key, decision in best.items():
+                doc = doc_by_key[key]
+                class_counts[best_class[key]] += 1
+                if decision == SELECTED:
                     per_pid_selected += 1
-                    http_after_selected += 1
-                    http_after_fallback += 1
+                elif decision == SELECTED_FALLBACK:
+                    per_pid_fallback += 1
+                elif decision == UNKNOWN_NEEDS_REVIEW:
+                    per_pid_unknown += 1
+                    unknown_reasons[best_reason[key].split(":")[1] if ":" in best_reason[key] else best_reason[key]] += 1
+                else:
+                    skipped_reasons[best_reason[key].split(":")[0]] += 1
+                if decision in (SELECTED, SELECTED_FALLBACK):
+                    sel_counts[decision] += 1
                     reuse_key = reuse_class(doc, has_match)
                     reuse_counts[reuse_key] += 1
-                    parser_route, normalizer_route = ROUTES.get(
-                        selection.document_class, (None, None)
-                    )
+                    document_class = DocumentClass(best_class[key])
+                    parser_route, normalizer_route = ROUTES.get(document_class, (None, None))
                     route_counts[
-                        ("PARSER_OK" if parser_route else "PARSER_GAP", selection.document_class.value)
+                        ("PARSER_OK" if parser_route else "PARSER_GAP", document_class.value)
                     ] += 1
                     route_counts[
-                        ("NORMALIZER_OK" if normalizer_route else "NORMALIZER_GAP", selection.document_class.value)
+                        ("NORMALIZER_OK" if normalizer_route else "NORMALIZER_GAP", document_class.value)
                     ] += 1
-                    selected_docs.append((pid, selection.document_class.value, reuse_key))
-                elif selection.selection_decision == UNKNOWN_NEEDS_REVIEW:
-                    per_pid_unknown += 1
-                    unknown_reasons[selection.classification_reason.split(":")[0]] += 1
+                    selected_docs.append((pid, document_class.value, reuse_key))
                 else:
-                    skipped_reasons[selection.selection_reason.split(":")[0]] += 1
-                trace_files.append((doc.get("file_name") or "", selection))
+                    sel_counts[decision] += 1
+                if decision == SELECTED:
+                    http_after_selected += 1
+                    http_after_fallback += 1
+                elif decision == SELECTED_FALLBACK:
+                    http_after_fallback += 1
             http_after_fallback += per_pid_unknown
             unknown_unknown += per_pid_unknown
-            if per_pid_unknown and per_pid_selected:
+            if per_pid_unknown and (per_pid_selected or per_pid_fallback):
                 unknown_when_required += per_pid_unknown
             for group in {track_group(o["opportunity_track"]) for o in opps}:
                 per_track[group]["PROCUREMENTS"] += 1
                 per_track[group]["DOCS"] += len(docs)
                 per_track[group]["SELECTED"] += per_pid_selected
+                per_track[group]["SELECTED_FALLBACK"] += per_pid_fallback
                 per_track[group]["UNKNOWN"] += per_pid_unknown
-            if len(samples_for_trace) < TRACE_PIDS and docs:
-                samples_for_trace.append((pid, opps, plan, trace_files))
+            if len(samples_for_trace) < 40 and docs:
+                samples_for_trace.append((pid, opps, unit_plans, unit_selections, classified))
+
+        # Prefer one multi-category procurement in the trace (Phase 12 evidence).
+        multi_trace = [s for s in samples_for_trace if len(s[3]) > 1]
+        single_trace = [s for s in samples_for_trace if len(s[3]) == 1]
+        samples_for_trace = (multi_trace[:1] + single_trace)[:TRACE_PIDS]
 
         print("=" * 78)
         print("PHASE 15 - PROCUREMENT TRACES")
-        for pid, opps, plan, trace_files in samples_for_trace:
+        for pid, opps, unit_plans, unit_selections, classified in samples_for_trace:
             print(f"PROCUREMENT_ID={pid}")
             for o in opps:
                 print(
@@ -504,34 +585,55 @@ def main() -> int:
                     f"STATE={o['commercial_state']} MEDAL={o['candidate_initial_medal']} "
                     f"START={o['start_date']} END={o['end_date']}"
                 )
-            print(f"  REQUIRED_FACTS={','.join(f.value for f in plan.required_facts)}")
-            print(f"  REQUIRED_CLASSES={','.join(c.value for c in plan.required_classes)}")
-            print(f"  OPTIONAL_CLASSES={','.join(c.value for c in plan.optional_classes) or '-'}")
-            for name, selection in trace_files[:14]:
-                print(
-                    f"  FILE={name[:70]!r} CLASS={selection.document_class.value} "
-                    f"DECISION={selection.selection_decision} REASON={selection.selection_reason[:60]}"
-                )
+            for category in sorted(unit_selections):
+                plan = unit_plans[category]
+                selections = unit_selections[category]
+                print(f"  UNIT={category}")
+                print(f"    REQUIRED_FACTS={','.join(f.value for f in plan.required_facts)}")
+                print(f"    REQUIRED_CLASSES={','.join(c.value for c in plan.required_classes)}")
+                print(f"    OPTIONAL_CLASSES={','.join(c.value for c in plan.optional_classes) or '-'}")
+                for (doc, _classification), selection in list(zip(classified, selections))[:12]:
+                    print(
+                        f"    FILE={(doc.get('file_name') or '')[:66]!r} "
+                        f"CLASS={selection.document_class.value} "
+                        f"DECISION={selection.selection_decision} "
+                        f"REASON={selection.selection_reason[:52]}"
+                    )
             print(
-                f"  POTENTIAL_HTTP_BEFORE={len(trace_files)} "
-                f"AFTER_SELECTED={sum(1 for _, s in trace_files if s.selection_decision == SELECTED)}"
+                f"  POTENTIAL_HTTP_BEFORE={len(classified)} "
+                f"AFTER_SELECTED={sum(1 for s in unit_selections.get(sorted(unit_selections)[0], []) if s.selection_decision == SELECTED)}"
             )
 
         print("=" * 78)
-        print("PHASE 16 - AGGREGATE HTTP SIMULATION")
+        print("PHASE 16 - AGGREGATE HTTP SIMULATION (document_selection_v2)")
         print("DEDUPE_LEVEL=DISTINCT_FILE_NAME_PER_PROCUREMENT")
         print(f"DISTINCT_PHYSICAL_KEYS={physical_keys_total}")
         print(f"DISTINCT_FILE_NAMES={file_name_total}")
         print(f"SOURCE_DOCUMENTS_TOTAL={sel_counts.total()}")
         print(f"SELECTED={sel_counts.get(SELECTED, 0)}")
+        print(f"SELECTED_FALLBACK={sel_counts.get(SELECTED_FALLBACK, 0)}")
         print(f"SKIPPED_NOT_RELEVANT={sel_counts.get(SKIPPED_NOT_RELEVANT, 0)}")
         print(f"UNKNOWN_NEEDS_REVIEW={sel_counts.get(UNKNOWN_NEEDS_REVIEW, 0)}")
+        print(f"UNITS_WITH_ACCEPTED_DOC={accepted_units}")
+        print(f"UNITS_USING_FALLBACK={fallback_units}")
+        print(f"FALLBACK_MAX_PER_PROCUREMENT_CATEGORY={FALLBACK_MAX_PER_UNIT}")
+        print(
+            "FALLBACK_SELECTED_ONLY_WHEN_NO_ACCEPTED_DOC="
+            f"{'YES' if fallback_violations == 0 else 'NO'}"
+        )
+        print(f"FALLBACK_VIOLATIONS={fallback_violations}")
+        print(f"FALLBACK_REASONS={fallback_reasons.most_common(8)}")
         print(f"HTTP_BEFORE={http_before}")
         print(f"HTTP_AFTER_SELECTED={http_after_selected}")
-        print(f"HTTP_AFTER_WITH_FALLBACK={http_after_fallback}")
+        http_after_v2 = sel_counts.get(SELECTED, 0) + sel_counts.get(SELECTED_FALLBACK, 0)
+        print(f"HTTP_AFTER_V2={http_after_v2}")
+        print(f"HTTP_AFTER_V2_WITH_UNKNOWN={http_after_fallback}")
         if http_before:
-            print(f"HTTP_REDUCTION_SELECTED_PCT={100.0 * (1 - http_after_selected / http_before):.1f}")
-            print(f"HTTP_REDUCTION_FALLBACK_PCT={100.0 * (1 - http_after_fallback / http_before):.1f}")
+            print(f"HTTP_REDUCTION_PCT={100.0 * (1 - http_after_v2 / http_before):.1f}")
+            print(
+                "HTTP_REDUCTION_PCT_WITH_UNKNOWN="
+                f"{100.0 * (1 - http_after_fallback / http_before):.1f}"
+            )
         print(f"TOP_SKIPPED_REASONS={skipped_reasons.most_common(6)}")
         print(f"TOP_UNKNOWN_REASONS={unknown_reasons.most_common(6)}")
         print(f"DOCUMENT_CLASSES={class_counts.most_common()}")
@@ -556,8 +658,6 @@ def main() -> int:
         skipped_class_examples = Counter()
         loss_class_combo = Counter()
         current_loss_combo = Counter()
-        fallback_recover_current = 0
-        fallback_recover_global = 0
         current_loss_examples: List[Tuple[str, Tuple[str, ...], Tuple[str, ...]]] = []
         by_unit: Dict[Tuple[int, str], List[str]] = defaultdict(list)
         for row in known_positives:
@@ -577,23 +677,29 @@ def main() -> int:
                     [category_plan(category, g) for g in sorted(groups_by_category[category])],
                 )
                 unit_plans[(pid, category)] = plan
-            classes = {}
+            names = sorted(set(names))
+            classifications = [classify_document_metadata(name) for name in names]
+            items = [(None, name, classification) for name, classification in zip(names, classifications)]
+            selections, promoted = select_unit_documents(
+                plan, procurement_id=pid, category_code=category, documents=items
+            )
+            classes: Dict[str, int] = {}
             unit_has_selected = False
-            unit_has_deferred = False
-            for name in names:
-                classification = classify_document_metadata(name)
-                classes[classification.document_class.value] = classes.get(
-                    classification.document_class.value, 0
-                ) + 1
-                selection = decide_file_selection(
-                    plan, classification, procurement_id=pid, file_name=name
+            if promoted is not None:
+                recall["FALLBACK_UNITS"] += 1
+                if pid in current_pid_set:
+                    recall["FALLBACK_UNITS_CURRENT"] += 1
+            for name, classification, selection in zip(names, classifications, selections):
+                classes[classification.document_class.value] = (
+                    classes.get(classification.document_class.value, 0) + 1
                 )
-                if selection.selection_decision == SELECTED:
+                if selection.selection_decision in (SELECTED, SELECTED_FALLBACK):
                     doc_status["KNOWN_POSITIVE_DOC_SELECTED"] += 1
+                    if selection.selection_decision == SELECTED_FALLBACK:
+                        doc_status["KNOWN_POSITIVE_DOC_SELECTED_FALLBACK"] += 1
                     unit_has_selected = True
                 elif selection.selection_decision == UNKNOWN_NEEDS_REVIEW:
                     doc_status["KNOWN_POSITIVE_DOC_DEFERRED_UNKNOWN"] += 1
-                    unit_has_deferred = True
                 else:
                     doc_status["KNOWN_POSITIVE_DOC_SKIPPED"] += 1
                     skipped_class_examples[(category, classification.document_class.value)] += 1
@@ -602,26 +708,15 @@ def main() -> int:
                 recall["RECALL_OK_UNITS"] += 1
                 if pid in current_pid_set:
                     recall["RECALL_OK_UNITS_CURRENT"] += 1
-            elif unit_has_deferred:
-                recall["RECALL_DEFERRED_UNITS"] += 1
-                if pid in current_pid_set:
-                    recall["RECALL_DEFERRED_UNITS_CURRENT"] += 1
             else:
                 recall["RECALL_LOSS_UNITS"] += 1
                 loss_class_combo[(category, tuple(sorted(classes)))] += 1
-                recoverable_by_fallback = any(
-                    cls in FALLBACK_PROMOTABLE_CLASSES for cls in classes
-                )
-                if recoverable_by_fallback:
-                    fallback_recover_global += 1
                 recall_losses.append(
                     (category, tuple(sorted(classes)), tuple(sorted(set(names))[:3]))
                 )
                 if pid in current_pid_set:
                     recall["RECALL_LOSS_UNITS_CURRENT"] += 1
                     current_loss_combo[(category, tuple(sorted(classes)))] += 1
-                    if recoverable_by_fallback:
-                        fallback_recover_current += 1
                     if len(current_loss_examples) < 12:
                         current_loss_examples.append(
                             (category, tuple(sorted(classes)), tuple(sorted(set(names))[:3]))
@@ -633,36 +728,26 @@ def main() -> int:
         total_docs = doc_status["KNOWN_POSITIVE_DOC_SELECTED"] + doc_status["KNOWN_POSITIVE_DOC_SKIPPED"] + doc_status["KNOWN_POSITIVE_DOC_DEFERRED_UNKNOWN"]
         print(f"KNOWN_POSITIVE_DOCUMENTS={total_docs}")
         print(f"KNOWN_POSITIVE_SELECTED={doc_status['KNOWN_POSITIVE_DOC_SELECTED']}")
+        print(f"KNOWN_POSITIVE_SELECTED_FALLBACK={doc_status['KNOWN_POSITIVE_DOC_SELECTED_FALLBACK']}")
         print(f"KNOWN_POSITIVE_DEFERRED_UNKNOWN={doc_status['KNOWN_POSITIVE_DOC_DEFERRED_UNKNOWN']}")
         print(f"KNOWN_POSITIVE_SKIPPED={doc_status['KNOWN_POSITIVE_DOC_SKIPPED']}")
         print(f"RECALL_OK_UNITS={recall['RECALL_OK_UNITS']}")
-        print(f"RECALL_DEFERRED_UNITS={recall['RECALL_DEFERRED_UNITS']}")
         print(f"RECALL_LOSS_UNITS={recall['RECALL_LOSS_UNITS']}")
         print(f"CURRENT_RECALL_OK_UNITS={recall['RECALL_OK_UNITS_CURRENT']}")
-        print(f"CURRENT_RECALL_DEFERRED_UNITS={recall['RECALL_DEFERRED_UNITS_CURRENT']}")
         print(f"CURRENT_RECALL_LOSS_UNITS={recall['RECALL_LOSS_UNITS_CURRENT']}")
+        print(f"KNOWN_POSITIVE_CURRENT_LOSS={recall['RECALL_LOSS_UNITS_CURRENT']}")
+        print(f"KNOWN_POSITIVE_GLOBAL_LOSS={recall['RECALL_LOSS_UNITS']}")
+        print(f"RECALL_FALLBACK_UNITS={recall['FALLBACK_UNITS']}")
+        print(f"CURRENT_RECALL_FALLBACK_UNITS={recall['FALLBACK_UNITS_CURRENT']}")
         print(f"CATEGORY_NOT_IN_CURRENT_UNITS={recall['CATEGORY_NOT_IN_CURRENT']}")
         units = recall["RECALL_OK_UNITS"] + recall["RECALL_LOSS_UNITS"]
         if units:
-            recoverable = recall["RECALL_OK_UNITS"] + recall["RECALL_DEFERRED_UNITS"]
-            print(f"KNOWN_POSITIVE_RECALL_STRICT={100.0 * recall['RECALL_OK_UNITS'] / units:.1f}%")
-            print(
-                "KNOWN_POSITIVE_RECALL_WITH_DEFERRED="
-                f"{100.0 * recoverable / max(units, 1):.1f}%"
-            )
+            print(f"KNOWN_POSITIVE_RECALL={100.0 * recall['RECALL_OK_UNITS'] / units:.1f}%")
         print(f"SKIPPED_REASON_TOTALS={[(k, v) for k, v in recall.items() if k.startswith('SKIPPED_REASON_')]}")
         print(f"SKIPPED_CLASS_EXAMPLES={skipped_class_examples.most_common(12)}")
         print(f"RECALL_LOSS_EXAMPLES={recall_losses[:6]}")
         print(f"RECALL_LOSS_CLASS_COMBOS={loss_class_combo.most_common(10)}")
         print(f"CURRENT_RECALL_LOSS_CLASS_COMBOS={current_loss_combo.most_common(10)}")
-        print(
-            "FALLBACK_RULE_RECOVERS_CURRENT_UNITS="
-            f"{fallback_recover_current} / {recall['RECALL_LOSS_UNITS_CURRENT']}"
-        )
-        print(
-            "FALLBACK_RULE_RECOVERS_GLOBAL_UNITS="
-            f"{fallback_recover_global} / {recall['RECALL_LOSS_UNITS']}"
-        )
         print(f"CURRENT_RECALL_LOSS_EXAMPLES={current_loss_examples}")
 
         # --------------------------------------------- Phases 18-20 routing/reuse
