@@ -239,7 +239,9 @@ _TERM_SKIP = ("срок действия", "срок годности", "сро�
               "срок рассмотрения", "срок предоставления обеспеч", "срок возврата",
               "срок подписания", "срок размещения", "срок направления", "срок действия договора",
               # ссылки на нормы — это не срок поставки конкретной закупки
-              "статье", "статьи", "статьей", "федерального закона", "фз №", "кодекса", "гк рф")
+              "статье", "статьи", "статьей", "федеральн", "законом", "фз", "кодекс", "гк рф",
+              # цена/порядок оплаты — не срок поставки
+              "цена контракта является", "цена договора является", "твердой и определяется")
 _MONTHS = (("январ", 1), ("феврал", 2), ("март", 3), ("апрел", 4), ("мая", 5), ("май", 5),
            ("июн", 6), ("июл", 7), ("август", 8), ("сентябр", 9), ("октябр", 10),
            ("ноябр", 11), ("декабр", 12))
@@ -269,6 +271,17 @@ def _parse_term_dates(text: str) -> Dict[str, Any]:
                     result["deadline"] = "%04d-%02d-%02d" % (
                         int(worded.group(3)), month, int(worded.group(1)))
                     break
+    # Дата в прошлом — это не срок поставки (обычно дата закона/постановления в цитате).
+    if result["deadline"]:
+        import datetime as _dt
+
+        try:
+            parsed = _dt.date.fromisoformat(result["deadline"])
+        except ValueError:
+            parsed = None
+        if parsed is not None and parsed < _dt.date.today() - _dt.timedelta(days=30):
+            result["deadline_rejected"] = result["deadline"]
+            result["deadline"] = None
     duration = re.search(
         r"(?:в течение|не позднее чем через|в срок)(\d{1,3})(?:\([^)]*\))?"
         r"(календарн\w*|рабоч\w*)?(дн\w+|месяц\w+|год\w+|лет)", compact)
@@ -493,6 +506,33 @@ def _classify_with_offset(rows: List[List[str]]) -> "tuple[Optional[str], int]":
 _SPEC_HEADER = ["Наименование", "Код ОКПД2", "Кол-во"]
 _TECH_HEADER = ["Параметр", "Значение", "Единица"]
 
+#: Служебные ячейки ТЗ — это инструкция участнику, а не значение характеристики.
+_INSTRUCTION_MARKERS = (
+    "участник закупки указывает", "значение характеристики не может изменяться",
+    "не может изменяться участником", "указывается участником", "заполняется участником",
+    "инструкция по заполнению",
+)
+_UNIT_WORDS = (
+    "кельвин", "ватт", "люмен", "люкс", "вольт", "ампер", "герц", "ом", "децибел",
+    "мм", "см", "м", "км", "шт", "штука", "компл", "кг", "г", "т", "л", "мл",
+    "ч", "час", "сут", "дн", "мес", "год", "%", "процент", "гб", "мгб", "тб",
+    "бит", "байт", "мбит", "гбит", "вт", "квт", "дб", "нм", "мкм", "с", "сек",
+    "секунд", "мин", "минут", "руб",
+)
+
+
+def _is_instruction(text: str) -> bool:
+    low = str(text or "").lower()
+    return any(marker in low for marker in _INSTRUCTION_MARKERS) or len(low) > 180
+
+
+def _looks_like_unit(text: str) -> bool:
+    low = str(text or "").strip().lower().rstrip(".;")
+    if not low or len(low) > 24:
+        return False
+    head = re.split(r"[\s,;(]", low)[0]
+    return any(low.startswith(word) or head == word for word in _UNIT_WORDS)
+
 
 def _emit_spec_tech(out: Dict[str, List[Dict[str, Any]]], data_rows: List[List[str]],
                     header: List[str], name: str) -> None:
@@ -505,10 +545,17 @@ def _emit_spec_tech(out: Dict[str, List[Dict[str, Any]]], data_rows: List[List[s
     i_qty = _find_col(header_low, "кол-во", "количество")
     i_okpd = _find_col(header_low, "окпд", "код")
     seen: set = set()
+    current_item = ""
     for row in data_rows:
         if not any(_norm_cell(c) for c in row):
             continue
         item = _norm_cell(_cell(row, i_name))
+        # Объединённая ячейка товара: в следующих строках она пустая — наследуем
+        # название из предыдущей строки, иначе теряются все характеристики позиции.
+        if item:
+            current_item = item
+        else:
+            item = current_item
         if not item:
             continue
         if item.lower() not in seen:
@@ -520,11 +567,29 @@ def _emit_spec_tech(out: Dict[str, List[Dict[str, Any]]], data_rows: List[List[s
         char = _norm_cell(_cell(row, i_char))
         value = _norm_cell(_cell(row, i_val))
         if not value:
+            # Значение ищем и без разметки колонок: это ячейка со числом/оператором.
+            for candidate in row:
+                text = _norm_cell(candidate)
+                if not text or text == item:
+                    continue
+                if re.search(r"[≥≤<>]|\d", text) and not _is_instruction(text):
+                    value = text
+                    break
+        if not value or _is_instruction(value):
             continue
+        unit = _norm_cell(_cell(row, i_unit))
+        if not unit:
+            for candidate in row:
+                text = _norm_cell(candidate)
+                if text and text not in (value, item, char) and _looks_like_unit(text):
+                    unit = text
+                    break
+        if char and _is_instruction(char):
+            char = ""
         param = item if not char or char == item else "%s — %s" % (item, char)
         out["tech"].append({
             "source_file": name, "header": _TECH_HEADER,
-            "cells": [param, value, _norm_cell(_cell(row, i_unit))],
+            "cells": [param, value, unit],
         })
 
 

@@ -1,0 +1,10 @@
+#!/bin/bash
+PSQL="sudo -n -u postgres psql -d crm -Atc"
+echo "--- распределение медалей DIRECT после пересчёта ---"
+$PSQL "select current_effective_medal, count(*) from crm_procurement_category_opportunities where opportunity_track='DIRECT_SUPPLY' and status='CURRENT' group by 1 order by 2 desc"
+echo "--- контрольные закупки ---"
+$PSQL "select o.procurement_id, p.contract_number, p.initial_price, o.current_effective_medal, o.current_effective_reason from crm_procurement_category_opportunities o join crm_procurements p on p.id=o.procurement_id where o.procurement_id in (459670,459631,460978,460789,460753) order by p.initial_price"
+echo "--- сколько GOLD осталось дешевле 100k (должно быть 0) ---"
+$PSQL "select count(*) from crm_procurement_category_opportunities o join crm_procurements p on p.id=o.procurement_id where o.opportunity_track='DIRECT_SUPPLY' and o.current_effective_medal='GOLD' and (p.initial_price is null or p.initial_price < 100000)"
+echo "--- GOLD теперь ---"
+$PSQL "select case when p.initial_price is null then 'нет НМЦК' when p.initial_price < 200000 then '<200k' when p.initial_price < 1000000 then '200k-1M' else '>=1M' end b, count(*) from crm_procurement_category_opportunities o join crm_procurements p on p.id=o.procurement_id where o.opportunity_track='DIRECT_SUPPLY' and o.current_effective_medal='GOLD' group by 1 order by 2 desc"

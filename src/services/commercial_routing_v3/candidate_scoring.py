@@ -254,8 +254,9 @@ def _commercial_scale_score(ctx: CandidateScoringContext) -> float:
         p = 0.0
     if p <= 0:
         return 30.0
-    # Log-scaled; never alone pushes to Gold (weight is only 15%)
-    return _clamp(35.0 + 8.0 * math.log10(max(p, 100_000.0)), hi=88.0)
+    # Log-scaled; never alone pushes to Gold. Пол max(p, 100_000) убран 10.10.2026:
+    # он уравнивал 50 тыс. и 100 тыс., из-за чего мелкие закупки не теряли балл.
+    return _clamp(35.0 + 8.0 * math.log10(max(p, 1.0)), hi=88.0)
 
 
 def _source_confidence_score(ctx: CandidateScoringContext) -> float:
@@ -404,6 +405,23 @@ def score_hypothesis(
         hard_cap = CandidateMedal.BRONZE
         hard_cap_reason = "direct_supply_without_product_evidence"
         downgrades.append("direct_supply_contextual_cap")
+
+    # Стоимостной порог прямой поставки: не выдаём GOLD/SILVER закупкам на десятки
+    # тысяч рублей (правило согласовано 10.10.2026, см. direct_value_floor).
+    if track == OpportunityTrack.DIRECT_SUPPLY.value:
+        from src.services.commercial_routing_v3.direct_value_floor import (
+            direct_value_cap,
+            lower_medal,
+        )
+
+        value_cap, value_reason = direct_value_cap(
+            ctx.final_contract_price or ctx.initial_price
+        )
+        if value_cap is not None:
+            hard_cap = lower_medal(hard_cap, value_cap)
+            if hard_cap is value_cap or hard_cap_reason is None:
+                hard_cap_reason = value_reason
+            downgrades.append(value_reason)
 
     final = _clamp(final)
     medal, cap, cap_reason = medal_from_score(

@@ -1,0 +1,10 @@
+#!/bin/bash
+PSQL="sudo -n -u postgres psql -d crm -Atc"
+echo "--- crm_lead_routing_rules columns ---"
+$PSQL "select column_name||' '||data_type from information_schema.columns where table_name='crm_lead_routing_rules' order by ordinal_position"
+echo "--- rules ---"
+$PSQL "select left(row_to_json(t)::text, 300) from crm_lead_routing_rules t limit 10"
+echo "--- score anatomy for direct procurements (what feeds medal) ---"
+$PSQL "select procurement_id, commercial_category_code, category_confidence, expected_category_value, category_value_basis, commercial_priority_score, research_value_score, candidate_initial_score, candidate_medal from crm_procurement_category_opportunities where procurement_id in (459670, 459631) order by procurement_id"
+echo "--- nmck of those ---"
+$PSQL "select id, contract_number, initial_price from crm_procurements where id in (459670, 459631)"

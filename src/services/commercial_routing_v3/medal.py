@@ -97,6 +97,21 @@ def compute_track_medal(inp: TrackMedalInput) -> tuple[CandidateMedal, int, int]
     else:
         medal = CandidateMedal.WOOD
 
+    # Стоимостной порог прямой поставки (согласовано 10.10.2026): procurement_total
+    # сам по себе медаль не повышает, но ниже порога она быть не может.
+    if track == OpportunityTrack.DIRECT_SUPPLY:
+        from src.services.commercial_routing_v3.direct_value_floor import (
+            direct_value_cap,
+            medal_rank,
+        )
+
+        cap, _reason = direct_value_cap(inp.procurement_total)
+        if cap is not None and medal_rank(cap) < medal_rank(medal):
+            medal = cap
+            composite = min(composite, {CandidateMedal.WOOD: 24,
+                                        CandidateMedal.BRONZE: 49,
+                                        CandidateMedal.SILVER: 74}.get(cap, composite))
+
     return medal, commercial, research
 
 
