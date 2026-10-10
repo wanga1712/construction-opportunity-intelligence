@@ -9,6 +9,9 @@ class ProcessingOutcome(Enum):
     #: Terminal skip: every file of the procurement is excluded by the file
     #: policy (contract drafts, notices, platform artifacts, drawings, raster).
     SKIPPED_NOISE = "SKIPPED_NOISE"
+    #: Terminal skip: the procurement is legitimately out of scope (admission
+    #: gate rejected it or OKPD is out of target) — not a technical failure.
+    SKIPPED_NOT_TARGET = "SKIPPED_NOT_TARGET"
 
 @dataclass
 class MatchDetailResult:
