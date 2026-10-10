@@ -10,6 +10,8 @@
 - **Invalid embedded value.** `INVALID_TOTAL_NMCK_AS_CATEGORY_VALUE=5`: pid `8029, 12125, 15632, 17066, 19419`, все `EMBEDDED_MATERIAL`, `expected_category_value == crm_procurements.initial_price`, basis `DIRECT_PROCUREMENT_VALUE`; не исправлялось.
 - **Controls (read-only).** PID949 `CURRENT_OPPORTUNITIES=0`; PID1064 current opportunities отсутствуют (`crm_procurements.initial_price=1416157539.85`, stage `razygranye`). Эти данные фиксируют текущее состояние и не подменяют отсутствующие category values.
 - **Stop.** До reconciliation runtime semantic changes (commit/stash/snapshot decision) Phase 2 cohort policy, simulation и любые writes не запускаются.
+- **Runtime reconciliation (10.10, evening).** `KEEP_CANONICAL` medal baseline: `candidate_scoring.py`, `direct_value_floor.py`, `medal.py` уже в commit `7754475`; advisory `category_admission.py` уже в `278eab3`, добавлен invariant test `tests/test_category_admission_advisory_veto.py`; runtime timing в `engine.py` канонизирован commit `e70eec3`. Отдельный WIP `initial-pass` канонизирован commit `d243c55` (`crm_ai_assessment_runner.py`, `routing_initial_pass.py`, `routing_arbitration.py`). Для этих файлов `local sha256 == S13 runtime sha256`; production code py_compile OK.
+- **Остаточный blocker.** Полный S13 worktree всё ещё содержит semantic-файлы других WIP (UI/waterproofing/system-health и т.п.); их не коммитил. `WORKTREE_CLEAN=NO` глобально, но `MEDAL_RECALIBRATION_BASELINE_CLEAN=YES`. Phase 2 не стартует, пока не принято: считать достаточным scoped clean baseline или сначала reconcile-ить остальные WIP.
 
 ## CURRENT WIP — 2026-10-10 (DOCUMENT-CLAIM-FRESHNESS-WIP)
 
