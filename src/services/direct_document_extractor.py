@@ -1,14 +1,18 @@
 """DIRECT-экстрактор: смета / техпараметры / требования из документов закупки.
 
-Без внешних зависимостей: .docx читается как zip + XML (works в любом venv).
-Никаких записей — только чтение локальных файлов, уже скачанных документным
-контуром. Нормализация названий через ИИ — следующий этап.
+.docx и .xlsx/.xlsm читаются как zip + XML (stdlib, работает в CRM-venv).
+.pdf/.doc разбираются воркерным venv через tools/parse_documents_cli.py
+(pdfplumber/python-docx есть только там) с дисковым кэшем — файлы удаляются
+retention'ом, поэтому разбор нужно помнить. Никаких записей в БД: только чтение.
 """
 from __future__ import annotations
 
+import hashlib
+import json
 import logging
 import os
 import re
+import subprocess
 import zipfile
 from typing import Any, Dict, List, Optional
 from xml.etree import ElementTree as ET
@@ -129,6 +133,74 @@ def _tables_for(path: str) -> List[List[List[str]]]:
     return []
 
 
+#: Форматы, которые разбирает воркерный venv (pdfplumber/python-docx), а не CRM-venv.
+_EXTERNAL_SUFFIXES = (".pdf", ".doc", ".xls")
+_PARSE_CLI = os.getenv("DIRECT_PARSE_CLI", "/opt/tender_documents_research/tools/parse_documents_cli.py")
+_PARSE_PY = os.getenv("DIRECT_PARSE_PY", "/opt/tender_documents_research/.venv/bin/python")
+_PARSE_TIMEOUT = int(os.getenv("DIRECT_PARSE_TIMEOUT", "180"))
+_PARSE_CACHE = os.getenv("DIRECT_PARSE_CACHE", "/var/cache/crm_direct_parse")
+#: Версия логики внешнего разбора — входит в ключ кэша (иначе держатся устаревшие результаты).
+_PARSE_VERSION = "2"
+
+
+def _cache_file(path: str) -> str:
+    try:
+        stat = os.stat(path)
+        key = "v%s|%s|%s|%s" % (_PARSE_VERSION, path, stat.st_size, stat.st_mtime_ns)
+    except OSError:
+        key = "v%s|%s" % (_PARSE_VERSION, path)
+    name = hashlib.sha1(key.encode("utf-8", "replace")).hexdigest() + ".json"
+    return os.path.join(_PARSE_CACHE, name)
+
+
+def _external_docs(local_paths: List[str]) -> Dict[str, Dict[str, Any]]:
+    """Таблицы/строки для pdf/doc/xls: воркерный venv + дисковый кэш (fail-safe)."""
+    wanted = [p for p in local_paths
+              if p and os.path.exists(p) and not _is_junk(p)
+              and p.lower().endswith(_EXTERNAL_SUFFIXES)]
+    out: Dict[str, Dict[str, Any]] = {}
+    pending: List[str] = []
+    for path in wanted:
+        try:
+            with open(_cache_file(path), "r", encoding="utf-8") as fh:
+                out[path] = json.load(fh)
+            continue
+        except Exception:  # noqa: BLE001
+            pending.append(path)
+    if not pending or not os.path.exists(_PARSE_PY) or not os.path.exists(_PARSE_CLI):
+        return out
+    import tempfile
+
+    handle, out_path = tempfile.mkstemp(prefix="direct_parse_", suffix=".json")
+    os.close(handle)
+    try:
+        subprocess.run([_PARSE_PY, _PARSE_CLI, "--out", out_path] + pending,
+                       capture_output=True, timeout=_PARSE_TIMEOUT, check=False)
+        with open(out_path, "r", encoding="utf-8") as fh:
+            payload = json.loads(fh.read() or "{}")
+        docs = payload.get("docs") or {}
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("external document parse failed: %s", exc)
+        return out
+    finally:
+        try:
+            os.unlink(out_path)
+        except OSError:
+            pass
+    for path in pending:
+        doc = docs.get(path) or {"tables": [], "lines": [], "error": "no_output"}
+        out[path] = doc
+        if doc.get("error"):
+            continue
+        try:
+            os.makedirs(_PARSE_CACHE, exist_ok=True)
+            with open(_cache_file(path), "w", encoding="utf-8") as fh:
+                json.dump(doc, fh, ensure_ascii=False)
+        except Exception:  # noqa: BLE001
+            logger.debug("parse cache write skipped for %s", path)
+    return out
+
+
 #: Секции требований: (ключ, подписи-заголовки).
 _SECTIONS = (
     ("participant", ("требования к участник", "требование к участник",
@@ -142,7 +214,18 @@ _SECTIONS = (
 )
 
 
-def extract_text_sections(local_paths: List[str]) -> Dict[str, List[Dict[str, Any]]]:
+def _paragraphs_for(path: str, external: Optional[Dict[str, Dict[str, Any]]]) -> List[str]:
+    doc = (external or {}).get(path)
+    if doc is not None:
+        return [str(x) for x in (doc.get("lines") or [])]
+    if path.lower().endswith(".docx"):
+        return _docx_paragraphs(path)
+    return []
+
+
+def extract_text_sections(local_paths: List[str],
+                          external: Optional[Dict[str, Dict[str, Any]]] = None
+                          ) -> Dict[str, List[Dict[str, Any]]]:
     """Текстовые требования секциями: участник / товар / участие / обеспечение / нацрежим.
 
     Заголовок секции — абзац, содержащий одну из подписей; тело — абзацы до
@@ -152,10 +235,8 @@ def extract_text_sections(local_paths: List[str]) -> Dict[str, List[Dict[str, An
     for path in local_paths:
         if not path or not os.path.exists(path) or _is_junk(path):
             continue
-        if not path.lower().endswith(".docx"):
-            continue
         name = os.path.basename(path)
-        paras = _docx_paragraphs(path)
+        paras = _paragraphs_for(path, external)
         current = None
         for text in paras:
             low = text.lower()
@@ -181,10 +262,16 @@ def _norm_cell(value: Any) -> str:
     return re.sub(r"\s+", " ", str(value or "")).strip()
 
 
+def _squash(value: Any) -> str:
+    """Текст без пробелов: pdfplumber рвёт слова внутри ячейки («Еди ниц а изм ере ния»)."""
+    return re.sub(r"\s+", "", str(value or "")).lower()
+
+
 def _find_col(header_low: List[str], *markers: str) -> int:
     """Индекс первой колонки, чьё название содержит любой из маркеров."""
     for idx, title in enumerate(header_low):
-        if any(marker in title for marker in markers):
+        squashed = _squash(title)
+        if any(marker in title or _squash(marker) in squashed for marker in markers):
             return idx
     return -1
 
@@ -196,21 +283,24 @@ def _cell(row: List[str], idx: int) -> str:
 def _find_item_col(header_low: List[str]) -> int:
     """Колонка товара/позиции — не путать с колонкой «наименование характеристики»."""
     for idx, title in enumerate(header_low):
-        if ("наименован" in title or "товар" in title) and "характеристик" not in title:
+        squashed = _squash(title)
+        has_name = "наименован" in squashed or "товар" in squashed
+        if has_name and "характеристик" not in squashed:
             return idx
     for idx, title in enumerate(header_low):
-        if "товар" in title and ("характеристик" in title or "описан" in title):
+        squashed = _squash(title)
+        if "товар" in squashed and ("характеристик" in squashed or "описан" in squashed):
             return idx
     return -1
 
 
 def _classify(rows: List[List[str]]) -> Optional[str]:
     header = [_norm_cell(c).lower() for c in (rows[0] if rows else [])]
-    head = " ".join(header)
+    head = _squash(" ".join(header))
     item_col = _find_item_col(header)
-    has_char = any("характеристик" in h for h in header)
-    has_value = any(("значени" in h or "параметр" in h or "единица" in h or "требуем" in h)
-                    for h in header)
+    has_char = any("характеристик" in _squash(h) for h in header)
+    has_value = any(any(marker in _squash(h) for marker in
+                        ("значени", "параметр", "единица", "требуем")) for h in header)
     if has_char and has_value:
         return "spec_tech" if item_col >= 0 else "tech"
     if "требован" in head and ("национальн" in head or "окпд" in head or "режим" in head):
@@ -269,14 +359,20 @@ def _emit_spec_tech(out: Dict[str, List[Dict[str, Any]]], data_rows: List[List[s
         })
 
 
-def extract_tables(local_paths: List[str]) -> Dict[str, List[Dict[str, Any]]]:
-    """Спека / техпараметры / требования по .docx и .xlsx закупки."""
+def extract_tables(local_paths: List[str],
+                   external: Optional[Dict[str, Dict[str, Any]]] = None
+                   ) -> Dict[str, List[Dict[str, Any]]]:
+    """Спека / техпараметры / требования по .docx/.xlsx и внешним pdf/doc (.venv воркера)."""
     out: Dict[str, List[Dict[str, Any]]] = {"spec": [], "tech": [], "requirements": []}
     for path in local_paths:
         if not path or not os.path.exists(path) or _is_junk(path):
             continue
         name = os.path.basename(path)
-        for rows in _tables_for(path):
+        doc = (external or {}).get(path)
+        tables = doc.get("tables") if doc else None
+        if not tables:
+            tables = _tables_for(path)
+        for rows in tables:
             kind, offset = _classify_with_offset(rows)
             if not kind:
                 continue
@@ -337,8 +433,9 @@ def load_direct_extraction(procurement_id: int) -> Dict[str, Any]:
     except Exception as exc:  # noqa: BLE001
         logger.warning("direct extraction DI query failed: %s", exc)
         return empty
-    data = extract_tables(paths)
-    data["sections"] = extract_text_sections(paths)
+    external = _external_docs(paths)
+    data = extract_tables(paths, external)
+    data["sections"] = extract_text_sections(paths, external)
     data["files"] = len(paths)
     return data
 
