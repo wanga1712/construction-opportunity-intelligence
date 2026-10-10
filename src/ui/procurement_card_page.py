@@ -490,14 +490,19 @@ def _render_dossier(d: Dict[str, Any], db: Any = None) -> None:
 
     with tab_find:
         finds = d.get("findings") or []
-        mode = st.radio("Показывать", ["VERIFIED", "Все", "INVALID/LEGACY"], horizontal=True,
+        mode = st.radio("Показывать", ["Все", "VERIFIED", "INVALID/LEGACY"], horizontal=True,
                         key=f"pc_find_mode_{pid}", label_visibility="collapsed")
         if mode == "VERIFIED":
             finds = [f for f in finds if f.get("provenance_status") == "VERIFIED"]
         elif mode == "INVALID/LEGACY":
             finds = [f for f in finds if f.get("provenance_status") != "VERIFIED"]
+        _all_finds = d.get("findings") or []
+        _v = sum(1 for f in _all_finds if f.get("provenance_status") == "VERIFIED")
+        _l = sum(1 for f in _all_finds if f.get("provenance_status") == "LEGACY_UNVERIFIED")
+        _i = sum(1 for f in _all_finds if f.get("provenance_status") == "INVALID")
         st.caption(f"показано {len(finds)} из {counts.get('findings', 0)} · "
-                   f"только VERIFIED можно отправлять в модель")
+                   f"VERIFIED {_v} · LEGACY {_l} · INVALID {_i} · "
+                   f"в модель можно отправлять только VERIFIED")
         st.markdown(_table_html(
             ["Термин", "Метод", "Score", "Provenance", "Строка", "matched_text", "Файл"],
             [
