@@ -32,9 +32,9 @@ ALL_MODES = "ALL"
 
 MODE_LABELS = {
     DIRECT_SUPPLY: "Прямая поставка",
-    EMBEDDED_MATERIAL: "В составе работ",
-    DESIGN: "Проект / влияние",
-    OBJECT: "Объект (проект)",
+    EMBEDDED_MATERIAL: "В составе объекта/проекта",
+    DESIGN: "В составе объекта/проекта",
+    OBJECT: "В составе объекта/проекта",
     ALL_MODES: "Все режимы",
 }
 

@@ -33,14 +33,13 @@ from src.services.commercial_routing_v3.submission_window_temporal import (
     format_seconds,
 )
 
-#: Типы закупок в фильтре: режимы не пересекаются, «в составе работ» — отдельный тип
-#: (раньше он был спрятан внутри «Объект (проект)» вместе с проектными закупками).
-_TYPE_OPTIONS = [ALL_MODES, DIRECT_SUPPLY, EMBEDDED_MATERIAL, DESIGN]
+#: Типы закупок ровно два (как договорились): прямая поставка и работа в составе
+#: объекта/проекта (встроенные материалы + проектные требования).
+_TYPE_OPTIONS = [ALL_MODES, DIRECT_SUPPLY, OBJECT]
 _TYPE_LABELS = {
     ALL_MODES: "Все",
     DIRECT_SUPPLY: "Прямая поставка",
-    EMBEDDED_MATERIAL: "В составе работ",
-    DESIGN: "Проект",
+    OBJECT: "В составе объекта/проекта",
 }
 _ALL = "__all__"
 
