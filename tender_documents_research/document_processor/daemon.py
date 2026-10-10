@@ -147,8 +147,12 @@ class DocumentProcessorDaemon:
             min_score=self.matcher.min_score,
             keyword_meta=dict(self.matcher.keyword_meta),
         )
-        gen = "S13_V4_EXHAUSTIVE_CONTEXT" if _backend_name == "S13_V4" else "S13_V2"
+        gen = os.getenv(
+            "DOCUMENT_PIPELINE_GENERATION",
+            "S13_V4_EXHAUSTIVE_CONTEXT",
+        )
         self.s13_persistence = S13V2TaskPersistenceService(self.db, pipeline_generation=gen)
+        self._scoped_engines: dict = {}
         self.morning_boost = MorningPriorityBoost()
         self.populate_coordinator = QueuePopulateCoordinator(
             self.queue_manager, self.morning_boost, self.logger
@@ -160,6 +164,33 @@ class DocumentProcessorDaemon:
             pass
 
         self.maintenance.reset_stale_tasks()
+
+    def _scoped_engine(self, procurement_id: int):
+        """Движок, ограниченный категориями закупки (scope §3.1). Кэш по набору."""
+        if not getattr(self, "match_engine", None):
+            return None
+        try:
+            rows = self.db.execute_query(
+                "crm",
+                """SELECT DISTINCT commercial_category_code
+                     FROM crm_procurement_category_opportunities
+                    WHERE procurement_id = %s AND status = 'CURRENT'""",
+                (int(procurement_id),),
+                fetch=True,
+            ) or []
+        except Exception:
+            rows = []
+        cats = []
+        for r in rows:
+            code = r.get("commercial_category_code") if isinstance(r, dict) else (r[0] if r else None)
+            if code:
+                cats.append(str(code))
+        if not cats:
+            return self.match_engine
+        key = frozenset(cats)
+        if key not in self._scoped_engines:
+            self._scoped_engines[key] = self.match_engine.for_categories(cats)
+        return self._scoped_engines[key]
 
     def _resolve_download_base_dir(self, backend_name: str) -> Path:
         """Resolve download root. S13_V2/V4 must fail closed instead of falling back to /opt."""
@@ -400,7 +431,8 @@ class DocumentProcessorDaemon:
                         contract_reg_number=contract_reg_number,
                         table_source=table_source,
                         files=files,
-                        match_engine=self.match_engine
+                        match_engine=self._scoped_engine(task["procurement_id"]),
+                        category_codes=None,
                     )
 
                     if proc_result.outcome == ProcessingOutcome.FAILED:
@@ -558,7 +590,8 @@ class DocumentProcessorDaemon:
                 contract_reg_number=contract_number,
                 table_source=source_table,
                 files=files,
-                match_engine=self.match_engine,
+                match_engine=self._scoped_engine(procurement_id),
+                category_codes=None,
             )
             if proc_result.outcome == "FAILED":
                 backend.queue.mark_failed(task_id, proc_result.error_message)

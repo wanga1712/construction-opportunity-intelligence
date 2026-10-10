@@ -47,7 +47,8 @@ class S13V2Pipeline:
         contract_reg_number: str,
         table_source: str,
         files: list[Path],
-        match_engine
+        match_engine,
+        category_codes: list | None = None,
     ):
         """
         Pure compute processing for S13_V2. No DB writes.
@@ -134,7 +135,8 @@ class S13V2Pipeline:
                     file_res.status = "COMPLETED"
                 else:
                     file_res.status = "COMPLETED"
-                    matches_dtos = match_engine.process_text(text, line_meta)
+                    engine = match_engine.for_categories(category_codes) if category_codes else match_engine
+                    matches_dtos = engine.process_text(text, line_meta)
                     cat_map = {}
                     for d in matches_dtos:
                         if d.category_code not in cat_map:

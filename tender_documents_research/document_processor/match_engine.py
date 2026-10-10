@@ -38,6 +38,29 @@ class MatchEngine:
         self.keyword_meta = keyword_meta or {}
         self._table_row_matcher = TableRowMatcher()
 
+    def for_categories(self, category_codes) -> "MatchEngine":
+        """Движок только по терминам указанных категорий (scope §3.1).
+
+        Термин без совпадающей категории не ищем вовсе — это убирает и мусор
+        (чужие категории), и лишнюю работу (596 ключей → десятки).
+        """
+        cats = {str(c).strip() for c in (category_codes or []) if str(c or "").strip()}
+        if not cats or not self.keyword_meta:
+            return self
+        keep = [
+            k for k in self.keywords
+            if set((self.keyword_meta.get(k) or {}).get("category_codes") or []) & cats
+        ]
+        if not keep or len(keep) >= len(self.keywords):
+            return self
+        return MatchEngine(
+            keywords=keep,
+            stop_phrases=self.stop_phrases,
+            custom_thresholds=self.custom_thresholds,
+            min_score=self.min_score,
+            keyword_meta=self.keyword_meta,
+        )
+
     def _is_blocked_by_stop_phrase(self, keyword: str, text_lower: str) -> bool:
         for phrase in self.stop_phrases:
             if keyword in phrase and phrase in text_lower:
