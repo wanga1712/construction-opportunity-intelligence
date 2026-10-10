@@ -221,13 +221,13 @@ def normalize_spec_positions(items: List[str]) -> List[Dict[str, Any]]:
     return []
 
 
-#: ??????? ????????????/?????????????? ?????????? ? ???????????.
-_CERT_MARKERS = ("??????????", "????????", "????????????", "??????", "????????????",
-                 "??????????", "??????", "?????????")
+#: Маркеры требований к сертификатам/декларациям соответствия в документах.
+_CERT_MARKERS = ("сертификат", "деклараци", "соответстви", "реестр", "сертификаци",
+                 "гарантия", "лицензия", "паспорт")
 
 
 def build_tkp_request(extraction: Dict[str, Any], dossier: Dict[str, Any]) -> str:
-    """???????????? ?????? ??? ?? ????? + ?????????? (deterministic, ??? ??????)."""
+    """Детерминированный запрос ТКП по смете + требованиям (deterministic, без модели)."""
     ident = (dossier or {}).get("identity") or {}
     md = (dossier or {}).get("money_and_dates") or {}
     parties = (dossier or {}).get("parties") or {}
@@ -237,36 +237,50 @@ def build_tkp_request(extraction: Dict[str, Any], dossier: Dict[str, Any]) -> st
     secs = extraction.get("sections") or {}
 
     lines: List[str] = []
-    lines.append("?????? ???????-????????????? ??????????? (???)")
-    lines.append(f"???????: ? {ident.get('contract_number') or '?'} ? {ident.get('auction_name') or '?'}")
+    lines.append("Запрос технико-коммерческого предложения (ТКП)")
+    lines.append(f"Закупка: № {ident.get('contract_number') or '?'} — {ident.get('auction_name') or '?'}")
     law = ident.get("law") or "?"
-    lines.append(f"?????: {law} ? ????2: {ident.get('okpd_code') or '?'} ? ??????: {ident.get('region') or '?'}")
-    lines.append(f"????????: {parties.get('customer') or '?'}")
-    lines.append(f"????: {md.get('initial_price') or '?'} ???.")
+    lines.append(f"Закон: {law} · ОКПД2: {ident.get('okpd_code') or '?'} · Регион: {ident.get('region') or '?'}")
+    lines.append(f"Заказчик: {parties.get('customer') or '?'}")
+    lines.append(f"НМЦК: {md.get('initial_price') or '?'} руб.")
     lines.append("")
 
-    lines.append(f"1. ??????? ????? ({len(spec)})")
+    lines.append(f"1. Позиции сметы ({len(spec)})")
     if spec:
         header = spec[0].get("header") or []
+        header_low = [str(h).strip().lower() for h in header]
+
+        def _col(marker: str) -> int:
+            for idx, title in enumerate(header_low):
+                if marker in title:
+                    return idx
+            return -1
+
+        qty_col = _col("кол")
+        okpd_col = _col("окпд")
         for item in spec:
             cells = [str(c).strip() for c in (item.get("cells") or [])]
             joined = " ".join(cells).lower()
-            if not cells or "?????" in joined:
+            if not cells or "итого" in joined:
                 continue
-            name = next((c for c in cells if c and len(c) > 5 and c.lower() != "?????"), "?")
+            name = next((c for c in cells if c and len(c) > 5 and c.lower() != "итого"), "?")
             if name in ("—", "-", ""):
                 continue
-            qty = next((c for c in cells if c.replace(" ", "").isdigit()), "")
-            okpd = next((c for c in cells if re.match(r"^\d{2}\.\d{2}", c)), "")
-            tail = " ? ".join(x for x in (f"???-??: {qty}" if qty else "",
-                                          f"????2: {okpd}" if okpd else "") if x)
-            lines.append(f"  - {name}{' ? ' + tail if tail else ''}")
-        lines.append(f"  (??????? ?????????: {', '.join(header)})")
+            qty = cells[qty_col] if 0 <= qty_col < len(cells) else ""
+            if not qty or not qty.replace(" ", "").isdigit():
+                qty = next((c for c in cells[1:] if c.replace(" ", "").isdigit()), "")
+            okpd = cells[okpd_col] if 0 <= okpd_col < len(cells) else ""
+            if not re.match(r"^\d{2}\.\d{2}", okpd or ""):
+                okpd = next((c for c in cells if re.match(r"^\d{2}\.\d{2}", c)), "")
+            tail = " · ".join(x for x in (f"Кол-во: {qty}" if qty else "",
+                                          f"ОКПД2: {okpd}" if okpd else "") if x)
+            lines.append(f"  - {name}{' · ' + tail if tail else ''}")
+        lines.append(f"  (Колонки таблицы: {', '.join(header)})")
     else:
-        lines.append("  - ???????????? ?? ???????")
+        lines.append("  - Позиции не найдены")
     lines.append("")
 
-    lines.append(f"2. ??????????? ????????? ({len(tech)})")
+    lines.append(f"2. Технические параметры ({len(tech)})")
     for item in tech[:120]:
         cells = [str(c).strip() for c in (item.get("cells") or [])]
         if len(cells) >= 2 and cells[0]:
@@ -274,18 +288,18 @@ def build_tkp_request(extraction: Dict[str, Any], dossier: Dict[str, Any]) -> st
             unit = cells[2] if len(cells) > 2 else ""
             lines.append(f"  - {cells[0]}: {value} {unit}".rstrip())
     if not tech:
-        lines.append("  - ?? ???????")
+        lines.append("  - не найдены")
     lines.append("")
 
-    lines.append("3. ??????????")
+    lines.append("3. Требования")
     for item in reqs[:40]:
         cells = [str(c).strip() for c in (item.get("cells") or [])]
         if any(cells):
             lines.append("  - " + " | ".join(c for c in cells if c))
-    for key, title in (("product", "?????????? ? ?????? ? ????????"),
-                       ("participant", "?????????? ? ?????????"),
-                       ("security", "???????????"),
-                       ("national", "???????????? ?????")):
+    for key, title in (("product", "Требования к товару и поставке"),
+                       ("participant", "Требования к участнику"),
+                       ("security", "Обеспечение"),
+                       ("national", "Национальный режим")):
         items = secs.get(key) or []
         if not items:
             continue
@@ -300,12 +314,12 @@ def build_tkp_request(extraction: Dict[str, Any], dossier: Dict[str, Any]) -> st
         low = text.lower()
         if any(m in low for m in _CERT_MARKERS):
             certs.append(text[:200])
-    lines.append(f"4. ??????????? / ?????????????? ????????? ({len(certs)})")
+    lines.append(f"4. Сертификаты / декларации соответствия ({len(certs)})")
     for c in certs[:10]:
         lines.append(f"  - {c}")
     if not certs:
-        lines.append("  - ????? ?????????? ? ???????????? ?? ???????")
+        lines.append("  - Список сертификатов и деклараций не найден")
     lines.append("")
-    lines.append("??????? ???????????? ??? ? ?????? ?? ????????, ??????? ????????, "
-                 "????????? ? ??????????????? ???????????.")
+    lines.append("Документ подготовлен автоматически: смета, технические параметры, "
+                 "требования и национальный режим.")
     return "\n".join(lines)
