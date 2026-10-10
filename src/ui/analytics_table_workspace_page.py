@@ -33,8 +33,15 @@ from src.services.commercial_routing_v3.submission_window_temporal import (
     format_seconds,
 )
 
-_TYPE_OPTIONS = [ALL_MODES, DIRECT_SUPPLY, OBJECT]
-_TYPE_LABELS = {ALL_MODES: "Все", DIRECT_SUPPLY: "Прямая поставка", OBJECT: "Объект (проект)"}
+#: Типы закупок в фильтре: режимы не пересекаются, «в составе работ» — отдельный тип
+#: (раньше он был спрятан внутри «Объект (проект)» вместе с проектными закупками).
+_TYPE_OPTIONS = [ALL_MODES, DIRECT_SUPPLY, EMBEDDED_MATERIAL, DESIGN]
+_TYPE_LABELS = {
+    ALL_MODES: "Все",
+    DIRECT_SUPPLY: "Прямая поставка",
+    EMBEDDED_MATERIAL: "В составе работ",
+    DESIGN: "Проект",
+}
 _ALL = "__all__"
 
 _CSS = """
