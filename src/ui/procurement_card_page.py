@@ -558,7 +558,7 @@ def _render_dossier(d: Dict[str, Any], db: Any = None) -> None:
             if _spec:
                 st.markdown("**Смета / спецификация**")
                 _h = _spec[0].get("header") or []
-                st.markdown(_table(
+                st.markdown(_table_html(
                     [_fmt(x) for x in (_h if _h else ["Данные"])] or ["Данные"],
                     [[_fmt(c) for c in it.get("cells") or []] + [""] * max(0, len(_h) - len(it.get("cells") or []))
                      for it in _spec[:200]],
@@ -566,14 +566,14 @@ def _render_dossier(d: Dict[str, Any], db: Any = None) -> None:
             if _tech:
                 st.markdown(f"**Технические параметры ({len(_tech)})**")
                 _h = _tech[0].get("header") or []
-                st.markdown(_table(
+                st.markdown(_table_html(
                     [_fmt(x) for x in (_h if _h else ["Данные"])] or ["Данные"],
                     [[_fmt(c) for c in it.get("cells") or []] for it in _tech[:300]],
                     wrap=True), unsafe_allow_html=True)
             if _req:
                 st.markdown(f"**Требования / условия участия ({len(_req)})**")
                 _h = _req[0].get("header") or []
-                st.markdown(_table(
+                st.markdown(_table_html(
                     [_fmt(x) for x in (_h if _h else ["Данные"])] or ["Данные"],
                     [[_fmt(c) for c in it.get("cells") or []] for it in _req[:200]],
                     wrap=True), unsafe_allow_html=True)
