@@ -13,8 +13,8 @@ from __future__ import annotations
 import re
 from typing import Any, Dict, List, Optional
 
-SECTIONS = ("estimate", "product", "delivery", "participant",
-            "security", "additional", "unclassified")
+SECTIONS = ("estimate", "product", "delivery", "participant", "security",
+            "national", "additional", "unclassified")
 
 #: Коммерческий режим: подтверждённый источник — scope gate, затем трек возможностей.
 DIRECT_SCOPE_TYPES = ("DIRECT_GOODS",)
@@ -33,16 +33,25 @@ _PARTICIPANT_MARKERS = (
     "участник", "участников", "заявк", "лиценз", "сро", "опыт", "квалификац",
     "рнп", "реестр недобросовестн", "декларац", "соответствие требован",
     "не привлекал", "административн", "налог", "аффилирован", "сговор",
+    "оператор электронной площадки", "переговор", "аукцион", "оформлени",
+    "содержанию, форме", "составу заявки", "заявка на участие",
 )
 _SECURITY_MARKERS = (
     "обеспечение", "независимая гарантия", "банковская гарантия", "обеспечительн",
     "залог", "поручительств", "возврат обеспечен", "размер обеспечен",
 )
+#: Национальный режим и происхождение товара — отдельный раздел, не «дополнительно».
+_NATIONAL_MARKERS = (
+    "страна происхождения", "национальн", "преференц", "евразийск", "постановлени",
+    "реестров", "радиоэлектронной продукции", "промышленной продукции",
+    "уровень радиоэлектронной", "совокупном количестве баллов", "балл",
+    "запрет", "ограничен", "закупк", "ст-1", "приложение к постановлению",
+)
 _ADDITIONAL_MARKERS = (
     "штраф", "пеня", "ответственност", "расторжен", "неустойк", "оплат",
     "расчет", "расчёт", "аванс", "цена договора", "цена контракта",
     "форс-мажор", "обстоятельств непреодолимой силы", "конфиденциальн",
-    "антидемпинг", "национальн", "преференц", "запрет", "ограничен",
+    "антидемпинг",
 )
 #: Группы технических требований: ключ -> подписи.
 PRODUCT_GROUPS = (
@@ -98,6 +107,32 @@ def _norm(value: Any) -> str:
     return re.sub(r"\s+", " ", str(value or "")).strip()
 
 
+def clean_text(value: Any) -> str:
+    """Аккуратная нормализация текста требования (без изменения смысла)."""
+    text = _norm(value)
+    text = re.sub(r"\b0{5,}\d*\b", " ", text)          # служебные нумера вида 00000000000000000510
+    text = re.sub(r"([.…])[.…\s]{2,}", r"\1 ", text)   # многоточия-заполнители
+    text = re.sub(r"(\d)\s*\.\s*(\d)", r"\1.\2", text)  # «26. 20.14.1 20» → «26.20.14.120»
+    text = re.sub(r"^\s*[\d]+(?:\s*[.)]\s*\d*)*\s*[.)]?\s*", "", text)  # ведущая нумерация
+    text = re.sub(r"\s+([,;:)])", r"\1", text)
+    return re.sub(r"\s{2,}", " ", text).strip(" .;")
+
+
+def _is_noise(text: str) -> bool:
+    """Осколок таблицы, колонка-число или заголовок без требования."""
+    value = str(text or "").strip()
+    letters = len(re.findall(r"[A-Za-zА-Яа-яЁё]", value))
+    if letters < 4:
+        return True
+    if value.count(".") + value.count("…") > max(6, len(value) // 4):
+        return True
+    words = value.split()
+    if len(value) < 60 and not re.search(r"\d", value) and len(words) <= 7 \
+            and not re.search(r"должен|не допускается|обяз|требует|вправе|запрещ", value, re.I):
+        return True
+    return False
+
+
 def _hits(text: str, markers) -> int:
     low = str(text or "").lower()
     return sum(1 for marker in markers if marker in low)
@@ -117,13 +152,16 @@ def _mandatory(text: str) -> Optional[bool]:
 
 def _classify_text(text: str) -> str:
     """Детерминированное отнесение текста требования к основному разделу."""
+    national = _hits(text, _NATIONAL_MARKERS)
     security = _hits(text, _SECURITY_MARKERS)
     delivery = _hits(text, _DELIVERY_MARKERS)
     participant = _hits(text, _PARTICIPANT_MARKERS)
     additional = _hits(text, _ADDITIONAL_MARKERS)
-    best = max(security, delivery, participant, additional)
+    best = max(national, security, delivery, participant, additional)
     if best == 0:
         return "unclassified"
+    if national == best:
+        return "national"
     if security == best:
         return "security"
     if delivery == best:
@@ -162,13 +200,15 @@ def _tech_record(row: Dict[str, Any], index: int) -> Dict[str, Any]:
 
 def _section_record(item: Dict[str, Any], source: str, index: int,
                     forced: Optional[str] = None) -> Dict[str, Any]:
-    text = _norm(item.get("text"))
+    raw = _norm(item.get("text"))
+    text = clean_text(raw)
     return {
         "id": "%s:%d" % (source, index),
-        "section": forced or _classify_text(text),
+        "section": forced or _classify_text(text or raw),
         "source": source,
         "source_file": item.get("source_file"),
-        "text": text[:600],
+        "text": (text or raw)[:600],
+        "noise": _is_noise(text or raw),
         "param": None,
         "value": None,
         "unit": None,
@@ -194,23 +234,32 @@ def classify(extraction: Dict[str, Any], dossier: Dict[str, Any]) -> Dict[str, A
     for index, row in enumerate(extraction.get("tech") or []):
         add(_tech_record(row, index))
     for index, row in enumerate(extraction.get("requirements") or []):
-        text = _norm(" | ".join(c for c in (row.get("cells") or []) if _norm(c)))
-        add({"id": "req:%d" % index, "section": _classify_text(text), "source": "requirements",
-             "source_file": row.get("source_file"), "text": text[:600], "param": None,
-             "value": None, "unit": None, "group": None, "mandatory": _mandatory(text)})
+        raw = _norm(" | ".join(c for c in (row.get("cells") or []) if _norm(c)))
+        text = clean_text(raw)
+        noise = _is_noise(text or raw)
+        add({"id": "req:%d" % index,
+             "section": "unclassified" if noise else _classify_text(text or raw),
+             "source": "requirements", "source_file": row.get("source_file"),
+             "text": (text or raw)[:600], "noise": noise, "param": None,
+             "value": None, "unit": None, "group": None,
+             "mandatory": None if noise else _mandatory(text or raw)})
     forced_map = {"participant": "participant", "participation": "participant",
-                  "security": "security", "national": "additional"}
+                  "security": "security", "national": "national"}
     for key, items in (extraction.get("sections") or {}).items():
         for index, item in enumerate(items or []):
             text = _norm(item.get("text"))
             # Секция «требования к товару» по умолчанию товарная: её текст собран по
             # подписям «технические требования / требования к товару», а не по словам.
             if key == "product":
-                if _hits(text, _DELIVERY_MARKERS):
+                cleaned = clean_text(text)
+                if _is_noise(cleaned):
+                    forced = "unclassified"
+                elif _hits(cleaned, _NATIONAL_MARKERS):
+                    forced = "national"
+                elif _hits(cleaned, _DELIVERY_MARKERS):
                     forced = "delivery"
-                elif _hits(text, _ADDITIONAL_MARKERS) and not re.search(
-                        r"товар|оборудован|устройств|сервер|характеристик", text, re.I):
-                    forced = "additional"
+                elif _hits(cleaned, _PARTICIPANT_MARKERS):
+                    forced = "participant"
                 else:
                     forced = "product"
             else:

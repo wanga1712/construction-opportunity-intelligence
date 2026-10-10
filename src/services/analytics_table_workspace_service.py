@@ -338,6 +338,8 @@ def build_row(raw: Dict[str, Any], *, now: datetime) -> Dict[str, Any]:
         ),
         "medal_current": med_cur or "—",
         "medal_capped_from": capped_from,
+        # Подтверждённая медаль: временной кап её не понижает, он показывается отдельно.
+        "medal_confirmed": capped_from or med_cur or "—",
         "medal_initial": med_init,
         "medal_downgraded": bool(med_cur and med_init and med_cur != med_init),
         "purchase_title": _clean(raw.get("auction_name")) or "—",
@@ -392,7 +394,9 @@ def _row_sort_key(row: Dict[str, Any]):
         TEMPORAL_UNKNOWN,
         WOOD_CAP,
     )
-    medal = str(row.get("medal_current") or "").upper()
+    # Сортировка и заголовок группы — по подтверждённой медали: закупка GOLD с
+    # исчерпанным окном не должна проваливаться в самый низ, её «кап» показывается отдельно.
+    medal = str(row.get("medal_confirmed") or row.get("medal_current") or "").upper()
     temporal = row.get("temporal") or {}
     bucket = str(temporal.get("temporal_bucket") or TEMPORAL_UNKNOWN).upper()
     # «Есть данные»: реально скачанные документы или найденные подтверждения,

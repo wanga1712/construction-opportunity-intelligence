@@ -70,10 +70,10 @@ def tab_titles(state: Dict[str, Any]) -> List[str]:
     estimate_count = len(state["estimate"]["rows"])
     return [
         "Смета (%d)" % estimate_count,
-        "Товар и поставка (%d)" % (counts["product"] + counts["delivery"]),
+        "Товар и поставка (%d)" % (counts["product"] + counts["delivery"] + counts["national"]),
         "Требования к участнику (%d)" % counts["participant"],
         "Обеспечение (%d)" % counts["security"],
-        "Дополнительно (%d)" % (counts["additional"] + counts["unclassified"]),
+        "Дополнительно (%d)" % counts["additional"],
     ]
 
 
@@ -106,11 +106,27 @@ def _source_line(record: Dict[str, Any]) -> str:
 
 def _record_block(record: Dict[str, Any]) -> None:
     title = str(record.get("param") or record.get("text") or "")[:120]
+    variants = record.get("variants") or []
+    if record.get("deadline"):
+        title = "Срок поставки: не позднее %s" % record["deadline"]
+    elif record.get("duration_value"):
+        title = "Срок поставки: в течение %s %s" % (record["duration_value"],
+                                                   record.get("duration_unit") or "")
     with st.expander(title or "(без названия)", expanded=False):
         st.markdown('<div class="pc-muted">%s</div>' % _source_line(record),
                     unsafe_allow_html=True)
         st.markdown(_esc(record.get("text") or record.get("param") or ""),
                     unsafe_allow_html=True)
+        sources = record.get("sources") or []
+        if len(sources) > 1:
+            st.markdown('<div class="pc-note">Та же формулировка встречается в документах: %s'
+                        '</div>' % _esc(", ".join(str(s) for s in sources if s)),
+                        unsafe_allow_html=True)
+        if variants:
+            st.markdown('<div class="pc-muted">Другие формулировки этого же срока (%d):</div>'
+                        % len(variants), unsafe_allow_html=True)
+            for variant in variants:
+                st.markdown("- %s" % _esc(variant), unsafe_allow_html=True)
 
 
 def _record_list(state: Dict[str, Any], section: str, hint: str,

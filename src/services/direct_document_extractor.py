@@ -237,7 +237,9 @@ _TERM_WEAK = ("поставка товара осуществляется", "п�
 #: Ложные срабатывания — это не срок поставки.
 _TERM_SKIP = ("срок действия", "срок годности", "срок гарант", "гарантийн", "срок оплаты",
               "срок рассмотрения", "срок предоставления обеспеч", "срок возврата",
-              "срок подписания", "срок размещения", "срок направления", "срок действия договора")
+              "срок подписания", "срок размещения", "срок направления", "срок действия договора",
+              # ссылки на нормы — это не срок поставки конкретной закупки
+              "статье", "статьи", "статьей", "федерального закона", "фз №", "кодекса", "гк рф")
 _MONTHS = (("январ", 1), ("феврал", 2), ("март", 3), ("апрел", 4), ("мая", 5), ("май", 5),
            ("июн", 6), ("июл", 7), ("август", 8), ("сентябр", 9), ("октябр", 10),
            ("ноябр", 11), ("декабр", 12))
@@ -331,7 +333,39 @@ def extract_delivery_terms(local_paths: List[str],
     # Сначала то, где есть конкретная дата или длительность.
     found.sort(key=lambda item: (item.get("deadline") is None,
                                  item.get("duration_value") is None, len(item["text"])))
-    return found[:10]
+    # Один срок — одна запись: одинаковую дату/длительность из разных документов
+    # (ТЗ, проект договора, извещение) сводим к одному пункту, а прочие формулировки
+    # сохраняем в «variants», чтобы ничего не терять.
+    merged: List[Dict[str, Any]] = []
+    by_key: Dict[str, Dict[str, Any]] = {}
+    uninformative: Optional[Dict[str, Any]] = None
+    for term in found:
+        deadline = term.get("deadline")
+        duration = term.get("duration_value")
+        if not deadline and not duration:
+            if uninformative is None:
+                uninformative = dict(term, variants=[], sources=[term.get("source_file")])
+                merged.append(uninformative)
+            else:
+                uninformative.setdefault("variants", []).append(term.get("text"))
+                source = term.get("source_file")
+                if source and source not in uninformative.setdefault("sources", []):
+                    uninformative["sources"].append(source)
+            continue
+        key = deadline or ("%s|%s" % (duration, term.get("duration_unit") or ""))
+        if key in by_key:
+            item = by_key[key]
+            item.setdefault("variants", []).append(term.get("text"))
+            source = term.get("source_file")
+            if source and source not in item.setdefault("sources", []):
+                item["sources"].append(source)
+            if not item.get("anchor") and term.get("anchor"):
+                item["anchor"] = term["anchor"]
+            continue
+        item = dict(term, variants=[], sources=[term.get("source_file")])
+        by_key[key] = item
+        merged.append(item)
+    return merged[:10]
 
 
 #: Секции требований: (ключ, подписи-заголовки).

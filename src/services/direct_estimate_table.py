@@ -141,6 +141,20 @@ def build_estimate(extraction: Dict[str, Any], nmck: Optional[float] = None) -> 
             if re.search(r"начальная|максимальная", name, re.I) and re.search(r"цена|контракт", name, re.I):
                 skipped_notes.append("%s: строка НМЦК «%s»" % (source_file, name[:60]))
                 continue
+            # Позиция обязана иметь количество, цену или код: иначе это подпись,
+            # реквизит или осколок шапки, а не товар.
+            if not any((_num(_cell(cells, mapping.get("qty"))),
+                        _num(_cell(cells, mapping.get("price"))),
+                        _num(_cell(cells, mapping.get("sum"))),
+                        _cell(cells, mapping.get("okpd")),
+                        _cell(cells, mapping.get("unit")))):
+                skipped_notes.append("%s: строка без количества/цены/кода «%s»"
+                                     % (source_file, name[:60]))
+                continue
+            if re.search(r"подпись|расшифровка|должность|работник контрактной|"
+                         r"контрактный управляющий|м\.\s*п\.|стороны:", name, re.I):
+                skipped_notes.append("%s: подпись/реквизит «%s»" % (source_file, name[:60]))
+                continue
             index += 1
             qty = _num(_cell(cells, mapping.get("qty")))
             unit = _cell(cells, mapping.get("unit"))
