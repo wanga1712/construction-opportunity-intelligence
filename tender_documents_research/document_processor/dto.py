@@ -6,6 +6,9 @@ class ProcessingOutcome(Enum):
     SUCCESS = "SUCCESS"
     FAILED = "FAILED"
     NO_LINKS = "NO_LINKS"
+    #: Terminal skip: every file of the procurement is excluded by the file
+    #: policy (contract drafts, notices, platform artifacts, drawings, raster).
+    SKIPPED_NOISE = "SKIPPED_NOISE"
 
 @dataclass
 class MatchDetailResult:

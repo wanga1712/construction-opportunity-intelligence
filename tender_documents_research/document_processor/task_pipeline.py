@@ -242,6 +242,17 @@ class TaskPipeline:
                         continue
                     text, line_meta = parse_file_with_meta(parser, path)
 
+                # Parse-time extraction (estimates + project metadata) while the
+                # file is still on disk: retention deletes raw files after 3 days.
+                try:
+                    from document_processor.parse_extractors import extract_and_persist
+
+                    extract_and_persist(path, text, tender_id, path.name)
+                except Exception as exc:  # never break parsing
+                    self.logger.warning(
+                        f"[{task_id}] parse-time extraction skipped: {exc}"
+                    )
+
                 if not finished_fully:
                     if tender_id is not None:
                         became_error = self._handle_partial_pdf(

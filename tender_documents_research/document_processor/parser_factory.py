@@ -1,7 +1,16 @@
 from pathlib import Path
 from typing import Dict, Type, Optional
 
-from .parsers import BaseParser, PdfParser, WordParser, DocParser, ExcelParser, TextParser, OdtParser, GsfxParser
+from .parsers import (
+    BaseParser,
+    PdfParser,
+    WordParser,
+    DocParser,
+    ExcelParser,
+    TextParser,
+    OdtParser,
+    GsfxParser,
+)
 
 
 class ParserFactory:
