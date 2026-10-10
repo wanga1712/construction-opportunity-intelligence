@@ -28,7 +28,7 @@ ALLOWED = set(COMMERCIAL_KEEP_CODES)
 
 
 def test_prompt_version_v5() -> None:
-    assert PROMPT_VERSION == "v3_category_centric_routing_7b_v5"
+    assert PROMPT_VERSION == "v3_category_centric_routing_7b_v5_signals1"
 
 
 def test_candidate_score_single_authority() -> None:

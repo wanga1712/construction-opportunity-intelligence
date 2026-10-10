@@ -15,7 +15,7 @@ from src.services.commercial_routing_v3.registry_prompt_payload import (
 
 
 def test_production_prompt_unchanged():
-    assert PROD_PROMPT == "v3_category_centric_routing_7b_v5"
+    assert PROD_PROMPT == "v3_category_centric_routing_7b_v5_signals1"
     assert V9 != PROD_PROMPT
     assert "full_registry" in V9
 

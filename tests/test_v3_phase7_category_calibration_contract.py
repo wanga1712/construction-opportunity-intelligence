@@ -61,7 +61,7 @@ def _mi(title: str, okpd: str = "27.40.00", okpd_name: str = "Светильни
 
 
 def test_prompt_versions_distinct() -> None:
-    assert V5 == "v3_category_centric_routing_7b_v5"
+    assert V5 == "v3_category_centric_routing_7b_v5_signals1"
     assert V61 == "v3_category_centric_routing_7b_v6_1"
     assert V62 == "v3_category_centric_routing_7b_v6_2"
     assert len({V5, V61, V62}) == 3

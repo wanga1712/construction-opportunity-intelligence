@@ -13,7 +13,7 @@ from typing import Any, Dict, List, Optional
 
 
 ROUTING_VERSION = "v3"
-PROMPT_VERSION = "v3_category_centric_routing_7b_v5"
+PROMPT_VERSION = "v3_category_centric_routing_7b_v5_signals1"
 
 
 class SourceContour(StrEnum):

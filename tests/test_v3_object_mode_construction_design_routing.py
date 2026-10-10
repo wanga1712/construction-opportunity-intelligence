@@ -64,7 +64,7 @@ def _proc(pid: int) -> dict:
 
 
 def test_prompt_version_v5() -> None:
-    assert PROMPT_VERSION == "v3_category_centric_routing_7b_v5"
+    assert PROMPT_VERSION == "v3_category_centric_routing_7b_v5_signals1"
 
 
 def test_18215_direct_goods_nce_unchanged() -> None:
@@ -107,7 +107,7 @@ def test_17141_rental_not_object_target() -> None:
 def test_10753_object_mode_blocks_mistaken_nce() -> None:
     proc = _proc(10753)
     obj = classify_object(proc, form="CONSTRUCTION_WORKS")
-    assert obj["object_sector"] == "TRANSPORT_INFRASTRUCTURE"
+    assert obj["object_sector"] == "INFRASTRUCTURE"
     assert obj["object_type"] == "ROAD"
     assert "REPAIR" in obj["object_context"] or obj["work_stage"] == "REPAIR"
 
@@ -183,7 +183,7 @@ def test_20228_awarded_school_capital_repair_coercion() -> None:
     assert "ТРАСТ" in str(out.get("post_award_commercial_target_name") or "").upper()
     # MODEL object_classification may be absent on this raw; business classification holds school.
     obj = out.get("business_object_classification") or out["object_classification"]
-    assert obj["object_sector"] == "SOCIAL_INFRASTRUCTURE"
+    assert obj["object_sector"] == "SOCIAL"
     assert obj["object_type"] == "SCHOOL"
     assert obj["work_stage"] == "CAPITAL_REPAIR"
     hyps = out.get("business_category_hypotheses") or out["commercial_category_hypotheses"]

@@ -27,7 +27,7 @@ def _norm(raw: Dict[str, Any]) -> Dict[str, Any]:
 
 
 def test_prompt_version_and_contract_text() -> None:
-    assert PROMPT_VERSION == "v3_category_centric_routing_7b_v5"
+    assert PROMPT_VERSION == "v3_category_centric_routing_7b_v5_signals1"
     assert "NEVER put into category_code" in _CATEGORY_CODE_CONTRACT
     assert "gas meters" in _CATEGORY_CODE_CONTRACT
     assert "NO_COMMERCIAL_ENTRY" in _CATEGORY_CODE_CONTRACT

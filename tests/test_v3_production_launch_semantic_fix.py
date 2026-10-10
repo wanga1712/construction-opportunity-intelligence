@@ -116,7 +116,7 @@ def _mi_17443() -> dict:
 
 
 def test_prompt_v5_contextual_not_purchased_product() -> None:
-    assert PROMPT_VERSION == "v3_category_centric_routing_7b_v5"
+    assert PROMPT_VERSION == "v3_category_centric_routing_7b_v5_signals1"
     text = build_v3_prompt_from_model_input(
         _mi_17723(),
         registry=[{"category_code": "computers", "category_name": "Computers"}],

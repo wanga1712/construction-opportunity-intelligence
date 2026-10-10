@@ -8,7 +8,7 @@ from src.services.commercial_routing_v3.prompt import NUM_PREDICT, PROMPT_VERSIO
 
 
 def test_prompt_version_frozen() -> None:
-    assert PROMPT_VERSION == "v3_category_centric_routing_7b_v5"
+    assert PROMPT_VERSION == "v3_category_centric_routing_7b_v5_signals1"
     assert NUM_PREDICT == 512
 
 

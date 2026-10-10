@@ -5,7 +5,9 @@ import json
 import re
 from typing import Any, Dict, List, Tuple
 
-PROMPT_VERSION = "v3_category_centric_routing_7b_v5"
+from src.services.commercial_routing_v3.prompt_signals import normalized_signal_block
+
+PROMPT_VERSION = "v3_category_centric_routing_7b_v5_signals1"
 # Bounded generation for compact structured JSON (schema + caps).
 NUM_PREDICT = 512
 
@@ -56,7 +58,8 @@ _OBJECT_MODE_CONTRACT = (
     "  1) WHAT OBJECT IS THIS? 2) WORK/PROJECT STAGE? 3) Which registry categories "
     "can appear in this object? 4) Which documents must be researched?\n"
     "  Output object_classification: object_sector, object_type, object_subtype, "
-    "object_context, work_stage.\n"
+    "object_context, work_stage. object_sector MUST be a canonical code: SOCIAL, "
+    "RESIDENTIAL, COMMERCIAL, INDUSTRIAL, INFRASTRUCTURE, URBAN_IMPROVEMENT, OTHER.\n"
     "  Multiple commercial_category_hypotheses are NORMAL (up to 5). Each is an "
     "object-level Candidate hypothesis — NOT a direct purchase claim.\n"
     "  Use tracks EMBEDDED_MATERIAL / DESIGN_REQUIREMENT / DESIGN_INFLUENCE — "
@@ -73,7 +76,7 @@ _OBJECT_MODE_CONTRACT = (
     "  DESIGN: DESIGN_TECHNICAL_ASSIGNMENT, DESIGN_REQUIREMENTS, SOURCE_INPUT_DATA, "
     "EXISTING_PROJECT_DOCUMENTATION, SPECIFICATIONS_AND_ATTACHMENTS.\n"
     "NEGATIVE EXAMPLE road repair (OKPD 42.11, no product in title): NOT NCE/SKIP; "
-    "emit object_classification TRANSPORT_INFRASTRUCTURE/ROAD + contextual Candidate "
+    "emit object_classification INFRASTRUCTURE/ROAD + contextual Candidate "
     "hypotheses (drainage, curbstone, lighting, etc.) with confirmation_required=YES.\n"
 )
 
@@ -176,7 +179,6 @@ def build_v3_prompt(
     routing_signals: List[Dict[str, Any]],
     procurement_form_prior: str,
 ) -> str:
-    del routing_signals  # reserved; not embedded (noise)
     model_input = procurement.get("v3_model_input")
     if isinstance(model_input, dict) and model_input.get("model_input_version"):
         return build_v3_prompt_from_model_input(
@@ -184,6 +186,7 @@ def build_v3_prompt(
             registry=registry,
             okpd_priors=okpd_priors,
             procurement_form_prior=procurement_form_prior,
+            routing_signals=routing_signals,
         )
 
     compact_reg, _sub_count = compact_registry_for_prompt(registry, procurement, okpd_priors)
@@ -254,6 +257,7 @@ def build_v3_prompt(
         f"{allowed_category_codes_block(registry)}\n"
         f"{registry_desc}\n"
         f"OKPD priors (подсказки, не whitelist):\n{json.dumps(priors[:20], ensure_ascii=False, default=str)}\n\n"
+        f"{normalized_signal_block(procurement, routing_signals)}"
         "Вход:\n"
         f"title: {procurement.get('title')}\n"
         f"okpd_code: {procurement.get('okpd_code')}\n"
@@ -289,6 +293,7 @@ def build_v3_prompt_from_model_input(
     registry: List[Dict[str, Any]],
     okpd_priors: List[Dict[str, Any]],
     procurement_form_prior: str,
+    routing_signals: List[Dict[str, Any]] | None = None,
 ) -> str:
     """Prompt built from frozen V3_ROUTING_MODEL_INPUT_V3 only (no CRM row dump)."""
     from src.services.commercial_routing_v3.model_input import (
@@ -348,6 +353,7 @@ def build_v3_prompt_from_model_input(
         f"Heuristic procurement_form prior (не догма): {procurement_form_prior}\n\n"
         f"{allowed_category_codes_block(registry)}\n"
         f"{registry_desc}\n"
+        f"{normalized_signal_block(procurement, routing_signals)}"
         "V3_ROUTING_MODEL_INPUT_V3 (единственный бизнес-вход; без URL-blob/document dump):\n"
         f"{mi_json}\n\n"
         "JSON schema (структура; НЕ копируй category/track из примера):\n"
