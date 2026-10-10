@@ -234,6 +234,23 @@ class S13V2StateRepository(ProcessingStateRepository):
         )
         return (row[0], row[1]) if row else None
 
+    def find_completed_by_name(self, procurement_id, file_name):
+        """Скачанный файл с тем же именем (для защиты от повторной загрузки той же ссылки).
+
+        Возвращает (local_path, url) — используется, чтобы не качать документ второй раз,
+        когда повторный резолв выдал новый uid и url_hash изменился.
+        """
+        if not file_name or procurement_id is None:
+            return None
+        return self._one(
+            """SELECT local_path, url FROM document_files
+               WHERE download_status = 'COMPLETED' AND local_path IS NOT NULL
+                 AND lower(file_name) = lower(%s)
+                 AND procurement_id = %s
+               ORDER BY downloaded_at DESC NULLS LAST, id DESC LIMIT 1""",
+            (file_name, procurement_id),
+        )
+
     @_rollback_on_error
     def mark_file_status(self, procurement_id, table_source, file_name, url_hash, status, worker_id=None):
         del procurement_id, table_source, file_name

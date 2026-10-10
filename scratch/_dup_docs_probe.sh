@@ -1,0 +1,12 @@
+#!/bin/bash
+PSQL="sudo -n -u postgres psql -d document_intelligence -Atc"
+echo "--- два документа из карточки ---"
+$PSQL "select id, procurement_id, queue_id, file_name, download_status, url_hash, canonical_source_document_id, physical_download_key, local_path, downloaded_at, local_deleted_at from document_files where id in (91583, 93123)"
+echo "--- url'ы ---"
+$PSQL "select id, url from document_files where id in (91583, 93123)"
+echo "--- все файлы этой закупки ---"
+$PSQL "select f.id, f.file_name, f.download_status, f.url_hash, f.canonical_source_document_id, f.queue_id, f.downloaded_at, f.local_path from document_files f where f.procurement_id = (select procurement_id from document_files where id=93123) order by f.file_name, f.id"
+echo "--- дубли по имени в целом по базе (топ) ---"
+$PSQL "select procurement_id, file_name, count(*) c from document_files where download_status='COMPLETED' group by 1,2 having count(*) > 1 order by c desc limit 10"
+echo "--- сколько закупок с дублями ---"
+$PSQL "select count(*) from (select procurement_id, file_name from document_files where download_status='COMPLETED' group by 1,2 having count(*)>1) t"

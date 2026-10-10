@@ -277,10 +277,24 @@ def _kv(pairs: List[List[str]]) -> str:
 def _table_html(columns: List[str], rows: List[List[str]], wrap: bool = True) -> str:
     if not rows:
         return '<div class="pc-muted">Категорийные возможности не найдены</div>'
-    head = "".join(f"<th>{escape(c)}</th>" for c in columns)
+    head = "".join(f"<th>{escape(str(c))}</th>" for c in columns)
     body = "".join("<tr>" + "".join(f"<td>{c}</td>" for c in r) + "</tr>" for r in rows)
     table = f'<table class="pc-table"><thead><tr>{head}</tr></thead><tbody>{body}</tbody></table>'
     return f'<div class="pc-scroll">{table}</div>' if wrap else table
+
+
+def _doc_link_key(doc: Dict[str, Any]) -> str:
+    """Ключ документа: имя + путь ссылки без query (uid меняется при повторном резолве)."""
+    url = str(doc.get("url") or "")
+    return "%s|%s" % (str(doc.get("file_name") or "").strip().lower(), url.split("?", 1)[0])
+
+
+def _group_documents(documents: List[Dict[str, Any]]) -> List[List[Dict[str, Any]]]:
+    """Сгруппировать копии одного документа, скачанные повторно с другим uid."""
+    groups: Dict[str, List[Dict[str, Any]]] = {}
+    for doc in documents:
+        groups.setdefault(_doc_link_key(doc), []).append(doc)
+    return list(groups.values())
 
 
 def _render_history_tab(pid: int, db: Any) -> None:
@@ -397,7 +411,11 @@ def _render_dossier(d: Dict[str, Any], db: Any = None) -> None:
 
     _direct_state = _direct_state_build(_direct, d)
     _is_direct_track = bool((_direct_state["classified"].get("mode") or {}).get("is_direct"))
-    _titles = ["Обзор", f"Документы ({counts.get('documents', 0)})"]
+    _doc_groups = _group_documents(d.get("documents") or [])
+    _doc_title = "Документы (%d)" % len(_doc_groups)
+    if len(_doc_groups) != len(d.get("documents") or []):
+        _doc_title = "Документы (%d из %d)" % (len(_doc_groups), len(d.get("documents") or []))
+    _titles = ["Обзор", _doc_title]
     _direct_specs = []
     if _is_direct_track:
         _titles += _direct_tab_titles(_direct_state)
@@ -551,16 +569,41 @@ def _render_dossier(d: Dict[str, Any], db: Any = None) -> None:
                     f'{counts.get("documents", 0)} · можно скачать '
                     f'{counts.get("downloadable", 0)} · повторно уже скачанное не качается.</div>',
                     unsafe_allow_html=True)
+        _docs = list(d.get("documents") or [])
+        # Один и тот же документ может попасть в базу дважды: повторный резолв ссылок
+        # выдаёт новый uid (url_hash другой), а файл тот же. Группируем копии по имени
+        # и пути ссылки без query — это одна ссылка, показываем одну строку.
+        _grouped = _group_documents(_docs)
+
+        def _doc_row(_items: List[Dict[str, Any]]) -> List[str]:
+            _latest = max(_items, key=lambda x: str(x.get("downloaded_at") or ""))
+            _copies = len(_items)
+            _name = escape(str(_latest.get("file_name") or ""))
+            if _copies > 1:
+                _name += (' <span class="pc-note">· %d копии одной ссылки (uid менялся '
+                          'при повторном резолве)</span>' % _copies)
+            _ids = ", ".join(str(x.get("id")) for x in sorted(
+                _items, key=lambda x: str(x.get("id"))))
+            _url = str(_latest.get("url") or "")
+            return [
+                escape(_ids),
+                _name,
+                _fmt(_latest.get("download_status")),
+                (f'<a class="pc-link" href="{escape(_url)}" target="_blank">скачать ↗</a>'
+                 if _url else '<span class="pc-muted">нет ссылки</span>'),
+                _date(_latest.get("downloaded_at")),
+                _fmt(_latest.get("error_message")),
+            ]
+
         st.markdown(_table_html(
             ["ID", "Файл", "Статус", "Ссылка", "Скачано", "Ошибка"],
-            [
-                [str(doc.get("id")), escape(str(doc.get("file_name") or "")),
-                 _fmt(doc.get("download_status")),
-                 (f'<a class="pc-link" href="{escape(str(doc.get("url")))}" target="_blank">'
-                  f'скачать ↗</a>' if doc.get("url") else '<span class="pc-muted">нет ссылки</span>'),
-                 _date(doc.get("downloaded_at")), _fmt(doc.get("error_message"))]
-                for doc in (d.get("documents") or [])
-            ]), unsafe_allow_html=True)
+            [_doc_row(items) for items in _grouped]),
+            unsafe_allow_html=True)
+        _dupes = [items for items in _grouped if len(items) > 1]
+        if _dupes:
+            st.markdown('<div class="pc-note">Показано %d записей вместо %d: %d документ(ов) '
+                        'скачаны повторно с тем же именем и той же ссылкой.</div>'
+                        % (len(_grouped), len(_docs), len(_dupes)), unsafe_allow_html=True)
 
     if tab_find is not None:
         with tab_find:

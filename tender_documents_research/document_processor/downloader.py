@@ -376,6 +376,28 @@ class Downloader:
 
         return False
 
+    def _find_reusable_same_link(self, tender_id: Optional[int], file_name: str,
+                                 url: str) -> Optional[Path]:
+        """Уже скачанный локально файл с тем же именем и той же ссылкой (без query)."""
+        if tender_id is None or not file_name or not self.state_repo:
+            return None
+        finder = getattr(self.state_repo, "find_completed_by_name", None)
+        if finder is None:
+            return None
+        try:
+            row = finder(tender_id, file_name)
+        except Exception:  # noqa: BLE001
+            return None
+        if not row:
+            return None
+        local_path = row[0] if len(row) > 0 else None
+        existing_url = row[1] if len(row) > 1 else None
+        if not local_path or not Path(local_path).exists():
+            return None
+        if str(existing_url or "").split("?", 1)[0] != str(url or "").split("?", 1)[0]:
+            return None
+        return Path(local_path)
+
     def _process_single_link(self, task_id: int, task_dir: Path, url: str, db_file_name: Optional[str],
                              tender_id: Optional[int], table_source: Optional[str],
                              remote_dir: Optional[str], safe_prefix: Optional[str],
@@ -389,6 +411,26 @@ class Downloader:
 
         import hashlib
         url_hash = hashlib.sha256(url.encode('utf-8')).hexdigest()
+
+        # Защита от повторного скачивания одной и той же ссылки: при повторном резолве
+        # zakupki выдаёт новый uid, url_hash меняется, и файл качается второй раз
+        # (в карточке это выглядело как два одинаковых документа). Если документ уже
+        # скачан — переиспользуем его, копию не создаём.
+        reused = self._find_reusable_same_link(tender_id, safe_predicted, url)
+        if reused is not None:
+            self.logger.info(
+                f"[{task_id}] Документ уже скачан по той же ссылке — переиспользую: {safe_predicted}"
+            )
+            if tender_id is not None and table_source and self.state_repo:
+                try:
+                    self.state_repo.record_download_attempt(
+                        task_id, tender_id, url, url_hash, 0, "SKIPPED",
+                        bytes_received=reused.stat().st_size, duration_ms=0,
+                    )
+                except Exception:  # noqa: BLE001
+                    pass
+            return ([reused], None, canonical_source_document_id,
+                    physical_download_key, url_hash)
 
         if tender_id is not None and table_source and self.state_repo:
             self.state_repo.ensure_download_file(
