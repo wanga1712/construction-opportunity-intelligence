@@ -128,6 +128,18 @@ class S13V2Pipeline:
 
                     text, line_meta = parse_file_with_meta(parser, path)
 
+                # Parse-time extraction (estimate tables + project metadata).
+                # Retention removes raw files after 3 days, so anything we may
+                # need later must be captured now, while the file is on disk.
+                try:
+                    from document_processor.parse_extractors import extract_and_persist
+
+                    extract_and_persist(path, text, procurement_id, path.name)
+                except Exception as exc:  # never break parsing
+                    self.logger.warning(
+                        f"[{procurement_id}] parse-time extraction skipped: {exc}"
+                    )
+
                 if not finished_fully:
                     file_res.status = "FAILED"
                     file_res.error_message = "Прервано по лимиту памяти (S13_V2 не поддерживает resume)"
