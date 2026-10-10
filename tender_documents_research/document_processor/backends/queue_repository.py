@@ -19,7 +19,8 @@ _S13_CLAIM_ADMISSION_FILTER = """
         q.research_action = 'FACTUAL_FEEDER_ADMITTED'
         OR q.category_context->>'AI_QUEUE_ADMISSION_GATE' = 'YES'
     )
-    AND COALESCE(q.category_context->>'legacy_revalidation_status','') <> 'REQUIRED'
+    AND COALESCE(q.category_context->>'legacy_revalidation_status','')
+        NOT IN ('REQUIRED', 'LEGACY_HOLD')
 """
 
 class QueueRepository(abc.ABC):
