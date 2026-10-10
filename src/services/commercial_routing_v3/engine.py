@@ -121,6 +121,33 @@ class CommercialRoutingV3Engine:
         title = procurement.get("title") or procurement.get("auction_name") or ""
         price = float(procurement.get("price") or procurement.get("initial_price") or 0)
 
+        lc = str(procurement.get("normalized_lifecycle") or "OPEN").upper()
+        timing_value = None
+        remaining_days = None
+        if lc == "OPEN":
+            from src.services.commercial_routing_v3.commercial_timing import (
+                compute_active_commercial_timing,
+            )
+
+            start = (
+                procurement.get("submission_start_at")
+                or procurement.get("start_date")
+                or procurement.get("procurement_start_at")
+                or procurement.get("source_start_date")
+            )
+            deadline = (
+                procurement.get("submission_deadline_at")
+                or procurement.get("end_date")
+                or procurement.get("procurement_end_at")
+                or procurement.get("source_end_date")
+            )
+            if start or deadline:
+                timing = compute_active_commercial_timing(
+                    procurement_start_at=start, procurement_end_at=deadline
+                )
+                timing_value = timing.get("commercial_timing_value")
+                remaining_days = timing.get("remaining_days")
+
         matched_priors = match_okpd_priors(okpd, priors)
         hypotheses: List[CategoryOpportunityV3] = []
         tracks = TRACKS_FOR_FORM.get(form, [OpportunityTrack.UNKNOWN])
@@ -145,9 +172,11 @@ class CommercialRoutingV3Engine:
                 )
                 ctx = CandidateScoringContext(
                     procurement_form=form.value,
-                    normalized_lifecycle=str(procurement.get("normalized_lifecycle") or "OPEN"),
+                    normalized_lifecycle=lc,
                     initial_price=price,
                     category_confidence=confidence,
+                    commercial_timing_value=timing_value,
+                    remaining_days=remaining_days,
                 )
                 scored = score_hypothesis(
                     {
