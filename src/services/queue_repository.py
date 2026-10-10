@@ -19,6 +19,13 @@ import psycopg2.extras
 PIPELINE_S13V2 = "S13_V2"
 PIPELINE_LEGACY = "LEGACY"
 
+_S13_CLAIM_ADMISSION_FILTER = """
+    AND (
+        q.research_action = 'FACTUAL_FEEDER_ADMITTED'
+        OR q.category_context->>'AI_QUEUE_ADMISSION_GATE' = 'YES'
+    )
+"""
+
 # ──────────────────────────────────────────────────────────────────────────────
 # Abstract base
 # ──────────────────────────────────────────────────────────────────────────────
@@ -204,6 +211,7 @@ class S13V2QueueRepository(QueueRepository):
                     SELECT q.id
                       FROM document_processing_queue q
                      WHERE q.status IN ('PENDING', 'PRE_RESEARCH_WAITING')
+                       {_S13_CLAIM_ADMISSION_FILTER}
                        {lane_filter}
                      ORDER BY {order_by_sql}
                      LIMIT %s
@@ -255,6 +263,7 @@ class S13V2QueueRepository(QueueRepository):
             SELECT {_COLS}
               FROM document_processing_queue q
              WHERE q.status IN ('PENDING', 'PRE_RESEARCH_WAITING')
+               {_S13_CLAIM_ADMISSION_FILTER}
                AND q.research_prior_band = 'GOLD'{lane_filter}
              ORDER BY {_ORDER} LIMIT %s FOR UPDATE SKIP LOCKED)""")
         union_params.extend(lane_params + [per_band_limit])
@@ -264,6 +273,7 @@ class S13V2QueueRepository(QueueRepository):
             SELECT {_COLS}
               FROM document_processing_queue q
              WHERE q.status IN ('PENDING', 'PRE_RESEARCH_WAITING')
+               {_S13_CLAIM_ADMISSION_FILTER}
                AND q.procurement_scope_type = 'DIRECT_GOODS'
                AND COALESCE(q.normalized_nmck_rub, 0) >= 50000
                AND (q.research_prior_band IS NULL OR q.research_prior_band != 'GOLD'){lane_filter}
@@ -276,6 +286,7 @@ class S13V2QueueRepository(QueueRepository):
                 SELECT {_COLS}
                   FROM document_processing_queue q
                  WHERE q.status IN ('PENDING', 'PRE_RESEARCH_WAITING')
+                   {_S13_CLAIM_ADMISSION_FILTER}
                    AND q.research_prior_band = %s
                    AND NOT (q.procurement_scope_type = 'DIRECT_GOODS' AND COALESCE(q.normalized_nmck_rub, 0) >= 50000){lane_filter}
                  ORDER BY {_ORDER} LIMIT %s FOR UPDATE SKIP LOCKED)""")
@@ -286,6 +297,7 @@ class S13V2QueueRepository(QueueRepository):
             SELECT {_COLS}
               FROM document_processing_queue q
              WHERE q.status IN ('PENDING', 'PRE_RESEARCH_WAITING')
+               {_S13_CLAIM_ADMISSION_FILTER}
                AND (q.research_prior_band IS NULL
                     OR q.research_prior_band NOT IN ('GOLD','SILVER','BRONZE','WOOD'))
                AND NOT (q.procurement_scope_type = 'DIRECT_GOODS' AND COALESCE(q.normalized_nmck_rub, 0) >= 50000){lane_filter}

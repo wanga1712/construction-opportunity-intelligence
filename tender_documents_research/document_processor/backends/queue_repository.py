@@ -14,6 +14,13 @@ from database_work.database_connection import DatabaseManager
 
 PIPELINE_S13V2 = "S13_V2"
 
+_S13_CLAIM_ADMISSION_FILTER = """
+    AND (
+        q.research_action = 'FACTUAL_FEEDER_ADMITTED'
+        OR q.category_context->>'AI_QUEUE_ADMISSION_GATE' = 'YES'
+    )
+"""
+
 class QueueRepository(abc.ABC):
     @abc.abstractmethod
     def claim_batch(self, worker_id: int, batch_size: int, force_contract: Optional[str] = None, force_table: Optional[str] = None, queue_lanes: Optional[Sequence[str]] = None) -> List[Dict[str, Any]]:
@@ -142,6 +149,7 @@ class S13V2QueueRepository(QueueRepository):
                         FROM document_processing_queue q
                        WHERE q.status IN ('PENDING', 'PRE_RESEARCH_WAITING')
                          AND (q.pipeline_generation = %s OR q.pipeline_generation IS NULL)
+                         {_S13_CLAIM_ADMISSION_FILTER}
                          {lane_filter}
                        ORDER BY {order_clause}
                       LIMIT %s
@@ -199,7 +207,7 @@ class S13V2QueueRepository(QueueRepository):
                     sql = f"""SELECT {_COLS}
                               FROM document_processing_queue q
                              WHERE q.status IN ('PENDING', 'PRE_RESEARCH_WAITING')
-                               AND {predicate}{_GEN_FILTER}{lane_filter}
+                               AND {predicate}{_GEN_FILTER}{_S13_CLAIM_ADMISSION_FILTER}{lane_filter}
                              ORDER BY {_ORDER}
                              LIMIT %s
                              FOR UPDATE SKIP LOCKED"""
