@@ -192,6 +192,58 @@ def _sheet_members(zf: zipfile.ZipFile) -> List[Tuple[str, str]]:
     return out
 
 
+def _read_sn2012(
+    zf: zipfile.ZipFile,
+    member: str,
+    sheet_name: str,
+    strings: List[str],
+    terms: Dict[str, Tuple[str, ...]],
+) -> List[SmetaFact]:
+    """СН-2012 «Форма № 1а»: E=кол-во, F=цена за ед., J=ВСЕГО затрат."""
+    facts: List[SmetaFact] = []
+    in_table = False
+    for row_no, cells in _sheet_rows(zf, member, strings):
+        joined = " ".join(str(v) for v in cells.values()).lower()
+        if not in_table:
+            # Header row: «Наименование работ и затрат» + «Кол-во» + «Цена».
+            if (
+                "\u043d\u0430\u0438\u043c\u0435\u043d\u043e\u0432\u0430\u043d" in joined
+                and "\u043a\u043e\u043b-\u0432\u043e" in joined
+                and "\u0446\u0435\u043d\u0430" in joined
+            ):
+                in_table = True
+            continue
+        name = str(cells.get("C") or "").strip()
+        unit = str(cells.get("D") or "").strip()
+        quantity = _num(cells.get("E"))
+        price = _num(cells.get("F"))
+        total = _num(cells.get("J"))
+        if not name or not unit or quantity is None or price is None:
+            continue
+        category = _category_of(name, terms)
+        if not category:
+            continue
+        quote = " | ".join(
+            f"{key}={cells[key]}" for key in ("A", "B", "C", "D", "E", "F", "J")
+            if key in cells
+        )
+        facts.append(
+            SmetaFact(
+                row=row_no,
+                sheet=sheet_name,
+                category_code=category,
+                product_name_raw=name,
+                quantity_value=quantity,
+                quantity_unit=unit,
+                unit_price_value=price,
+                total_price_value=total,
+                base_total_value=total,
+                source_quote=quote,
+            )
+        )
+    return facts
+
+
 def read_estimate(
     path: str | Path,
     *,
@@ -210,6 +262,8 @@ def read_estimate(
         if not members:
             return facts
         main_sheet, main_member = members[0]
+        if "\u0421\u041d-2012" in main_sheet.upper():  # СН-2012 -> Форма № 1а
+            return _read_sn2012(zf, main_member, main_sheet, strings, terms)
         for row_no, cells in _sheet_rows(zf, main_member, strings):
             name = str(cells.get("C") or "").strip()
             if not name:
