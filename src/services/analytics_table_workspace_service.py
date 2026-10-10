@@ -663,6 +663,19 @@ def _attach_queue_status(rows: List[Dict[str, Any]]) -> None:
                                 WHERE status='PROCESSING'""")
                 active = int((cur.fetchone() or [0])[0] or 0)
                 workers = max(1, min(11, active or 1))
+                # Реальные счётчики из document_intelligence (CRM file_count бывает 0).
+                doc_counts: Dict[int, int] = {}
+                find_counts: Dict[int, int] = {}
+                cur.execute("""SELECT procurement_id, COUNT(*) FROM document_files
+                                WHERE procurement_id = ANY(%s) GROUP BY procurement_id""", (ids,))
+                for pid, n in cur.fetchall():
+                    doc_counts[int(pid)] = int(n or 0)
+                cur.execute("""SELECT m.procurement_id, COUNT(*)
+                                 FROM document_match_details d
+                                 JOIN document_matches m ON m.id = d.match_id
+                                WHERE m.procurement_id = ANY(%s) GROUP BY m.procurement_id""", (ids,))
+                for pid, n in cur.fetchall():
+                    find_counts[int(pid)] = int(n or 0)
                 positions = {}
                 for pid, (status, prio) in latest.items():
                     if str(status).upper() in ("PENDING", "PRE_RESEARCH_WAITING"):
@@ -696,6 +709,21 @@ def _attach_queue_status(rows: List[Dict[str, Any]]) -> None:
         row["queue_text"] = label
         row["queue_position"] = pos
         row["queue_depth"] = depth
+        docs_n = doc_counts.get(pid)
+        finds_n = find_counts.get(pid)
+        if str(status).upper() == "COMPLETED":
+            extra = []
+            if docs_n is not None:
+                extra.append(f"{docs_n} док")
+            if finds_n is not None:
+                extra.append(f"{finds_n} находок")
+            if extra:
+                row["queue_text"] = label + " · " + " · ".join(extra)
+        # «Документы»: если CRM-счётчик пуст, показываем реальное число из DI.
+        if docs_n and str(row.get("documents_text") or "—").strip() in ("—", "-", ""):
+            row["documents_text"] = f"{docs_n} ✓"
+        if finds_n is not None:
+            row["findings_count"] = finds_n
 
 
 def load_filter_options(crm_db: Any) -> Dict[str, Any]:
