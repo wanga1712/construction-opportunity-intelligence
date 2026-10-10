@@ -1,0 +1,13 @@
+#!/bin/bash
+PSQL="sudo -n -u postgres psql -d crm -Atc"
+echo "--- predictions: сколько с not null hash ---"
+$PSQL "select count(*), count(research_generation_hash) from crm_v3_shadow_predictions"
+echo "--- truth: сколько с not null hash ---"
+$PSQL "select count(*), count(research_generation_hash) from crm_v3_exhaustive_truth"
+echo "--- пересечение по (procurement_id, hash) ---"
+$PSQL "select count(*) from crm_v3_shadow_predictions p join crm_v3_exhaustive_truth t on t.procurement_id=p.procurement_id and t.research_generation_hash=p.research_generation_hash"
+echo "--- примеры хешей ---"
+$PSQL "select left(coalesce(research_generation_hash,'null'),18), count(*) from crm_v3_shadow_predictions group by 1 limit 5"
+$PSQL "select left(coalesce(research_generation_hash,'null'),18), count(*) from crm_v3_exhaustive_truth group by 1 limit 5"
+echo "--- разрез evaluation-запроса (сколько строк даёт JOIN без фильтров) ---"
+$PSQL "select count(*) from crm_v3_shadow_evaluations"
