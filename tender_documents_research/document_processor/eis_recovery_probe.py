@@ -16,6 +16,7 @@ from .eis_rate_limit_store import load_document_dsn
 from .http_client import HttpFileClient
 
 LOGGER = logging.getLogger("document_processor.eis_recovery_probe")
+DEFAULT_PROBE_URL = "https://zakupki.gov.ru/robots.txt"
 
 
 def resolve_canary_url(dsn: Optional[dict] = None) -> Optional[str]:
@@ -75,7 +76,7 @@ def run_recovery_probe(guard=None) -> Dict[str, Any]:
     client.set_request_gate(coordinator.request_slot)
     canary_url = resolve_canary_url()
     configured_probe_url = (os.getenv("EIS_PROBE_URL") or "").strip()
-    probe_url = configured_probe_url or canary_url
+    probe_url = configured_probe_url or DEFAULT_PROBE_URL
     if not probe_url:
         return {"status": "NO_CANARY", "detail": "No production EIS endpoint available"}
 
@@ -100,24 +101,25 @@ def run_recovery_probe(guard=None) -> Dict[str, Any]:
                 "detail": f"HEAD {probe_url} -> {status}",
             }
 
-        if not canary_url:
-            return {
-                "ok": False,
-                "status": "NO_CANARY",
-                "detail": "No small production filestore URL is available",
-            }
+        canary_targets = []
+        for target in (canary_url, probe_url):
+            if target and target not in canary_targets:
+                canary_targets.append(target)
         with tempfile.TemporaryDirectory(prefix="eis-canary-") as tmpdir:
-            path = client.try_download_direct(
-                Path(tmpdir),
-                canary_url,
-                suggested_filename="eis_canary.bin",
-                request_type="PROBE",
-            )
-            if not path or not path.exists() or path.stat().st_size <= 0:
+            for target in canary_targets:
+                path = client.try_download_direct(
+                    Path(tmpdir),
+                    target,
+                    suggested_filename="eis_canary.bin",
+                    request_type="PROBE",
+                )
+                if path and path.exists() and path.stat().st_size > 0:
+                    break
+            else:
                 return {
                     "ok": False,
                     "status": "CANARY_FAILED",
-                    "detail": "Canary file request did not produce bytes",
+                    "detail": "Canary requests did not produce bytes",
                 }
         return {
             "ok": True,
