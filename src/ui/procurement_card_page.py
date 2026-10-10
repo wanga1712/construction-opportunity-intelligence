@@ -274,9 +274,10 @@ def _kv(pairs: List[List[str]]) -> str:
     return f'<dl class="pc-kv">{body}</dl>'
 
 
-def _table_html(columns: List[str], rows: List[List[str]], wrap: bool = True) -> str:
+def _table_html(columns: List[str], rows: List[List[str]], wrap: bool = True,
+                empty: str = "Данных нет") -> str:
     if not rows:
-        return '<div class="pc-muted">Категорийные возможности не найдены</div>'
+        return '<div class="pc-muted">%s</div>' % escape(empty)
     head = "".join(f"<th>{escape(str(c))}</th>" for c in columns)
     body = "".join("<tr>" + "".join(f"<td>{c}</td>" for c in r) + "</tr>" for r in rows)
     table = f'<table class="pc-table"><thead><tr>{head}</tr></thead><tbody>{body}</tbody></table>'
@@ -529,7 +530,8 @@ def _render_dossier(d: Dict[str, Any], db: Any = None) -> None:
                                  f'{_fmt(o.get("category_confidence"))}</div>',
                                  _ru(_ACTION_RU, o.get("research_action"))]
                                 for o in opps
-                            ]) + "</div>", unsafe_allow_html=True)
+                            ], empty="Категорийные возможности не найдены") + "</div>",
+                        unsafe_allow_html=True)
         with st.expander("＋ Добавить категорию вручную"):
             try:
                 from src.services.manual_category_service import (
@@ -574,6 +576,10 @@ def _render_dossier(d: Dict[str, Any], db: Any = None) -> None:
         # выдаёт новый uid (url_hash другой), а файл тот же. Группируем копии по имени
         # и пути ссылки без query — это одна ссылка, показываем одну строку.
         _grouped = _group_documents(_docs)
+        if not _grouped:
+            st.markdown('<div class="pc-muted">Документы закупки ещё не скачаны: строки в '
+                        'очереди обработки нет — закупка не отправлялась на скачивание.</div>',
+                        unsafe_allow_html=True)
 
         def _doc_row(_items: List[Dict[str, Any]]) -> List[str]:
             _latest = max(_items, key=lambda x: str(x.get("downloaded_at") or ""))
