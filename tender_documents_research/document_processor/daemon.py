@@ -561,6 +561,16 @@ class DocumentProcessorDaemon:
             f"[S13_V2][{task_id}] Processing procurement={procurement_id}"
         )
         print(f"[S13_V2][{task_id}] Start procurement={procurement_id}", flush=True)
+        if task.get("plan_version") == "queue_v2":
+            print(
+                f"[QUEUE_V2][{task_id}] action={task.get('research_action_v2')} "
+                f"tier={task.get('work_tier')} lifecycle={task.get('source_lifecycle')} "
+                f"phase={task.get('execution_phase')} "
+                f"selected={len(task.get('selected_source_document_ids') or [])} "
+                f"fallback={len(task.get('fallback_source_document_ids') or [])} "
+                f"categories={task.get('category_codes')}",
+                flush=True,
+            )
         try:
             try:
                 batch = self.pipeline.prefetch_task(
@@ -569,6 +579,7 @@ class DocumentProcessorDaemon:
                     source_table,
                     procurement_id=procurement_id,
                     source_id=task.get("source_id"),
+                    selected_source_document_ids=task.get("selected_source_document_ids"),
                 )
                 files = batch.files
                 if getattr(batch, "rate_limited", False) and not files:

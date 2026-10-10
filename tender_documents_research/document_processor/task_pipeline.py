@@ -3,7 +3,7 @@ import shutil
 import time
 from datetime import datetime
 from pathlib import Path
-from typing import Optional, Set
+from typing import List, Optional, Set
 
 from document_processor.parse_utils import get_rich_parser, parse_file_with_meta, supports_rich_meta
 from document_processor.pdf_processor import parse_pdf_incremental
@@ -83,6 +83,7 @@ class TaskPipeline:
         table_source: str,
         procurement_id: Optional[int] = None,
         source_id: Optional[int] = None,
+        selected_source_document_ids: Optional[List[int]] = None,
     ):
         self.logger.info(f"[{task_id}] Получение ссылок для {contract_reg_number}...")
         try:
@@ -92,7 +93,15 @@ class TaskPipeline:
                 print(f"[{task_id}] Registry: {link}", flush=True)
         except Exception:
             pass
-        links = self.downloader.get_links(contract_reg_number, table_source)
+        if selected_source_document_ids:
+            # Queue V2: the plan already decided the exact documents.
+            links = self.downloader.get_selected_links(list(selected_source_document_ids))
+            self.logger.info(
+                f"[{task_id}][QUEUE_V2] targeted download: plan_selected="
+                f"{len(selected_source_document_ids)} resolvable={len(links)}"
+            )
+        else:
+            links = self.downloader.get_links(contract_reg_number, table_source)
         if not links:
             message = f"Нет ссылок документов для {contract_reg_number} в {table_source}"
             self.logger.warning(f"[{task_id}] {message}")

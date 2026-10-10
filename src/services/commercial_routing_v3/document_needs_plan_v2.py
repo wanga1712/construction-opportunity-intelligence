@@ -206,10 +206,15 @@ FALLBACK_MAX_PER_UNIT = 1
 def _fallback_rank(classification: DocumentClassification) -> int:
     """Lower is better; non-documents are the very last resort."""
     if not classification.is_document:
-        return len(FALLBACK_CLASS_PRIORITY) + 2
+        return NON_DOCUMENT_FALLBACK_RANK
     if classification.document_class in FALLBACK_CLASS_PRIORITY:
         return FALLBACK_CLASS_PRIORITY.index(classification.document_class)
-    return len(FALLBACK_CLASS_PRIORITY) + 1
+    return len(FALLBACK_CLASS_PRIORITY)
+
+
+#: Non-documents (skip-list extensions) are never promoted: they carry no
+#: parseable evidence (verified against document_matches: zero known positives).
+NON_DOCUMENT_FALLBACK_RANK = 10_000
 
 
 def classes_for_facts(facts: Iterable[RequiredFact]) -> tuple[DocumentClass, ...]:
@@ -407,11 +412,12 @@ def select_unit_documents(
     ]
     if any(selection.selection_decision == SELECTED for _, selection in pairs):
         return [selection for _, selection in pairs], None
-    if not pairs:
+    candidates = [i for i, (classification, _) in enumerate(pairs) if classification.is_document]
+    if not candidates:
         return [], None
 
     order = sorted(
-        range(len(pairs)),
+        candidates,
         key=lambda i: (
             _fallback_rank(pairs[i][0]),
             pairs[i][1].source_document_id if pairs[i][1].source_document_id is not None else 1 << 62,

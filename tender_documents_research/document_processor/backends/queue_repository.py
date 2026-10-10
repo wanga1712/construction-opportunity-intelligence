@@ -18,10 +18,24 @@ _S13_CLAIM_ADMISSION_FILTER = """
     AND (
         q.research_action = 'FACTUAL_FEEDER_ADMITTED'
         OR q.category_context->>'AI_QUEUE_ADMISSION_GATE' = 'YES'
+        OR q.plan_version = 'queue_v2'
     )
     AND COALESCE(q.category_context->>'legacy_revalidation_status','')
         NOT IN ('REQUIRED', 'LEGACY_HOLD')
+    AND NOT (
+        q.plan_version = 'queue_v2'
+        AND COALESCE(q.research_action_v2, '') NOT IN
+            ('DOCUMENT_RESEARCH_REQUIRED', 'DOCUMENT_CONFIRMATION_REQUIRED')
+    )
 """
+
+#: Queue V2 payload columns returned on claim (targeted downloader input).
+_QUEUE_V2_COLS = """q.plan_version, q.research_action_v2, q.document_plan_version,
+                   q.selected_source_document_ids, q.selected_physical_keys,
+                   q.fallback_source_document_ids, q.selected_documents,
+                   q.source_lifecycle, q.project_active, q.project_end_at,
+                   q.project_remaining_days, q.execution_phase,
+                   q.current_effective_medal"""
 
 class QueueRepository(abc.ABC):
     @abc.abstractmethod
@@ -164,7 +178,12 @@ class S13V2QueueRepository(QueueRepository):
                  contract_number, queue_lane, pipeline_generation,
                  research_action, research_depth, category_codes,
                  research_prior_model, research_prior_version, research_prior_score,
-                 research_prior_percentile, research_prior_band, research_prior_effective_score
+                 research_prior_percentile, research_prior_band, research_prior_effective_score,
+                 plan_version, research_action_v2, document_plan_version,
+                 selected_source_document_ids, selected_physical_keys,
+                 fallback_source_document_ids, selected_documents,
+                 source_lifecycle, project_active, project_end_at,
+                 project_remaining_days, execution_phase, current_effective_medal
             """
             params = [worker_id, self.pipeline_generation()] + lane_params + [batch_size]
             conn = self._get_conn()
@@ -186,7 +205,13 @@ class S13V2QueueRepository(QueueRepository):
                    q.research_prior_model, q.research_prior_version, q.research_prior_score,
                    q.research_prior_percentile, q.research_prior_band, q.research_prior_effective_score,
                    q.procurement_scope_type, q.normalized_nmck_rub,
-                   q.work_tier, q.source_start_date"""
+                   q.work_tier, q.source_start_date,
+                   q.plan_version, q.research_action_v2, q.document_plan_version,
+                   q.selected_source_document_ids, q.selected_physical_keys,
+                   q.fallback_source_document_ids, q.selected_documents,
+                   q.source_lifecycle, q.project_active, q.project_end_at,
+                   q.project_remaining_days, q.execution_phase,
+                   q.current_effective_medal"""
 
         _ORDER = f"""q.work_tier ASC,
             q.source_start_date DESC NULLS LAST,
@@ -264,7 +289,12 @@ class S13V2QueueRepository(QueueRepository):
                  contract_number, queue_lane, pipeline_generation,
                  research_action, research_depth, category_codes,
                  research_prior_model, research_prior_version, research_prior_score,
-                 research_prior_percentile, research_prior_band, research_prior_effective_score
+                 research_prior_percentile, research_prior_band, research_prior_effective_score,
+                 plan_version, research_action_v2, document_plan_version,
+                 selected_source_document_ids, selected_physical_keys,
+                 fallback_source_document_ids, selected_documents,
+                 source_lifecycle, project_active, project_end_at,
+                 project_remaining_days, execution_phase, current_effective_medal
             """
             update_params = [worker_id] + selected_ids
             with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:

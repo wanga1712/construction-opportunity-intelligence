@@ -178,6 +178,52 @@ class Downloader:
         )
         return prioritized
 
+    def get_selected_links(self, selected_source_document_ids: List[int]) -> List[Any]:
+        """Queue V2 targeted path: resolve ONLY the persisted selected rows.
+
+        No link discovery, no prioritize_links, no "download all remaining".
+        Returns (url, file_name, source_document_id) tuples deduped by physical key.
+        """
+        if not selected_source_document_ids:
+            return []
+        dsn = {
+            "host": os.getenv("S13_DOCUMENT_DB_HOST", "localhost"),
+            "port": int(os.getenv("S13_DOCUMENT_DB_PORT", "5432")),
+            "dbname": os.getenv("S13_DOCUMENT_DB_NAME", "document_intelligence"),
+            "user": os.getenv("S13_DOCUMENT_DB_USER", "doc_worker"),
+            "password": os.getenv("S13_DOCUMENT_DB_PASSWORD", ""),
+        }
+        conn = psycopg2.connect(**dsn)
+        try:
+            with conn.cursor() as cur:
+                cur.execute(
+                    """
+                    SELECT id, url, file_name, COALESCE(physical_download_key, url_hash, url)
+                      FROM document_files
+                     WHERE id = ANY(%s)
+                     ORDER BY id
+                    """,
+                    (list(selected_source_document_ids),),
+                )
+                rows = cur.fetchall() or []
+        finally:
+            conn.close()
+        seen: set = set()
+        links: List[Any] = []
+        for doc_id, url, file_name, phys in rows:
+            if not url:
+                continue
+            key = phys or url
+            if key in seen:
+                continue
+            seen.add(key)
+            links.append((url, file_name, int(doc_id), phys))
+        self.logger.info(
+            "QUEUE_V2 targeted links: selected=%d resolvable=%d physical=%d",
+            len(selected_source_document_ids), len(rows), len(links),
+        )
+        return links
+
     def _load_routing_context(self, contract_reg_number: str, table_source: str) -> RoutingContext:
         sql = f"""
             SELECT
