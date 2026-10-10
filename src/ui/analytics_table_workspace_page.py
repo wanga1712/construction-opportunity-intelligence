@@ -621,7 +621,14 @@ def _render_table(columns: List[str], rows: List[Dict[str, Any]]) -> str:
             f'{" · " + escape(str(remaining)) if remaining else ""}'
             f'<br><a href="?tw_pid={head.get("procurement_id")}" target="_self" '
             f'style="font-size:11px;font-weight:600;color:#2066b0;text-decoration:none">'
-            f'карточка ↗</a></div>'
+            f'карточка ↗</a>'
+            + ('<br><span class="pc-chip ok">очередь: успеет</span>'
+               if head.get("queue_fits") is True else
+               ('<br><span class="pc-chip bad">очередь: может не успеть</span>'
+                if head.get("queue_fits") is False else ""))
+            + (f'<div class="tw-small">{escape(str(head.get("queue_text")))}</div>'
+               if head.get("queue_text") else "")
+            + '</div>'
             f'<div class="tw-rb">{_temporal_cell(head)}</div>'
             f'</summary>'
             f'<div class="tw-gwin">{_temporal_detail(head)}</div>'

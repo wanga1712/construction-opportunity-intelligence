@@ -617,7 +617,12 @@ _QUEUE_LABELS = {
 
 
 def _attach_queue_status(rows: List[Dict[str, Any]]) -> None:
-    """Best-effort document-queue status so 'show all' reveals queued/cancelled rows."""
+    """Статус документной очереди + позиция, оценка времени и «успеет ли».
+
+    Оценка считается один раз на рендер (не на строку): средняя длительность
+    последних COMPLETED задач × позиция / число воркеров. Если истории нет —
+    позиция выводится, ETA не выдумывается.
+    """
     ids = [r["procurement_id"] for r in rows if r.get("procurement_id")]
     if not ids:
         return
@@ -629,24 +634,68 @@ def _attach_queue_status(rows: List[Dict[str, Any]]) -> None:
         kw["dbname"] = os.getenv("S13_DOCUMENT_DB_NAME", "document_intelligence")
         kw["connect_timeout"] = 5
         conn = psycopg2.connect(**kw)
+        depth = 0
+        avg_sec = None
+        workers = 1
         try:
             with conn.cursor() as cur:
                 cur.execute(
-                    """SELECT DISTINCT ON (procurement_id) procurement_id, status
+                    """SELECT DISTINCT ON (procurement_id) procurement_id, status, priority_score
                          FROM document_processing_queue
                         WHERE procurement_id = ANY(%s)
                         ORDER BY procurement_id, id DESC""",
                     (ids,),
                 )
-                latest = {int(pid): st for pid, st in cur.fetchall()}
+                latest = {int(pid): (st, pr) for pid, st, pr in cur.fetchall()}
+                cur.execute("""SELECT COUNT(*) FROM document_processing_queue
+                                WHERE status IN ('PENDING','PRE_RESEARCH_WAITING')""")
+                depth = int((cur.fetchone() or [0])[0] or 0)
+                cur.execute("""SELECT AVG(EXTRACT(EPOCH FROM (completed_at - started_at)))
+                                 FROM (SELECT completed_at, started_at
+                                         FROM document_processing_queue
+                                        WHERE status='COMPLETED' AND completed_at IS NOT NULL
+                                          AND started_at IS NOT NULL
+                                          AND completed_at > started_at
+                                        ORDER BY completed_at DESC LIMIT 300) t""")
+                row_avg = cur.fetchone()
+                avg_sec = float(row_avg[0]) if row_avg and row_avg[0] is not None else None
+                cur.execute("""SELECT COUNT(*) FROM document_processing_queue
+                                WHERE status='PROCESSING'""")
+                active = int((cur.fetchone() or [0])[0] or 0)
+                workers = max(1, min(11, active or 1))
+                positions = {}
+                for pid, (status, prio) in latest.items():
+                    if str(status).upper() in ("PENDING", "PRE_RESEARCH_WAITING"):
+                        cur.execute("""SELECT COUNT(*) FROM document_processing_queue
+                                        WHERE status IN ('PENDING','PRE_RESEARCH_WAITING')
+                                          AND (COALESCE(priority_score,0) > COALESCE(%s,0)
+                                               OR (COALESCE(priority_score,0) = COALESCE(%s,0)
+                                                   AND procurement_id < %s))""",
+                                    (prio, prio, pid))
+                        positions[pid] = int((cur.fetchone() or [0])[0] or 0) + 1
         finally:
             conn.close()
     except Exception:
         return
     for row in rows:
-        status = latest.get(int(row["procurement_id"]) if row.get("procurement_id") else -1)
-        if status:
-            row["queue_text"] = _QUEUE_LABELS.get(str(status).upper(), str(status))
+        pid = int(row["procurement_id"]) if row.get("procurement_id") else -1
+        entry = latest.get(pid)
+        if not entry:
+            continue
+        status, _prio = entry
+        label = _QUEUE_LABELS.get(str(status).upper(), str(status))
+        pos = positions.get(pid)
+        if pos:
+            label += f" · {pos}-й из {depth}"
+            if avg_sec:
+                eta = avg_sec * pos / workers
+                label += f" · ~{format_seconds(eta)}"
+                rem = (row.get("temporal") or {}).get("remaining_seconds")
+                if rem is not None:
+                    row["queue_fits"] = bool(eta <= float(rem))
+        row["queue_text"] = label
+        row["queue_position"] = pos
+        row["queue_depth"] = depth
 
 
 def load_filter_options(crm_db: Any) -> Dict[str, Any]:
