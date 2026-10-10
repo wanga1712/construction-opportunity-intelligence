@@ -235,7 +235,9 @@ def build_live_prompt(item: Dict[str, Any], allowed_registry: List[Dict[str, Any
 
 def fetch_candidates(tender_db, crm_db) -> List[Dict[str, Any]]:
     """Production selector — canonical evaluate_routing_eligibility only."""
-    from src.services.commercial_routing_v3.okpd_priors import load_okpd_priors_from_db
+    from src.services.commercial_routing_v3.okpd_priors import load_okpd_priors_from_db, match_okpd_priors
+    from src.services.commercial_routing_v3.procurement_form import classify_procurement_form
+    from src.services.commercial_routing_v3.routing_initial_pass import initial_pass_mode, initial_pass_decision
     from src.services.commercial_routing_v3.processing_lease import reclaim_stale_running
     from src.services.commercial_routing_v3.routing_eligibility import (
         LANE_ACTIVE_OPEN,
@@ -251,19 +253,68 @@ def fetch_candidates(tender_db, crm_db) -> List[Dict[str, Any]]:
     except Exception:
         priors = []
 
-    query = """
-        SELECT id, auction_name, okpd_code, okpd_name, initial_price,
-               delivery_region, customer, source_table, source_id,
-               ai_assessment_status, ai_assessment_version, ai_assessment_fingerprint,
-               ai_assessment_stability, ai_stability_count, end_date, start_date, award_date,
-               reassessment_requested, crm_stage, award_status, manual_override,
-               coalesce(ai_routing_attempt_count, 0) AS ai_routing_attempt_count,
-               ai_routing_error_class, ai_assessed_at
-        FROM crm_procurements
-        WHERE coalesce(manual_override, FALSE) = FALSE
-    """
+    import time
+
+    _t_fetch_start = time.perf_counter()
+    if initial_pass_mode():
+        query = """
+            SELECT cp.id, cp.auction_name, cp.okpd_code, cp.okpd_name, cp.initial_price,
+                   cp.delivery_region, cp.customer, cp.source_table, cp.source_id,
+                   cp.ai_assessment_status, cp.ai_assessment_version, cp.ai_assessment_fingerprint,
+                   cp.ai_assessment_stability, cp.ai_stability_count, cp.end_date, cp.start_date, cp.award_date,
+                   cp.reassessment_requested, cp.crm_stage, cp.award_status, cp.manual_override,
+                   coalesce(cp.ai_routing_attempt_count, 0) AS ai_routing_attempt_count,
+                   cp.ai_routing_error_class, cp.ai_assessed_at
+            FROM crm_procurements cp
+            JOIN crm_procurement_scope_authority a ON a.procurement_id = cp.id
+            WHERE coalesce(cp.manual_override, FALSE) = FALSE
+              AND a.admission_state = 'ELIGIBLE'
+              AND a.admission_policy_version = 'BUSINESS_RESEARCH_ADMISSION_V2'
+        """
+    else:
+        query = """
+            SELECT id, auction_name, okpd_code, okpd_name, initial_price,
+                   delivery_region, customer, source_table, source_id,
+                   ai_assessment_status, ai_assessment_version, ai_assessment_fingerprint,
+                   ai_assessment_stability, ai_stability_count, end_date, start_date, award_date,
+                   reassessment_requested, crm_stage, award_status, manual_override,
+                   coalesce(ai_routing_attempt_count, 0) AS ai_routing_attempt_count,
+                   ai_routing_error_class, ai_assessed_at
+            FROM crm_procurements
+            WHERE coalesce(manual_override, FALSE) = FALSE
+        """
     rows = crm_db.execute_query(query) or []
+    t_sql_fetch = time.perf_counter() - _t_fetch_start
+    authority_map = {}
+    existing_evidence_ids = set()
+    if initial_pass_mode():
+        for _a in (crm_db.execute_query(
+            "SELECT procurement_id, source_lifecycle, procurement_scope_type, "
+            "admission_state, admission_reason, admission_policy_version "
+            "FROM crm_procurement_scope_authority"
+        ) or []):
+            _pid = int(_a["procurement_id"] if isinstance(_a, dict) else _a[0])
+            authority_map[_pid] = dict(_a) if isinstance(_a, dict) else {
+                "procurement_id": _a[0],
+                "source_lifecycle": _a[1],
+                "procurement_scope_type": _a[2],
+                "admission_state": _a[3],
+                "admission_reason": _a[4],
+                "admission_policy_version": _a[5],
+            }
+        ev_rows = crm_db.execute_query(
+            "SELECT procurement_id FROM crm_procurement_category_opportunities WHERE status = 'CURRENT'"
+        ) or []
+        existing_evidence_ids = {
+            int(r["procurement_id"] if isinstance(r, dict) else r[0])
+            for r in ev_rows
+            if (r["procurement_id"] if isinstance(r, dict) else r[0]) is not None
+        }
     candidates = []
+    skip_reasons = {}
+    _t_py_eligibility = 0.0
+    _t_init_gate = 0.0
+    _selectable_after_eligibility = 0
     lane_rank = {
         LANE_ACTIVE_OPEN: 0,
         LANE_WAITING_HOLD: 1,
@@ -302,9 +353,29 @@ def fetch_candidates(tender_db, crm_db) -> List[Dict[str, Any]]:
         st = c["source_table"] or ""
         c["law_type"] = "615_PP" if "615" in st else ("223_FZ" if "223" in st else "44_FZ")
         c["current_fingerprint"] = get_input_fingerprint(c)
+        _t0 = time.perf_counter()
         decision = evaluate_routing_eligibility(c, priors=priors, force_reassess=False)
+        _t_py_eligibility += time.perf_counter() - _t0
         if not decision.selectable:
             continue
+        _selectable_after_eligibility += 1
+
+        _tg = time.perf_counter()
+        has_prior = bool(match_okpd_priors(c["okpd_code"], priors)) if c["okpd_code"] else False
+        _form = classify_procurement_form(
+            {"auction_name": c["auction_name"], "okpd_code": c["okpd_code"], "okpd_name": c["okpd_name"]}
+        )
+        _designish = getattr(_form, "value", str(_form)) in (
+            "DESIGN_ONLY", "SURVEY_AND_DESIGN", "DESIGN_AND_BUILD", "DESIGN_EXPERTISE_AND_BUILD"
+        )
+        _select, _ip_reason = initial_pass_decision(
+            authority_map.get(c["id"]), has_prior, c["id"] in existing_evidence_ids, _designish
+        )
+        _t_init_gate += time.perf_counter() - _tg
+        if not _select:
+            skip_reasons[_ip_reason] = skip_reasons.get(_ip_reason, 0) + 1
+            continue
+        c["initial_pass_reason"] = _ip_reason
         c["routing_lane"] = decision.lane
         c["normalized_lifecycle"] = decision.normalized_lifecycle
         c["commercial_lane"] = decision.commercial_lane
@@ -314,6 +385,17 @@ def fetch_candidates(tender_db, crm_db) -> List[Dict[str, Any]]:
         candidates.append(c)
 
     from src.services.commercial_routing_v3.routing_priority import sort_lane_buckets
+
+    _t_fetch_total = time.perf_counter() - _t_fetch_start
+    logger.info(
+        "FETCH_CANDIDATES metrics: source_rows=%d selectable=%d selected=%d "
+        "sql_fetch=%.3fs py_eligibility=%.3fs init_gate=%.3fs total=%.3fs",
+        len(rows), _selectable_after_eligibility, len(candidates),
+        t_sql_fetch, _t_py_eligibility, _t_init_gate, _t_fetch_total,
+    )
+
+    if initial_pass_mode() and skip_reasons:
+        logger.info("INITIAL_PASS selector skip reasons: %s", dict(skip_reasons))
 
     # Deterministic lane preference + equal-weight category fair-share.
     return sort_lane_buckets(candidates, priors)
@@ -336,6 +418,7 @@ def ensure_v3_model_input(c: Dict[str, Any], crm_db) -> Dict[str, Any]:
         model_input_hash,
     )
     from src.services.commercial_routing_v3.okpd_priors import load_okpd_priors_from_db
+    from src.services.commercial_routing_v3.routing_initial_pass import initial_pass_mode
     from src.services.commercial_routing_v3.source_enrich import enrich_procurement_from_s7
 
     crm_id = c.get("id") or c.get("procurement_id")
@@ -348,7 +431,8 @@ def ensure_v3_model_input(c: Dict[str, Any], crm_db) -> Dict[str, Any]:
     full = dict(rows[0]) if isinstance(rows[0], dict) else {}
     if not full:
         return c
-    full = enrich_procurement_from_s7(full)
+    if not initial_pass_mode():
+        full = enrich_procurement_from_s7(full)
     full["title"] = full.get("auction_name") or full.get("title") or c.get("title")
     full["price"] = float(full.get("initial_price") or c.get("price") or 0)
     full["region"] = full.get("delivery_region") or full.get("region_name") or c.get("region")
@@ -560,9 +644,109 @@ def aggregate_research_action(opportunities: List[Dict[str, Any]]) -> str:
             max_action = action
     return max_action
 
+def _run_initial_pass_deterministic(c: Dict[str, Any], crm_db, fp: str):
+    """Initial-pass deterministic-first branch.
+
+    Returns:
+      True  -> handled (DETERMINISTIC_ACCEPT or NO_COMMERCIAL_ENTRY)
+      False -> handled but failed
+      None  -> QWEN_REQUIRED; caller must fall through to the canonical Qwen path.
+    """
+    from src.services.commercial_routing_v3.engine import CommercialRoutingV3Engine
+    from src.services.commercial_routing_v3.runtime_adapter import decision_to_normalized_result
+    from src.services.commercial_routing_v3.opportunity_persistence import persist_category_opportunities
+    from src.services.commercial_routing_v3.routing_arbitration import (
+        MODE_ACCEPT, MODE_QWEN, arbitrate_deterministic,
+    )
+
+    crm_id = c["id"]
+    procurement = {
+        "title": c.get("auction_name") or c.get("title") or "",
+        "auction_name": c.get("auction_name") or "",
+        "okpd_code": c.get("okpd_code") or "",
+        "okpd_name": c.get("okpd_name") or "",
+        "price": float(c.get("initial_price") or 0),
+        "initial_price": c.get("initial_price"),
+        "source_table": c.get("source_table") or "",
+        "law_type": c.get("law_type") or "",
+        "normalized_lifecycle": c.get("normalized_lifecycle") or c.get("lifecycle") or "OPEN",
+        "submission_start_at": c.get("start_date"),
+        "submission_deadline_at": c.get("end_date"),
+    }
+
+    try:
+        engine = CommercialRoutingV3Engine(crm_db=crm_db)
+        decision = engine.route_deterministic(procurement)
+        mode, reason, chosen = arbitrate_deterministic(decision)
+    except Exception as exc:
+        logger.error("INITIAL_PASS deterministic failed for %s: %s", crm_id, exc)
+        return False
+
+    if mode == MODE_QWEN:
+        return None
+
+    if mode == MODE_ACCEPT:
+        try:
+            normalized = decision_to_normalized_result(decision=decision, procurement=procurement)
+        except Exception:
+            normalized = {}
+        category_opportunities = normalized.get("category_opportunities") or []
+        try:
+            persist = persist_category_opportunities(
+                crm_db,
+                procurement_id=crm_id,
+                assessment_id=None,
+                normalized_result=normalized,
+                category_opportunities=category_opportunities,
+                dry_run=False,
+            )
+        except Exception as exc:
+            logger.error("INITIAL_PASS deterministic persist failed for %s: %s", crm_id, exc)
+            return False
+        score = int(getattr(chosen, "commercial_priority_score", 0) or 0)
+        crm_db.execute_update(
+            """
+            UPDATE crm_procurements
+            SET ai_assessment_status = 'COMPLETED',
+                ai_assessment_fingerprint = %s,
+                ai_assessed_at = NOW(),
+                reassessment_requested = FALSE,
+                qualification_state = 'candidate',
+                commercial_score = %s
+            WHERE id = %s
+            """,
+            (fp, score, crm_id),
+        )
+        logger.info(
+            "INITIAL_DETERMINISTIC_DONE id=%s category=%s medal=%s persisted=%s",
+            crm_id,
+            getattr(chosen, "commercial_category_code", None),
+            getattr(getattr(chosen, "candidate_medal", None), "value", None),
+            (persist or {}).get("persisted", 0),
+        )
+        return True
+
+    # NO_COMMERCIAL_ENTRY
+    crm_db.execute_update(
+        """
+        UPDATE crm_procurements
+        SET ai_assessment_status = 'COMPLETED',
+            ai_assessment_fingerprint = %s,
+            ai_assessed_at = NOW(),
+            reassessment_requested = FALSE,
+            qualification_state = 'no_commercial_entry'
+        WHERE id = %s
+        """,
+        (fp, crm_id),
+    )
+    logger.info("INITIAL_NO_COMMERCIAL_ENTRY id=%s reason=%s", crm_id, reason)
+    return True
+
+
 def process_item(c: Dict[str, Any], rules: List[Any], medians: Dict[str, Any], registry: List[Dict[str, Any]], registry_hash: str, examples: List[Dict[str, Any]], tender_db, crm_db) -> bool:
     from src.services.ai_assessment_runner import match_okpd_rule, check_egrz_expertise, DEFAULT_MEDIAN_PRICES
     from src.services.candidate_policy import CandidatePolicy
+    from src.services.commercial_routing_v3.routing_initial_pass import initial_pass_mode
     from src.services.commercial_routing_v3.routing_runtime_config import (
         MAX_ROUTING_ATTEMPTS,
         PRODUCTION_REQUIRES_V3,
@@ -578,6 +762,11 @@ def process_item(c: Dict[str, Any], rules: List[Any], medians: Dict[str, Any], r
     okpd, law, lifecycle = c["okpd_code"], c["law_type"], c.get("lifecycle") or c.get("normalized_lifecycle") or "OPEN"
     fp = c["current_fingerprint"]
     force = bool(c.get("force_reassess"))
+
+    if initial_pass_mode():
+        _ip_res = _run_initial_pass_deterministic(c, crm_db, fp)
+        if _ip_res is not None:
+            return _ip_res
 
     if force:
         crm_db.execute_update(
@@ -684,7 +873,10 @@ def process_item(c: Dict[str, Any], rules: List[Any], medians: Dict[str, Any], r
             )
             return False
 
-        egrz = check_egrz_expertise(tender_db, c["source_table"], c["source_id"])
+        if initial_pass_mode():
+            egrz = {}
+        else:
+            egrz = check_egrz_expertise(tender_db, c["source_table"], c["source_id"])
         
         ai_res = None
         v3_normalized_result: Optional[Dict[str, Any]] = None
@@ -1129,6 +1321,43 @@ def process_item(c: Dict[str, Any], rules: List[Any], medians: Dict[str, Any], r
                     if sorted(p_cats or []) != sorted(proposed_cats): change_fields.append("categories")
                     if p_level != cand_level: change_fields.append("candidate_level")
 
+        # ── Canonical routing axes: OBJECT_STAGE / SERVICE_TYPE ──────────────
+        # Deterministic (form + title), never price-driven. These are SEPARATE
+        # from the legacy compatibility key ``project_stage`` (tender stage).
+        from src.domain.commercial_routing_v3 import ProcurementForm as _PF
+        from src.services.commercial_routing_v3.object_mode_routing import (
+            classify_object_stage as _classify_object_stage,
+            classify_service_type as _classify_service_type,
+            is_object_stage_applicable as _object_stage_applicable,
+        )
+
+        _axis_form = ""
+        for _cand in (
+            (ai_res or {}).get("_model_validated", {}).get("procurement_form")
+            if isinstance((ai_res or {}).get("_model_validated"), dict) else None,
+            procurement.get("procurement_form"),
+            proposed_proc,
+        ):
+            _cand_s = str(_cand or "").strip().upper()
+            if _cand_s in {f.value for f in _PF}:
+                _axis_form = _cand_s
+                break
+        _axis_title = str(
+            procurement.get("title") or c.get("auction_name") or ""
+        )
+        if not _axis_form:
+            object_stage_axis = service_type_axis = None
+        else:
+            service_type_axis = _classify_service_type(
+                title=_axis_title, form=_axis_form
+            )
+            object_stage_axis = _classify_object_stage(
+                title=_axis_title, form=_axis_form, service_type=service_type_axis
+            )
+            if not _object_stage_applicable(form=_axis_form):
+                # Direct supply has no object lifecycle.
+                object_stage_axis = None
+
         normalized_result = {
             # COMPATIBILITY / BUSINESS-ENRICHED blob — NOT model authority.
             # Model authority: crm_v3_model_inference_runs.validated_model_result
@@ -1139,6 +1368,12 @@ def process_item(c: Dict[str, Any], rules: List[Any], medians: Dict[str, Any], r
             "object_subtype": (ai_res.get("object_subtype") if ai_res else None) or "unknown",
             "procurement_type": proposed_proc,
             "project_stage": (ai_res.get("project_stage") if ai_res else None) or "unknown",
+            # Canonical axes (OBJECT_STAGE / SERVICE_TYPE). None = not applicable.
+            "object_stage": object_stage_axis,
+            "service_type": service_type_axis,
+            "object_stage_applicable": bool(
+                _axis_form and _object_stage_applicable(form=_axis_form)
+            ),
             "expected_categories": proposed_cats,
             "unlikely_categories": ai_res.get("unlikely_categories") if ai_res else [],
             "document_search_plan": ai_res.get("document_search_plan") if ai_res else [],
