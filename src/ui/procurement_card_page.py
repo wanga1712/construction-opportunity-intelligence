@@ -384,15 +384,26 @@ def _render_dossier(d: Dict[str, Any], db: Any = None) -> None:
     _spec = _direct.get("spec") or []
     _tech = _direct.get("tech") or []
     _req = _direct.get("requirements") or []
-    _titles = ["Обзор", f"Документы ({counts.get('documents', 0)})",
-               f"Находки ({counts.get('findings', 0)})",
-               f"Что можно поставить ({len(d.get('supply_candidates') or [])})"]
+    # Для прямой поставки разбираем смету — вкладка keyword-находок не нужна.
+    _is_direct_track = any(
+        str(o.get("opportunity_track") or "").upper() == "DIRECT_SUPPLY"
+        for o in (d.get("opportunities") or [])
+    )
+    _titles = ["Обзор", f"Документы ({counts.get('documents', 0)})"]
+    if not _is_direct_track:
+        _titles.append(f"Находки ({counts.get('findings', 0)})")
+    _titles.append(f"Что можно поставить ({len(d.get('supply_candidates') or [])})")
     if _spec or _tech or _req:
         _titles.append(f"Смета и требования ({len(_spec) + len(_tech) + len(_req)})")
     _titles += ["История / Модель", "Очередь"]
     _tabs = st.tabs(_titles)
-    tab_overview, tab_docs, tab_find, tab_supply = _tabs[0], _tabs[1], _tabs[2], _tabs[3]
-    _idx = 4
+    _idx = 0
+    tab_overview = _tabs[_idx]; _idx += 1
+    tab_docs = _tabs[_idx]; _idx += 1
+    tab_find = None
+    if not _is_direct_track:
+        tab_find = _tabs[_idx]; _idx += 1
+    tab_supply = _tabs[_idx]; _idx += 1
     tab_direct = None
     if _spec or _tech or _req:
         tab_direct = _tabs[_idx]
@@ -503,50 +514,32 @@ def _render_dossier(d: Dict[str, Any], db: Any = None) -> None:
                 for doc in (d.get("documents") or [])
             ]), unsafe_allow_html=True)
 
-    with tab_find:
-        finds = d.get("findings") or []
-        _is_direct = any(
-            str(o.get("opportunity_track") or "").upper() == "DIRECT_SUPPLY"
-            for o in (d.get("opportunities") or [])
-        )
-        mode = st.radio("Показывать", ["Все", "VERIFIED", "INVALID/LEGACY"], horizontal=True,
-                        key=f"pc_find_mode_{pid}", label_visibility="collapsed")
-        if mode == "VERIFIED":
-            finds = [f for f in finds if f.get("provenance_status") == "VERIFIED"]
-        elif mode == "INVALID/LEGACY":
-            finds = [f for f in finds if f.get("provenance_status") != "VERIFIED"]
-        _all_finds = d.get("findings") or []
-        _v = sum(1 for f in _all_finds if f.get("provenance_status") == "VERIFIED")
-        _l = sum(1 for f in _all_finds if f.get("provenance_status") == "LEGACY_UNVERIFIED")
-        _i = sum(1 for f in _all_finds if f.get("provenance_status") == "INVALID")
-        _table_md = _table_html(
-            ["Термин", "Метод", "Score", "Provenance", "Строка", "matched_text", "Файл"],
-            [
-                [_fmt(f.get("matched_term")), _fmt(f.get("match_method")), _fmt(f.get("score")),
-                 _prov_chip(f.get("provenance_status")),
-                 f'{_fmt(f.get("page_or_sheet"))} / {_fmt(f.get("row_number"))}',
-                 f'<span class="pc-mono">{escape(str(f.get("matched_text") or "")[:180])}</span>',
-                 escape(str(f.get("file_name") or ""))]
-                for f in finds[:150]
-            ])
-        if _is_direct:
-            st.markdown(
-                '<div class="pc-muted">Для <b>прямой поставки</b> keyword-поиск не '
-                'используется: реальные доказательства — во вкладке '
-                '<b>«Смета и требования»</b> (спецификация, техпараметры, требования). '
-                f'Устаревший keyword-слой скрыт ({len(finds)} строк, '
-                f'VERIFIED {_v} / LEGACY {_l} / INVALID {_i}) и в решении не участвует.</div>',
-                unsafe_allow_html=True)
-            _show_legacy = st.toggle(
-                "показать устаревшие keyword-находки (диагностика)",
-                value=False, key=f"pc_legacy_{pid}")
-            if _show_legacy:
-                st.markdown(_table_md, unsafe_allow_html=True)
-        else:
+    if tab_find is not None:
+        with tab_find:
+            finds = d.get("findings") or []
+            mode = st.radio("Показывать", ["Все", "VERIFIED", "INVALID/LEGACY"], horizontal=True,
+                            key=f"pc_find_mode_{pid}", label_visibility="collapsed")
+            if mode == "VERIFIED":
+                finds = [f for f in finds if f.get("provenance_status") == "VERIFIED"]
+            elif mode == "INVALID/LEGACY":
+                finds = [f for f in finds if f.get("provenance_status") != "VERIFIED"]
+            _all_finds = d.get("findings") or []
+            _v = sum(1 for f in _all_finds if f.get("provenance_status") == "VERIFIED")
+            _l = sum(1 for f in _all_finds if f.get("provenance_status") == "LEGACY_UNVERIFIED")
+            _i = sum(1 for f in _all_finds if f.get("provenance_status") == "INVALID")
             st.caption(f"показано {len(finds)} из {counts.get('findings', 0)} · "
                        f"VERIFIED {_v} · LEGACY {_l} · INVALID {_i} · "
                        f"в модель можно отправлять только VERIFIED")
-            st.markdown(_table_md, unsafe_allow_html=True)
+            st.markdown(_table_html(
+                ["Термин", "Метод", "Score", "Provenance", "Строка", "matched_text", "Файл"],
+                [
+                    [_fmt(f.get("matched_term")), _fmt(f.get("match_method")), _fmt(f.get("score")),
+                     _prov_chip(f.get("provenance_status")),
+                     f'{_fmt(f.get("page_or_sheet"))} / {_fmt(f.get("row_number"))}',
+                     f'<span class="pc-mono">{escape(str(f.get("matched_text") or "")[:180])}</span>',
+                     escape(str(f.get("file_name") or ""))]
+                    for f in finds[:150]
+                ]), unsafe_allow_html=True)
 
     with tab_supply:
         supply = d.get("supply_candidates") or []
