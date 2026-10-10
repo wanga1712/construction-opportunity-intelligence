@@ -22,7 +22,10 @@ from document_processor.eis_rate_limit_store import (  # noqa: E402
     EIS_HOST,
     MemoryEisStateStore,
 )
-from document_processor.http_client import HttpFileClient  # noqa: E402
+from document_processor.http_client import (  # noqa: E402
+    HttpFileClient,
+    PermanentSourceMiss,
+)
 
 
 class FakeResponse:
@@ -257,3 +260,81 @@ def test_download_failure_preserves_http_fields():
     assert failure.http_status == 429
     assert failure.retry_after == 5
     assert failure.xid == "2828711056"
+
+
+@pytest.mark.parametrize("status", [404, 410])
+def test_permanent_source_miss_is_not_retried(status):
+    guard, _ = make_guard()
+    client = HttpFileClient(None, "http", logging.getLogger("test"), guard=guard)
+    client.session = FakeSession(FakeResponse(status_code=status))
+
+    with pytest.raises(PermanentSourceMiss) as exc_info:
+        client.try_download_direct(
+            Path("."), "https://zakupki.gov.ru/filestore/public/1.0/download/file"
+        )
+
+    assert exc_info.value.http_status == status
+    assert len(client.session.calls) == 1
+
+
+def test_proxy_404_is_not_followed_by_fallback():
+    guard, _ = make_guard()
+    client = HttpFileClient(
+        "http://proxy.local", "http", logging.getLogger("test"), guard=guard
+    )
+    client.session = FakeSession(FakeResponse(status_code=404))
+
+    with pytest.raises(PermanentSourceMiss):
+        client.try_download_with_proxy(
+            Path("."), "https://zakupki.gov.ru/filestore/public/1.0/download/file"
+        )
+    assert len(client.session.calls) == 1
+
+
+def test_html_404_is_not_retried():
+    guard, _ = make_guard()
+    client = HttpFileClient(None, "http", logging.getLogger("test"), guard=guard)
+    client.session = FakeSession(FakeResponse(status_code=404))
+
+    with pytest.raises(PermanentSourceMiss):
+        client.download_html_and_follow(
+            Path("."), "https://zakupki.gov.ru/download.html"
+        )
+    assert len(client.session.calls) == 1
+
+
+def test_download_single_stops_after_direct_404():
+    from document_processor.downloader import Downloader
+
+    class StubHttp:
+        def __init__(self):
+            self.calls = []
+
+        def extract_host(self, url):
+            return "zakupki.gov.ru"
+
+        def try_download_direct(self, task_dir, url, suggested_filename=None):
+            self.calls.append("direct")
+            raise PermanentSourceMiss(url, 404)
+
+        def try_download_with_proxy(self, *args, **kwargs):
+            self.calls.append("proxy")
+            raise AssertionError("proxy must not run after direct 404")
+
+        def request_head(self, *args, **kwargs):
+            self.calls.append("head")
+            raise AssertionError("HEAD must not run after direct 404")
+
+        def download_html_and_follow(self, *args, **kwargs):
+            self.calls.append("html")
+            raise AssertionError("HTML follow must not run after direct 404")
+
+    downloader = Downloader.__new__(Downloader)
+    downloader.http_client = StubHttp()
+    downloader.logger = logging.getLogger("test")
+
+    with pytest.raises(PermanentSourceMiss):
+        downloader._download_single(
+            Path("."), "https://zakupki.gov.ru/filestore/public/1.0/download/file"
+        )
+    assert downloader.http_client.calls == ["direct"]

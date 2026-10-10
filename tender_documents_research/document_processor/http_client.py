@@ -20,6 +20,15 @@ from .eis_rate_limit_guard import (
 )
 
 
+class PermanentSourceMiss(RuntimeError):
+    """The source explicitly says this URL no longer exists."""
+
+    def __init__(self, url: str, http_status: int) -> None:
+        super().__init__(f"PERMANENT_SOURCE_MISS http={http_status} url={url}")
+        self.url = url
+        self.http_status = int(http_status)
+
+
 class HttpFileClient:
     """HTTP download client. Every EIS request passes the same global gate."""
 
@@ -178,6 +187,13 @@ class HttpFileClient:
                     handle.write(chunk)
         return local_path
 
+    @staticmethod
+    def _raise_if_permanent_source_miss(response, url: str) -> None:
+        if response.status_code in (404, 410):
+            status = int(response.status_code)
+            response.close()
+            raise PermanentSourceMiss(url, status)
+
     def try_download_direct(
         self,
         task_dir: Path,
@@ -218,6 +234,7 @@ class HttpFileClient:
                 stream=True,
                 verify=self._get_verify_param(),
             )
+            self._raise_if_permanent_source_miss(response, url)
             with response:
                 if not response.ok:
                     self.logger.warning(
@@ -237,7 +254,7 @@ class HttpFileClient:
                 return self._write_response(
                     task_dir, url, response, suggested_filename
                 )
-        except (EisRateLimited, EisRateLimitBlocked):
+        except (EisRateLimited, EisRateLimitBlocked, PermanentSourceMiss):
             raise
         except Exception as exc:
             self.logger.warning(f"Direct download failed: {exc}")
@@ -307,6 +324,7 @@ class HttpFileClient:
                     stream=True,
                     verify=verify,
                 )
+            self._raise_if_permanent_source_miss(response, url)
             with response:
                 if not response.ok:
                     self.logger.warning(
@@ -316,7 +334,7 @@ class HttpFileClient:
                 return self._write_response(
                     task_dir, url, response, suggested_filename
                 )
-        except (EisRateLimited, EisRateLimitBlocked):
+        except (EisRateLimited, EisRateLimitBlocked, PermanentSourceMiss):
             raise
         except Exception as exc:
             self.logger.warning(f"Proxy download failed: {exc}")
@@ -333,21 +351,23 @@ class HttpFileClient:
             "Accept-Encoding": "gzip, deflate, br",
         }
         try:
-            with self._request(
+            response = self._request(
                 "GET",
                 page_url,
                 request_type="HTML",
                 headers=headers,
                 timeout=60,
                 verify=self._get_verify_param(),
-            ) as response:
+            )
+            self._raise_if_permanent_source_miss(response, page_url)
+            with response:
                 if not response.ok:
                     self.logger.warning(
                         f"HTML page unavailable: {response.status_code}"
                     )
                     return None
                 html = response.text or ""
-        except (EisRateLimited, EisRateLimitBlocked):
+        except (EisRateLimited, EisRateLimitBlocked, PermanentSourceMiss):
             raise
         except Exception:
             return None
@@ -387,17 +407,20 @@ class HttpFileClient:
         if not candidates:
             return None
         for candidate in candidates[:5]:
-            host = self.extract_host(candidate) or ""
-            if "zakupki.gov.ru" in host and "/filestore/public/1.0/download/" in candidate:
+            try:
+                host = self.extract_host(candidate) or ""
+                if "zakupki.gov.ru" in host and "/filestore/public/1.0/download/" in candidate:
+                    path = self.try_download_with_proxy(task_dir, candidate)
+                    if path:
+                        return path
+                path = self.try_download_direct(task_dir, candidate)
+                if path:
+                    return path
                 path = self.try_download_with_proxy(task_dir, candidate)
                 if path:
                     return path
-            path = self.try_download_direct(task_dir, candidate)
-            if path:
-                return path
-            path = self.try_download_with_proxy(task_dir, candidate)
-            if path:
-                return path
+            except PermanentSourceMiss:
+                continue
         return None
 
     def is_proxy_alive(self) -> bool:

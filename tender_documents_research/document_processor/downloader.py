@@ -11,7 +11,7 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from database_work.database_connection import DatabaseManager
 from utils.logger_config import get_logger
 
-from .http_client import HttpFileClient
+from .http_client import HttpFileClient, PermanentSourceMiss
 from .concurrency_manager import DownloadCoordinator
 from .eis_rate_limit_guard import (
     EisRateLimitBlocked,
@@ -57,7 +57,11 @@ class DownloadBatchResult:
 
     @property
     def permanent_failed_count(self) -> int:
-        return sum(1 for f in self.failures if f.error_class == "PERMANENT")
+        return sum(
+            1
+            for f in self.failures
+            if f.error_class in ("PERMANENT", "PERMANENT_SOURCE_MISS")
+        )
 
 
 class Downloader:
@@ -479,6 +483,53 @@ class Downloader:
             except (EisRateLimited, EisRateLimitBlocked) as exc:
                 local_path = None
                 rate_limit_exc = exc
+            except PermanentSourceMiss as miss_exc:
+                duration_ms = int((time.monotonic() - attempt_start) * 1000)
+                if tender_id is not None and table_source and self.state_repo:
+                    self.state_repo.record_download_attempt(
+                        task_id,
+                        tender_id,
+                        url,
+                        url_hash,
+                        attempt_number,
+                        "FAILED",
+                        error_class="PERMANENT_SOURCE_MISS",
+                        http_status=miss_exc.http_status,
+                        duration_ms=duration_ms,
+                    )
+                    self.state_repo.finalize_download_status(
+                        tender_id,
+                        table_source,
+                        safe_predicted,
+                        url_hash,
+                        False,
+                        "PERMANENT_SOURCE_MISS",
+                    )
+                self.eis_guard.record_file_event(
+                    result="FAILED",
+                    source_url=url,
+                    url_hash=url_hash,
+                    file_name=safe_predicted,
+                    error_class="PERMANENT_SOURCE_MISS",
+                    http_status=miss_exc.http_status,
+                    duration_ms=duration_ms,
+                )
+                failure = DownloadFailure(
+                    source_link_id=None,
+                    source_url=url,
+                    url_hash=url_hash,
+                    error_class="PERMANENT_SOURCE_MISS",
+                    http_status=miss_exc.http_status,
+                    error_message="PERMANENT_SOURCE_MISS",
+                    latency_ms=duration_ms,
+                )
+                return (
+                    [],
+                    failure,
+                    canonical_source_document_id,
+                    physical_download_key,
+                    url_hash,
+                )
             duration_ms = int((time.monotonic() - attempt_start) * 1000)
             if rate_limit_exc is not None:
                 http_status = getattr(rate_limit_exc, "http_status", 429)
@@ -659,7 +710,7 @@ class Downloader:
                         file_size = direct.stat().st_size
                         self.logger.info(f"✅ Прямое скачивание успешно: {direct.name} ({file_size} байт)")
                         return direct
-                except (EisRateLimited, EisRateLimitBlocked):
+                except (EisRateLimited, EisRateLimitBlocked, PermanentSourceMiss):
                     raise
                 except Exception as e:
                     self.logger.warning(f"Прямое скачивание неуспешно (попытка {attempt + 1}): {e}")
@@ -700,7 +751,7 @@ class Downloader:
                 if path:
                     self.logger.info(f"✅ Скачивание через прокси успешно: {path.name}")
                     return path
-        except (EisRateLimited, EisRateLimitBlocked):
+        except (EisRateLimited, EisRateLimitBlocked, PermanentSourceMiss):
             raise
         except Exception as e:
             self.logger.warning(f"Ошибка при скачивании через прокси: {e}")
@@ -713,7 +764,7 @@ class Downloader:
                 if html_path:
                     self.logger.info(f"✅ HTML обработка успешна: {html_path.name}")
                     return html_path
-            except (EisRateLimited, EisRateLimitBlocked):
+            except (EisRateLimited, EisRateLimitBlocked, PermanentSourceMiss):
                 raise
             except Exception as e:
                 self.logger.warning(f"Ошибка обработки HTML: {e}")
@@ -727,7 +778,7 @@ class Downloader:
                 if direct_final:
                     self.logger.info(f"✅ Финальное прямое скачивание успешно: {direct_final.name}")
                     return direct_final
-            except (EisRateLimited, EisRateLimitBlocked):
+            except (EisRateLimited, EisRateLimitBlocked, PermanentSourceMiss):
                 raise
             except Exception as e:
                 self.logger.warning(f"Финальное прямое скачивание неуспешно: {e}")
