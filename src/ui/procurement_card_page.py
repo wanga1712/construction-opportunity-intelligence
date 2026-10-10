@@ -384,6 +384,7 @@ def _render_dossier(d: Dict[str, Any], db: Any = None) -> None:
     _spec = _direct.get("spec") or []
     _tech = _direct.get("tech") or []
     _req = _direct.get("requirements") or []
+    _secs = _direct.get("sections") or {}
     # Для прямой поставки разбираем смету — вкладка keyword-находок не нужна.
     _is_direct_track = any(
         str(o.get("opportunity_track") or "").upper() == "DIRECT_SUPPLY"
