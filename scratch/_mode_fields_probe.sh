@@ -1,0 +1,10 @@
+#!/bin/bash
+PSQL="sudo -n -u postgres psql -d crm -Atc"
+echo "--- crm_procurements: mode-ish columns ---"
+$PSQL "select column_name||' '||data_type from information_schema.columns where table_name='crm_procurements' and (column_name like '%scope%' or column_name like '%mode%' or column_name like '%track%' or column_name like '%type%' or column_name like '%entry%') order by ordinal_position"
+echo "--- opportunities: mode-ish columns ---"
+$PSQL "select column_name||' '||data_type from information_schema.columns where table_name='crm_procurement_category_opportunities' order by ordinal_position"
+echo "--- pid 459631 opportunity rows ---"
+$PSQL "select id, category_code, opportunity_track, commercial_entry_point, medal, source_kind from crm_procurement_category_opportunities where procurement_id=459631"
+echo "--- distribution of opportunity_track (all) ---"
+$PSQL "select coalesce(opportunity_track,'(null)'), count(*) from crm_procurement_category_opportunities group by 1 order by 2 desc limit 10"

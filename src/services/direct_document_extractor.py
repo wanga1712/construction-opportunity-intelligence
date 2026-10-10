@@ -669,8 +669,18 @@ _CERT_MARKERS = ("сертификат", "деклараци", "соответс
                  "гарантия", "лицензия", "паспорт")
 
 
-def build_tkp_request(extraction: Dict[str, Any], dossier: Dict[str, Any]) -> str:
-    """Детерминированный запрос ТКП по смете + требованиям (deterministic, без модели)."""
+def build_tkp_request(extraction: Dict[str, Any], dossier: Dict[str, Any], *,
+                      include_participant: bool = False, include_security: bool = False,
+                      include_national: bool = False,
+                      delivery_lines: Optional[List[str]] = None,
+                      estimate_rows: Optional[List[Dict[str, Any]]] = None) -> str:
+    """Запрос ТКП поставщику из структурированных данных (без модели).
+
+    По умолчанию берём только то, что относится к коммерческому предложению поставщика:
+    позиции сметы, технические требования, условия поставки, гарантию и сертификаты.
+    Требования к участнику и обеспечение в запрос поставщику не попадают (см. WIP §10) —
+    их можно включить флагами.
+    """
     ident = (dossier or {}).get("identity") or {}
     md = (dossier or {}).get("money_and_dates") or {}
     parties = (dossier or {}).get("parties") or {}
@@ -688,8 +698,23 @@ def build_tkp_request(extraction: Dict[str, Any], dossier: Dict[str, Any]) -> st
     lines.append(f"НМЦК: {md.get('initial_price') or '?'} руб.")
     lines.append("")
 
-    lines.append(f"1. Позиции сметы ({len(spec)})")
-    if spec:
+    rows = estimate_rows if estimate_rows is not None else None
+    lines.append(f"1. Позиции сметы ({len(rows) if rows is not None else len(spec)})")
+    if rows:
+        for row in rows:
+            tail = " · ".join(x for x in (
+                ("Кол-во: %s %s" % ("%g" % row.get("qty"), row.get("unit") or "")).strip()
+                if row.get("qty") else "",
+                ("ОКПД2: %s" % row.get("okpd")) if row.get("okpd") else "") if x)
+            price = row.get("unit_price")
+            if price:
+                tail += " · цена за ед.: %s%s" % (
+                    "{:,.2f}".format(float(price)).replace(",", " "),
+                    {"nmck_share": " (ориентировочно из НМЦК)"}.get(
+                        row.get("unit_price_source") or "", ""))
+            lines.append(f"  - {row.get('name')}{' · ' + tail if tail else ''}")
+        lines.append("")
+    elif spec:
         header = spec[0].get("header") or []
         header_low = [str(h).strip().lower() for h in header]
 
@@ -734,15 +759,19 @@ def build_tkp_request(extraction: Dict[str, Any], dossier: Dict[str, Any]) -> st
         lines.append("  - не найдены")
     lines.append("")
 
-    lines.append("3. Требования")
+    lines.append("3. Требования к товару и поставке")
     for item in reqs[:40]:
         cells = [str(c).strip() for c in (item.get("cells") or [])]
         if any(cells):
             lines.append("  - " + " | ".join(c for c in cells if c))
-    for key, title in (("product", "Требования к товару и поставке"),
-                       ("participant", "Требования к участнику"),
-                       ("security", "Обеспечение"),
-                       ("national", "Национальный режим")):
+    blocks = [("product", "Требования к товару и поставке")]
+    if include_participant:
+        blocks.append(("participant", "Требования к участнику"))
+    if include_security:
+        blocks.append(("security", "Обеспечение"))
+    if include_national:
+        blocks.append(("national", "Национальный режим"))
+    for key, title in blocks:
         items = secs.get(key) or []
         if not items:
             continue
@@ -751,13 +780,19 @@ def build_tkp_request(extraction: Dict[str, Any], dossier: Dict[str, Any]) -> st
             lines.append(f"    - {str(it.get('text') or '')[:200]}")
     lines.append("")
 
+    if delivery_lines:
+        lines.append(f"4. Условия поставки ({len(delivery_lines)})")
+        for text in delivery_lines[:15]:
+            lines.append(f"  - {str(text)[:220]}")
+        lines.append("")
+
     certs = []
     for it in (secs.get("product") or []) + (secs.get("participant") or []) + reqs:
         text = str(it.get("text") or " ".join(it.get("cells") or []))
         low = text.lower()
         if any(m in low for m in _CERT_MARKERS):
             certs.append(text[:200])
-    lines.append(f"4. Сертификаты / декларации соответствия ({len(certs)})")
+    lines.append(f"5. Сертификаты / декларации соответствия ({len(certs)})")
     for c in certs[:10]:
         lines.append(f"  - {c}")
     if not certs:

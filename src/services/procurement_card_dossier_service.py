@@ -270,6 +270,20 @@ def load_procurement_dossier(db: Any, procurement_id: int) -> Dict[str, Any]:
         """,
         (int(procurement_id),),
     )
+    # Коммерческий режим: подтверждённый источник — scope gate (см. §2 WIP по карточке).
+    scope_rows = _safe(
+        db,
+        None,
+        """
+        SELECT procurement_scope_type, scope_confidence, scope_method, scope_version,
+               admission_state, admission_reason, scope_evaluated_at
+        FROM crm_procurement_scope_authority
+        WHERE procurement_id = %s
+        LIMIT 1
+        """,
+        (int(procurement_id),),
+    )
+    dossier["scope"] = scope_rows[0] if scope_rows else {}
     # Ручные категории (MANUAL) — тот же источник данных, что и в таблице.
     try:
         from src.services.manual_category_service import list_manual_categories

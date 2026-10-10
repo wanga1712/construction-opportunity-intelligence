@@ -385,33 +385,50 @@ def _render_dossier(d: Dict[str, Any], db: Any = None) -> None:
     _tech = _direct.get("tech") or []
     _req = _direct.get("requirements") or []
     _secs = _direct.get("sections") or {}
-    # Для прямой поставки разбираем смету — вкладка keyword-находок не нужна.
-    _is_direct_track = any(
-        str(o.get("opportunity_track") or "").upper() == "DIRECT_SUPPLY"
-        for o in (d.get("opportunities") or [])
-    )
+    # Прямая поставка — своя структура вкладок (WIP §3). Режим берём из подтверждённого
+    # источника scope gate, а не из названия закупки или ОКПД2.
+    from src.ui.procurement_card_direct import build_state as _direct_state_build
+    from src.ui.procurement_card_direct import render_additional as _render_additional
+    from src.ui.procurement_card_direct import render_estimate as _render_estimate
+    from src.ui.procurement_card_direct import render_participant as _render_participant
+    from src.ui.procurement_card_direct import render_product_delivery as _render_product_delivery
+    from src.ui.procurement_card_direct import render_security as _render_security
+    from src.ui.procurement_card_direct import tab_titles as _direct_tab_titles
+
+    _direct_state = _direct_state_build(_direct, d)
+    _is_direct_track = bool((_direct_state["classified"].get("mode") or {}).get("is_direct"))
     _titles = ["Обзор", f"Документы ({counts.get('documents', 0)})"]
-    if not _is_direct_track:
-        _titles.append(f"Находки ({counts.get('findings', 0)})")
-    _titles.append(f"Что можно поставить ({len(d.get('supply_candidates') or [])})")
     _direct_specs = []
-    if _spec:
-        _direct_specs.append(("spec", f"Смета ({len(_spec)})"))
-    if _tech:
-        _direct_specs.append(("tech", f"Техпараметры ({len(_tech)})"))
-    if _req or any((_direct.get("sections") or {}).values()):
-        _req_total = len(_req) + sum(len(v or []) for v in (_direct.get("sections") or {}).values())
-        _direct_specs.append(("req", f"Требования ({_req_total})"))
-    _titles += [t for _, t in _direct_specs]
+    if _is_direct_track:
+        _titles += _direct_tab_titles(_direct_state)
+    else:
+        _titles.append(f"Находки ({counts.get('findings', 0)})")
+        _titles.append(f"Что можно поставить ({len(d.get('supply_candidates') or [])})")
+        if _spec:
+            _direct_specs.append(("spec", f"Смета ({len(_spec)})"))
+        if _tech:
+            _direct_specs.append(("tech", f"Техпараметры ({len(_tech)})"))
+        if _req or any((_direct.get("sections") or {}).values()):
+            _req_total = len(_req) + sum(len(v or []) for v in (_direct.get("sections") or {}).values())
+            _direct_specs.append(("req", f"Требования ({_req_total})"))
+        _titles += [t for _, t in _direct_specs]
     _titles += ["История / Модель", "Очередь"]
     _tabs = st.tabs(_titles)
     _idx = 0
     tab_overview = _tabs[_idx]; _idx += 1
     tab_docs = _tabs[_idx]; _idx += 1
     tab_find = None
-    if not _is_direct_track:
+    tab_supply = None
+    tab_estimate = tab_prod = tab_participant = tab_security = tab_additional = None
+    if _is_direct_track:
+        tab_estimate = _tabs[_idx]; _idx += 1
+        tab_prod = _tabs[_idx]; _idx += 1
+        tab_participant = _tabs[_idx]; _idx += 1
+        tab_security = _tabs[_idx]; _idx += 1
+        tab_additional = _tabs[_idx]; _idx += 1
+    else:
         tab_find = _tabs[_idx]; _idx += 1
-    tab_supply = _tabs[_idx]; _idx += 1
+        tab_supply = _tabs[_idx]; _idx += 1
     tab_spec = tab_tech = tab_req = None
     for _key, _ in _direct_specs:
         if _key == "spec":
@@ -572,23 +589,41 @@ def _render_dossier(d: Dict[str, Any], db: Any = None) -> None:
                     for f in finds[:150]
                 ]), unsafe_allow_html=True)
 
-    with tab_supply:
-        supply = d.get("supply_candidates") or []
-        if supply:
-            st.markdown(_table_html(
-                ["Товар/материал", "Бренд", "Модель", "Кол-во", "Цена", "Сумма", "Отношение", "Trust"],
-                [
-                    [escape(str(s.get("product_name_normalized") or s.get("product_name_raw") or "")),
-                     _fmt(s.get("brand_normalized")), _fmt(s.get("model_article_normalized")),
-                     f'{_fmt(s.get("quantity_value"))} {_fmt(s.get("quantity_unit_raw"))}',
-                     _money(s.get("unit_price_value")), _money(s.get("total_price_value")),
-                     _fmt(s.get("product_relation")), _fmt(s.get("structured_fact_trust_state"))]
-                    for s in supply
-                ]), unsafe_allow_html=True)
-        else:
-            st.markdown('<div class="pc-muted">Извлечённых товаров нет: extraction ещё не '
-                        'прогнан. Кандидаты — вкладка «Находки», фильтр VERIFIED.</div>',
-                        unsafe_allow_html=True)
+    if tab_supply is not None:
+        with tab_supply:
+            supply = d.get("supply_candidates") or []
+            if supply:
+                st.markdown(_table_html(
+                    ["Товар/материал", "Бренд", "Модель", "Кол-во", "Цена", "Сумма", "Отношение", "Trust"],
+                    [
+                        [escape(str(s.get("product_name_normalized") or s.get("product_name_raw") or "")),
+                         _fmt(s.get("brand_normalized")), _fmt(s.get("model_article_normalized")),
+                         f'{_fmt(s.get("quantity_value"))} {_fmt(s.get("quantity_unit_raw"))}',
+                         _money(s.get("unit_price_value")), _money(s.get("total_price_value")),
+                         _fmt(s.get("product_relation")), _fmt(s.get("structured_fact_trust_state"))]
+                        for s in supply
+                    ]), unsafe_allow_html=True)
+            else:
+                st.markdown('<div class="pc-muted">Извлечённых товаров нет: extraction ещё не '
+                            'прогнан. Кандидаты — вкладка «Находки», фильтр VERIFIED.</div>',
+                            unsafe_allow_html=True)
+
+    if _is_direct_track:
+        if tab_estimate is not None:
+            with tab_estimate:
+                _render_estimate(_direct_state, pid)
+        if tab_prod is not None:
+            with tab_prod:
+                _render_product_delivery(_direct_state)
+        if tab_participant is not None:
+            with tab_participant:
+                _render_participant(_direct_state)
+        if tab_security is not None:
+            with tab_security:
+                _render_security(_direct_state)
+        if tab_additional is not None:
+            with tab_additional:
+                _render_additional(_direct_state)
 
     with tab_history:
         _render_history_tab(pid, db)

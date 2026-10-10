@@ -1,0 +1,12 @@
+#!/bin/bash
+PSQL="sudo -n -u postgres psql -d crm -Atc"
+echo "--- crm_procurement_scope_authority columns ---"
+$PSQL "select column_name||' '||data_type from information_schema.columns where table_name='crm_procurement_scope_authority' order by ordinal_position"
+echo "--- sample / counts ---"
+$PSQL "select count(*) from crm_procurement_scope_authority"
+$PSQL "select left(row_to_json(t)::text, 400) from crm_procurement_scope_authority t limit 3"
+echo "--- pid 459631 rows ---"
+$PSQL "select left(row_to_json(t)::text, 400) from crm_procurement_scope_authority t where procurement_id=459631"
+echo "--- streamlit version (CRM venv) ---"
+/opt/CRM_Streamlit/.venv313/bin/python -c "import streamlit; print(streamlit.__version__)"
+/opt/CRM_Streamlit/.venv313/bin/python -c "from streamlit.testing.v1 import AppTest; print('AppTest OK')"
