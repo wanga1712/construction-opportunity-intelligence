@@ -1,6 +1,32 @@
 ## CURRENT WIP — 2026-10-11 (EMBEDDED_EXTRACTION_NORMALIZATION_V1 / PHASE 0-1)
 
-**EMBEDDED_EXTRACTION_NORMALIZATION_V1** — `[~]` **PHASE 0 PASS; PHASE 1 (trace) PASS; PHASE 2+ (new extractor) НЕ НАЧАТ по собственному условию WIP**. Acquisition не трогается; workers/writers off; mass rollout off.
+### PHASE 2-5 — category-bound extractor + normalizer (canary, HTTP=0)
+**Статус: GATE PASS.** Новый модуль `tender_documents_research/document_processor/embedded_extraction.py` (`EMBEDDED_EXTRACTOR_V1`, `UNIT_NORMALIZER_V1`): детерминированный row/table extraction, без модели; контракт факта — material, quantity raw+normalized, unit raw+normalized, `measurement_family`, unit_price, line_total, provenance, confidence.
+Unit normalization по семьям: `COUNT / AREA / LENGTH / MASS / VOLUME` (шт→PCS, компл→SET, м/метр→M, мм→MM, км→KM, м2/кв.м→M2, кг→KG, г→G, т→T, л→L, м3→M3; несовместимые единицы не приводятся).
+Extractor работает только по табличным строкам (`meta.cells` или ` | `-разделённые), имя позиции выбирается по материальному скорингу (material hints + registry-keywords минус адреса/даты/перечисления/коды); факт требует unit-bound quantity. Таблица `structured_entities` расширена (additive migration `20261011_structured_entities_v3_contract.sql`): `measurement_family, source_document_id, physical_download_key, page_or_sheet, row_or_line, extractor_version, normalizer_version`; `detail_id` для runs/entities стал nullable. xlsx-ветка приведена к тому же контракту через `facts_from_table_rows`.
+Обвязка: `scripts/run_embedded_extraction_canary.py` — переиспользует уже лежащие на диске canary-artifacts (`/data/tender-documents/downloads/<queue_id>/`), `NEW_HTTP_REQUESTS=0`; идемпотентно чистит свои прошлые runs.
+Категория больше не `unknown`: атрибуция берётся из плана (`selected_documents[].category`) и registry (`crm_product_categories.document_search_plan` как vocabulary), без параллельного списка.
+
+**PHASE 4 отчёт (canary):**
+```
+EMBEDDED_DOCS_REPROCESSED=28
+CATEGORY_EXTRACTOR_CALLED=20
+NORMALIZER_CALLED=9
+MATERIAL_FOUND=35        QUANTITY_FOUND=35       UNIT_FOUND=35
+UNIT_PRICE_FOUND=18      CATEGORY_VALUE_FOUND=20
+STRUCTURED_ENTITIES_WRITTEN=35
+STRUCTURED_ENTITIES_WITH_CATEGORY=35
+STRUCTURED_ENTITIES_WITH_PROVENANCE=35
+CATEGORY_CODE_UNKNOWN_FOR_NEW_ENTITIES=0
+DUPLICATE_ENTITY_VALUE_SUM=0
+NEW_HTTP_REQUESTS=0
+PER_CATEGORY: cable_support_systems 21, lighting 13, curbstone 1
+families: LENGTH/M 18 (6 pids), COUNT/PCS+SET 17 (5 pids)
+```
+Phase 5 example-proof (из уже известных xlsx-примеров): `200.0 Метр → qty=200, unit=M, family=LENGTH`; `50.0 м → qty=50, unit=M, family=LENGTH`; `1 компл → unit=SET, family=COUNT`. Provenance completeness: 35/35 (category, source_document_id, page/sheet или row/line, source_quote), dedup duplicates 0.
+Ограничения этапа соблюдены: HTTP=0, workers/writers/medal writes off, mass rollout off; historical rebuild / medals / 711 / queue reprocess **не трогались**.
+
+**EMBEDDED_EXTRACTION_NORMALIZATION_V1** — `[~]` **PHASE 0-5 PASS (canary gate пройден); historical reprocess / medals / queue — НЕ начинались**. Acquisition не трогается; workers/writers/medal writes off; mass rollout off.
 
 ### PHASE 0 — V3 как baseline (ACCEPTED)
 `DOCUMENT_SELECTION_V3=ACCEPTED`, `QUEUE_V2=ACCEPTED`, `TARGETED_DOWNLOADER=ACCEPTED`, `EIS_GUARD_V2=PASS`, `PRIORITY_LIFECYCLE_V2=PASS`. Commit `e14b76a` запушен в canonical (`origin/CRM-ANALYTICS-V2-UI-REBUILD-1` = `e14b76a`); S13 runtime = repo по sha256 для всего V3-файлсета. `MASS_ROLLOUT=NO`, `DOCUMENT_WORKERS=OFF`, `WRITERS=OFF`.
