@@ -183,6 +183,7 @@ class TaskPipeline:
         contract_reg_number: str,
         table_source: str,
         files: list[Path],
+        soft_fallback_file_names: Optional[set] = None,
     ) -> TaskProcessResult:
         self.logger.info(f"[{task_id}] Получено файлов: {len(files)}")
         if not files:
@@ -204,8 +205,13 @@ class TaskPipeline:
         result = TaskProcessResult()
         processed_names: Set[str] = set()
 
+        # DOCUMENT_SELECTION_V3: explicit, ID-scoped soft-fallback bypass.
+        bypass_names = {
+            str(n).strip().lower() for n in (soft_fallback_file_names or set()) if n
+        }
+
         for path in files:
-            if should_skip_file(path.name):
+            if should_skip_file(path.name) and str(path.name).strip().lower() not in bypass_names:
                 self.logger.info(f"[{task_id}] Пропуск файла (skip list): {path.name}")
                 continue
 

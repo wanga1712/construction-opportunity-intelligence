@@ -32,7 +32,8 @@ _S13_CLAIM_ADMISSION_FILTER = """
 #: Queue V2 payload columns returned on claim (targeted downloader input).
 _QUEUE_V2_COLS = """q.plan_version, q.research_action_v2, q.document_plan_version,
                    q.selected_source_document_ids, q.selected_physical_keys,
-                   q.fallback_source_document_ids, q.selected_documents,
+                   q.fallback_source_document_ids, q.soft_fallback_source_document_ids,
+                   q.selected_documents,
                    q.source_lifecycle, q.project_active, q.project_end_at,
                    q.project_remaining_days, q.execution_phase,
                    q.current_effective_medal"""
@@ -181,7 +182,8 @@ class S13V2QueueRepository(QueueRepository):
                  research_prior_percentile, research_prior_band, research_prior_effective_score,
                  plan_version, research_action_v2, document_plan_version,
                  selected_source_document_ids, selected_physical_keys,
-                 fallback_source_document_ids, selected_documents,
+                 fallback_source_document_ids, soft_fallback_source_document_ids,
+                 selected_documents,
                  source_lifecycle, project_active, project_end_at,
                  project_remaining_days, execution_phase, current_effective_medal
             """
@@ -208,7 +210,8 @@ class S13V2QueueRepository(QueueRepository):
                    q.work_tier, q.source_start_date,
                    q.plan_version, q.research_action_v2, q.document_plan_version,
                    q.selected_source_document_ids, q.selected_physical_keys,
-                   q.fallback_source_document_ids, q.selected_documents,
+                   q.fallback_source_document_ids, q.soft_fallback_source_document_ids,
+                   q.selected_documents,
                    q.source_lifecycle, q.project_active, q.project_end_at,
                    q.project_remaining_days, q.execution_phase,
                    q.current_effective_medal"""
@@ -292,7 +295,8 @@ class S13V2QueueRepository(QueueRepository):
                  research_prior_percentile, research_prior_band, research_prior_effective_score,
                  plan_version, research_action_v2, document_plan_version,
                  selected_source_document_ids, selected_physical_keys,
-                 fallback_source_document_ids, selected_documents,
+                 fallback_source_document_ids, soft_fallback_source_document_ids,
+                 selected_documents,
                  source_lifecycle, project_active, project_end_at,
                  project_remaining_days, execution_phase, current_effective_medal
             """

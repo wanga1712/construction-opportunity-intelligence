@@ -36,7 +36,10 @@ from src.services.commercial_routing_v3.document_needs_plan_v2 import (  # noqa:
     DOCUMENT_NEEDS_POLICY_VERSION,
     DOCUMENT_SELECTION_POLICY_VERSION,
     FALLBACK_MAX_PER_UNIT,
+    NO_EXECUTABLE_FALLBACK,
+    SELECTED_DECISIONS,
     SELECTED_FALLBACK,
+    SELECTED_SOFT_FALLBACK,
     SELECTED,
     SKIPPED_NOT_RELEVANT,
     UNKNOWN_NEEDS_REVIEW,
@@ -417,6 +420,7 @@ def main() -> int:
         http_before = 0
         http_after_selected = 0
         http_after_fallback = 0
+        http_after_soft = 0
         physical_keys_total = 0
         file_name_total = 0
         reuse_counts = Counter()
@@ -519,8 +523,9 @@ def main() -> int:
             decision_rank = {
                 SELECTED: 0,
                 SELECTED_FALLBACK: 1,
-                UNKNOWN_NEEDS_REVIEW: 2,
-                SKIPPED_NOT_RELEVANT: 3,
+                SELECTED_SOFT_FALLBACK: 2,
+                UNKNOWN_NEEDS_REVIEW: 3,
+                SKIPPED_NOT_RELEVANT: 4,
             }
             best: Dict[str, str] = {}
             best_class: Dict[str, str] = {}
@@ -538,6 +543,7 @@ def main() -> int:
                         best_reason[key] = selection.selection_reason
             per_pid_selected = 0
             per_pid_fallback = 0
+            per_pid_soft_fallback = 0
             per_pid_unknown = 0
             for key, decision in best.items():
                 doc = doc_by_key[key]
@@ -546,12 +552,14 @@ def main() -> int:
                     per_pid_selected += 1
                 elif decision == SELECTED_FALLBACK:
                     per_pid_fallback += 1
+                elif decision == SELECTED_SOFT_FALLBACK:
+                    per_pid_soft_fallback += 1
                 elif decision == UNKNOWN_NEEDS_REVIEW:
                     per_pid_unknown += 1
                     unknown_reasons[best_reason[key].split(":")[1] if ":" in best_reason[key] else best_reason[key]] += 1
                 else:
                     skipped_reasons[best_reason[key].split(":")[0]] += 1
-                if decision in (SELECTED, SELECTED_FALLBACK):
+                if decision in SELECTED_DECISIONS:
                     sel_counts[decision] += 1
                     reuse_key = reuse_class(doc, has_match)
                     reuse_counts[reuse_key] += 1
@@ -571,6 +579,9 @@ def main() -> int:
                     http_after_fallback += 1
                 elif decision == SELECTED_FALLBACK:
                     http_after_fallback += 1
+                elif decision == SELECTED_SOFT_FALLBACK:
+                    http_after_fallback += 1
+                    http_after_soft += 1
             http_after_fallback += per_pid_unknown
             unknown_unknown += per_pid_unknown
             if per_pid_unknown and (per_pid_selected or per_pid_fallback):
@@ -580,6 +591,7 @@ def main() -> int:
                 per_track[group]["DOCS"] += len(docs)
                 per_track[group]["SELECTED"] += per_pid_selected
                 per_track[group]["SELECTED_FALLBACK"] += per_pid_fallback
+                per_track[group]["SELECTED_SOFT_FALLBACK"] += per_pid_soft_fallback
                 per_track[group]["UNKNOWN"] += per_pid_unknown
             if len(samples_for_trace) < 40 and docs:
                 samples_for_trace.append((pid, opps, unit_plans, unit_selections, classified))
@@ -619,13 +631,14 @@ def main() -> int:
             )
 
         print("=" * 78)
-        print("PHASE 16 - AGGREGATE HTTP SIMULATION (document_selection_v2)")
+        print("PHASE 16 - AGGREGATE HTTP SIMULATION (document_selection_v3)")
         print("DEDUPE_LEVEL=DISTINCT_FILE_NAME_PER_PROCUREMENT")
         print(f"DISTINCT_PHYSICAL_KEYS={physical_keys_total}")
         print(f"DISTINCT_FILE_NAMES={file_name_total}")
         print(f"SOURCE_DOCUMENTS_TOTAL={sel_counts.total()}")
         print(f"SELECTED={sel_counts.get(SELECTED, 0)}")
         print(f"SELECTED_FALLBACK={sel_counts.get(SELECTED_FALLBACK, 0)}")
+        print(f"SELECTED_SOFT_FALLBACK={sel_counts.get(SELECTED_SOFT_FALLBACK, 0)}")
         print(f"SKIPPED_NOT_RELEVANT={sel_counts.get(SKIPPED_NOT_RELEVANT, 0)}")
         print(f"UNKNOWN_NEEDS_REVIEW={sel_counts.get(UNKNOWN_NEEDS_REVIEW, 0)}")
         print(f"UNITS_WITH_ACCEPTED_DOC={accepted_units}")
@@ -644,9 +657,13 @@ def main() -> int:
         print(f"HTTP_AFTER_SELECTED={http_after_selected}")
         http_after_v2 = sel_counts.get(SELECTED, 0) + sel_counts.get(SELECTED_FALLBACK, 0)
         print(f"HTTP_AFTER_V2={http_after_v2}")
+        http_after_v3 = http_after_v2 + sel_counts.get(SELECTED_SOFT_FALLBACK, 0)
+        print(f"HTTP_AFTER_V3={http_after_v3}")
+        print(f"HTTP_AFTER_V3_SOFT_FALLBACK={http_after_soft}")
         print(f"HTTP_AFTER_V2_WITH_UNKNOWN={http_after_fallback}")
         if http_before:
             print(f"HTTP_REDUCTION_PCT={100.0 * (1 - http_after_v2 / http_before):.1f}")
+            print(f"HTTP_REDUCTION_PCT_V3={100.0 * (1 - http_after_v3 / http_before):.1f}")
             print(
                 "HTTP_REDUCTION_PCT_WITH_UNKNOWN="
                 f"{100.0 * (1 - http_after_fallback / http_before):.1f}"
@@ -715,10 +732,12 @@ def main() -> int:
                 classes[classification.document_class.value] = (
                     classes.get(classification.document_class.value, 0) + 1
                 )
-                if selection.selection_decision in (SELECTED, SELECTED_FALLBACK):
+                if selection.selection_decision in SELECTED_DECISIONS:
                     doc_status["KNOWN_POSITIVE_DOC_SELECTED"] += 1
                     if selection.selection_decision == SELECTED_FALLBACK:
                         doc_status["KNOWN_POSITIVE_DOC_SELECTED_FALLBACK"] += 1
+                    elif selection.selection_decision == SELECTED_SOFT_FALLBACK:
+                        doc_status["KNOWN_POSITIVE_DOC_SELECTED_SOFT_FALLBACK"] += 1
                     unit_has_selected = True
                 elif selection.selection_decision == UNKNOWN_NEEDS_REVIEW:
                     doc_status["KNOWN_POSITIVE_DOC_DEFERRED_UNKNOWN"] += 1
@@ -728,10 +747,18 @@ def main() -> int:
                     recall["SKIPPED_REASON_" + selection.selection_reason.split(":")[0]] += 1
             if unit_has_selected:
                 recall["RECALL_OK_UNITS"] += 1
+                if promoted is not None and promoted.selection_decision == SELECTED_SOFT_FALLBACK:
+                    recall["RECALL_OK_UNITS_SOFT_FALLBACK"] += 1
                 if pid in current_pid_set:
                     recall["RECALL_OK_UNITS_CURRENT"] += 1
+                    if promoted is not None and promoted.selection_decision == SELECTED_SOFT_FALLBACK:
+                        recall["RECALL_OK_UNITS_CURRENT_SOFT_FALLBACK"] += 1
             else:
                 recall["RECALL_LOSS_UNITS"] += 1
+                if not any(_skip_predicate()(n) for n in names):
+                    recall["RECALL_LOSS_UNITS_WITH_EXECUTABLE"] += 1
+                else:
+                    recall["RECALL_LOSS_UNITS_ALL_SKIP"] += 1
                 if all(_skip_predicate()(n) for n in names):
                     global_skip_only_units += 1
                     if pid in current_pid_set:
@@ -755,6 +782,10 @@ def main() -> int:
         print(f"KNOWN_POSITIVE_DOCUMENTS={total_docs}")
         print(f"KNOWN_POSITIVE_SELECTED={doc_status['KNOWN_POSITIVE_DOC_SELECTED']}")
         print(f"KNOWN_POSITIVE_SELECTED_FALLBACK={doc_status['KNOWN_POSITIVE_DOC_SELECTED_FALLBACK']}")
+        print(
+            "KNOWN_POSITIVE_SELECTED_SOFT_FALLBACK="
+            f"{doc_status['KNOWN_POSITIVE_DOC_SELECTED_SOFT_FALLBACK']}"
+        )
         print(f"KNOWN_POSITIVE_DEFERRED_UNKNOWN={doc_status['KNOWN_POSITIVE_DOC_DEFERRED_UNKNOWN']}")
         print(f"KNOWN_POSITIVE_SKIPPED={doc_status['KNOWN_POSITIVE_DOC_SKIPPED']}")
         print(f"RECALL_OK_UNITS={recall['RECALL_OK_UNITS']}")
@@ -763,6 +794,9 @@ def main() -> int:
         print(f"CURRENT_RECALL_LOSS_UNITS={recall['RECALL_LOSS_UNITS_CURRENT']}")
         print(f"KNOWN_POSITIVE_CURRENT_LOSS={recall['RECALL_LOSS_UNITS_CURRENT']}")
         print(f"KNOWN_POSITIVE_GLOBAL_LOSS={recall['RECALL_LOSS_UNITS']}")
+        print(f"KNOWN_POSITIVE_CURRENT_SOFT_FALLBACK={recall['RECALL_OK_UNITS_CURRENT_SOFT_FALLBACK']}")
+        print(f"KNOWN_POSITIVE_GLOBAL_SOFT_FALLBACK={recall['RECALL_OK_UNITS_SOFT_FALLBACK']}")
+        print(f"KNOWN_POSITIVE_GLOBAL_LOSS_ALL_SKIP={recall['RECALL_LOSS_UNITS_ALL_SKIP']}")
         print(f"KNOWN_POSITIVE_DOCS_MATCHING_SKIP_LIST={skip_docs}")
         print(f"CURRENT_POSITIVE_UNITS_ONLY_IN_SKIP_FILES={current_skip_only_units}")
         print(f"GLOBAL_POSITIVE_UNITS_ONLY_IN_SKIP_FILES={global_skip_only_units}")

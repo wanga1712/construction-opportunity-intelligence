@@ -49,6 +49,7 @@ class S13V2Pipeline:
         files: list[Path],
         match_engine,
         category_codes: list | None = None,
+        soft_fallback_file_names: set | None = None,
     ):
         """
         Pure compute processing for S13_V2. No DB writes.
@@ -56,6 +57,26 @@ class S13V2Pipeline:
         """
         from document_processor.dto import TaskProcessResult, ProcessingOutcome, FileProcessResult, MatchResult, EvidenceResult
         from document_processor.file_skip_list import should_skip_file
+
+        # DOCUMENT_SELECTION_V3: only explicitly planned soft-fallback documents
+        # (queue plan selection_type=SOFT_FALLBACK, ID-scoped) may bypass the
+        # filename semantic skip. HARD_SKIP is never bypassed.
+        bypass_names = {
+            str(n).strip().lower() for n in (soft_fallback_file_names or set()) if n
+        }
+        soft_bypass_used = 0
+
+        def _skip(name: str) -> bool:
+            nonlocal soft_bypass_used
+            if not should_skip_file(name):
+                return False
+            if str(name).strip().lower() in bypass_names:
+                soft_bypass_used += 1
+                self.logger.info(
+                    f"[{procurement_id}] SOFT_FALLBACK explicit bypass: {name}"
+                )
+                return False
+            return True
 
         result = TaskProcessResult(
             procurement_id=procurement_id,
@@ -71,7 +92,7 @@ class S13V2Pipeline:
             return result
 
         for path in files:
-            if should_skip_file(path.name):
+            if _skip(path.name):
                 parent_name, parent_path, member_path = _archive_parent_identity(path)
                 result.files.append(FileProcessResult(
                     file_name=path.name,

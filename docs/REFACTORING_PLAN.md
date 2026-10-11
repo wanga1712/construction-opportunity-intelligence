@@ -1,3 +1,50 @@
+## CURRENT WIP — 2026-10-11 (DOCUMENT_SELECTION_V3 / SOFT_FALLBACK + CANARY)
+
+**DOCUMENT_SELECTION_V3_WIP** — `[~]` **PASS ДО EXTRACTION GATE; ACQUISITION ДОКАЗАН; EMBEDDED quantity/unit = 0 → СЛЕДУЮЩИЙ WIP**. Закрыт конфликт «historical evidence в PROJECT_CONTRACT / NOTICE / ElectronicAuction vs canonical file_skip_list». Selection policy переведена на три ступени; skip-list разделён на HARD/SOFT; Queue payload несёт `selection_type` и ID-scoped soft bypass.
+
+### PHASE 0 — baseline (не менялось)
+`RESEARCH_ACTION_V2=KEEP`, `DOCUMENT_NEEDS_PLAN_V2=KEEP`, `DOCUMENT_CLASSES=KEEP`, `DIRECT_MEDAL_V1=KEEP`, `PRIORITY_LIFECYCLE_V2=KEEP`, `QUEUE_V2=KEEP`, `TARGETED_DOWNLOADER=KEEP`, `EIS_GUARD_AUTO_RECOVERY_V2=PASS`, `FALLBACK_EXECUTABILITY_V2=PASS`, `MASS_ROLLOUT=OFF`, `WRITERS=OFF` (tender-docs-daemon-open/-awarded, crm-ai-assessment-runner, crm-v3-* — inactive).
+Измеренный конфликт (2026-10-11): `KNOWN_POSITIVE_DOCS_MATCHING_SKIP_LIST=6963`; под V2 executable-only `CURRENT_POSITIVE_UNITS_ONLY_IN_SKIP_FILES` и `GLOBAL_...` были 158 / 2255 (полностью терялись). Под V3 оба = 0.
+
+### PHASE 1 — разделение skip policy
+`tender_documents_research/document_processor/file_skip_list.py`: добавлен `SkipPolicy = HARD_SKIP | SOFT_SKIP | EXECUTABLE`, `classify_skip_policy(name)`, `soft_skip_class(name)`; legacy `should_skip_file()` сохранён по смыслу (проверено на 20000 реальных имён из `document_files`: `DIFF=0`).
+`HARD_SKIP_CLASSES` = расширения-контейнеры/подписи/растры (`.xml .sig .p7s .gge .sign .gsfx .cer .crt .key .pem .png .jpg .jpeg .tif .tiff .bmp .gif .dwg .dxf .dwf`), файлы без расширения, control/result-control точные имена/префиксы (`автоматический контроль`, `подписи заключивших контракт`, `результат контроля`, `control99`), custom-правила `skip_files.json` (fail-closed).
+`SOFT_SKIP_CLASSES` = `PROJECT_CONTRACT`, `NOTICE`, `ELECTRONIC_AUCTION`, `PRINTED_CONTRACT_FORM`, `CONTRACT_FORM_OTHER`, `CONTRACT_INFO`, `SOFT_OTHER`, `NUMERIC_NAME` (имена без букв). «Печатная форма контракта» — отдельный класс, не приравнена к проекту контракта.
+
+### PHASE 2 — CURRENT evidence audit (read-only)
+`scripts/audit_document_selection_v3_evidence.py` (новый). `AUDITED_CURRENT_UNITS=163` (IP называл 158 — расхождение из-за прироста CURRENT-данных и учёта всех soft-классов), `TRUE_COMMERCIAL_EVIDENCE=143`, `CONTEXT_ONLY=17`, `FALSE_POSITIVE=3`, `UNVERIFIABLE=0`.
+`PROJECT_CONTRACT_TRUE_RATE=75.0%` (52 units), `NOTICE_TRUE_RATE=90.3%` (72), `ELECTRONIC_AUCTION_TRUE_RATE=100.0%` (39).
+
+### PHASE 3/4 — document_selection_v3 + soft priority
+`select_unit_documents()` — три ступени: accepted executable → `SELECTED`; иначе ordinary executable → 1 `SELECTED_FALLBACK`; иначе 1 `SELECTED_SOFT_FALLBACK`; иначе нет selection (`NO_EXECUTABLE_FALLBACK`). Новые enum: `SELECTED_SOFT_FALLBACK`, `NO_EXECUTABLE_FALLBACK`. `DOCUMENT_SELECTION_POLICY_VERSION=document_selection_v3`.
+Production soft order выведен из audit: `ELECTRONIC_AUCTION > NOTICE > PROJECT_CONTRACT > PRINTED_CONTRACT_FORM > CONTRACT_FORM_OTHER > CONTRACT_INFO > SOFT_OTHER > NUMERIC_NAME`; инвариант `SOFT_FALLBACK_MAX_PER_PROCUREMENT_CATEGORY=1`.
+**Отклонение (записано):** имена без букв (EIS numeric, напр. `17238739.pdf`) были в IP-черновике HARD как «невалидные»; audit 39/39 global hard-only units показал реальные товарные термины в сохранённых matches → переведены в SOFT `NUMERIC_NAME` (последний приоритет, только last resort). Это снимает GLOBAL unexplained loss.
+
+### PHASE 5/6/7 — payload, exact bypass, invariants
+Queue payload: `selected_documents[{source_document_id, physical_key, file_name, category, document_class, selection_type, selection_reason, required_by_category, required_facts}]`; `selection_type ∈ NORMAL|FALLBACK|SOFT_FALLBACK`; добавлено `soft_fallback_source_document_ids[]` (additive migration `20261011_queue_v3_soft_fallback.sql`, применена approved postgres route). `selection_type` живёт в `tender_documents_research/backends/queue_repository.py`.
+Bypass: `daemon._process_s13v2_task` строит ID-scoped множество soft-имён из плана → `s13_v2_pipeline.process_task(soft_fallback_file_names=...)`; быстрый skip обходится **только** для явно запланированного файла (`SOFT_FALLBACK explicit bypass`), префиксы не освобождаются, HARD_SKIP не обходится никогда.
+Invariants (структурные + измеренные): `SELECTED_HARD_SKIP=0`, `FALLBACK_HARD_SKIP=0`, `SOFT_FALLBACK_HARD_SKIP=0`, `UNPLANNED_SOFT_SKIP_PARSED=0`, `PLANNED_SOFT_FALLBACK_SKIPPED_BY_FILENAME=0`, `HTTP_TO_HARD_SKIP=0`, `HTTP_TO_UNSELECTED_DOCUMENT=0`, `DUPLICATE_PHYSICAL_HTTP=0`.
+
+### PHASE 8 — full read-only simulation (build_queue_v2_plan.py)
+`PROCUREMENTS=711` (IP называл 695; CURRENT-with-docs вырос). `NORMAL_SELECTED=23`, `FALLBACK_SELECTED=688`, `SOFT_FALLBACK_SELECTED=7`, `NO_EXECUTABLE_FALLBACK=0`. `SELECTED_PHYSICAL_DOCUMENTS=718`, `DUPLICATE_SELECTED_PHYSICAL_DOWNLOADS=0`. `REUSE_NO_HTTP=146`, `REPROCESS_NO_HTTP=511`, `NEW_HTTP_REQUIRED=61`. `HTTP_BEFORE=4252`, `HTTP_AFTER_V3=718`, `HTTP_REDUCTION_PCT=83.1`.
+
+### PHASE 9 — recall V3 (simulate_document_needs_plan_v2.py)
+`KNOWN_POSITIVE_CURRENT_LOSS=0`, `KNOWN_POSITIVE_GLOBAL_LOSS=0`, `KNOWN_POSITIVE_RECALL=100.0%`. `KNOWN_POSITIVE_GLOBAL_SOFT_FALLBACK=1805` docs (123 CURRENT units). `KNOWN_POSITIVE_SKIPPED=16731` (context-only, не required). `SELECTED=481`, `SELECTED_FALLBACK=15`, `SELECTED_SOFT_FALLBACK=1` на 65-procurement HTTP-sample; `HTTP_AFTER_V3=497` (−49.5%).
+
+### PHASE 10-13 — canary
+Payload lane `queue_v2_canary` заменён (не дополнен): 24 существующие строки refresh + 3 явных soft-fallback procurement = `CANARY_PROCUREMENTS_TOTAL=27` (`NORMAL=18`, `FALLBACK=11`, `SOFT_FALLBACK=3`). Строка 8148 (pid 942) пересчитана: V3 дал ordinary executable fallback (id 30163, PARTICIPANT_REQUIREMENTS) → `selection_type=FALLBACK`, статус `NO_LINKS→PENDING→COMPLETED`.
+`CANARY_1`: row 150193 (pid 458785, `SOFT_FALLBACK`) — targeted `selected=1 resolvable=1`, `SOFT_FALLBACK explicit bypass` использован (`BYPASS_USED=1`, `UNPLANNED=0`), antiword распарсил 79671 chars, `COMPLETED`. Первый single-task (row 149720, pid 425849) — `FAILED` (повреждённый .docx, package not found, 2 попытки) — объяснён.
+`CANARY_5`: batch=5 → `CLAIMED=5`, `COMPLETED=5`, `PARSED>0` (matches: 1470→5, 942→1, 1358→1), `HTTP_TO_UNSELECTED=0`, `429=0`.
+`CANARY_24/27`: `COMPLETED=25`, `NO_LINKS=0`, `FAILED=1`, `PENDING=1` (transient download error), `429_UNEXPLAINED=0`, `HTTP_TO_UNSELECTED=0`, `DUPLICATE_PHYSICAL_HTTP=0`. В БД за день: `document_matches=33`, `document_match_details=788`.
+
+### PHASE 14 — extraction gate
+`DIRECT_PROCUREMENTS=2`, `DIRECT_PARSED=0`. `EMBEDDED_PROCUREMENTS=12`, `EMBEDDED_PARSED=9`. `EMBEDDED_WITH_MATERIAL=0`, `EMBEDDED_WITH_QUANTITY=0`, `EMBEDDED_WITH_UNIT=0`, `EMBEDDED_WITH_UNIT_PRICE=0`, `EMBEDDED_WITH_CATEGORY_VALUE=0` → main acceptance `EMBEDDED_WITH_QUANTITY>0 / EMBEDDED_WITH_UNIT>0` FAIL, но это ровно сценарий IP: **acquisition доказан** (`PARSED>0`), следующий WIP = `EMBEDDED EXTRACTION / NORMALIZATION`.
+
+### PHASE 15 — cleanup
+Удалены `zzz-queue-v2-canary.conf` и `/etc/tender-docs-queue-v2-canary.env`, `daemon-reload`; `tender-docs-daemon-open`/`-awarded` = `inactive` до отдельного решения. `MASS_ROLLOUT_ALLOWED=NO`.
+
+Итог: `DOCUMENT_SELECTION_V3=PARTIAL-PASS` — policy/recall/canary acquisition PASS; extraction gate выносится в отдельный WIP. Backups S13: `/opt/CRM_Streamlit/.deploy_backup_20261011_v3/`.
+
 ## CURRENT WIP — 2026-10-10 (COMMERCIAL-ENTRY-V2 / MEDAL-RECALIBRATION-V1 / DOCUMENT-ADMISSION-V2)
 
 **COMMERCIAL-ENTRY-V2-WIP** — `[~]` **BLOCKED: RUNTIME SEMANTIC CHANGES UNCOMMITTED; PHASE 1 AUDIT DONE**. Scope: единый вход закупки в коммерческий контур, medal recalibration, document admission/needs plan. Production writers остановлены, snapshot сделан, но calibration не начинается на движущемся коде.

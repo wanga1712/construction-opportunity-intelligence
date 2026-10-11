@@ -114,6 +114,15 @@ SELECT id, procurement_id, status, plan_version, work_tier, source_start_date,
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--write-canary", type=int, default=0)
+    parser.add_argument("--print-cohort", action="store_true")
+    parser.add_argument("--probe-pid", type=int, default=0)
+    parser.add_argument("--refresh-canary-lane", action="store_true")
+    parser.add_argument(
+        "--add-soft-pids",
+        type=str,
+        default="",
+        help="comma-separated procurement ids to append to the canary lane",
+    )
     args = parser.parse_args()
 
     crm = psycopg2.connect(**crm_dsn())
@@ -265,6 +274,9 @@ def main() -> int:
         # ---------------------------------------------------------- Phase 8 sums
         planned_selected = sum(len(p["selected_source_document_ids"]) for p in plans.values())
         planned_fallback = sum(len(p["fallback_source_document_ids"]) for p in plans.values())
+        planned_soft = sum(
+            len(p.get("soft_fallback_source_document_ids") or []) for p in plans.values()
+        )
         selected_ids = {i for p in plans.values() for i in p["selected_source_document_ids"]}
         physical_keys = {k for p in plans.values() for k in p["selected_physical_keys"]}
         known_ids = {int(d["id"]) for d in documents}
@@ -290,19 +302,41 @@ def main() -> int:
         print(f"SELECTED_SOURCE_DOCUMENTS={len(selected_ids)}")
         print(f"SELECTED_PHYSICAL_DOCUMENTS={len(physical_keys)}")
         print(f"DUPLICATE_SELECTED_PHYSICAL_DOWNLOADS={len(selected_ids) - len(physical_keys)}")
-        print(f"NORMAL_SELECTED={planned_selected - planned_fallback}")
+        print(f"NORMAL_SELECTED={planned_selected - planned_fallback - planned_soft}")
         print(f"FALLBACK_SELECTED={planned_fallback}")
+        print(f"SOFT_FALLBACK_SELECTED={planned_soft}")
         print(f"MISSING_FROM_SOURCE_TABLE={missing}")
         print(f"EXTRA_IN_QUEUE={extra}")
         print(f"REUSE_NO_HTTP={reuse}")
         print(f"REPROCESS_NO_HTTP={reprocess}")
         print(f"NEW_HTTP_REQUIRED={new_http}")
+        phys_all = {
+            (
+                d.get("physical_download_key")
+                or d.get("url_hash")
+                or (d.get("url") or "").strip().lower()
+                or f"row:{d.get('id')}"
+            )
+            for d in documents
+        }
+        print(f"HTTP_BEFORE={len(phys_all)}")
+        print(f"HTTP_AFTER_V3={planned_selected}")
+        if phys_all:
+            print(f"HTTP_REDUCTION_PCT={100.0 * (1 - planned_selected / len(phys_all)):.1f}")
+        print(
+            "NO_EXECUTABLE_FALLBACK_UNITS="
+            f"{sum(p.get('no_executable_fallback_units', 0) for p in plans.values())}"
+        )
         fallback_by_class: Counter = Counter()
+        soft_by_class: Counter = Counter()
         for plan in plans.values():
             for entry in plan["selected_documents"]:
                 if entry["selection_type"] == "FALLBACK":
                     fallback_by_class[entry["document_class"]] += 1
+                elif entry["selection_type"] == "SOFT_FALLBACK":
+                    soft_by_class[entry["document_class"]] += 1
         print(f"FALLBACK_BY_CLASS={fallback_by_class.most_common(8)}")
+        print(f"SOFT_FALLBACK_BY_CLASS={soft_by_class.most_common(8)}")
 
         # ---------------------------------------------------------- Phase 3 audit
         queue_rows = query(di, QUEUE_SQL, (list(plans),)) if plans else []
@@ -324,6 +358,50 @@ def main() -> int:
         print(f"EXISTING_QUEUE_ROWS={len(queue_rows)}")
         print(f"STALE_QUEUE_CATEGORY_COUNT={stale}")
         print(f"EXISTING_QUEUE_ROW_BLOCKS_CATEGORY_REFRESH={stale}")
+
+        if args.probe_pid:
+            pid = int(args.probe_pid)
+            plan = plans.get(pid)
+            print("=" * 78)
+            print(f"PROBE_PID={pid} IN_PLANS={pid in plans}")
+            if plan:
+                print(f"ACTION={plan['research_action_v2']} ALLOWED={plan['acquisition_allowed']}")
+                print(
+                    f"SELECTED={plan['selected_source_document_ids']} "
+                    f"FB={plan['fallback_source_document_ids']} "
+                    f"SOFT={plan['soft_fallback_source_document_ids']}"
+                )
+                for entry in plan["selected_documents"]:
+                    print(
+                        f"  SELDOC id={entry['source_document_id']} "
+                        f"type={entry['selection_type']} file={entry['file_name']}"
+                    )
+
+        if args.print_cohort:
+            cohort = _canary_cohort(plans, doc_by_id, 24)
+            print("=" * 78)
+            print("PHASE 10 - CANARY COHORT PREVIEW (read-only)")
+            print(f"CANARY_COHORT_SIZE={len(cohort)}")
+            print(f"CANARY_COHORT_PIDS={cohort}")
+            for pid in cohort:
+                plan = plans[pid]
+                print(
+                    f"  PID={pid} action={plan['research_action_v2']} "
+                    f"cats={plan['category_codes']} "
+                    f"sel={len(plan['selected_source_document_ids'])} "
+                    f"fb={len(plan['fallback_source_document_ids'])} "
+                    f"soft={len(plan['soft_fallback_source_document_ids'])}"
+                )
+
+        if args.refresh_canary_lane:
+            refresh_canary_lane(di, plans=plans, doc_by_id=doc_by_id)
+
+        if args.add_soft_pids:
+            extra = [
+                int(x) for x in args.add_soft_pids.split(",") if x.strip()
+            ]
+            extra = [p for p in extra if p in plans]
+            write_canary(di, plans=plans, doc_by_id=doc_by_id, limit=0, cohort=extra)
 
         if args.write_canary:
             write_canary(
@@ -376,8 +454,100 @@ def _canary_cohort(plans: Dict[int, Dict[str, Any]], doc_by_id: Dict[int, Dict[s
     return picked
 
 
-def write_canary(di, *, plans, doc_by_id, limit: int) -> None:
-    cohort = _canary_cohort(plans, doc_by_id, limit)
+def refresh_canary_lane(di, *, plans, doc_by_id) -> None:
+    """Replace the payload of the EXISTING canary lane rows (no new rows).
+
+    Each existing row keeps its id/receipt; only the plan payload + status are
+    rewritten from the current document_selection_v3 plan. PENDING is set only
+    when a document is actually selected; NO_EXECUTABLE_FALLBACK rows become
+    NO_LINKS (HTTP=0) and NO_DOCUMENT_RESEARCH rows stay unclaimable by the
+    queue_v2 claim filter.
+    """
+    with di.cursor() as cur:
+        cur.execute(
+            "SELECT id, procurement_id, status FROM document_processing_queue"
+            " WHERE queue_lane='queue_v2_canary' ORDER BY id"
+        )
+        rows = cur.fetchall()
+
+    counts = Counter()
+    with di.cursor() as cur:
+        for row_id, pid, prev_status in rows:
+            pid = int(pid)
+            plan = plans.get(pid)
+            if plan is None:
+                counts["NO_PLAN"] += 1
+                print(f"CANARY_ROW id={row_id} pid={pid} SKIP=NO_PLAN")
+                continue
+            sel = plan["selected_source_document_ids"]
+            types = Counter(e["selection_type"] for e in plan["selected_documents"])
+            if not sel:
+                new_status = "NO_LINKS"
+            elif not plan["acquisition_allowed"]:
+                new_status = "PENDING"
+            else:
+                new_status = "PENDING"
+            cur.execute(
+                """
+                UPDATE document_processing_queue
+                   SET work_tier = %s, source_start_date = %s,
+                       source_lifecycle = %s, project_active = %s,
+                       project_end_at = %s, project_remaining_days = %s,
+                       execution_phase = %s, candidate_initial_medal = %s,
+                       current_effective_medal = %s, research_action_v2 = %s,
+                       plan_version = %s, document_plan_version = %s,
+                       priority_policy_version = %s, category_codes = %s,
+                       required_facts = %s, required_document_types = %s,
+                       selected_source_document_ids = %s,
+                       selected_physical_keys = %s,
+                       fallback_source_document_ids = %s,
+                       soft_fallback_source_document_ids = %s,
+                       selected_documents = %s, plan_built_at = NOW(),
+                       status = %s, worker_id = NULL, started_at = NULL,
+                       completed_at = NULL, attempt_count = 0,
+                       last_error = %s
+                 WHERE id = %s
+                """,
+                (
+                    plan["work_tier"], plan["source_start_date"],
+                    plan["source_lifecycle"], plan["project_active"],
+                    plan["project_end_at"], plan["project_remaining_days"],
+                    plan["execution_phase"], plan["candidate_initial_medal"],
+                    plan["current_effective_medal"], plan["research_action_v2"],
+                    QUEUE_PLAN_VERSION, plan["document_plan_version"],
+                    plan["priority_policy_version"], plan["category_codes"],
+                    psycopg2.extras.Json(plan["required_facts"]),
+                    psycopg2.extras.Json(plan["required_document_types"]),
+                    plan["selected_source_document_ids"],
+                    plan["selected_physical_keys"],
+                    plan["fallback_source_document_ids"],
+                    plan["soft_fallback_source_document_ids"],
+                    psycopg2.extras.Json(plan["selected_documents"]),
+                    new_status, None if new_status == "PENDING" else "NO_EXECUTABLE_FALLBACK",
+                    row_id,
+                ),
+            )
+            counts.update(types)
+            counts[f"STATUS_{new_status}"] += 1
+            sample = ", ".join(
+                f"{e['source_document_id']}:{e['selection_type']}"
+                for e in plan["selected_documents"][:4]
+            )
+            print(
+                f"CANARY_ROW id={row_id} pid={pid} status={prev_status}->{new_status} "
+                f"action={plan['research_action_v2']} sel={len(sel)} soft="
+                f"{len(plan['soft_fallback_source_document_ids'])} docs=[{sample}]"
+            )
+    di.commit()
+    print("=" * 78)
+    print("PHASE 10 - CANARY LANE PAYLOAD REFRESH (document_selection_v3)")
+    print(f"CANARY_ROWS={len(rows)}")
+    print(f"CANARY_SELECTION_TYPES={dict(counts)}")
+
+
+def write_canary(di, *, plans, doc_by_id, limit: int, cohort=None) -> None:
+    if cohort is None:
+        cohort = _canary_cohort(plans, doc_by_id, limit)
     with di.cursor() as cur:
         for pid in cohort:
             plan = plans[pid]
@@ -401,6 +571,7 @@ def write_canary(di, *, plans, doc_by_id, limit: int) -> None:
                 plan["selected_source_document_ids"],
                 plan["selected_physical_keys"],
                 plan["fallback_source_document_ids"],
+                plan["soft_fallback_source_document_ids"],
                 psycopg2.extras.Json(plan["selected_documents"]),
                 pid,
             )
@@ -426,6 +597,7 @@ def write_canary(di, *, plans, doc_by_id, limit: int) -> None:
                        selected_source_document_ids = %s,
                        selected_physical_keys = %s,
                        fallback_source_document_ids = %s,
+                       soft_fallback_source_document_ids = %s,
                        selected_documents = %s,
                        plan_built_at = NOW(),
                        queue_lane = 'queue_v2_canary',
@@ -451,10 +623,11 @@ def write_canary(di, *, plans, doc_by_id, limit: int) -> None:
                          work_tier, source_start_date, source_lifecycle,
                          research_action_v2, document_plan_version, category_codes,
                          selected_source_document_ids, selected_physical_keys,
-                         fallback_source_document_ids, selected_documents,
+                         fallback_source_document_ids, soft_fallback_source_document_ids,
+                         selected_documents,
                          plan_built_at)
                     VALUES (%s, %s, %s, %s, NULL, 'PENDING', %s, 'queue_v2_canary', %s,
-                            %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, NOW())
+                            %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, NOW())
                     """,
                     (
                         pid,
@@ -472,6 +645,7 @@ def write_canary(di, *, plans, doc_by_id, limit: int) -> None:
                         plan["selected_source_document_ids"],
                         plan["selected_physical_keys"],
                         plan["fallback_source_document_ids"],
+                        plan["soft_fallback_source_document_ids"],
                         psycopg2.extras.Json(plan["selected_documents"]),
                     ),
                 )

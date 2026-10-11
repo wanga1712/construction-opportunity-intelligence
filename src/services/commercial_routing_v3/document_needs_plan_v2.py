@@ -23,6 +23,13 @@ from .document_classifier_v1 import (
 )
 
 _SKIP_PREDICATE = None
+_SKIP_CLASSIFIER = None
+_SOFT_CLASSIFIER = None
+
+#: V3 policy classes (mirror of file_skip_list.SkipPolicy values).
+HARD_SKIP = "HARD_SKIP"
+SOFT_SKIP = "SOFT_SKIP"
+EXECUTABLE = "EXECUTABLE"
 
 
 def skip_predicate():
@@ -66,15 +73,76 @@ def skip_predicate():
     return _fallback
 
 
+def _fallback_classify(file_name):
+    """Conservative name-only V3 classification when the canonical module is absent."""
+    if not file_name or not str(file_name).strip():
+        return HARD_SKIP
+    if not skip_predicate()(file_name):
+        return EXECUTABLE
+    stem = str(file_name).strip().lower()
+    for dot in (".",):
+        if dot in stem:
+            stem = stem.rsplit(dot, 1)[0]
+    if not any(ch.isalpha() for ch in stem):
+        return SOFT_SKIP
+    soft = (
+        "проект контракта",
+        "проект_контракта",
+        "проект договора",
+        "проект_договора",
+        "извещение",
+        "electronicauction",
+        "печатная форма",
+        "информация о контракте",
+        "доп. соглашение",
+        "электронный контракт",
+    )
+    return SOFT_SKIP if stem.startswith(soft) else HARD_SKIP
+
+
+def classify_skip_policy(file_name) -> str:
+    """V3 policy of a file name: HARD_SKIP / SOFT_SKIP / EXECUTABLE.
+
+    Single authority is ``document_processor.file_skip_list.classify_skip_policy``;
+    the selector never invents a second policy (fail-closed fallback otherwise).
+    """
+    global _SKIP_CLASSIFIER
+    if _SKIP_CLASSIFIER is None:
+        try:
+            from document_processor.file_skip_list import (
+                classify_skip_policy as _fn,
+            )
+
+            _SKIP_CLASSIFIER = lambda name: _fn(name).value  # noqa: E731
+        except Exception:
+            _SKIP_CLASSIFIER = _fallback_classify
+    return _SKIP_CLASSIFIER(file_name)
+
+
+def soft_skip_class(file_name):
+    """Semantic soft label (PROJECT_CONTRACT / NOTICE / ...); None if not soft."""
+    global _SOFT_CLASSIFIER
+    if _SOFT_CLASSIFIER is None:
+        try:
+            from document_processor.file_skip_list import (
+                soft_skip_class as _fn,
+            )
+
+            _SOFT_CLASSIFIER = _fn
+        except Exception:
+            _SOFT_CLASSIFIER = lambda name: (  # noqa: E731
+                "SOFT_OTHER" if classify_skip_policy(name) == SOFT_SKIP else None
+            )
+    return _SOFT_CLASSIFIER(file_name)
+
+
 def is_executable_document(file_name, classification) -> bool:
     """A document the next pipeline stage can actually accept."""
-    if not classification.is_document:
-        return False
-    return not skip_predicate()(file_name)
+    return bool(classification.is_document) and classify_skip_policy(file_name) == EXECUTABLE
 from .research_action_v2 import GROUP_DESIGN, GROUP_DIRECT, GROUP_EMBEDDED, GROUP_UNKNOWN
 
 DOCUMENT_NEEDS_POLICY_VERSION = "document_needs_plan_v2"
-DOCUMENT_SELECTION_POLICY_VERSION = "document_selection_v2"
+DOCUMENT_SELECTION_POLICY_VERSION = "document_selection_v3"
 
 
 class RequiredFact(str, Enum):
@@ -231,13 +299,23 @@ class FileSelection:
 
     @property
     def http_request_potential(self) -> int:
-        return 1 if self.selection_decision in (SELECTED, SELECTED_FALLBACK) else 0
+        return (
+            1
+            if self.selection_decision
+            in (SELECTED, SELECTED_FALLBACK, SELECTED_SOFT_FALLBACK)
+            else 0
+        )
 
 
 SELECTED = "SELECTED"
 SELECTED_FALLBACK = "SELECTED_FALLBACK"
+SELECTED_SOFT_FALLBACK = "SELECTED_SOFT_FALLBACK"
 SKIPPED_NOT_RELEVANT = "SKIPPED_NOT_RELEVANT"
 UNKNOWN_NEEDS_REVIEW = "UNKNOWN_NEEDS_REVIEW"
+NO_EXECUTABLE_FALLBACK = "NO_EXECUTABLE_FALLBACK"
+
+#: Selection decisions that end up in the queue plan (targeted download/parse).
+SELECTED_DECISIONS: tuple[str, ...] = (SELECTED, SELECTED_FALLBACK, SELECTED_SOFT_FALLBACK)
 
 #: Fallback classes that are normally NOT requested, ordered by their measured
 #: contribution to historical positive recall (document_matches audit 2026-10-10).
@@ -251,6 +329,37 @@ FALLBACK_CLASS_PRIORITY: tuple[DocumentClass, ...] = (
     DocumentClass.OTHER,
 )
 FALLBACK_MAX_PER_UNIT = 1
+
+#: SOFT fallback candidate order (Phase 4) - derived from the Phase 2 CURRENT
+#: evidence audit (2026-10-11, 163 audited units): ELECTRONIC_AUCTION 100%,
+#: NOTICE 90.3%, PROJECT_CONTRACT 75.0% TRUE_COMMERCIAL_EVIDENCE. The remaining
+#: contract-form classes had no measured CURRENT units, so they stay last resort
+#: (fail-closed). "Печатная форма контракта" is a separate class, NOT folded
+#: into PROJECT_CONTRACT.
+SOFT_FALLBACK_CLASS_PRIORITY: tuple[str, ...] = (
+    "ELECTRONIC_AUCTION",
+    "NOTICE",
+    "PROJECT_CONTRACT",
+    "PRINTED_CONTRACT_FORM",
+    "CONTRACT_FORM_OTHER",
+    "CONTRACT_INFO",
+    "SOFT_OTHER",
+    # Alpha-less EIS names (e.g. "17238739.pdf"): non-semantic, never a first
+    # choice, but a measured last resort - 39/39 global hard-only units carried
+    # real product terms (Phase 2/9 audit 2026-10-11).
+    "NUMERIC_NAME",
+)
+SOFT_FALLBACK_MAX_PER_UNIT = 1
+
+
+def _soft_rank(file_name: str) -> int:
+    label = soft_skip_class(file_name)
+    if label is None:
+        return len(SOFT_FALLBACK_CLASS_PRIORITY)
+    try:
+        return SOFT_FALLBACK_CLASS_PRIORITY.index(label)
+    except ValueError:
+        return len(SOFT_FALLBACK_CLASS_PRIORITY)
 
 
 def _fallback_rank(classification: DocumentClassification) -> int:
@@ -442,9 +551,19 @@ def select_unit_documents(
 ) -> tuple[list[FileSelection], Optional[FileSelection]]:
     """Recall-safe selection for ONE (procurement, category) unit.
 
-    Layer on top of :func:`decide_file_selection` (unchanged V1 semantics):
-    if the unit has no accepted-class document at all, exactly ONE fallback
-    document is promoted to SELECTED_FALLBACK. Classes and facts are untouched.
+    document_selection_v3 - three ordered stages on top of
+    :func:`decide_file_selection` (unchanged V1 semantics):
+
+      STEP 1 - an accepted executable document exists -> SELECTED.
+      STEP 2 - no accepted doc, but an ordinary executable fallback exists ->
+               the best ONE is promoted to SELECTED_FALLBACK.
+      STEP 3 - no executable fallback at all, but a SOFT_SKIP semantic document
+               exists -> the best ONE is promoted to SELECTED_SOFT_FALLBACK.
+      otherwise the unit yields no selection (caller records
+      NO_EXECUTABLE_FALLBACK).
+
+    HARD_SKIP is never promoted; only an explicit soft unit is. Classes, facts
+    and the returned shape are unchanged.
     """
     pairs = [
         (
@@ -460,18 +579,56 @@ def select_unit_documents(
         )
         for source_document_id, file_name, classification in documents
     ]
+    # STEP 1 - accepted executable document.
     if any(selection.selection_decision == SELECTED for _, selection in pairs):
         return [selection for _, selection in pairs], None
-    candidates = [i for i, (classification, _) in enumerate(pairs) if classification.is_document]
-    candidates = [
-        i for i in candidates if is_executable_document(pairs[i][1].file_name, pairs[i][0])
-    ]
-    if not candidates:
-        return [], None
 
+    # STEP 2 - ordinary executable fallback.
+    exec_candidates = [
+        i
+        for i, (classification, selection) in enumerate(pairs)
+        if classification.is_document
+        and classify_skip_policy(selection.file_name) == EXECUTABLE
+    ]
+    if exec_candidates:
+        order = sorted(
+            exec_candidates,
+            key=lambda i: (
+                _fallback_rank(pairs[i][0]),
+                pairs[i][1].source_document_id if pairs[i][1].source_document_id is not None else 1 << 62,
+                pairs[i][1].file_name.lower(),
+            ),
+        )
+        promoted_index = order[0]
+        classification, selection = pairs[promoted_index]
+        promoted = FileSelection(
+            procurement_id=procurement_id,
+            source_document_id=selection.source_document_id,
+            file_name=selection.file_name,
+            document_class=classification.document_class,
+            classification_confidence=classification.confidence,
+            classification_reason=classification.reason,
+            required_by_categories=(category_code,),
+            required_facts=(),
+            selection_decision=SELECTED_FALLBACK,
+            selection_reason=f"FALLBACK_NO_ACCEPTED_DOC:{classification.document_class.value}",
+        )
+        pairs[promoted_index] = (classification, promoted)
+        return [item for _, item in pairs], promoted
+
+    # STEP 3 - last-resort SOFT_SKIP document (semantic, explicit, ID-scoped).
+    soft_candidates = [
+        i
+        for i, (classification, selection) in enumerate(pairs)
+        if classification.is_document
+        and classify_skip_policy(selection.file_name) == SOFT_SKIP
+    ]
+    if not soft_candidates:
+        return [], None
     order = sorted(
-        candidates,
+        soft_candidates,
         key=lambda i: (
+            _soft_rank(pairs[i][1].file_name),
             _fallback_rank(pairs[i][0]),
             pairs[i][1].source_document_id if pairs[i][1].source_document_id is not None else 1 << 62,
             pairs[i][1].file_name.lower(),
@@ -479,6 +636,7 @@ def select_unit_documents(
     )
     promoted_index = order[0]
     classification, selection = pairs[promoted_index]
+    soft_label = soft_skip_class(selection.file_name) or "SOFT_OTHER"
     promoted = FileSelection(
         procurement_id=procurement_id,
         source_document_id=selection.source_document_id,
@@ -488,8 +646,8 @@ def select_unit_documents(
         classification_reason=classification.reason,
         required_by_categories=(category_code,),
         required_facts=(),
-        selection_decision=SELECTED_FALLBACK,
-        selection_reason=f"FALLBACK_NO_ACCEPTED_DOC:{classification.document_class.value}",
+        selection_decision=SELECTED_SOFT_FALLBACK,
+        selection_reason=f"SOFT_FALLBACK_NO_EXECUTABLE:{soft_label}",
     )
     pairs[promoted_index] = (classification, promoted)
     return [item for _, item in pairs], promoted
@@ -498,7 +656,7 @@ def select_unit_documents(
 def http_request_potential(selections: Iterable[FileSelection]) -> int:
     """Selected documents only (accepted + fallback promotions)."""
     return sum(
-        1 for s in selections if s.selection_decision in (SELECTED, SELECTED_FALLBACK)
+        1 for s in selections if s.selection_decision in SELECTED_DECISIONS
     )
 
 

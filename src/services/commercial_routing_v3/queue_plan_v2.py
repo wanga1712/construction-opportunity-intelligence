@@ -16,6 +16,8 @@ from .document_needs_plan_v2 import (
     DOCUMENT_SELECTION_POLICY_VERSION,
     SELECTED,
     SELECTED_FALLBACK,
+    SELECTED_SOFT_FALLBACK,
+    SELECTED_DECISIONS,
     build_document_needs_plan,
     category_plan,
     select_unit_documents,
@@ -33,6 +35,24 @@ from .research_action_v2 import (
 QUEUE_PLAN_VERSION = "queue_v2"
 SELECTION_TYPE_NORMAL = "NORMAL"
 SELECTION_TYPE_FALLBACK = "FALLBACK"
+SELECTION_TYPE_SOFT_FALLBACK = "SOFT_FALLBACK"
+
+#: Lower rank wins when the same document is selected for several categories.
+_SELECTION_TYPE_RANK = {
+    SELECTION_TYPE_NORMAL: 0,
+    SELECTION_TYPE_FALLBACK: 1,
+    SELECTION_TYPE_SOFT_FALLBACK: 2,
+}
+
+
+def selection_type_for(decision: str) -> Optional[str]:
+    if decision == SELECTED:
+        return SELECTION_TYPE_NORMAL
+    if decision == SELECTED_FALLBACK:
+        return SELECTION_TYPE_FALLBACK
+    if decision == SELECTED_SOFT_FALLBACK:
+        return SELECTION_TYPE_SOFT_FALLBACK
+    return None
 
 
 def physical_key(doc: Dict[str, Any]) -> str:
@@ -84,6 +104,7 @@ def build_queue_plan_v2(
     selected: Dict[int, Dict[str, Any]] = {}
     required_facts: List[str] = []
     required_classes: List[str] = []
+    no_executable_fallback_units = 0
     for category in sorted(units):
         plan = build_document_needs_plan(
             procurement_id,
@@ -98,28 +119,39 @@ def build_queue_plan_v2(
         selections, _promoted = select_unit_documents(
             plan, procurement_id=procurement_id, category_code=category, documents=items
         )
+        if not any(s.selection_decision in SELECTED_DECISIONS for s in selections):
+            no_executable_fallback_units += 1
         for selection in selections:
-            if selection.selection_decision not in (SELECTED, SELECTED_FALLBACK):
+            if selection.selection_decision not in SELECTED_DECISIONS:
                 continue
             doc_id = selection.source_document_id
             if doc_id is None:
                 continue
+            sel_type = selection_type_for(selection.selection_decision)
+            if sel_type is None:
+                continue
+            doc = by_id.get(int(doc_id))
             entry = selected.setdefault(
                 int(doc_id),
                 {
                     "source_document_id": int(doc_id),
                     "file_name": selection.file_name,
+                    "physical_key": physical_key(doc) if doc else None,
                     "document_class": selection.document_class.value,
-                    "selection_type": (
-                        SELECTION_TYPE_FALLBACK
-                        if selection.selection_decision == SELECTED_FALLBACK
-                        else SELECTION_TYPE_NORMAL
-                    ),
+                    "selection_type": sel_type,
                     "selection_reason": selection.selection_reason,
+                    "category": category,
                     "required_by_category": [],
                     "required_facts": list(selection.required_facts),
                 },
             )
+            # Same physical document selected for several categories: keep the
+            # strongest type (NORMAL > FALLBACK > SOFT_FALLBACK).
+            if _SELECTION_TYPE_RANK.get(sel_type, 9) < _SELECTION_TYPE_RANK.get(
+                entry["selection_type"], 9
+            ):
+                entry["selection_type"] = sel_type
+                entry["selection_reason"] = selection.selection_reason
             if category not in entry["required_by_category"]:
                 entry["required_by_category"].append(category)
             for fact in selection.required_facts:
@@ -129,6 +161,9 @@ def build_queue_plan_v2(
     all_ids = sorted(selected)
     normal_ids = [i for i in all_ids if selected[i]["selection_type"] == SELECTION_TYPE_NORMAL]
     fallback_ids = [i for i in all_ids if selected[i]["selection_type"] == SELECTION_TYPE_FALLBACK]
+    soft_fallback_ids = [
+        i for i in all_ids if selected[i]["selection_type"] == SELECTION_TYPE_SOFT_FALLBACK
+    ]
     physical_keys = [physical_key(by_id[i]) for i in all_ids if i in by_id]
 
     best_opp = max(
@@ -182,10 +217,12 @@ def build_queue_plan_v2(
         "category_codes": sorted(units),
         "required_facts": required_facts,
         "required_document_types": required_classes,
-        "selected_source_document_ids": normal_ids + fallback_ids,
+        "selected_source_document_ids": normal_ids + fallback_ids + soft_fallback_ids,
         "selected_physical_keys": physical_keys,
         "fallback_source_document_ids": fallback_ids,
+        "soft_fallback_source_document_ids": soft_fallback_ids,
         "selected_documents": [selected[i] for i in all_ids],
+        "no_executable_fallback_units": no_executable_fallback_units,
         "sort_key": priority.sort_key,
     }
 

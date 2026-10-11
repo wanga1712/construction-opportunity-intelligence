@@ -568,9 +568,31 @@ class DocumentProcessorDaemon:
                 f"phase={task.get('execution_phase')} "
                 f"selected={len(task.get('selected_source_document_ids') or [])} "
                 f"fallback={len(task.get('fallback_source_document_ids') or [])} "
+                f"soft_fallback={len(task.get('soft_fallback_source_document_ids') or [])} "
                 f"categories={task.get('category_codes')}",
                 flush=True,
             )
+        # DOCUMENT_SELECTION_V3: explicit, ID-scoped soft-fallback bypass names.
+        # The downloader stores files under http_client.sanitize_name(...), so the
+        # bypass set carries both the raw plan name and its sanitized form.
+        _sanitize = getattr(
+            getattr(self.downloader, "http_client", None), "sanitize_name", None
+        )
+        soft_fallback_file_names = set()
+        for _entry in task.get("selected_documents") or []:
+            if not isinstance(_entry, dict):
+                continue
+            if _entry.get("selection_type") != "SOFT_FALLBACK":
+                continue
+            _name = _entry.get("file_name")
+            if not _name:
+                continue
+            soft_fallback_file_names.add(str(_name).strip().lower())
+            if _sanitize is not None:
+                try:
+                    soft_fallback_file_names.add(str(_sanitize(_name)).strip().lower())
+                except Exception:
+                    pass
         try:
             try:
                 batch = self.pipeline.prefetch_task(
@@ -641,6 +663,7 @@ class DocumentProcessorDaemon:
                 files=files,
                 match_engine=self._scoped_engine(procurement_id),
                 category_codes=None,
+                soft_fallback_file_names=soft_fallback_file_names,
             )
             if getattr(batch, "rate_limited", False):
                 if proc_result.files:
