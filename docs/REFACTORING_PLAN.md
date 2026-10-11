@@ -1,5 +1,25 @@
 ## CURRENT WIP — 2026-10-11 (EMBEDDED_EXTRACTION_NORMALIZATION_V1 / PHASE 0-1)
 
+### STEP 1 — LOCAL REPROCESS 145 (V3-selected, local-present, HTTP=0)
+`scripts/run_local_reprocess.py` — прогон ровно `SELECTED_LOCAL_PRESENT` (145) через `EMBEDDED_EXTRACTOR_V1` / `UNIT_NORMALIZER_V1`; `ONLY_V3_SELECTED_DOCUMENTS=YES`, `ONLY_LOCAL_PRESENT=YES`. Новый identity-индекс `uq_entity_v3_identity (procurement_id, source_document_id, entity_fingerprint, extractor_version)` (migration `20261011_structured_entities_v3_identity.sql`) делает повторный reprocess идемпотентным.
+```
+LOCAL_SELECTED_INPUT=145
+FILES_PARSED=131   FILES_FAILED=14   FILES_EMPTY=2
+FILES_WITH_FACTS=35   FILES_WITHOUT_FACTS=96
+EMBEDDED_FILES=17   DIRECT_FILES=128
+ENTITIES_CREATED=176 (run1) / 0 (run2)     ENTITIES_REUSED=0 (run1) / 176 (run2)
+DUPLICATE_ENTITIES_CREATED=0
+MATERIAL_FOUND=176  QUANTITY_FOUND=160  UNIT_FOUND=165  UNIT_PRICE_FOUND=45  CATEGORY_VALUE_FOUND=100
+WITH_CATEGORY=176   WITH_PROVENANCE=176   UNKNOWN_CATEGORY=0
+NEW_HTTP_REQUESTS=0
+PER_CATEGORY={computers 128, lighting 31, cable_support_systems 17}
+PER_DOC_CLASS={CONTRACT_PROJECT 80, PARTICIPANT_REQUIREMENTS 36, NMCK_JUSTIFICATION 20, OTHER 7, TECH_SPEC 2}
+PER_EXT={docx 99, doc 19, xlsx 10, zip 10, pdf 3, rtf 2, rar 1, xls 1}
+```
+`FILES_FAILED=14` — это контейнеры/неподдерживаемые форматы (zip 10, rar 1, rtf 2, xls 1); архивы не «потеряны», их дочерние файлы лежат отдельными `document_files`. Идемпотентность доказана (run2: 0 новых, 176 reuse). Canonical-identity дубликатов 0; отдельно зафиксированы `CROSS_TABLE_ROW_OVERLAP_PAIRS=2` — одна и та же позиция (`Системный блок` row2, `Монитор` row3) встречается в `table_1` и `table_2` одного docx (разные rows по канонической identity; не вызвано multi-category или повторным reprocess) → агрегация value должна учитывать overlap таблиц.
+Acceptance: `NEW_HTTP_REQUESTS=0`, `DUPLICATE_ENTITIES_CREATED=0`, `UNKNOWN_CATEGORY=0`, `MATERIAL/QUANTITY/UNIT>0`, `WITH_CATEGORY=WITH_PROVENANCE=ENTITIES_TOTAL` — **PASS**.
+Открытый вопрос перед Step 2 (сеть): `REDOWNLOAD_BY_TIER` содержит `TIER_None=95` — до скачивания 573 нужно либо присвоить им tier, либо явно объяснить, почему None допустим (чтобы неопределённая группа не обошла политику TIER0→TIER1→TIER2).
+
 ### HISTORICAL ADMISSION / DOCUMENT_PLAN_V3 — READ-ONLY measurement (Phase 11-14, no writes/HTTP)
 `scripts/measure_historical_rebuild.py` — вся база прогоняется сегодняшними правилами: lifecycle → category admission → track → research_action → DOCUMENT_SELECTION_V3 plan → selected documents → классификация локального артефакта. `download_status` НЕ authority: документ «reprocessable» только если новый plan его выбрал И файл реально есть на диске (magic-byte проверка формата → CORRUPT).
 ```
