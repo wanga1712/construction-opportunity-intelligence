@@ -131,6 +131,7 @@ def main() -> int:
     parser.add_argument("--require-ext", default="")
     parser.add_argument("--require-name-substr", default="")
     parser.add_argument("--pid", type=int, default=0)
+    parser.add_argument("--pids", default="", help="comma-separated procurement ids")
     parser.add_argument("--artifact-class", default="", choices=["", "fast", "heavy"],
                         help="restrict to fast (bulk) or heavy (big archives/pdf) artifacts")
     args = parser.parse_args()
@@ -188,6 +189,10 @@ def main() -> int:
                 continue
             if args.pid and pid != args.pid:
                 continue
+            if args.pids:
+                wanted = {int(x) for x in args.pids.split(",") if x.strip()}
+                if pid not in wanted:
+                    continue
             plan = build_queue_plan_v2(procurement=items[0], opportunities=items,
                                        documents=docs_by_pid[pid], pipeline_generation=PIPELINE_GENERATION)
             if not plan["acquisition_allowed"] or plan["work_tier"] != args.tier:
