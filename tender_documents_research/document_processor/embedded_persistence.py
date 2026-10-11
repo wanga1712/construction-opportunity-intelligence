@@ -1,0 +1,115 @@
+"""Idempotent persistence of EMBEDDED_EXTRACTOR_V1 facts (shared by callers)."""
+
+from __future__ import annotations
+
+import hashlib
+import json
+from typing import Any, Dict, Iterable, Tuple
+
+from document_processor.embedded_extraction import EXTRACTOR_VERSION
+
+
+def persist_facts(
+    conn,
+    *,
+    procurement_id: int,
+    document_name: str,
+    category_code: str,
+    facts: Iterable[Any],
+    detail_id=None,
+) -> Tuple[int, int, Dict[str, int]]:
+    """Insert facts for one document; re-runs reuse entities (idempotent)."""
+    facts = list(facts)
+    stats = {"material": 0, "quantity": 0, "unit": 0, "unit_price": 0, "total": 0,
+             "with_category": 0, "without_provenance": 0}
+    if not facts:
+        return 0, 0, stats
+    cur = conn.cursor()
+    if detail_id is None:
+        cur.execute("SELECT MIN(id) FROM document_match_details WHERE procurement_id=%s", (procurement_id,))
+        detail_id = cur.fetchone()[0]
+    snapshot = json.dumps([f.source_quote for f in facts][:200], ensure_ascii=False)
+    cur.execute(
+        "SELECT id FROM structured_extraction_runs"
+        " WHERE procurement_id=%s AND document_name=%s AND extractor_version=%s LIMIT 1",
+        (procurement_id, document_name, EXTRACTOR_VERSION),
+    )
+    row = cur.fetchone()
+    if row:
+        run_id = row[0]
+        cur.execute(
+            "UPDATE structured_extraction_runs SET category_code=%s, source_text_snapshot=%s,"
+            " source_text_sha256=%s, completed_at=NOW() WHERE id=%s",
+            (str(category_code)[:100], snapshot,
+             hashlib.sha256(snapshot.encode("utf-8")).hexdigest(), run_id),
+        )
+    else:
+        cur.execute(
+            """
+            INSERT INTO structured_extraction_runs
+                (detail_id, procurement_id, category_code, document_name, page_or_sheet,
+                 source_text_snapshot, source_text_sha256, source_validator_name,
+                 source_validator_version, source_validation_method, extractor_name,
+                 extractor_version, extraction_method, prompt_version, model_name, status,
+                 created_at, completed_at, structured_fact_trust_state)
+            VALUES (%s,%s,%s,%s,'mixed',%s,%s,'PROVENANCE_CONTRACT','v1','PARSE_TIME',
+                    'EMBEDDED_EXTRACTOR',%s,'DETERMINISTIC_ROW_MAP','none','none','COMPLETED',
+                    NOW(),NOW(),'MANUAL_PROOF_QUARANTINE')
+            RETURNING id
+            """,
+            (detail_id, procurement_id, str(category_code)[:100], document_name, snapshot,
+             hashlib.sha256(snapshot.encode("utf-8")).hexdigest(), EXTRACTOR_VERSION),
+        )
+        run_id = cur.fetchone()[0]
+
+    created = reused = 0
+    for f in facts:
+        unit_raw = (f.unit_raw or None) and str(f.unit_raw)[:100]
+        unit_norm = (f.unit_normalized or None) and str(f.unit_normalized)[:100]
+        cat = str(f.category_code or "unknown")[:100]
+        cur.execute(
+            """
+            INSERT INTO structured_entities
+                (run_id, detail_id, procurement_id, category_code, entity_fingerprint,
+                 entity_type, product_name_raw, product_name_normalized,
+                 quantity_value, quantity_raw, quantity_unit_raw, quantity_unit_normalized,
+                 measurement_family, unit_price_value, unit_price_raw,
+                 total_price_value, total_price_raw, currency_code, source_quote,
+                 confidence, product_relation, created_at, structured_fact_trust_state,
+                 source_document_id, physical_download_key, page_or_sheet, row_or_line,
+                 extractor_version, normalizer_version)
+            VALUES (%s,%s,%s,%s,%s,'PRODUCT',%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,'RUB',%s,
+                    %s,'EMBEDDED',NOW(),'MANUAL_PROOF_QUARANTINE',%s,%s,%s,%s,%s,%s)
+            ON CONFLICT (procurement_id, source_document_id, entity_fingerprint, extractor_version)
+              WHERE extractor_version IS NOT NULL AND source_document_id IS NOT NULL
+            DO NOTHING
+            """,
+            (
+                run_id, detail_id, procurement_id, cat, f.entity_fingerprint,
+                (f.product_name_raw or "")[:400], f.product_name_normalized,
+                f.quantity_value, f.quantity_raw, unit_raw, unit_norm,
+                f.measurement_family, f.unit_price_value, f.unit_price_raw,
+                f.line_total_value, f.line_total_raw, f.source_quote, f.confidence,
+                f.source_document_id, f.physical_download_key, f.page_or_sheet,
+                f.row_or_line, f.extractor_version, f.normalizer_version,
+            ),
+        )
+        if cur.rowcount == 0:
+            reused += 1
+            continue
+        created += 1
+        if f.product_name_raw:
+            stats["material"] += 1
+        if f.quantity_value is not None:
+            stats["quantity"] += 1
+        if f.unit_normalized:
+            stats["unit"] += 1
+        if f.unit_price_value is not None:
+            stats["unit_price"] += 1
+        if f.line_total_value is not None:
+            stats["total"] += 1
+        if cat and cat != "unknown":
+            stats["with_category"] += 1
+        if not (f.source_document_id and f.source_quote):
+            stats["without_provenance"] += 1
+    return created, reused, stats

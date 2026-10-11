@@ -1,5 +1,29 @@
 ## CURRENT WIP — 2026-10-11 (EMBEDDED_EXTRACTION_NORMALIZATION_V1 / PHASE 0-1)
 
+### TIER0 NETWORK RUN (158) — PASS
+Только TIER0: `scripts/queue_network_batch.py --tier 0` → лейн `queue_v2_tier0` (158 планов / 158 документов; 2 предсуществующие дублирующие queue-строки сняты в `SKIPPED_NOISE`, чтобы не было двойного HTTP). Worker `tender-docs-daemon-open` в режиме `RUN_ONCE`, `QUEUE_LANES=queue_v2_tier0`, `MAX_ACTIVE_DOWNLOADS=1`, `DOWNLOAD_PARALLEL=1`, stagger 5s.
+```
+TIER0_INPUT=158              (156 фактически acquirable + 2 policy NO_DOCUMENT_RESEARCH)
+COMPLETED=140  FAILED=16  NO_LINKS=2  SKIPPED_NOISE=2
+HTTP_REQUESTS=208  HTTP_200_OK=205  HTTP_404_410=0  HTTP_429=0  RATE_LIMIT_BLOCK=0
+CORRUPT(source unreadable)=60 (EOF marker 8, Package not found 32)  INVALID_FILE=30  TRANSIENT=30
+TARGETED_PLANNED_MISMATCH=0   -> HTTP_TO_UNSELECTED_DOCUMENT=0
+FAILED/NO_LINKS по причинам: no_processable_doc 6, transient_source 6, download_failed 3,
+                             duplicate_row_dedup 2, policy_no_research 2, row_link 1
+```
+Extraction (из task-dir'ов воркера, HTTP=0; `scripts/extract_tier0_taskdirs.py`):
+```
+DOCS_SELECTED=146  SELECTED_FILE_NOT_IN_TASKDIR=0  FILES_PARSED=138  FILES_FAILED=8 (unsupported zip/rar)
+FILES_WITH_FACTS=26  FILES_WITHOUT_FACTS=112
+ENTITIES_CREATED=289  ENTITIES_REUSED=10
+MATERIAL=289  QUANTITY=267  UNIT=281  UNIT_PRICE=143  CATEGORY_VALUE=241
+WITH_CATEGORY=289  UNKNOWN_CATEGORY=0  WITHOUT_PROVENANCE=0
+PER_CATEGORY={computers 150, composite_structures 52, lighting 45, cable_support_systems 40, curbstone 12}
+```
+Gate PASS: `HTTP_TO_UNSELECTED=0`, `HTTP_TO_HARD_SKIP=0`, `DUPLICATE_PHYSICAL_HTTP=0`, `429_UNEXPLAINED=0`, `FILES_PARSED>0`, `MATERIAL/QUANTITY/UNIT>0`, `UNKNOWN_CATEGORY=0`, `WITHOUT_PROVENANCE=0`; все FAILED/NO_LINKS объяснены (см. разбивку). CRM/medal/queue-rebuild — не трогались.
+**Найденный разрыв (важно до массового rollout):** старая parse-time hook (`parse_extractors.extract_and_persist`) не вызывает `EMBEDDED_EXTRACTOR_V1`, а `document_files.local_path` у большинства выбранных строк после targeted-скачивания не обновляется (файл лежит в task-dir). Поэтому TIER0-экстракция сделана проходом по task-dir'ам. До production нужна интеграция: прокинуть category-context в parse-time hook и запускать `EMBEDDED_EXTRACTOR_V1` во время парсинга (пока файл на диске). Это отдельный шаг, не меняющий политику.
+Артефакты: `scripts/queue_network_batch.py`, `scripts/extract_tier0_taskdirs.py`, `scripts/analyze_tier0_journal.py`, `tender_documents_research/document_processor/embedded_persistence.py`.
+
 ### TIER_NONE_RESOLUTION — READ-ONLY
 `scripts/resolve_tier_none.py`. `TIER_NONE_BEFORE=95` → `TIER_NONE_AFTER=0`, `TIER_NONE_AFTER_CLAIMABLE=0`, `NULL_TIER_CLAIMABLE=0`. Ни один NULL-tier план не остаётся сетевым: у всех 95 `research_action_v2=NO_DOCUMENT_RESEARCH`, поэтому queue_v2 claim filter их не берёт.
 ```
