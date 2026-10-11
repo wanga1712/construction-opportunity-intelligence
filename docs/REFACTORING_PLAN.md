@@ -29,6 +29,16 @@
 
 ## CURRENT WIP — 2026-10-11 (EMBEDDED_EXTRACTION_NORMALIZATION_V1 / PHASE 0-1)
 
+### PARSE_TIME_EXTRACTION_WIRING_V2 — track routing + no-facts memory (PASS)
+* **Routing по track**: `selected_documents[].track` пишется в очередь (`queue_plan_v2`), прокидывается `daemon → s13_v2_pipeline → extract_and_persist`. `DIRECT` (прямые поставки) → ранее разработанный шаблонный экстрактор `src/services/direct_document_extractor.py` (L1: spec/tech/requirements + delivery terms, загружается по пути, без импорта CRM-пакета); `EMBEDDED` (проекты/объекты) → `EMBEDDED_EXTRACTOR_V1` (+ xlsx readers). Оба трека пишут в один и тот же `structured_entities`.
+* **Память «нет фактов»**: таблица `document_extraction_outcomes` (migration `20261011_document_extraction_outcomes.sql`, GRANT doc_worker) — ключ `(source_document_id, extractor_version, category)`; `outcome ∈ FACTS_FOUND | NO_FACTS | ...`. Вердикт version-scoped: сменилась версия экстрактора → вердикт инвалидируется, документ снова качается. Позволяет не докачивать документы, доказанно пустые для текущих шаблонов.
+* **HEAVY-контроль**: `HEAVY_MEMBER_CAP` / `HEAVY_UNPACKED_SIZE_CAP_BYTES` / `HEAVY_WALL_CLOCK_SECONDS` в s13-пайплайне → явные `FAILED_HEAVY_MEMBER_CAP / FAILED_HEAVY_SIZE_CAP / FAILED_HEAVY_WALL_CLOCK_CAP` вместо вечного PROCESSING. `queue_network_batch --artifact-class fast|heavy` (FAST ≤5 МБ; HEAVY = архивы >5 МБ, PDF >20 МБ).
+* **Найденный и исправленный регресс**: `embedded_extraction.extract_facts` использовал `os.getenv` без `import os` → 156 docx/doc/pdf документов TIER1 получили «embedded extraction failed» и не дали фактов (xlsx-путь не пострадал). Исправлено; сделан healing-прогон.
+* **Healing + DIRECT-routing прогон** (`run_local_reprocess.py`, теперь один код-путь — тот же hook, HTTP=0): `LOCAL_SELECTED_INPUT=362`, `FILES_PARSED=324`, `ENTITIES_CREATED=727`; V1-итог `entities=2074`, `UNKNOWN_CATEGORY=0`, `WITHOUT_PROVENANCE=0`, `qty=unit=1724`.
+* **Outcomes**: `DIRECT FACTS_FOUND=37 / NO_FACTS=115`, `EMBEDDED FACTS_FOUND=16 / NO_FACTS=156` (часть NO_FACTS — документы без артефакта локально; часть — правда без табличных фактов).
+* Известный шум DIRECT: часть строк берёт цену как количество (напр. `ИБП ... 22370.5 PCS`) — колоночная эвристика требует доработки (отдельный шаг, не блокирует routing).
+* TIER1 (штатный worker path) завершён: `COMPLETED=220 FAILED=7 PENDING=5 SKIPPED_NOISE=2` (232 claimable + 2 снятых дубля).
+
 ### PARSE_TIME_EXTRACTION_WIRING_V1 — PASS
 Extractor встроен в штатный путь обработки и закрыт lifecycle локального файла.
 **Изменения кода:**
