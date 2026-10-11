@@ -142,6 +142,30 @@ _HEADER_TOKENS = (
     "номер",
 )
 
+#: Summary/aggregate rows that are never commercial line positions.
+_AGGREGATE_NAME = (
+    "цена контракта",
+    "твердая цена",
+    "твёрдая цена",
+    "ндс",
+    "итого",
+    "всего",
+    "итог ",
+    "общая стоимость",
+    "общий итог",
+    "сумма по",
+    "стартовая цена",
+    "начальная (максимальная) цена",
+    "оср",
+    "ведомость объемов",
+    "локальн",
+)
+
+
+def _is_aggregate_name(name: str) -> bool:
+    low = (name or "").strip().lower()
+    return any(tok in low for tok in _AGGREGATE_NAME)
+
 _MATERIAL_HINTS = (
     "материал",
     "товар",
@@ -289,6 +313,7 @@ class ExtractedFact:
     entity_fingerprint: str = ""
     extractor_version: str = EXTRACTOR_VERSION
     normalizer_version: str = NORMALIZER_VERSION
+    layout_status: Optional[str] = None
 
 
 def normalize_name(raw: Optional[str]) -> Optional[str]:
@@ -320,6 +345,30 @@ def _is_header(cell: str) -> bool:
     if not low:
         return True
     return any(tok in low for tok in _HEADER_TOKENS) and len(low) < 40
+
+
+_COL_MARKERS = {
+    "name": ("наименован", "характеристик", "параметр", "показател", "товар", "материал", "позици"),
+    "unit": ("единиц", "ед. изм", "ед.изм", "ед "),
+    "qty": ("кол-во", "количество", "кол."),
+    "price": ("цена",),
+    "total": ("стоимост", "сумма", "итого"),
+}
+
+
+def _header_mapping(cells: Sequence[str]) -> Dict[str, int]:
+    """Detect a table header row and map semantic columns to indices."""
+    low = [str(c).strip().lower() for c in cells]
+    mapping: Dict[str, int] = {}
+    for key, markers in _COL_MARKERS.items():
+        for i, cell in enumerate(low):
+            if any(m in cell for m in markers) and i not in mapping.values():
+                mapping[key] = i
+                break
+    # a real header must expose at least quantity or price/total plus a name
+    if "name" in mapping and ("qty" in mapping or "price" in mapping or "total" in mapping):
+        return mapping
+    return {}
 
 
 def _split_row_cells(row_text: str, meta: Dict[str, Any]) -> List[str]:
@@ -357,10 +406,46 @@ def _row_to_fact(
     row_text: str,
     meta: Dict[str, Any],
     category_keywords: Sequence[str],
+    header_map: Optional[Dict[str, int]] = None,
 ) -> Optional[ExtractedFact]:
     cells = _split_row_cells(row_text, meta)
     if not cells:
         return None
+
+    layout_status = None
+    mapped_qty = mapped_unit = mapped_price = mapped_total = None
+    if header_map:
+        def _val(key: str) -> Optional[str]:
+            idx = header_map.get(key)
+            return cells[idx].strip() if idx is not None and 0 <= idx < len(cells) else None
+
+        mapped_qty_cell = _val("qty")
+        if mapped_qty_cell:
+            parsed = split_quantity_unit(mapped_qty_cell)
+            mapped_qty = parsed[0] if parsed else parse_number(mapped_qty_cell)
+        mapped_unit = _val("unit")
+        mapped_price = parse_number(_val("price")) if _val("price") else None
+        mapped_total = parse_number(_val("total")) if _val("total") else None
+        if mapped_qty is not None and mapped_unit is None and mapped_qty_cell:
+            parsed = split_quantity_unit(mapped_qty_cell)
+            if parsed and parsed[1]:
+                mapped_unit = parsed[1]
+        # reconciliation
+        if mapped_qty is not None and mapped_price is not None and mapped_total is not None:
+            computed = float(mapped_qty) * float(mapped_price)
+            denom = max(abs(float(mapped_total)), abs(computed), 1.0)
+            if abs(float(mapped_total) - computed) / denom > 0.05:
+                layout_status = "INCONSISTENT_LAYOUT"
+                mapped_total = None
+            else:
+                layout_status = "CONSISTENT"
+        elif mapped_price is not None:
+            layout_status = "CONSISTENT"
+        else:
+            # A total without a price column cannot be verified against a
+            # position (aggregate/contract sums live here) -> no value.
+            layout_status = "UNSUPPORTED_LAYOUT"
+            mapped_total = None
 
     # name = best material-looking cell (net of address/date/enumeration noise)
     low_row = row_text.lower()
@@ -387,6 +472,8 @@ def _row_to_fact(
             best_name = cell
     name = best_name
     if not name or best_score < 0:
+        return None
+    if _is_aggregate_name(name):
         return None
 
     # quantity + unit: combined cell first, then bare-unit + bare-number pairing
@@ -433,11 +520,23 @@ def _row_to_fact(
             continue
         money.append((idx, val, cell))
     unit_price_value = unit_price_raw = line_total_value = line_total_raw = None
-    if len(money) >= 2:
-        unit_price_value, unit_price_raw = money[0][1], money[0][2]
-        line_total_value, line_total_raw = money[-1][1], money[-1][2]
-    elif len(money) == 1:
-        line_total_value, line_total_raw = money[0][1], money[0][2]
+    if header_map:
+        unit_price_value = mapped_price
+        unit_price_raw = str(mapped_price) if mapped_price is not None else None
+        line_total_value = mapped_total
+        line_total_raw = str(mapped_total) if mapped_total is not None else None
+        qty = mapped_qty
+        unit_raw = mapped_unit
+        unit_norm, family = normalize_unit(unit_raw)
+        # A category VALUE is only trusted on a real position: quantity + unit.
+        if qty is None or unit_norm is None:
+            unit_price_value = unit_price_raw = None
+            line_total_value = line_total_raw = None
+            layout_status = "UNSUPPORTED_LAYOUT"
+    else:
+        # No recognisable header: material/quantity may be kept, but a value is
+        # NEVER guessed from neighbouring numbers.
+        layout_status = "UNSUPPORTED_LAYOUT"
 
     # An evidence fact requires a unit-bound quantity (no unit -> not a fact).
     if qty is None or unit_norm is None:
@@ -489,6 +588,7 @@ def _row_to_fact(
         source_quote=row_text[:500],
         confidence=confidence,
         category_match=category_match,
+        layout_status=layout_status,
     )
     row_key = str(fact.row_or_line)
     fact.entity_fingerprint = fingerprint(fact, row_key)
@@ -512,10 +612,19 @@ def extract_facts(
     seen: set = set()
     max_rows = int(os.getenv("EMBEDDED_MAX_ROWS", "200000"))
     processed = 0
+    # Header-aware column mapping per table: qty/price/total only from their own
+    # columns; a headerless table yields material/quantity but NO value.
+    headers: Dict[Any, Dict[str, int]] = {}
     for line_no, row_text, meta in _iter_rows(text or "", line_meta):
         processed += 1
         if processed > max_rows:
             break
+        cells = _split_row_cells(row_text, meta)
+        table_key = (meta.get("table_index"), meta.get("sheet_name"), meta.get("file", ""))
+        mapping = _header_mapping(cells)
+        if mapping:
+            headers[table_key] = mapping
+            continue
         fact = _row_to_fact(
             procurement_id=procurement_id,
             category_code=category_code,
@@ -526,6 +635,7 @@ def extract_facts(
             row_text=row_text,
             meta=meta,
             category_keywords=category_keywords,
+            header_map=headers.get(table_key),
         )
         if fact is None:
             continue
@@ -555,11 +665,28 @@ def facts_from_table_rows(
         name = getattr(r, "product_name_raw", None)
         if not name:
             continue
+        if _is_aggregate_name(str(name)):
+            continue
         unit_raw = getattr(r, "quantity_unit", None)
         unit_norm, family = normalize_unit(unit_raw)
         qty = getattr(r, "quantity_value", None)
         up = getattr(r, "unit_price_value", None)
         tot = getattr(r, "total_price_value", None)
+        # A value requires a real position: quantity + unit (+ price column).
+        if qty is None or unit_norm is None or (up is None and tot is not None):
+            up = None
+            tot = None
+        layout_status = "CONSISTENT"
+        if qty is not None and up is not None and tot is not None:
+            computed = float(qty) * float(up)
+            denom = max(abs(float(tot)), abs(computed), 1.0)
+            if abs(float(tot) - computed) / denom > 0.05:
+                layout_status = "INCONSISTENT_LAYOUT"
+                tot = None
+        elif up is None and tot is not None:
+            # unverifiable total (no price column) -> not a usable value
+            layout_status = "UNSUPPORTED_LAYOUT"
+            tot = None
         quote = getattr(r, "source_quote", "") or ""
         fact = ExtractedFact(
             procurement_id=procurement_id,
@@ -583,6 +710,7 @@ def facts_from_table_rows(
             source_quote=quote[:500],
             confidence=0.9 if (qty is not None and unit_norm) else 0.7,
             category_match=any(kw and kw in quote.lower() for kw in category_keywords),
+            layout_status=layout_status,
         )
         fact.entity_fingerprint = fingerprint(fact, str(fact.row_or_line or ""))
         if fact.entity_fingerprint in seen:

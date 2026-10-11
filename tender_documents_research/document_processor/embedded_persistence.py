@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
 from typing import Any, Dict, Iterable, Tuple
 
 from document_processor.embedded_extraction import EXTRACTOR_VERSION
@@ -133,12 +134,21 @@ def persist_facts(
                  total_price_value, total_price_raw, currency_code, source_quote,
                  confidence, product_relation, created_at, structured_fact_trust_state,
                  source_document_id, physical_download_key, page_or_sheet, row_or_line,
-                 extractor_version, normalizer_version)
+                 extractor_version, normalizer_version, layout_status)
             VALUES (%s,%s,%s,%s,%s,'PRODUCT',%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,'RUB',%s,
-                    %s,'EMBEDDED',NOW(),'MANUAL_PROOF_QUARANTINE',%s,%s,%s,%s,%s,%s)
+                    %s,'EMBEDDED',NOW(),'MANUAL_PROOF_QUARANTINE',%s,%s,%s,%s,%s,%s,%s)
             ON CONFLICT (procurement_id, source_document_id, entity_fingerprint, extractor_version)
               WHERE extractor_version IS NOT NULL AND source_document_id IS NOT NULL
-            DO NOTHING
+            DO UPDATE SET
+                quantity_value = EXCLUDED.quantity_value,
+                quantity_unit_normalized = EXCLUDED.quantity_unit_normalized,
+                measurement_family = EXCLUDED.measurement_family,
+                unit_price_value = EXCLUDED.unit_price_value,
+                total_price_value = EXCLUDED.total_price_value,
+                total_price_raw = EXCLUDED.total_price_raw,
+                layout_status = EXCLUDED.layout_status,
+                source_quote = EXCLUDED.source_quote
+              WHERE %s
             """,
             (
                 run_id, detail_id, procurement_id, cat, f.entity_fingerprint,
@@ -148,6 +158,8 @@ def persist_facts(
                 f.line_total_value, f.line_total_raw, f.source_quote, f.confidence,
                 f.source_document_id, f.physical_download_key, f.page_or_sheet,
                 f.row_or_line, f.extractor_version, f.normalizer_version,
+                getattr(f, "layout_status", None),
+                os.getenv("EMBEDDED_FORCE_UPDATE", "0") == "1",
             ),
         )
         if cur.rowcount == 0:

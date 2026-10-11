@@ -86,7 +86,7 @@ def main() -> int:
                      "strict_line_items": 0, "strict_value": 0.0, "strict_values": [],
                      "value_without_qty_unit": 0, "inconsistent_value_rows": 0,
                      "consistent_line_items": 0, "consistent_value": 0.0,
-                     "inconsistent_only": False}
+                     "inconsistent_only": False, "qty_price_only_rows": 0}
         )
         cohorts: Dict[Tuple[str, str, str], List[float]] = defaultdict(list)
         for f in facts:
@@ -99,12 +99,13 @@ def main() -> int:
             if line_total is not None:
                 value = float(line_total)
                 c["from_line_total"] += 1
-            elif qty is not None and price is not None:
-                value = float(qty) * float(price)
-                c["from_qty_price"] += 1
             else:
+                # A standalone price is not proof of a position value: without a
+                # line_total the row is a coverage gap, not a value.
                 value = None
                 c["excluded"] += 1
+                if qty is not None and price is not None:
+                    c["qty_price_only_rows"] += 1
             # Reconciliation: when both are present they must agree; otherwise
             # the row columns were mis-mapped -> use qty*price and flag it.
             if value is not None and qty is not None and price is not None and line_total is not None:
