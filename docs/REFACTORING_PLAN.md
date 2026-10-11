@@ -43,6 +43,21 @@
 ### PARSE_TIME_EXTRACTION_WIRING_V2 — track routing + no-facts memory (PASS)
 
 #### TIER2 (FAST/HEAVY) — ЗАВЕРШЁН
+
+#### ФИНАЛЬНЫЙ СЛОЙ — semantic dedup + confirmed facts (Шаг 1 PASS)
+Семантическая identity (утверждённый контракт, page/sheet/row — только provenance):
+`source_document_id + category_code + normalized_material + normalized_quantity + normalized_unit + COALESCE(unit_price, line_total)`.
+Таблица `confirmed_category_facts` (migration `20261011_confirmed_category_facts.sql`, GRANT doc_worker), билдер `scripts/build_confirmed_facts.py` (идемпотентный rebuild: DELETE + insert).
+```
+SOURCE_ENTITIES=1776  ->  CONFIRMED_FACTS=1497
+SEMANTIC_DUPLICATES_COLLAPSED=279     TABLE_OVERLAP_COLLAPSED=114 (table_1/table_2 схлопнуты)
+CONFIRMED_FACTS_WITH_MULTIPLE_MEMBERS=193
+SEMANTIC_DUPLICATES_AFTER_DEDUP=0     TABLE_OVERLAP_DOUBLE_COUNT=0
+CONFIRMED_FACTS_WITH_PROVENANCE=1497 (100%)   UNKNOWN_CATEGORY=0
+CATEGORY_VALUE_FROM_PROJECT_NMCK=0
+CATEGORY_VALUE_SUM=1146871943.54   QUANTITY_SUM=463892.482   SUM_REPRODUCIBLE=YES/YES
+```
+Замечание для следующего шага: сумма ещё «сырая» — часть строк являются агрегатами (не line-items), поэтому category value нужно считать после отбора позиций (line_total ИЛИ qty×unit_price) и с проверкой по категориям.
 ```
 TIER2_TOTAL=78 планов   COMPLETED=68 (67 FAST + 1 HEAVY)   FAILED_EXPLAINED=4   PENDING_DEFERRED=5   UNCLASSIFIED=0
 FAILED_EXPLAINED: все 4 = UNSUPPORTED (.xls расчёты НМЦК; артефакт локально есть, HTTP не повторяли)
