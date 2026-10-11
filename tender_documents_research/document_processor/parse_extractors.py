@@ -74,7 +74,7 @@ def _persist_estimate(conn, path: Path, procurement_id: int, document_name: str)
         "SELECT MIN(id) FROM document_match_details WHERE procurement_id=%s",
         (procurement_id,),
     )
-    detail_id = cur.fetchone()[0] or 0
+    detail_id = cur.fetchone()[0]  # nullable; may be None when no match detail exists
     payload = json.dumps([getattr(f, "__dict__", {}) for f in facts], ensure_ascii=False, default=str)
     cur.execute(
         """INSERT INTO structured_extraction_runs
@@ -158,9 +158,19 @@ def extract_and_persist(
     text: Optional[str],
     procurement_id: Optional[int],
     document_name: Optional[str] = None,
+    *,
+    category_code: Optional[str] = None,
+    source_document_id: Optional[int] = None,
+    physical_key: Optional[str] = None,
+    line_meta: Optional[Dict[int, Any]] = None,
 ) -> Dict[str, int]:
-    """Best-effort parse-time extraction; never raises."""
-    result = {"facts": 0, "metadata": 0}
+    """Best-effort parse-time extraction; never raises.
+
+    `category_code` (from the Queue V3 payload) enables EMBEDDED_EXTRACTOR_V1 +
+    UNIT_NORMALIZER_V1 while the file is still on disk. Category is never
+    re-derived from the text.
+    """
+    result = {"facts": 0, "metadata": 0, "embedded": 0}
     if procurement_id is None:
         return result
     try:
@@ -172,18 +182,83 @@ def extract_and_persist(
             for statement in _DDL:
                 conn.cursor().execute(statement)
             conn.commit()
+            # Each extractor is isolated: one failing must not block the others.
             if path.suffix.lower() in (".xlsx", ".xlsm"):
-                result["facts"] = _persist_estimate(conn, path, int(procurement_id), name)
+                try:
+                    result["facts"] = _persist_estimate(conn, path, int(procurement_id), name)
+                except Exception as exc:  # noqa: BLE001
+                    conn.rollback()
+                    logger.warning("estimate extraction failed for %s: %s", name, exc)
             if text:
-                result["metadata"] = _persist_metadata(conn, text, int(procurement_id), name)
+                try:
+                    result["metadata"] = _persist_metadata(conn, text, int(procurement_id), name)
+                except Exception as exc:  # noqa: BLE001
+                    conn.rollback()
+                    logger.warning("metadata extraction failed for %s: %s", name, exc)
+            if category_code:
+                result["embedded"] = _persist_embedded(
+                    conn, path, text, line_meta, int(procurement_id), name,
+                    category_code, source_document_id, physical_key,
+                )
             conn.commit()
         finally:
             conn.close()
-        if result["facts"] or result["metadata"]:
+        if result["facts"] or result["metadata"] or result.get("embedded"):
             logger.info(
-                "parse-time extraction: facts=%d metadata=%d doc=%s",
-                result["facts"], result["metadata"], name,
+                "parse-time extraction: facts=%d metadata=%d embedded=%d doc=%s",
+                result["facts"], result["metadata"], result.get("embedded", 0), name,
             )
     except Exception as exc:
         logger.warning("parse-time extraction failed for %s: %s", document_name, exc)
     return result
+
+
+def _persist_embedded(
+    conn,
+    path: Path,
+    text: Optional[str],
+    line_meta: Optional[Dict[int, Any]],
+    procurement_id: int,
+    document_name: str,
+    category_code: str,
+    source_document_id: Optional[int],
+    physical_key: Optional[str],
+) -> int:
+    """Run the category-bound extractor during parsing (file still on disk)."""
+    try:
+        from document_processor.embedded_extraction import extract_facts, facts_from_table_rows
+        from document_processor.embedded_persistence import persist_facts
+
+        if path.suffix.lower() in (".xlsx", ".xlsm"):
+            try:
+                from document_processor.smeta_forma_4b import (
+                    detect_forma_4b,
+                    read_estimate,
+                    xlsx_sheet_names,
+                )
+                from document_processor.xlsx_table_reader import read_tables
+
+                rows = read_estimate(path) if detect_forma_4b(xlsx_sheet_names(path)) else read_tables(path)
+            except Exception:
+                rows = []
+            facts = facts_from_table_rows(
+                procurement_id=procurement_id, category_code=category_code,
+                document_name=document_name, rows=rows,
+                source_document_id=source_document_id, physical_key=physical_key,
+            )
+        else:
+            facts = extract_facts(
+                procurement_id=procurement_id, category_code=category_code,
+                document_name=document_name, text=text, line_meta=line_meta,
+                source_document_id=source_document_id, physical_key=physical_key,
+            )
+        if not facts:
+            return 0
+        created, _reused, _stats = persist_facts(
+            conn, procurement_id=procurement_id, document_name=document_name,
+            category_code=category_code, facts=facts,
+        )
+        return created
+    except Exception as exc:  # never break parsing
+        logger.warning("embedded extraction failed for %s: %s", document_name, exc)
+        return 0

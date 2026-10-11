@@ -50,6 +50,7 @@ class S13V2Pipeline:
         match_engine,
         category_codes: list | None = None,
         soft_fallback_file_names: set | None = None,
+        selected_doc_context: dict | None = None,
     ):
         """
         Pure compute processing for S13_V2. No DB writes.
@@ -64,6 +65,7 @@ class S13V2Pipeline:
         bypass_names = {
             str(n).strip().lower() for n in (soft_fallback_file_names or set()) if n
         }
+        doc_ctx = selected_doc_context or {}
         soft_bypass_used = 0
 
         def _skip(name: str) -> bool:
@@ -155,7 +157,14 @@ class S13V2Pipeline:
                 try:
                     from document_processor.parse_extractors import extract_and_persist
 
-                    extract_and_persist(path, text, procurement_id, path.name)
+                    ctx = doc_ctx.get(str(path.name).strip().lower()) or {}
+                    extract_and_persist(
+                        path, text, procurement_id, path.name,
+                        category_code=ctx.get("category"),
+                        source_document_id=ctx.get("source_document_id"),
+                        physical_key=ctx.get("physical_key"),
+                        line_meta=line_meta,
+                    )
                 except Exception as exc:  # never break parsing
                     self.logger.warning(
                         f"[{procurement_id}] parse-time extraction skipped: {exc}"

@@ -112,6 +112,10 @@ def main() -> int:
     parser.add_argument("--tier", type=int, required=True)
     parser.add_argument("--lane", default="")
     parser.add_argument("--dry-run", action="store_true")
+    parser.add_argument("--max-plans", type=int, default=0)
+    parser.add_argument("--require-ext", default="")
+    parser.add_argument("--require-name-substr", default="")
+    parser.add_argument("--pid", type=int, default=0)
     args = parser.parse_args()
     lane = args.lane or f"queue_v2_tier{args.tier}"
 
@@ -165,9 +169,19 @@ def main() -> int:
         for pid, items in by_pid.items():
             if pid not in docs_by_pid:
                 continue
+            if args.pid and pid != args.pid:
+                continue
             plan = build_queue_plan_v2(procurement=items[0], opportunities=items,
                                        documents=docs_by_pid[pid], pipeline_generation=PIPELINE_GENERATION)
             if not plan["acquisition_allowed"] or plan["work_tier"] != args.tier:
+                continue
+            # Never enqueue a plan the queue claim filter would reject
+            # (policy leak: batch input must equal claimable work).
+            if plan["research_action_v2"] not in (
+                "DOCUMENT_RESEARCH_REQUIRED",
+                "DOCUMENT_CONFIRMATION_REQUIRED",
+            ):
+                counters["SKIPPED_NOT_CLAIMABLE"] += 1
                 continue
             pending = []
             for entry in plan["selected_documents"]:
@@ -196,15 +210,33 @@ def main() -> int:
                 doc_by_id[i].get("physical_download_key") or doc_by_id[i].get("url_hash") or doc_by_id[i].get("url")
                 for i in pending_ids if i in doc_by_id
             ]
+            if args.require_ext and not any(
+                str(doc_by_id[int(e["source_document_id"])].get("file_name", "")).lower().endswith(
+                    "." + args.require_ext.lower()
+                )
+                for e in pending if int(e["source_document_id"]) in doc_by_id
+            ):
+                counters["SKIPPED_EXT_FILTER"] += 1
+                continue
+            if args.require_name_substr and not any(
+                args.require_name_substr.lower() in str(doc_by_id[int(e["source_document_id"])].get("file_name", "")).lower()
+                for e in pending if int(e["source_document_id"]) in doc_by_id
+            ):
+                counters["SKIPPED_NAME_FILTER"] += 1
+                continue
             rows.append((pid, plan, pending))
             counters["TIER_INPUT"] += len(pending_ids)
             counters["TIER_PLANS_WITH_HTTP"] += 1
+            if args.max_plans and len(rows) >= args.max_plans:
+                break
 
         print(f"TIER={args.tier} LANE={lane}")
         print(f"TIER_PLANS={counters['TIER_PLANS']}")
         print(f"TIER_PLANS_WITH_HTTP={counters['TIER_PLANS_WITH_HTTP']}")
         print(f"TIER_PLANS_NO_HTTP={counters['PLANS_NO_HTTP']}")
+        print(f"TIER_PLANS_NOT_CLAIMABLE={counters['SKIPPED_NOT_CLAIMABLE']}")
         print(f"TIER_INPUT={counters['TIER_INPUT']}")
+        print(f"TIER_INPUT_CLAIMABLE={counters['TIER_INPUT']}")
 
         if args.dry_run:
             print("DRY_RUN=YES (no queue writes)")

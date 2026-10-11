@@ -1,5 +1,19 @@
 ## CURRENT WIP — 2026-10-11 (EMBEDDED_EXTRACTION_NORMALIZATION_V1 / PHASE 0-1)
 
+### PARSE_TIME_EXTRACTION_WIRING_V1 — PASS
+Extractor встроен в штатный путь обработки и закрыт lifecycle локального файла.
+**Изменения кода:**
+* `parse_extractors.extract_and_persist(...)` принимает `category_code / source_document_id / physical_key / line_meta`; категория берётся только из Queue V3 payload (по тексту не переопределяется). Каждый sub-extractor изолирован (падание legacy estimate больше не блокирует новый extraction); `_persist_estimate` больше не пишет `detail_id=0` (FK-баг).
+* `pipelines/s13_v2_pipeline.process_task(..., selected_doc_context=...)` прокидывает контекст на файл; новый блок запускается до удаления task-dir.
+* `daemon._process_s13v2_task` строит `selected_doc_context` (name → {category, source_document_id, physical_key}) из `selected_documents`.
+* `embedded_persistence.persist_facts` — единая идемпотентная запись (identity-индекс + reuse run).
+* Lifecycle: `S13V2StateRepository.mark_local_artifact()` + `downloader._bind_local_artifact()` вызываются на успешном download/reuse → `document_files.local_path` = факт. артефакт, `physical_download_key` заполнен, `local_deleted_at=NULL`, `download_status='COMPLETED'` (по `id`, не по url_hash — лечит "local_path не обновляется").
+**Lifecycle-проверка (2 live canary):** doc 81949 и 81923 после targeted download → `has_path=t`, `not_deleted=t`.
+**Offline-проверка хука** (`scripts/verify_parse_hook.py`, HTTP=0): `PARSE_TIME_HOOK_CALLED=6`, `ENTITIES_CREATED_RUN1=10`, `NEW_ENTITIES_RUN2=0`, `ENTITIES_REUSED_RUN2=6`, `UNKNOWN_CATEGORY=0`, `WITHOUT_PROVENANCE=0`.
+**Live production-path canary** (штатный worker, без task-dir обхода): план pid 408376 → targeted HTTP `Расчёт НМЦК.xlsx` → parser → hook → `structured_extraction_runs` id=1067 (`extractor_version=EMBEDDED_EXTRACTOR_V1`, category `computers`), `structured_entities` 5 (category-bound) → task COMPLETED → cleanup. Ранние 2 canary дали 0 фактов (документы без таблиц) — это отсутствие данных, не сбой пути.
+Инварианты V1 по всей базе: `entities=480`, `UNKNOWN_CATEGORY=0`, `WITHOUT_PROVENANCE=0`, `NEW_HTTP_REQUESTS=0`, `HTTP_BEHAVIOR_UNCHANGED=YES`, `DOCUMENT_SELECTION_V3_UNCHANGED=YES`.
+Policy-leak метрика закрыта: `queue_network_batch.py` больше НЕ ставит в лейн планы с `research_action_v2` вне `DOCUMENT_*`; отчёт разделяет `TIER_INPUT` (batch) и `TIER_INPUT_CLAIMABLE`. Для TIER1: `TIER_PLANS=240`, `WITH_HTTP=232`, `NOT_CLAIMABLE=2` → **TIER_INPUT_CLAIMABLE=232**.
+
 ### TIER0 NETWORK RUN (158) — PASS
 Только TIER0: `scripts/queue_network_batch.py --tier 0` → лейн `queue_v2_tier0` (158 планов / 158 документов; 2 предсуществующие дублирующие queue-строки сняты в `SKIPPED_NOISE`, чтобы не было двойного HTTP). Worker `tender-docs-daemon-open` в режиме `RUN_ONCE`, `QUEUE_LANES=queue_v2_tier0`, `MAX_ACTIVE_DOWNLOADS=1`, `DOWNLOAD_PARALLEL=1`, stagger 5s.
 ```

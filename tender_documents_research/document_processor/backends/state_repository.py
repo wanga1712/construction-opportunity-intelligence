@@ -41,6 +41,10 @@ class ProcessingStateRepository(ABC):
     @abstractmethod
     def finalize_download_status(self, procurement_id, table_source, file_name, url_hash, success, error_message=None, local_path=None): ...
 
+    def mark_local_artifact(self, document_id, local_path, physical_download_key=None, file_size=None):
+        """Bind a downloaded artifact to its canonical document_files row."""
+        return 0
+
     def record_download_attempt(self, queue_id, procurement_id, source_url, url_hash, attempt_number, result, error_class=None, http_status=None, bytes_received=None, duration_ms=None, response_headers=None, retry_after=None, xid=None):
         return None
 
@@ -295,6 +299,33 @@ class S13V2StateRepository(ProcessingStateRepository):
             if cur.rowcount < 1:
                 self.logger.warning(f"S13 document_files row missing for url_hash={url_hash} or file_name={file_name}")
         conn.commit()
+
+    def mark_local_artifact(self, document_id, local_path, physical_download_key=None, file_size=None):
+        """Wiring: bind a downloaded artifact to its canonical document_files row.
+
+        Targeted (Queue V3) downloads know the canonical source_document_id, so
+        the row is updated by id - independent of any url_hash drift. Also clears
+        a previous retention marker.
+        """
+        if document_id is None or not local_path:
+            return 0
+        conn = self._get_conn()
+        with conn.cursor() as cur:
+            cur.execute(
+                """UPDATE document_files SET
+                      download_status='COMPLETED',
+                      local_path=%s,
+                      local_deleted_at=NULL,
+                      error_message=NULL,
+                      physical_download_key=COALESCE(%s, physical_download_key),
+                      file_size_bytes=COALESCE(%s, file_size_bytes),
+                      downloaded_at=COALESCE(downloaded_at, NOW())
+                    WHERE id=%s""",
+                (str(local_path), physical_download_key, file_size, int(document_id)),
+            )
+            updated = cur.rowcount
+        conn.commit()
+        return updated
 
     @_rollback_on_error
     def record_download_attempt(self, queue_id, procurement_id, source_url, url_hash, attempt_number, result, error_class=None, http_status=None, bytes_received=None, duration_ms=None, response_headers=None, retry_after=None, xid=None):

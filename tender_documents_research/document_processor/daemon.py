@@ -593,6 +593,25 @@ class DocumentProcessorDaemon:
                     soft_fallback_file_names.add(str(_sanitize(_name)).strip().lower())
                 except Exception:
                     pass
+        # PARSE_TIME_EXTRACTION_WIRING_V1: category context per planned document.
+        selected_doc_context = {}
+        for _entry in task.get("selected_documents") or []:
+            if not isinstance(_entry, dict):
+                continue
+            _name = _entry.get("file_name")
+            if not _name:
+                continue
+            _ctx = {
+                "category": _entry.get("category"),
+                "source_document_id": _entry.get("source_document_id"),
+                "physical_key": _entry.get("physical_key"),
+            }
+            selected_doc_context[str(_name).strip().lower()] = _ctx
+            if _sanitize is not None:
+                try:
+                    selected_doc_context[str(_sanitize(_name)).strip().lower()] = _ctx
+                except Exception:
+                    pass
         try:
             try:
                 batch = self.pipeline.prefetch_task(
@@ -664,6 +683,7 @@ class DocumentProcessorDaemon:
                 match_engine=self._scoped_engine(procurement_id),
                 category_codes=None,
                 soft_fallback_file_names=soft_fallback_file_names,
+                selected_doc_context=selected_doc_context,
             )
             if getattr(batch, "rate_limited", False):
                 if proc_result.files:

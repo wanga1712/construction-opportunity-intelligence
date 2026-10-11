@@ -131,6 +131,9 @@ class Downloader:
         return root
 
     def _is_reusable_local_path(self, path: Path) -> bool:
+        return self._path_within_approved_root(path)
+
+    def _path_within_approved_root(self, path: Path) -> bool:
         if not path.exists() or not path.is_file():
             return False
         approved_storage_root = getattr(self, "approved_storage_root", None)
@@ -141,6 +144,25 @@ class Downloader:
             return True
         except ValueError:
             return False
+
+    def _bind_local_artifact(self, document_id, local_path, physical_key=None):
+        """Keep document_files.local_path truthful for targeted Queue V3 downloads."""
+        if document_id is None or local_path is None or self.state_repo is None:
+            return
+        try:
+            size = None
+            p = Path(local_path)
+            if p.exists():
+                size = p.stat().st_size
+            updated = self.state_repo.mark_local_artifact(
+                int(document_id), str(local_path), physical_key, size
+            )
+            if not updated:
+                self.logger.warning(
+                    f"mark_local_artifact: no document_files row for id={document_id}"
+                )
+        except Exception as exc:  # noqa: BLE001
+            self.logger.warning(f"mark_local_artifact failed for id={document_id}: {exc}")
 
     def get_links(self, contract_reg_number: str, table_source: str) -> List[Tuple[str, Optional[str]]]:
         """?????????? ?????? (url, file_name) ?? ??????? ??????????."""
@@ -477,6 +499,7 @@ class Downloader:
                     )
                 except Exception:  # noqa: BLE001
                     pass
+            self._bind_local_artifact(canonical_source_document_id, reused, physical_download_key)
             return ([reused], None, canonical_source_document_id,
                     physical_download_key, url_hash)
 
@@ -513,6 +536,7 @@ class Downloader:
                             bytes_received=target_path.stat().st_size,
                             duration_ms=0,
                         )
+                        self._bind_local_artifact(canonical_source_document_id, target_path, physical_download_key)
                         return [target_path], None, canonical_source_document_id, physical_download_key, url_hash
                     if target_path.exists():
                         self.logger.warning(
@@ -761,6 +785,7 @@ class Downloader:
             self.state_repo.finalize_download_status(
                 tender_id, table_source, safe_predicted, url_hash, True, None, ok_file
             )
+        self._bind_local_artifact(canonical_source_document_id, ok_file, physical_download_key)
 
         # Возвращаем файл как есть — распаковка будет в download_and_extract
         return [ok_file], None, canonical_source_document_id, physical_download_key, url_hash
