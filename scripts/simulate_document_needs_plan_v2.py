@@ -43,6 +43,7 @@ from src.services.commercial_routing_v3.document_needs_plan_v2 import (  # noqa:
     adapt_category_registry,
     build_document_needs_plan,
     category_plan,
+    skip_predicate as _skip_predicate,
     select_unit_documents,
 )
 from src.services.commercial_routing_v3.research_action_v2 import (  # noqa: E402
@@ -431,6 +432,9 @@ def main() -> int:
         accepted_units = 0
         fallback_violations = 0
         fallback_reasons = Counter()
+        no_executable_fallback_units = 0
+        selected_matching_skip = 0
+        fallback_matching_skip = 0
 
         for pid in all_pids:
             opps = opps_by_pid.get(pid, [])
@@ -492,6 +496,16 @@ def main() -> int:
                         fallback_violations += 1
                 else:
                     accepted_units += 1
+                    if not any(s.selection_decision == SELECTED for s in selections):
+                        no_executable_fallback_units += 1
+                for s in selections:
+                    if s.selection_decision in (SELECTED, SELECTED_FALLBACK) and _skip_predicate()(
+                        s.file_name
+                    ):
+                        if s.selection_decision == SELECTED:
+                            selected_matching_skip += 1
+                        else:
+                            fallback_matching_skip += 1
 
             for category, selections in unit_selections.items():
                 unit_required = set(unit_plans[category].required_classes)
@@ -623,6 +637,9 @@ def main() -> int:
         )
         print(f"FALLBACK_VIOLATIONS={fallback_violations}")
         print(f"FALLBACK_REASONS={fallback_reasons.most_common(8)}")
+        print(f"NO_EXECUTABLE_FALLBACK_UNITS={no_executable_fallback_units}")
+        print(f"SELECTED_FILE_MATCHING_SKIP_LIST={selected_matching_skip}")
+        print(f"FALLBACK_FILE_MATCHING_SKIP_LIST={fallback_matching_skip}")
         print(f"HTTP_BEFORE={http_before}")
         print(f"HTTP_AFTER_SELECTED={http_after_selected}")
         http_after_v2 = sel_counts.get(SELECTED, 0) + sel_counts.get(SELECTED_FALLBACK, 0)
@@ -654,6 +671,9 @@ def main() -> int:
         }
         current_pid_set = {o["procurement_id"] for o in opportunities}
         recall = Counter()
+        skip_docs = 0
+        current_skip_only_units = 0
+        global_skip_only_units = 0
         doc_status = Counter()
         skipped_class_examples = Counter()
         loss_class_combo = Counter()
@@ -690,6 +710,8 @@ def main() -> int:
                 if pid in current_pid_set:
                     recall["FALLBACK_UNITS_CURRENT"] += 1
             for name, classification, selection in zip(names, classifications, selections):
+                if _skip_predicate()(name):
+                    skip_docs += 1
                 classes[classification.document_class.value] = (
                     classes.get(classification.document_class.value, 0) + 1
                 )
@@ -710,6 +732,10 @@ def main() -> int:
                     recall["RECALL_OK_UNITS_CURRENT"] += 1
             else:
                 recall["RECALL_LOSS_UNITS"] += 1
+                if all(_skip_predicate()(n) for n in names):
+                    global_skip_only_units += 1
+                    if pid in current_pid_set:
+                        current_skip_only_units += 1
                 loss_class_combo[(category, tuple(sorted(classes)))] += 1
                 recall_losses.append(
                     (category, tuple(sorted(classes)), tuple(sorted(set(names))[:3]))
@@ -737,6 +763,9 @@ def main() -> int:
         print(f"CURRENT_RECALL_LOSS_UNITS={recall['RECALL_LOSS_UNITS_CURRENT']}")
         print(f"KNOWN_POSITIVE_CURRENT_LOSS={recall['RECALL_LOSS_UNITS_CURRENT']}")
         print(f"KNOWN_POSITIVE_GLOBAL_LOSS={recall['RECALL_LOSS_UNITS']}")
+        print(f"KNOWN_POSITIVE_DOCS_MATCHING_SKIP_LIST={skip_docs}")
+        print(f"CURRENT_POSITIVE_UNITS_ONLY_IN_SKIP_FILES={current_skip_only_units}")
+        print(f"GLOBAL_POSITIVE_UNITS_ONLY_IN_SKIP_FILES={global_skip_only_units}")
         print(f"RECALL_FALLBACK_UNITS={recall['FALLBACK_UNITS']}")
         print(f"CURRENT_RECALL_FALLBACK_UNITS={recall['FALLBACK_UNITS_CURRENT']}")
         print(f"CATEGORY_NOT_IN_CURRENT_UNITS={recall['CATEGORY_NOT_IN_CURRENT']}")

@@ -186,6 +186,8 @@ class Downloader:
         """
         if not selected_source_document_ids:
             return []
+        import psycopg2
+
         dsn = {
             "host": os.getenv("S13_DOCUMENT_DB_HOST", "localhost"),
             "port": int(os.getenv("S13_DOCUMENT_DB_PORT", "5432")),

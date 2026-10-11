@@ -21,6 +21,56 @@ from .document_classifier_v1 import (
     DocumentClass,
     DocumentClassification,
 )
+
+_SKIP_PREDICATE = None
+
+
+def skip_predicate():
+    """Canonical download-time skip-list (single authority).
+
+    Loaded lazily from ``tender_documents_research.document_processor.file_skip_list``
+    so the selector never invents a second policy; when unavailable, a
+    conservative name-only subset is used (same prefixes, fail-closed).
+    """
+    global _SKIP_PREDICATE
+    if _SKIP_PREDICATE is not None:
+        return _SKIP_PREDICATE
+    try:
+        from document_processor.file_skip_list import should_skip_file as fn
+
+        _SKIP_PREDICATE = fn
+        return fn
+    except Exception:
+        pass
+    lowered = (
+        "проект контракта",
+        "проект_контракта",
+        "проект договора",
+        "проект_договора",
+        "извещение",
+        "electronicauction",
+        "печатная форма",
+        "информация о контракте",
+        "автоматический контроль",
+    )
+
+    def _fallback(file_name):
+        name = (file_name or "").strip().lower()
+        if not name:
+            return True
+        if not any(ch.isalpha() for ch in name.replace(".", "")):
+            return True
+        return any(name.startswith(prefix) or prefix in name for prefix in lowered)
+
+    _SKIP_PREDICATE = _fallback
+    return _fallback
+
+
+def is_executable_document(file_name, classification) -> bool:
+    """A document the next pipeline stage can actually accept."""
+    if not classification.is_document:
+        return False
+    return not skip_predicate()(file_name)
 from .research_action_v2 import GROUP_DESIGN, GROUP_DIRECT, GROUP_EMBEDDED, GROUP_UNKNOWN
 
 DOCUMENT_NEEDS_POLICY_VERSION = "document_needs_plan_v2"
@@ -413,6 +463,9 @@ def select_unit_documents(
     if any(selection.selection_decision == SELECTED for _, selection in pairs):
         return [selection for _, selection in pairs], None
     candidates = [i for i, (classification, _) in enumerate(pairs) if classification.is_document]
+    candidates = [
+        i for i in candidates if is_executable_document(pairs[i][1].file_name, pairs[i][0])
+    ]
     if not candidates:
         return [], None
 
