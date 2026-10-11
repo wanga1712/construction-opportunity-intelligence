@@ -1,3 +1,36 @@
+## CURRENT WIP — 2026-10-11 (EMBEDDED_EXTRACTION_NORMALIZATION_V1 / PHASE 0-1)
+
+**EMBEDDED_EXTRACTION_NORMALIZATION_V1** — `[~]` **PHASE 0 PASS; PHASE 1 (trace) PASS; PHASE 2+ (new extractor) НЕ НАЧАТ по собственному условию WIP**. Acquisition не трогается; workers/writers off; mass rollout off.
+
+### PHASE 0 — V3 как baseline (ACCEPTED)
+`DOCUMENT_SELECTION_V3=ACCEPTED`, `QUEUE_V2=ACCEPTED`, `TARGETED_DOWNLOADER=ACCEPTED`, `EIS_GUARD_V2=PASS`, `PRIORITY_LIFECYCLE_V2=PASS`. Commit `e14b76a` запушен в canonical (`origin/CRM-ANALYTICS-V2-UI-REBUILD-1` = `e14b76a`); S13 runtime = repo по sha256 для всего V3-файлсета. `MASS_ROLLOUT=NO`, `DOCUMENT_WORKERS=OFF`, `WRITERS=OFF`.
+
+### PHASE 1 — trace текущего extraction path (read-only, canary)
+Caller graph после parser (доказан кодом + данными сегодняшнего canary):
+
+| stage | IMPLEMENTED | ACTUALLY_CALLED | INPUT | OUTPUT | PERSISTED_TO |
+|---|---|---|---|---|---|
+| download | yes | yes | selected_source_document_id | local artifact | `document_files` (`local_path`) |
+| parse | yes | yes | artifact | `text`, `line_meta` | in-memory |
+| matcher (evidence) | yes | yes | text/line_meta | matches/terms | `document_matches`, `document_match_details` |
+| structured extraction | **xlsx-only** | только `.xlsx/.xlsm` | `read_tables`/`smeta_forma_4b` | PRODUCT rows | `structured_extraction_runs`, `structured_entities` |
+| metadata extraction | yes | yes | text lines | people/orgs | `project_metadata_people/organizations` |
+| normalization (unit family) | **NO** | — | — | — | — |
+| category attribution | **NO** (пишет `category_code='unknown'`) | — | — | — | — |
+| promotion to facts/medals | **NO** | — | — | — | — |
+
+Факт (сегодня): `structured_extraction_runs=919/920`, `structured_entities=483..489` — но только из двух `.xlsx` (`Описание объекта закупки кабель.xlsx`, `... _товары_.xlsx`), `category_code='unknown'`, `structured_fact_trust_state='MANUAL_PROOF_QUARANTINE'`. Поля: `quantity_value=200.0/50.0/30.0/1.0`, `quantity_unit_normalized='Метр'/'м'/'компл'` (не нормализовано), есть `unit_price_value`/`total_price_value`.
+
+Canary parsed extensions: `docx 99, pdf 61, xlsx 24, doc 19, xls 5, + archives`.
+
+**Где фактически обрывается путь после parser:**
+1. Для не-xlsx (`docx/doc/pdf`) структурной extraction нет вообще — `extract_and_persist()` вызывает `_persist_estimate()` только для `.xlsx/.xlsm`; для текста пишет только metadata. Именно поэтому `EMBEDDED_WITH_QUANTITY/UNIT=0` на canary (большинство canary-документов — `docx/doc/pdf`).
+2. Даже для xlsx: `category_code='unknown'` → нет привязки к CURRENT категории; `quantity_unit_normalized` = сырая строка (`Метр`/`м`) → нет measurement family; `trust=MANUAL_PROOF_QUARANTINE`.
+3. Нет потребителя `structured_entities` → нет `category value`, нет `confirmed medal` (Phase 6/17/19 отсутствуют как код).
+
+Вывод: parser и matcher работают; **обрыв — на stage «structured extraction» (формат-гейт xlsx-only), плюс отсутствуют attribution/normalization/promotion**. Новый extractor до этой фиксации не писался (требование WIP выполнено).
+Артефакты canary ещё на диске (`/data/tender-documents/downloads/<queue_id>/`), поэтому Phase 4 «без HTTP» выполним.
+
 ## CURRENT WIP — 2026-10-11 (DOCUMENT_SELECTION_V3 / SOFT_FALLBACK + CANARY)
 
 **DOCUMENT_SELECTION_V3_WIP** — `[~]` **PASS ДО EXTRACTION GATE; ACQUISITION ДОКАЗАН; EMBEDDED quantity/unit = 0 → СЛЕДУЮЩИЙ WIP**. Закрыт конфликт «historical evidence в PROJECT_CONTRACT / NOTICE / ElectronicAuction vs canonical file_skip_list». Selection policy переведена на три ступени; skip-list разделён на HARD/SOFT; Queue payload несёт `selection_type` и ID-scoped soft bypass.
