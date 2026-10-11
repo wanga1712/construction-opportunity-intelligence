@@ -605,6 +605,7 @@ class DocumentProcessorDaemon:
                 "category": _entry.get("category"),
                 "source_document_id": _entry.get("source_document_id"),
                 "physical_key": _entry.get("physical_key"),
+                "track": _entry.get("track"),
             }
             selected_doc_context[str(_name).strip().lower()] = _ctx
             if _sanitize is not None:

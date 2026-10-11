@@ -46,6 +46,7 @@ from document_processor.embedded_extraction import (  # noqa: E402
     extract_facts,
     facts_from_table_rows,
 )
+from document_processor.parse_extractors import extract_and_persist  # noqa: E402
 from document_processor.parser_factory import ParserFactory  # noqa: E402
 from document_processor.parse_utils import (  # noqa: E402
     get_rich_parser,
@@ -258,21 +259,10 @@ def main() -> int:
             else:
                 counters["EMBEDDED_FILES"] += 1
 
-            facts = []
-            parse_failed = False
-            empty = False
+            # Single code path: the production parse-time hook (routing by track).
+            text, line_meta, parse_failed, empty = "", None, False, False
             try:
-                if path.suffix.lower() in {".xlsx", ".xlsm"}:
-                    rows = read_xlsx_facts(path)
-                    facts = facts_from_table_rows(
-                        procurement_id=pid, category_code=category, document_name=doc["file_name"],
-                        rows=rows, source_document_id=doc_id,
-                        physical_key=doc.get("physical_download_key"),
-                        category_keywords=vocab.get(category, []),
-                    )
-                    if not rows:
-                        empty = True
-                else:
+                if path.suffix.lower() not in {".xlsx", ".xlsm"}:
                     parser = get_rich_parser(factory, path) if supports_rich_meta(path) else factory.get_parser(path)
                     if parser is None:
                         parse_failed = True
@@ -280,30 +270,26 @@ def main() -> int:
                         text, line_meta = parse_file_with_meta(parser, path)
                         if not (text or "").strip():
                             empty = True
-                        facts = extract_facts(
-                            procurement_id=pid, category_code=category, document_name=doc["file_name"],
-                            text=text, line_meta=line_meta, source_document_id=doc_id,
-                            physical_key=doc.get("physical_download_key"),
-                            category_keywords=vocab.get(category, []),
-                        )
             except Exception:
                 parse_failed = True
-
             if parse_failed:
                 counters["FILES_FAILED"] += 1
                 continue
             counters["FILES_PARSED"] += 1
             if empty:
                 counters["FILES_EMPTY"] += 1
-            if facts:
+            res = extract_and_persist(
+                path, text, pid, path.name,
+                category_code=category, source_document_id=doc_id,
+                physical_key=doc.get("physical_download_key"),
+                track=("DIRECT" if track == GROUP_DIRECT else "EMBEDDED"),
+                line_meta=line_meta,
+            )
+            created = int(res.get("embedded") or 0)
+            if created:
                 counters["FILES_WITH_FACTS"] += 1
-                created, reused = _persist(di, doc, category, facts, counters)
-                for f in facts:
-                    per_category[category]["FACTS"] += 1
-                    per_category[category]["MATERIAL"] += 1 if f.product_name_raw else 0
-                    per_category[category]["QUANTITY"] += 1 if f.quantity_value is not None else 0
-                    per_category[category]["UNIT"] += 1 if f.unit_normalized else 0
-                    per_category[category]["TOTAL"] += 1 if f.line_total_value is not None else 0
+                counters["ENTITIES_CREATED"] += created
+                per_category[category]["FACTS"] += created
             else:
                 counters["FILES_WITHOUT_FACTS"] += 1
         di.commit()

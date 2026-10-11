@@ -7,6 +7,62 @@ import json
 from typing import Any, Dict, Iterable, Tuple
 
 from document_processor.embedded_extraction import EXTRACTOR_VERSION
+from document_processor.embedded_extraction import NORMALIZER_VERSION
+
+
+def record_outcome(
+    conn,
+    *,
+    source_document_id,
+    procurement_id: int,
+    category_code,
+    track,
+    document_name,
+    outcome: str,
+    facts_found: int = 0,
+    reason=None,
+    files_parsed: int = 0,
+    files_failed: int = 0,
+    member_count=None,
+    bytes_value=None,
+    artifact_class=None,
+) -> None:
+    """Version-scoped per-document extraction outcome (no-findings memory)."""
+    if source_document_id is None:
+        return
+    try:
+        cur = conn.cursor()
+        cur.execute(
+            """
+            INSERT INTO document_extraction_outcomes
+                (source_document_id, procurement_id, category_code, track, document_name,
+                 artifact_class, extractor_version, normalizer_version, outcome, facts_found,
+                 member_count, bytes, reason, files_parsed, files_failed, updated_at, created_at)
+            VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,NOW(),NOW())
+            ON CONFLICT (source_document_id, extractor_version, COALESCE(category_code, ''))
+            DO UPDATE SET
+                outcome = EXCLUDED.outcome,
+                facts_found = EXCLUDED.facts_found,
+                reason = EXCLUDED.reason,
+                files_parsed = EXCLUDED.files_parsed,
+                files_failed = EXCLUDED.files_failed,
+                member_count = COALESCE(EXCLUDED.member_count, document_extraction_outcomes.member_count),
+                bytes = COALESCE(EXCLUDED.bytes, document_extraction_outcomes.bytes),
+                artifact_class = COALESCE(EXCLUDED.artifact_class, document_extraction_outcomes.artifact_class),
+                updated_at = NOW()
+            """,
+            (
+                int(source_document_id), procurement_id, category_code, track, document_name,
+                artifact_class, EXTRACTOR_VERSION, NORMALIZER_VERSION, outcome, int(facts_found),
+                member_count, bytes_value, (reason or "")[:400], files_parsed, files_failed,
+            ),
+        )
+        conn.commit()
+    except Exception:
+        try:
+            conn.rollback()
+        except Exception:
+            pass
 
 
 def persist_facts(

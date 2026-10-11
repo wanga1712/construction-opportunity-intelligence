@@ -1,4 +1,5 @@
 import os
+import time
 from pathlib import Path
 from typing import Optional, Tuple
 from document_processor.pdf_processor import parse_pdf_incremental
@@ -93,7 +94,37 @@ class S13V2Pipeline:
             result.outcome = ProcessingOutcome.FAILED
             return result
 
+        # HEAVY guard (HEAVY lane): a pathological archive must fail with an
+        # explicit reason instead of holding the worker in PROCESSING.
+        member_cap = int(os.getenv("HEAVY_MEMBER_CAP", "300"))
+        size_cap = int(os.getenv("HEAVY_UNPACKED_SIZE_CAP_BYTES", str(1024 * 1024 * 1024)))
+        time_cap = float(os.getenv("HEAVY_WALL_CLOCK_SECONDS", "1800"))
+        if len(files) > member_cap:
+            result.error_message = f"FAILED_HEAVY_MEMBER_CAP: members={len(files)} cap={member_cap}"
+            result.outcome = ProcessingOutcome.FAILED
+            return result
+        unpacked_bytes = 0
+        for _p in files:
+            try:
+                unpacked_bytes += _p.stat().st_size
+            except Exception:
+                pass
+        if size_cap and unpacked_bytes > size_cap:
+            result.error_message = (
+                f"FAILED_HEAVY_SIZE_CAP: unpacked_bytes={unpacked_bytes} cap={size_cap}"
+            )
+            result.outcome = ProcessingOutcome.FAILED
+            return result
+        started_monotonic = time.monotonic()
+
         for path in files:
+            if time_cap and (time.monotonic() - started_monotonic) > time_cap:
+                result.error_message = (
+                    f"FAILED_HEAVY_WALL_CLOCK_CAP: seconds>{int(time_cap)} "
+                    f"after {len(result.files)} files"
+                )
+                result.outcome = ProcessingOutcome.FAILED
+                return result
             if _skip(path.name):
                 parent_name, parent_path, member_path = _archive_parent_identity(path)
                 result.files.append(FileProcessResult(
@@ -163,6 +194,7 @@ class S13V2Pipeline:
                         category_code=ctx.get("category"),
                         source_document_id=ctx.get("source_document_id"),
                         physical_key=ctx.get("physical_key"),
+                        track=ctx.get("track"),
                         line_meta=line_meta,
                     )
                 except Exception as exc:  # never break parsing

@@ -30,6 +30,7 @@ from .queue_priority_v2 import (
 from .research_action_v2 import (
     RESEARCH_ACTION_POLICY_VERSION,
     ResearchAction,
+    track_group,
 )
 
 QUEUE_PLAN_VERSION = "queue_v2"
@@ -141,6 +142,7 @@ def build_queue_plan_v2(
                     "selection_type": sel_type,
                     "selection_reason": selection.selection_reason,
                     "category": category,
+                    "track": track_group(sorted(units[category])[0]) if units.get(category) else "UNKNOWN",
                     "required_by_category": [],
                     "required_facts": list(selection.required_facts),
                 },

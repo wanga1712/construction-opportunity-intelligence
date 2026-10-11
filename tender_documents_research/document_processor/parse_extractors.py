@@ -163,6 +163,7 @@ def extract_and_persist(
     source_document_id: Optional[int] = None,
     physical_key: Optional[str] = None,
     line_meta: Optional[Dict[int, Any]] = None,
+    track: Optional[str] = None,
 ) -> Dict[str, int]:
     """Best-effort parse-time extraction; never raises.
 
@@ -183,7 +184,9 @@ def extract_and_persist(
                 conn.cursor().execute(statement)
             conn.commit()
             # Each extractor is isolated: one failing must not block the others.
-            if path.suffix.lower() in (".xlsx", ".xlsm"):
+            # When a Queue V3 category context is present the new extractor
+            # supersedes the legacy estimate reader (avoids reading big xlsx twice).
+            if path.suffix.lower() in (".xlsx", ".xlsm") and not category_code:
                 try:
                     result["facts"] = _persist_estimate(conn, path, int(procurement_id), name)
                 except Exception as exc:  # noqa: BLE001
@@ -198,8 +201,25 @@ def extract_and_persist(
             if category_code:
                 result["embedded"] = _persist_embedded(
                     conn, path, text, line_meta, int(procurement_id), name,
-                    category_code, source_document_id, physical_key,
+                    category_code, source_document_id, physical_key, track,
                 )
+                try:
+                    from document_processor.embedded_persistence import record_outcome
+
+                    record_outcome(
+                        conn,
+                        source_document_id=source_document_id,
+                        procurement_id=int(procurement_id),
+                        category_code=category_code,
+                        track=track,
+                        document_name=name,
+                        outcome="FACTS_FOUND" if result.get("embedded") else "NO_FACTS",
+                        facts_found=int(result.get("embedded") or 0),
+                        reason="parse_time_hook",
+                        files_parsed=1,
+                    )
+                except Exception:
+                    pass
             conn.commit()
         finally:
             conn.close()
@@ -223,12 +243,38 @@ def _persist_embedded(
     category_code: str,
     source_document_id: Optional[int],
     physical_key: Optional[str],
+    track: Optional[str] = None,
 ) -> int:
     """Run the category-bound extractor during parsing (file still on disk)."""
     try:
         from document_processor.embedded_extraction import extract_facts, facts_from_table_rows
         from document_processor.embedded_persistence import persist_facts
 
+        # DIRECT (прямые поставки) uses the previously built template extractor;
+        # EMBEDDED (проекты/объекты) uses the table-row extractor.
+        if track == "DIRECT":
+            from document_processor.direct_runtime import direct_facts
+
+            facts = direct_facts(
+                path, procurement_id=procurement_id, category_code=category_code,
+                document_name=document_name, source_document_id=source_document_id,
+                physical_key=physical_key,
+            )
+            if not facts:
+                return 0
+            created, _reused, _stats = persist_facts(
+                conn, procurement_id=procurement_id, document_name=document_name,
+                category_code=category_code, facts=facts,
+            )
+            return created
+
+        # Bounded work: one pathological workbook must not stall the batch.
+        max_xlsx_bytes = int(os.getenv("EMBEDDED_MAX_XLSX_BYTES", str(8 * 1024 * 1024)))
+        if path.suffix.lower() in (".xlsx", ".xlsm") and path.stat().st_size > max_xlsx_bytes:
+            logger.warning(
+                "embedded extraction skipped (xlsx over %d bytes): %s", max_xlsx_bytes, document_name
+            )
+            return 0
         if path.suffix.lower() in (".xlsx", ".xlsm"):
             try:
                 from document_processor.smeta_forma_4b import (

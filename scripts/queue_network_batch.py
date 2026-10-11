@@ -81,7 +81,8 @@ SELECT o.procurement_id, o.commercial_category_code AS category_code,
 
 DOCS_SQL = """
 SELECT id, procurement_id, source_table, source_id, url, url_hash, file_name,
-       physical_download_key, download_status, local_path, local_deleted_at
+       physical_download_key, download_status, local_path, local_deleted_at,
+       file_size_bytes
   FROM document_files WHERE procurement_id = ANY(%s)
 """
 
@@ -107,6 +108,20 @@ def local_present(doc: Dict[str, Any], cache: Dict[str, bool]) -> bool:
     return ok
 
 
+_ARCHIVE_SUFFIXES = (".zip", ".rar", ".7z", ".001", ".002", ".003", ".004", ".007")
+
+
+def artifact_class(doc: Dict[str, Any]) -> str:
+    """fast (bulk) | heavy (archives >5MB, pdf >20MB)."""
+    name = str(doc.get("file_name") or "").lower()
+    size = int(doc.get("file_size_bytes") or 0)
+    if name.endswith(_ARCHIVE_SUFFIXES) and size > 5 * 1024 * 1024:
+        return "heavy"
+    if name.endswith(".pdf") and size > 20 * 1024 * 1024:
+        return "heavy"
+    return "fast"
+
+
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--tier", type=int, required=True)
@@ -116,6 +131,8 @@ def main() -> int:
     parser.add_argument("--require-ext", default="")
     parser.add_argument("--require-name-substr", default="")
     parser.add_argument("--pid", type=int, default=0)
+    parser.add_argument("--artifact-class", default="", choices=["", "fast", "heavy"],
+                        help="restrict to fast (bulk) or heavy (big archives/pdf) artifacts")
     args = parser.parse_args()
     lane = args.lane or f"queue_v2_tier{args.tier}"
 
@@ -190,6 +207,8 @@ def main() -> int:
                     continue
                 doc = doc_by_id.get(int(sid))
                 if doc is None or local_present(doc, cache):
+                    continue
+                if args.artifact_class and artifact_class(doc) != args.artifact_class:
                     continue
                 pending.append(entry)
             counters["TIER_PLANS"] += 1

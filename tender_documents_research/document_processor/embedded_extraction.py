@@ -20,6 +20,7 @@ Design rules (from the WIP):
 from __future__ import annotations
 
 import hashlib
+import os
 import re
 from dataclasses import dataclass
 from typing import Any, Dict, Iterable, List, Optional, Sequence, Tuple
@@ -509,7 +510,12 @@ def extract_facts(
     """Deterministic row-level extraction for one category-bound document."""
     facts: List[ExtractedFact] = []
     seen: set = set()
+    max_rows = int(os.getenv("EMBEDDED_MAX_ROWS", "200000"))
+    processed = 0
     for line_no, row_text, meta in _iter_rows(text or "", line_meta):
+        processed += 1
+        if processed > max_rows:
+            break
         fact = _row_to_fact(
             procurement_id=procurement_id,
             category_code=category_code,
