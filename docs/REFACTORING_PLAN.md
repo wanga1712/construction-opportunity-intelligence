@@ -1,5 +1,23 @@
 ## CURRENT WIP — 2026-10-11 (EMBEDDED_EXTRACTION_NORMALIZATION_V1 / PHASE 0-1)
 
+### HISTORICAL ADMISSION / DOCUMENT_PLAN_V3 — READ-ONLY measurement (Phase 11-14, no writes/HTTP)
+`scripts/measure_historical_rebuild.py` — вся база прогоняется сегодняшними правилами: lifecycle → category admission → track → research_action → DOCUMENT_SELECTION_V3 plan → selected documents → классификация локального артефакта. `download_status` НЕ authority: документ «reprocessable» только если новый plan его выбрал И файл реально есть на диске (magic-byte проверка формата → CORRUPT).
+```
+PROCUREMENTS_TOTAL=428011      PROCUREMENTS_WITH_OPPORTUNITIES=5731
+CURRENT_PROCUREMENTS=2530      CURRENT_OPPORTUNITIES=7207   SUPERSEDED_CANDIDATES=8333
+TRACKS_CURRENT_OPPORTUNITIES={DIRECT 841, EMBEDDED 6302, DESIGN 9, UNKNOWN 53}
+DOCUMENT_PLANS_TOTAL=711  CURRENT_PROCUREMENTS_WITH_DOCS=711  CURRENT_CATEGORY_COVERAGE=100.0%
+SELECTED_DOCUMENTS_TOTAL=718   UNIQUE_PHYSICAL_SELECTED=718
+NO_OPPORTUNITY=0   NO_DOCUMENT_RESEARCH=0
+SELECTED_LOCAL_PRESENT=145  SELECTED_LOCAL_MISSING=60  SELECTED_LOCAL_DELETED=512  SELECTED_LOCAL_CORRUPT=1
+REPROCESS_NO_HTTP=145  REDOWNLOAD_REQUIRED=573
+REDOWNLOAD_BY_TIER={TIER_0: 158, TIER_1: 235, TIER_2: 85, TIER_None: 95}
+SELECTED_DOCUMENTS_CLASSIFIED_BY_LOCAL_STATE=100.0%
+OLD_COMPLETED_USED_AS_AUTHORITY=NO
+```
+Вывод: сетевой объём следующего этапа = **573 документа** (158 TIER0 fresh/open, 235 TIER1 awarded active project, 85 TIER2 backlog, 95 без tier), остальные 145 перерабатываются локально без HTTP. Расхождение с прежними числами объясняется retention (`local_deleted_at`): массовая часть исторически `COMPLETED`-строк уже физически удалена, поэтому под новыми правилами это именно `REDOWNLOAD_REQUIRED`, а не «уже скачано».
+Ограничения соблюдены: HTTP=0, `DOCUMENT_WORKERS=OFF`, `WRITERS=OFF`, `MEDAL_WRITES=OFF`, `QUEUE_WRITES=OFF`.
+
 ### PHASE 2-5 — category-bound extractor + normalizer (canary, HTTP=0)
 **Статус: GATE PASS.** Новый модуль `tender_documents_research/document_processor/embedded_extraction.py` (`EMBEDDED_EXTRACTOR_V1`, `UNIT_NORMALIZER_V1`): детерминированный row/table extraction, без модели; контракт факта — material, quantity raw+normalized, unit raw+normalized, `measurement_family`, unit_price, line_total, provenance, confidence.
 Unit normalization по семьям: `COUNT / AREA / LENGTH / MASS / VOLUME` (шт→PCS, компл→SET, м/метр→M, мм→MM, км→KM, м2/кв.м→M2, кг→KG, г→G, т→T, л→L, м3→M3; несовместимые единицы не приводятся).
