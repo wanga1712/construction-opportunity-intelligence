@@ -45,6 +45,26 @@
 #### TIER2 (FAST/HEAVY) — ЗАВЕРШЁН
 
 #### ФИНАЛЬНЫЙ СЛОЙ — semantic dedup + confirmed facts (Шаг 1 PASS)
+
+##### Шаг 3 (Шаг 2-3) — category value + quantity cohorts, READ-ONLY
+`scripts/category_value_cohorts.py` (только чтение). Правила соблюдены: `CATEGORY_VALUE = line_total ИЛИ qty×unit_price` (не оба), отсутствующее значение/количество остаются NULL (нули не подставляются), quantity сравнивается только внутри `measurement_family`, когорты `category+object_type+family → category+family → category` (MIN_N=20), project NMCK не участвует.
+```
+PROJECT_NMCK_LEAK=0        AGGREGATE_ROWS_DOUBLE_COUNT=0      SEMANTIC_DEDUP_ALREADY_APPLIED=YES
+LINE_ITEMS_USED=897        AGGREGATE_ROWS_EXCLUDED=600 (нет цены/итога — в value не суммируются)
+```
+**Найденная проблема (важно перед медалями):** reconciliation `line_total` vs `qty×unit_price` расходится у 320 строк (composite_structures 284, lighting 18, flooring 9, drainage 6, curbstone 2, cable 1) — значит в EMBEDDED-строках колонки цены/итога мапятся неверно (в DIRECT это уже исправлено заголовочным маппингом).
+Поэтому value считается **только по согласованным строкам** (`CONSISTENT_LINE_ITEMS`), а несогласованные помечены и исключены:
+```
+composite_structures 471 / 214 134 470.38
+computers             29 / 334 017 078.08
+cable_support_systems 10 /  49 402 472.08
+drainage_water_management 35 /    784 090.24
+flooring              24 /      22 734.32
+lighting               5 /         176.00
+curbstone              3 /           9.40
+```
+Quantity-когорты готовы (по family): composite_structures LENGTH 306 / MASS 191 / VOLUME 124 / COUNT 97 / AREA 44; computers COUNT 119; lighting COUNT 23; drainage AREA 20 и т.д.
+**Вывод:** quantity-слой готов; value-слой готов только на согласованном подмножестве. До медалей нужно перенести заголовочный маппинг колонок в EMBEDDED-ветку (как сделано для DIRECT) либо явно ограничить value согласованными строками и зафиксировать 320 строк как coverage gap.
 Семантическая identity (утверждённый контракт, page/sheet/row — только provenance):
 `source_document_id + category_code + normalized_material + normalized_quantity + normalized_unit + COALESCE(unit_price, line_total)`.
 Таблица `confirmed_category_facts` (migration `20261011_confirmed_category_facts.sql`, GRANT doc_worker), билдер `scripts/build_confirmed_facts.py` (идемпотентный rebuild: DELETE + insert).
