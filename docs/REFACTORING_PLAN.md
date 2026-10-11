@@ -1,5 +1,24 @@
 ## CURRENT WIP — 2026-10-11 (EMBEDDED_EXTRACTION_NORMALIZATION_V1 / PHASE 0-1)
 
+### TIER_NONE_RESOLUTION — READ-ONLY
+`scripts/resolve_tier_none.py`. `TIER_NONE_BEFORE=95` → `TIER_NONE_AFTER=0`, `TIER_NONE_AFTER_CLAIMABLE=0`, `NULL_TIER_CLAIMABLE=0`. Ни один NULL-tier план не остаётся сетевым: у всех 95 `research_action_v2=NO_DOCUMENT_RESEARCH`, поэтому queue_v2 claim filter их не берёт.
+```
+BUCKETS: DIRECT_SUBMISSION_CLOSED=53  AWARDED_CLOSED_PROJECT=37  AWARDED_DIRECT=5
+         OPEN_* =0  AWARDED_ACTIVE_PROJECT=0  STALE_SOURCE=0  UNKNOWN_LIFECYCLE=0
+         MISSING_SCOPE=0  MISSING_TIMING=0  OTHER=0
+REASON_TIER_NONE={DIRECT_SUBMISSION_CLOSED 53, PROJECT_CLOSED_NO_EXECUTION_WINDOW 35,
+                  DIRECT_AWARDED_WINDOW_CLOSED 5, PROJECT_TERMINAL 1,
+                  UNKNOWN_TRACK_AWARDED_NO_EXECUTION_WINDOW 1}
+PROPOSED={NO_ACQUISITION: 95}   BLOCKED_WITH_EXPLICIT_REASON=0
+```
+Итоговый сетевой объём (только acquisition_allowed):
+```
+REDOWNLOAD_REQUIRED_FINAL=478   (было 573: 95 NO_ACQUISITION-планов больше не считаются сетью)
+TIER0=158   TIER1=235   TIER2=85
+REPROCESS_NO_HTTP=144   SELECTED_DOCUMENTS=622   ACQUIRABLE_PLANS=616   NO_ACQUISITION=95
+```
+Причина NULL-tier у оставшихся объяснена политикой, «по умолчанию TIER2» никому не назначалось. План: сеть запускать ступенями TIER0 → verify, TIER1 → verify, TIER2 → background, с теми же invariants (`HTTP_TO_UNSELECTED=0`, `HTTP_TO_HARD_SKIP=0`, `DUPLICATE_PHYSICAL_HTTP=0`, `429_UNEXPLAINED=0`).
+
 ### STEP 1 — LOCAL REPROCESS 145 (V3-selected, local-present, HTTP=0)
 `scripts/run_local_reprocess.py` — прогон ровно `SELECTED_LOCAL_PRESENT` (145) через `EMBEDDED_EXTRACTOR_V1` / `UNIT_NORMALIZER_V1`; `ONLY_V3_SELECTED_DOCUMENTS=YES`, `ONLY_LOCAL_PRESENT=YES`. Новый identity-индекс `uq_entity_v3_identity (procurement_id, source_document_id, entity_fingerprint, extractor_version)` (migration `20261011_structured_entities_v3_identity.sql`) делает повторный reprocess идемпотентным.
 ```
