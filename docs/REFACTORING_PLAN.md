@@ -27,9 +27,36 @@
 
 Приёмка фазы N1: отчёт «форм — D, из них с колонкой товара — X, с блоками позиций — Y», примеры на закупках. До прогона N1 гипотезы T6/T7 остаются гипотезами, шаблоны не пишутся.
 
+### ШАБЛОН T8 «РОЛЬ ДОКУМЕНТА» — ВНЕДРЁН И ПРОВЕРЕН (прод, 2026-10-11)
+
+Запрос пользователя: на 459603 (№ 0848300069526000365, 44-ФЗ, текущий ремонт кабинета, НМЦК 539 339,28 ₽) в «Смету» попали критерии оценки заявок — нужен шаблон и проверка на этой закупке.
+
+- **Правило.** `_is_estimate_source(name)` (`src/services/direct_document_extractor.py`): документы-роли `порядок рассмотрения / оценк(и) заявок / приложение пик / проект контракта / умный контракт` не порождают `spec`, `spec_tech`, `tech`. Текстовые разделы из них извлекаются как раньше. Список маркеров — `_NON_ESTIMATE_FILE_MARKERS`.
+- **Почему роль файла, а не шапка таблицы.** Первая версия правила фильтровала по словам в шапке («критерий/подпункт/аванс»); это сдвигало `_classify_with_offset` на другой offset и добавляло мусор в «Техпараметры» (3→4). Вариант по роли файла не меняет разбор шапок.
+- **Проверка 459603 (прод, read-only).** До: spec=10, в смете критерии оценки, платёжный график, перечень КТРУ/ОКПД. После: spec=3 (только «Расчет НМЦК»), tech=3, оценка — **1 позиция** «Выполнение работ по текущему ремонту … на 1 этаже» 539 339,28 ₽, `nmck_diff=0.0`, `complete=true`. Требования не потеряны: секции 288 (product 16 / participation 114 / security 158) — как в карточке до правки.
+- **Проверка на выборке (cache-only, 57 закупок).** `LOST_SPEC_ENTIRELY=[]`; выпало 19 строк spec — все из файлов «Проект контракта»/приложений к нему; 460958: spec 6268→6261, tech 1725→1723.
+- **Деплой на S13.** `direct_document_extractor.py` обновлён (sha совпадает с рабочей копией), бэкап `…/direct_document_extractor.py.bak-t8-20261011`. Заодно выкачен ранее согласованный фикс ошибок и «Документов»: `procurement_card_dossier_service.py`, `procurement_card_page.py`, `procurement_card_direct.py`, `direct_requirement_classifier.py` (все четыре прод-файла до выката совпадали с HEAD; бэкапы `*.bak-errors-t8-20261011`). Проверено на 459603: `counts={documents 15, downloaded 15, findings 94, legacy_unverified 94, opportunities 1}` — карточка снова видит документы и ссылки.
+- **Отклонения / наблюдения.** (1) Правило опирается на имя файла: если смету назовут «Проект контракта», она выпадет — контроль по списку `_NON_ESTIMATE_FILE_MARKERS`. (2) Массовый перезамер spec/tech по всему корпусу (как DIRECT-EXTRACTION-COVERAGE) не делался. (3) При вызове досье в момент перепрогона запрос `crm_objects_index WHERE tender_id=…` не уложился в 8 с (`QueryCanceled`) — таблица ~1.2k строк, поэтому похоже на блокировку, а не на скан; проверить после перепрогона. (4) У 459603 все 94 находки — `LEGACY_UNVERIFIED` (подтверждённых 0): нужна перевалидация, отдельная тема.
+
 ## CURRENT WIP — 2026-10-11 (EMBEDDED_EXTRACTION_NORMALIZATION_V1 / PHASE 0-1)
 
 ### PARSE_TIME_EXTRACTION_WIRING_V2 — track routing + no-facts memory (PASS)
+
+#### TIER2 (FAST/HEAVY) — ЗАВЕРШЁН
+```
+TIER2_TOTAL=78 планов   COMPLETED=68 (67 FAST + 1 HEAVY)   FAILED_EXPLAINED=4   PENDING_DEFERRED=5   UNCLASSIFIED=0
+FAILED_EXPLAINED: все 4 = UNSUPPORTED (.xls расчёты НМЦК; артефакт локально есть, HTTP не повторяли)
+PENDING_DEFERRED: 5 = TRANSIENT_SOURCE_UNSTABLE (bounded retry исчерпан, явная причина, не блокирует)
+HTTP_TO_UNSELECTED=0  HTTP_TO_HARD_SKIP=0  DUPLICATE_PHYSICAL_HTTP=0  429_UNEXPLAINED=0
+TIER2 entities: 109 (qty 65 / unit 83 / category_value 52); UNKNOWN_CATEGORY=0, WITHOUT_PROVENANCE=0
+V1 глобально: entities=1776, UNKNOWN_CATEGORY=0, WITHOUT_PROVENANCE=0
+Durable: тяжёлый артефакт TIER2 скопирован в /data/tender-documents/durable и local_path перепривязан (всего durable=3)
+```
+* Bounded retry FAST-PENDING: источник отдаёт нестабильный ответ → 5 строк помечены `TRANSIENT_SOURCE_UNSTABLE`, повторно не качаются автоматически.
+* Классификатор (`classify_local_failures.py`) применён и к TIER2: `UNSUPPORTED` для legacy `.xls` — честная причина (в runtime нет парсера .xls), повторный HTTP не нужен.
+* Gate перед aggregation: `TIER1_LOCAL_FAILED_UNCLASSIFIED=0`, `DIRECT_PRICE_AS_QUANTITY=0`, `UNKNOWN_CATEGORY=0`, `WITHOUT_PROVENANCE=0`, `DUPLICATE_ENTITY_VALUE_SUM=0` — все PASS.
+* **Долг перед CATEGORY_VALUE_SUM**: overlap таблиц (`table_1/table_2`) — одна и та же позиция в двух таблицах одного документа даёт две канонические identity; при агрегации стоимости нужен table-overlap dedup (иначе удвоение).
+* Document-processing stage считается завершённым; дальше — aggregation + semantic dedup → confirmed category facts → category value → medals → CRM CURRENT rebuild → queue rebuild → production ON.
 
 #### TIER1 leftovers + DIRECT fix (продолжение)
 * **DIRECT колонки (исправлено, п.5)**: `direct_runtime.direct_facts` теперь строит факты по заголовкам (`наименован/характеристик`, `единиц`, `кол-во`, `цена`, `стоимость`), количество берётся ТОЛЬКО из колонки количества; добавлены guard'ы: имя обязано иметь ≥3 буквы, количество без распознанной единицы отбрасывается, строки-предложения («НМЦК составляет … рублей») игнорируются. Результат: `DIRECT_PRICE_AS_QUANTITY=0` (было 10), implausible `COUNT>10000` = 0 (было 7). Ошибочные DIRECT-факты удалены и перегенерированы.
