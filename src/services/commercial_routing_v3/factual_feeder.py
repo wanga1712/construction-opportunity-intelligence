@@ -27,9 +27,11 @@ from src.services.commercial_routing_v3.claim_freshness import compute_work_tier
 logger = logging.getLogger("commercial_routing_v3.factual_feeder")
 
 PIPELINE_GENERATION = "S13_V4_EXHAUSTIVE_CONTEXT"
-LOW_WATERMARK = 50
-HIGH_WATERMARK = 200
-FEED_BATCH_SIZE = 25
+# Watermarks are env-tunable so a legacy un-admitted backlog in
+# document_processing_queue cannot permanently block admission of live work.
+LOW_WATERMARK = int(os.getenv("FACTUAL_FEEDER_LOW_WATERMARK", "50"))
+HIGH_WATERMARK = int(os.getenv("FACTUAL_FEEDER_HIGH_WATERMARK", "200"))
+FEED_BATCH_SIZE = int(os.getenv("FACTUAL_FEEDER_BATCH", "25"))
 # Live lane = statuses that document workers are actually executing.
 # The historical PRE_RESEARCH_WAITING holding backlog is NOT counted, so new
 # live + actionable procurements are never blocked by old historical backlog.

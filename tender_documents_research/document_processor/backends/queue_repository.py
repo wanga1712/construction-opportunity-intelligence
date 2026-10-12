@@ -22,9 +22,9 @@ _S13_CLAIM_ADMISSION_FILTER = """
     )
     AND COALESCE(q.category_context->>'legacy_revalidation_status','')
         NOT IN ('REQUIRED', 'LEGACY_HOLD')
-    AND NOT (
-        q.plan_version = 'queue_v2'
-        AND COALESCE(q.research_action_v2, '') NOT IN
+    AND (
+        q.plan_version IS DISTINCT FROM 'queue_v2'
+        OR COALESCE(q.research_action_v2, '') IN
             ('DOCUMENT_RESEARCH_REQUIRED', 'DOCUMENT_CONFIRMATION_REQUIRED')
     )
 """
