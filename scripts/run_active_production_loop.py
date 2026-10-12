@@ -56,6 +56,7 @@ HEARTBEAT = "/tmp/active_production_loop.json"
 STEPS_LOG = "/tmp/active_production_steps.log"
 CRM_DIR = "/opt/CRM_Streamlit"
 WAVE = "/opt/CRM_Streamlit/scripts/run_wave2a_http.py"
+VERIFY_DIRECT = "/opt/CRM_Streamlit/scripts/verify_direct_supply_facts.py"
 PROMOTE_FACTS = "/opt/CRM_Streamlit/scripts/build_confirmed_facts.py"
 PROMOTE_CONFIRMED = "/opt/CRM_Streamlit/scripts/write_confirmed_base.py"
 PROMOTE_MEDALS = "/opt/CRM_Streamlit/scripts/run_v3_daily_medal_reevaluation.py"
@@ -278,15 +279,19 @@ def main() -> int:
             rc_wave = run_step([sys.executable, WAVE, "--limit", str(BATCH_LIMIT)])
             rc.append(rc_wave)
             if rc_wave == 0:
-                rc_facts = run_step([sys.executable, PROMOTE_FACTS])
-                rc.append(rc_facts)
-                if rc_facts == 0:
-                    rc_conf = run_step([sys.executable, PROMOTE_CONFIRMED, "--write"])
-                    rc.append(rc_conf)
-                    if rc_conf == 0:
-                        rc_medal = run_step([sys.executable, PROMOTE_MEDALS,
-                                             "--apply", "--limit", str(MEDAL_LIMIT)])
-                        rc.append(rc_medal)
+                # Direct-supply documentary verification (quote present in snapshot).
+                rc_verify = run_step([sys.executable, VERIFY_DIRECT, "--apply"])
+                rc.append(rc_verify)
+                if rc_verify == 0:
+                    rc_facts = run_step([sys.executable, PROMOTE_FACTS])
+                    rc.append(rc_facts)
+                    if rc_facts == 0:
+                        rc_conf = run_step([sys.executable, PROMOTE_CONFIRMED, "--write"])
+                        rc.append(rc_conf)
+                        if rc_conf == 0:
+                            rc_medal = run_step([sys.executable, PROMOTE_MEDALS,
+                                                 "--apply", "--limit", str(MEDAL_LIMIT)])
+                            rc.append(rc_medal)
             if any(code != 0 for code in rc):
                 state = "STEP_FAILED"
                 sleep_for = 60

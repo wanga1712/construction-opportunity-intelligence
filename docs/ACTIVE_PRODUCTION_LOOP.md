@@ -18,6 +18,7 @@ Status: **catch-up running / loop not yet enabled** (2026-10-12).
 |---|---|
 | Loop driver | `scripts/run_active_production_loop.py` |
 | A-only HTTP/extract step | `scripts/run_wave2a_http.py` |
+| Verification (direct supply, quote-checked) | `scripts/verify_direct_supply_facts.py --apply` |
 | Promotion: confirmation (documentary-confirmed facts) | `scripts/build_confirmed_facts.py` |
 | Promotion: confirmed_base | `scripts/write_confirmed_base.py --write` |
 | Promotion: current_effective + medals | `scripts/run_v3_daily_medal_reevaluation.py --apply` |
