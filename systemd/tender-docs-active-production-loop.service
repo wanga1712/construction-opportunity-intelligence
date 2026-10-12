@@ -25,6 +25,9 @@ Environment=S13_DOCUMENT_DB_PORT=5432
 Environment=S13_DOCUMENT_DB_NAME=document_intelligence
 # Cycle cadence (source sync runs every ~15 min).
 Environment=ACTIVE_LOOP_SLEEP_SECONDS=900
+# Batch size before promotion/recalculation; medals limit covers all CURRENT opportunities.
+Environment=ACTIVE_LOOP_BATCH=100
+Environment=ACTIVE_LOOP_MEDAL_LIMIT=50000
 
 ExecStart=/opt/tender_documents_research/.venv/bin/python /opt/CRM_Streamlit/scripts/run_active_production_loop.py
 Restart=always

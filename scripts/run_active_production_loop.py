@@ -1,15 +1,15 @@
 """ACTIVE_NEED_HTTP_AND_PROMOTION_V1: catch-up + continuous production loop.
 
-Phase 1 (catch-up): process the A-bucket of NEEDED_BUT_LOCAL_MISSING_V2
-  (download -> parse_file_with_meta -> extract_and_persist), then promote
-  (confirmed_base -> current_effective -> medals) through existing tools.
+Each cycle:
+  1. refresh the immutable plan with newly-active procurements
+     (A_OPEN_CURRENT = OPEN + CURRENT opportunity;
+      A_AWARDED_OBJECT = AWARDED + object/project/embedded signal);
+  2. process ONE batch of eligible A documents (download -> parse -> extract);
+  3. promote (confirmed_base) and recalculate (current_effective + medals);
+  4. next batch immediately while backlog remains, else sleep ~15 min.
 
-Phase 2 (continuous): the service never terminates. Each cycle refreshes the
-  plan with newly-active procurements (from routing-owned state that production
-  source-sync/admission already maintains), downloads only needed documents,
-  extracts, promotes and recalculates. No new classifier is introduced.
-
-No positive signal -> no opportunity is created here (routing owns that).
+No new classifier is introduced and no opportunity is created here: routing owns
+that. B_DISCOVERY / C_* buckets are never taken by HTTP.
 """
 from __future__ import annotations
 
@@ -35,6 +35,8 @@ WAVE = "/opt/CRM_Streamlit/scripts/run_wave2a_http.py"
 PROMOTE_CONFIRMED = "/opt/CRM_Streamlit/scripts/write_confirmed_base.py"
 PROMOTE_MEDALS = "/opt/CRM_Streamlit/scripts/run_v3_daily_medal_reevaluation.py"
 CYCLE_SLEEP_SECONDS = int(os.getenv("ACTIVE_LOOP_SLEEP_SECONDS", "900"))
+BATCH_LIMIT = int(os.getenv("ACTIVE_LOOP_BATCH", "100"))
+MEDAL_LIMIT = int(os.getenv("ACTIVE_LOOP_MEDAL_LIMIT", "50000"))
 
 
 def di_connect():
@@ -53,11 +55,16 @@ def crm_connect():
 
 
 def active_bucket_by_procurement(crm):
-    """bucket(procurement) from routing-owned lifecycle/opportunity state."""
+    """bucket(procurement) from routing-owned lifecycle/opportunity state.
+
+    A_OPEN_CURRENT requires a CURRENT opportunity; OPEN without one is discovery
+    (never downloaded by the loop).
+    """
     buckets = {}
     cur = crm.cursor()
     cur.execute(
         """SELECT sa.procurement_id, sa.source_lifecycle,
+                  (o.procurement_id IS NOT NULL) AS has_current,
                   coalesce(o.any_object, false), coalesce(o.any_followup, false)
              FROM crm_procurement_scope_authority sa
              LEFT JOIN (
@@ -69,8 +76,8 @@ def active_bucket_by_procurement(crm):
                 WHERE status = 'CURRENT'
                 GROUP BY 1) o ON o.procurement_id = sa.procurement_id""",
     )
-    for pid, life, any_object, any_followup in cur.fetchall():
-        if life == "OPEN":
+    for pid, life, has_current, any_object, any_followup in cur.fetchall():
+        if life == "OPEN" and has_current:
             buckets[int(pid)] = "A_OPEN_CURRENT"
         elif life == "AWARDED" and (any_object or any_followup):
             buckets[int(pid)] = "A_AWARDED_OBJECT"
@@ -85,9 +92,23 @@ def _flag(name, *needles):
     return any(n in low for n in needles)
 
 
+def current_categories_by_procurement(crm):
+    cats = {}
+    cur = crm.cursor()
+    cur.execute(
+        "SELECT procurement_id, commercial_category_code"
+        "  FROM crm_procurement_category_opportunities WHERE status='CURRENT'"
+    )
+    for pid, cat in cur.fetchall():
+        cats.setdefault(int(pid), []).append(str(cat))
+    cur.close()
+    return cats
+
+
 def refresh_plan(di, crm):
     """Grow the immutable plan with newly-active procurements (idempotent)."""
     buckets = active_bucket_by_procurement(crm)
+    cats_by_proc = current_categories_by_procurement(crm)
     active = [pid for pid, b in buckets.items() if b in A_BUCKETS]
     if not active:
         return 0
@@ -97,6 +118,12 @@ def refresh_plan(di, crm):
         " WHERE local_path IS NOT NULL AND local_deleted_at IS NULL AND download_status='COMPLETED'"
     )
     present_keys = {r[0] for r in cur.fetchall() if r[0]}
+    # version+category scoped outcome memory: (source_document_id, category_code)
+    cur.execute(
+        "SELECT source_document_id, coalesce(category_code,'') FROM document_extraction_outcomes"
+        " WHERE extractor_version='EMBEDDED_EXTRACTOR_V1'"
+    )
+    done_pairs = {(int(r[0]), str(r[1])) for r in cur.fetchall()}
     added = 0
     for start in range(0, len(active), 3000):
         chunk = active[start:start + 3000]
@@ -111,8 +138,6 @@ def refresh_plan(di, crm):
                      AND lower(coalesce(substring(df.file_name from '\\.([A-Za-z0-9]+)$'),'?')) IN {PARSEABLE}
                      AND coalesce(df.file_name,'') NOT LIKE '~$%%'
                      AND coalesce(df.error_message,'') !~* '(CORRUPT|INVALID_FILE|PACKAGE_NOT_FOUND|UNSUPPORTED_ZIP)'
-                     AND df.id NOT IN (SELECT source_document_id FROM document_extraction_outcomes
-                                        WHERE extractor_version='EMBEDDED_EXTRACTOR_V1')
                 )
                 SELECT DISTINCT ON (coalesce(pkey,'id:'||id))
                        id, procurement_id, url, file_name, file_size_bytes, ext, pkey
@@ -125,6 +150,10 @@ def refresh_plan(di, crm):
                 continue
             bucket = buckets.get(int(pid))
             if bucket not in A_BUCKETS:
+                continue
+            # already-processed check is version+category scoped
+            cats = cats_by_proc.get(int(pid)) or [""]
+            if all((int(sid), c) in done_pairs for c in cats):
                 continue
             is_est = _flag(fname, "смет", "нмцк")
             is_tz = _flag(fname, "тех", "тз", "специфик", "ооз", "описание объекта")
@@ -142,16 +171,20 @@ def refresh_plan(di, crm):
                    VALUES %s ON CONFLICT (plan_version, source_document_id) DO NOTHING""",
                 ins, page_size=1000,
             )
+            added += max(0, cur.rowcount or 0)
         di.commit()
     cur.close()
     return added
 
 
 def run_step(cmd):
+    """Run one pipeline step; return its exit code (never silently ignored)."""
     with open(STEPS_LOG, "a", encoding="utf-8") as fh:
         fh.write("\n### %s :: %s\n" % (time.strftime("%Y-%m-%d %H:%M:%S"), " ".join(cmd)))
         fh.flush()
-        subprocess.run(cmd, cwd=CRM_DIR, stdout=fh, stderr=subprocess.STDOUT, check=False)
+        rc = subprocess.run(cmd, cwd=CRM_DIR, stdout=fh, stderr=subprocess.STDOUT).returncode
+        fh.write("### rc=%d\n" % rc)
+    return rc
 
 
 def heartbeat(payload):
@@ -170,34 +203,50 @@ def main() -> int:
         di = di_connect()
         crm = crm_connect()
         try:
-            refresh_plan(di, crm)
+            added = refresh_plan(di, crm)
             cur = di.cursor()
             cur.execute(
                 """SELECT count(*) FILTER (WHERE status IN ('PLANNED','DOWNLOADED')) AS open_a,
-                          count(*) FILTER (WHERE status='PROCESSED') AS done_a
+                          count(*) FILTER (WHERE status='PROCESSED') AS done_a,
+                          count(*) FILTER (WHERE status='FAILED') AS failed_a
                      FROM needed_local_missing_v2_plan
                     WHERE plan_version=%s AND lifecycle_bucket = ANY(%s)""",
                 (PLAN_VERSION, list(A_BUCKETS)),
             )
-            open_a, done_a = cur.fetchone()
+            open_a, done_a, failed_a = cur.fetchone()
         finally:
             crm.close()
             di.close()
 
-        run_step([sys.executable, WAVE])
-        run_step([sys.executable, PROMOTE_CONFIRMED, "--write"])
-        run_step([sys.executable, PROMOTE_MEDALS, "--apply"])
+        if open_a and int(open_a) > 0:
+            rc_wave = run_step([sys.executable, WAVE, "--limit", str(BATCH_LIMIT)])
+            rc_conf = run_step([sys.executable, PROMOTE_CONFIRMED, "--write"])
+            rc_medal = run_step([sys.executable, PROMOTE_MEDALS,
+                                 "--apply", "--limit", str(MEDAL_LIMIT)])
+            state = "BATCH_DONE"
+            rc = [rc_wave, rc_conf, rc_medal]
+            sleep_for = 0
+        else:
+            state = "WAITING"
+            rc = []
+            sleep_for = CYCLE_SLEEP_SECONDS
 
         heartbeat({
             "cycle": cycle,
             "at": time.strftime("%Y-%m-%d %H:%M:%S"),
+            "state": state,
+            "plan_rows_added": added,
+            "batch_limit": BATCH_LIMIT,
             "A_open": int(open_a or 0),
             "A_processed": int(done_a or 0),
-            "sleep_seconds": CYCLE_SLEEP_SECONDS,
+            "A_failed": int(failed_a or 0),
+            "step_rc": rc,
+            "sleep_seconds": sleep_for,
         })
         if only_once:
             return 0
-        time.sleep(CYCLE_SLEEP_SECONDS)
+        if sleep_for:
+            time.sleep(sleep_for)
 
 
 if __name__ == "__main__":

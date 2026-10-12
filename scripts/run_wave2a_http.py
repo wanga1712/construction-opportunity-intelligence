@@ -145,21 +145,28 @@ def main() -> int:
     client.set_request_gate(coord.request_slot)
     pf = ParserFactory()
 
+    limit = int(os.getenv("WAVE2A_LIMIT", "0"))
+    for idx, arg in enumerate(sys.argv):
+        if arg == "--limit" and idx + 1 < len(sys.argv):
+            limit = int(sys.argv[idx + 1])
+
     cur = di.cursor()
-    cur.execute(
-        """SELECT p.id, p.source_document_id, p.procurement_id, p.url, p.priority,
-                  p.extension, p.document_class, p.file_size_bytes, p.status, df.file_name,
-                  p.lifecycle_bucket
-             FROM needed_local_missing_v2_plan p
-             LEFT JOIN document_files df ON df.id = p.source_document_id
-            WHERE p.plan_version = %s
-              AND p.status IN ('PLANNED', 'DOWNLOADED')
-              AND p.lifecycle_bucket = ANY(%s)
-            ORDER BY CASE p.priority WHEN 'P0' THEN 0 ELSE 1 END, p.id""",
-        (PLAN_VERSION, list(ALLOWED_BUCKETS)),
-    )
+    sql = """SELECT p.id, p.source_document_id, p.procurement_id, p.url, p.priority,
+                    p.extension, p.document_class, p.file_size_bytes, p.status, df.file_name,
+                    p.lifecycle_bucket
+               FROM needed_local_missing_v2_plan p
+               LEFT JOIN document_files df ON df.id = p.source_document_id
+              WHERE p.plan_version = %s
+                AND p.status IN ('PLANNED', 'DOWNLOADED')
+                AND p.lifecycle_bucket = ANY(%s)
+              ORDER BY CASE p.priority WHEN 'P0' THEN 0 ELSE 1 END, p.id"""
+    params = [PLAN_VERSION, list(ALLOWED_BUCKETS)]
+    if limit > 0:
+        sql += " LIMIT %s"
+        params.append(limit)
+    cur.execute(sql, tuple(params))
     rows = cur.fetchall()
-    log.info("wave2a start: %d plan rows (A-only, P0 first)", len(rows))
+    log.info("wave2a start: %d plan rows (A-only, P0 first, limit=%d)", len(rows), limit)
 
     cur.execute(
         """SELECT count(*) FILTER (WHERE lifecycle_bucket NOT IN ('A_OPEN_CURRENT','A_AWARDED_OBJECT')
