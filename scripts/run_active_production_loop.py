@@ -32,6 +32,7 @@ HEARTBEAT = "/tmp/active_production_loop.json"
 STEPS_LOG = "/tmp/active_production_steps.log"
 CRM_DIR = "/opt/CRM_Streamlit"
 WAVE = "/opt/CRM_Streamlit/scripts/run_wave2a_http.py"
+PROMOTE_FACTS = "/opt/CRM_Streamlit/scripts/build_confirmed_facts.py"
 PROMOTE_CONFIRMED = "/opt/CRM_Streamlit/scripts/write_confirmed_base.py"
 PROMOTE_MEDALS = "/opt/CRM_Streamlit/scripts/run_v3_daily_medal_reevaluation.py"
 CYCLE_SLEEP_SECONDS = int(os.getenv("ACTIVE_LOOP_SLEEP_SECONDS", "900"))
@@ -220,11 +221,12 @@ def main() -> int:
 
         if open_a and int(open_a) > 0:
             rc_wave = run_step([sys.executable, WAVE, "--limit", str(BATCH_LIMIT)])
+            rc_facts = run_step([sys.executable, PROMOTE_FACTS])
             rc_conf = run_step([sys.executable, PROMOTE_CONFIRMED, "--write"])
             rc_medal = run_step([sys.executable, PROMOTE_MEDALS,
                                  "--apply", "--limit", str(MEDAL_LIMIT)])
             state = "BATCH_DONE"
-            rc = [rc_wave, rc_conf, rc_medal]
+            rc = [rc_wave, rc_facts, rc_conf, rc_medal]
             sleep_for = 0
         else:
             state = "WAITING"
