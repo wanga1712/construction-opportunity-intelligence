@@ -66,6 +66,21 @@ def semantic_key(row: Dict[str, Any]) -> str:
 def main() -> int:
     di = psycopg2.connect(**di_dsn())
     try:
+        trust = query(
+            di,
+            "SELECT structured_fact_trust_state AS state, count(*) AS n"
+            "  FROM structured_entities WHERE extractor_version=%s"
+            "   AND category_code IS NOT NULL AND category_code <> 'unknown'"
+            " GROUP BY 1",
+            (EXTRACTOR_VERSION,),
+        )
+        trust_by_state = {r["state"]: int(r["n"]) for r in trust}
+        print(f"CONFIRMED_FACTS_TRUSTED_PRODUCTION={trust_by_state.get('TRUSTED_PRODUCTION', 0)}")
+        print(f"CONFIRMED_FACTS_MANUAL_PROOF_QUARANTINE={trust_by_state.get('MANUAL_PROOF_QUARANTINE', 0)}")
+        print(f"CONFIRMED_FACTS_DEV_EXPOSED={trust_by_state.get('DEV_EXPOSED', 0)}")
+        other = sum(v for k, v in trust_by_state.items()
+                    if k not in ('TRUSTED_PRODUCTION', 'MANUAL_PROOF_QUARANTINE', 'DEV_EXPOSED'))
+        print(f"CONFIRMED_FACTS_OTHER={other}")
         rows = query(
             di,
             "SELECT id, procurement_id, category_code, source_document_id, physical_download_key,"
@@ -74,6 +89,7 @@ def main() -> int:
             " source_quote, extractor_version, normalizer_version"
             " FROM structured_entities WHERE extractor_version=%s"
             " AND category_code IS NOT NULL AND category_code <> 'unknown'"
+            " AND structured_fact_trust_state = 'TRUSTED_PRODUCTION'"
             " ORDER BY id",
             (EXTRACTOR_VERSION,),
         )

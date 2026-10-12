@@ -24,10 +24,34 @@ sys.path.insert(0, "/opt/CRM_Streamlit")
 
 import psycopg2  # noqa: E402
 from psycopg2.extras import execute_values  # noqa: E402
+from src.services.commercial_routing_v3.document_classifier_v1 import (  # noqa: E402
+    DocumentClass,
+    classify_document_metadata,
+)
 
 PLAN_VERSION = "NEEDED_BUT_LOCAL_MISSING_V2"
 A_BUCKETS = ("A_OPEN_CURRENT", "A_AWARDED_OBJECT")
 PARSEABLE = "('docx','pdf','xlsx','xlsm','doc','xls')"
+#: Only these document classes carry material/characteristic evidence for the
+#: embedded normalizer. Legal/participant/contract boilerplate is never fetched.
+MATERIAL_DOC_CLASSES = frozenset({
+    DocumentClass.ESTIMATE.value,
+    DocumentClass.BOQ.value,
+    DocumentClass.TECH_SPEC.value,
+    DocumentClass.PRODUCT_SPECIFICATION.value,
+    DocumentClass.MATERIAL_SPECIFICATION.value,
+    DocumentClass.NMCK_JUSTIFICATION.value,
+    DocumentClass.PROJECT_DOCUMENTATION.value,
+    DocumentClass.WORKING_DOCUMENTATION.value,
+})
+P0_DOC_CLASSES = frozenset({
+    DocumentClass.ESTIMATE.value,
+    DocumentClass.BOQ.value,
+    DocumentClass.TECH_SPEC.value,
+    DocumentClass.PRODUCT_SPECIFICATION.value,
+    DocumentClass.MATERIAL_SPECIFICATION.value,
+    DocumentClass.NMCK_JUSTIFICATION.value,
+})
 HEARTBEAT = "/tmp/active_production_loop.json"
 STEPS_LOG = "/tmp/active_production_steps.log"
 CRM_DIR = "/opt/CRM_Streamlit"
@@ -156,10 +180,10 @@ def refresh_plan(di, crm):
             cats = cats_by_proc.get(int(pid)) or [""]
             if all((int(sid), c) in done_pairs for c in cats):
                 continue
-            is_est = _flag(fname, "смет", "нмцк")
-            is_tz = _flag(fname, "тех", "тз", "специфик", "ооз", "описание объекта")
-            prio = "P0" if (ext in ("xlsx", "xls", "xlsm") or is_est or is_tz) else "P1"
-            cls = "ESTIMATE" if is_est else ("TECH_SPEC" if is_tz else "OTHER")
+            cls = classify_document_metadata(fname).document_class.value
+            if cls not in MATERIAL_DOC_CLASSES:
+                continue
+            prio = "P0" if (ext in ("xlsx", "xls", "xlsm") or cls in P0_DOC_CLASSES) else "P1"
             ins.append((PLAN_VERSION, sid, pid, pkey, prio, ext, cls, size,
                         "auto_cycle", url, bucket))
         if ins:
@@ -174,6 +198,33 @@ def refresh_plan(di, crm):
             )
             added += max(0, cur.rowcount or 0)
         di.commit()
+    # Self-heal previously-planned backlog: reclassify by file name and drop the
+    # non-material classes so wave2a never downloads them.
+    cur.execute(
+        """SELECT p.id, df.file_name
+             FROM needed_local_missing_v2_plan p
+             JOIN document_files df ON df.id = p.source_document_id
+            WHERE p.plan_version=%s AND p.status IN ('PLANNED','DOWNLOADED')
+              AND (p.document_class IS NULL OR NOT (p.document_class = ANY(%s)))""",
+        (PLAN_VERSION, list(MATERIAL_DOC_CLASSES)),
+    )
+    for row_id, fname in cur.fetchall():
+        cls = classify_document_metadata(fname).document_class.value
+        if cls in MATERIAL_DOC_CLASSES:
+            prio = "P0" if cls in P0_DOC_CLASSES else "P1"
+            cur.execute(
+                "UPDATE needed_local_missing_v2_plan"
+                " SET document_class=%s, priority=%s, updated_at=now() WHERE id=%s",
+                (cls, prio, row_id),
+            )
+        else:
+            cur.execute(
+                "UPDATE needed_local_missing_v2_plan"
+                " SET status='FAILED', error_message='excluded_non_material', updated_at=now()"
+                " WHERE id=%s",
+                (row_id,),
+            )
+    di.commit()
     cur.close()
     return added
 
@@ -220,14 +271,25 @@ def main() -> int:
             di.close()
 
         if open_a and int(open_a) > 0:
-            rc_wave = run_step([sys.executable, WAVE, "--limit", str(BATCH_LIMIT)])
-            rc_facts = run_step([sys.executable, PROMOTE_FACTS])
-            rc_conf = run_step([sys.executable, PROMOTE_CONFIRMED, "--write"])
-            rc_medal = run_step([sys.executable, PROMOTE_MEDALS,
-                                 "--apply", "--limit", str(MEDAL_LIMIT)])
             state = "BATCH_DONE"
-            rc = [rc_wave, rc_facts, rc_conf, rc_medal]
             sleep_for = 0
+            rc = []
+            # Fail-closed: a failed step stops the chain; the next iteration retries.
+            rc_wave = run_step([sys.executable, WAVE, "--limit", str(BATCH_LIMIT)])
+            rc.append(rc_wave)
+            if rc_wave == 0:
+                rc_facts = run_step([sys.executable, PROMOTE_FACTS])
+                rc.append(rc_facts)
+                if rc_facts == 0:
+                    rc_conf = run_step([sys.executable, PROMOTE_CONFIRMED, "--write"])
+                    rc.append(rc_conf)
+                    if rc_conf == 0:
+                        rc_medal = run_step([sys.executable, PROMOTE_MEDALS,
+                                             "--apply", "--limit", str(MEDAL_LIMIT)])
+                        rc.append(rc_medal)
+            if any(code != 0 for code in rc):
+                state = "STEP_FAILED"
+                sleep_for = 60
         else:
             state = "WAITING"
             rc = []

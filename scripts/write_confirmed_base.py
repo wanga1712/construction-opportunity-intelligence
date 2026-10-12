@@ -142,7 +142,23 @@ def main() -> int:
                     "     confirmed_scoring_version=%s WHERE id=%s",
                     (score, medal, SCORING_VERSION, oid),
                 )
+            # Fail-closed: an opportunity without documentary-confirmed facts keeps
+            # confirmed_base = NULL (never WOOD/0, never a stale value).
+            cur.execute(
+                "UPDATE crm_procurement_category_opportunities"
+                " SET confirmed_base_score=NULL, confirmed_base_medal=NULL, confirmed_at=NULL,"
+                "     confirmed_scoring_version=NULL"
+                " WHERE status='CURRENT' AND NOT (id = ANY(%s))",
+                ([t[0] for t in targets],),
+            )
         crm.commit()
+        from_untrusted = query(
+            di,
+            "SELECT count(*) AS c FROM confirmed_category_facts cf"
+            " JOIN structured_entities se ON se.id = cf.entity_id"
+            " WHERE se.structured_fact_trust_state IS DISTINCT FROM 'TRUSTED_PRODUCTION'",
+        )[0]["c"]
+        print(f"CONFIRMED_BASE_FROM_UNTRUSTED={from_untrusted}")
         after = query(crm, "SELECT count(*) AS nonnull FROM crm_procurement_category_opportunities"
                            " WHERE status='CURRENT' AND confirmed_base_medal IS NOT NULL")[0]["nonnull"]
         total = query(crm, "SELECT count(*) AS c FROM crm_procurement_category_opportunities WHERE status='CURRENT'")[0]["c"]
