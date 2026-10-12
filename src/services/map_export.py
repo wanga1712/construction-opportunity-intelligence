@@ -151,30 +151,69 @@ def fetch_uk_summary(db: ParkingDatabase, min_floors: int = 0) -> list[dict]:
         params.append(min_floors)
 
     sql = f"""
+    WITH uk_objects AS (
+        SELECT DISTINCT mc.id AS uk_id, co.id AS object_id, co.floors_underground
+        FROM management_company mc
+        JOIN cadastral_object_management cm
+            ON cm.management_company_id = mc.id AND cm.status = 'DONE'
+        JOIN cadastral_object co ON co.id = cm.cadastral_object_id
+        JOIN parking_candidate pc ON pc.cadastral_object_id = co.id
+        WHERE co.lat IS NOT NULL AND co.lon IS NOT NULL
+          AND pc.parking_type = 'UNDERGROUND'
+          {floor_clause}
+    )
     SELECT
         mc.id AS uk_id,
         mc.ogrn AS uk_ogrn,
         mc.inn AS uk_inn,
         mc.name AS uk_name,
         mc.phone AS uk_phone,
-        COUNT(co.id) AS object_count,
-        COUNT(CASE WHEN co.floors_underground >= 2 THEN 1 END) AS ge2_floors
+        mc.address AS uk_address,
+        COUNT(u.object_id) AS object_count,
+        COUNT(u.object_id) AS parking_count,
+        COUNT(CASE WHEN u.floors_underground >= 1 THEN 1 END) AS ge1_floors,
+        COUNT(CASE WHEN u.floors_underground >= 2 THEN 1 END) AS ge2_floors,
+        COALESCE(SUM(u.floors_underground), 0) AS total_underground_floors,
+        COALESCE(MAX(u.floors_underground), 0) AS max_underground_floors
     FROM management_company mc
-    JOIN cadastral_object_management cm
-        ON cm.management_company_id = mc.id AND cm.status = 'DONE'
-    JOIN cadastral_object co ON co.id = cm.cadastral_object_id
-    JOIN parking_candidate pc ON pc.cadastral_object_id = co.id
-    WHERE co.lat IS NOT NULL AND co.lon IS NOT NULL
-      AND pc.parking_type = 'UNDERGROUND'
-      {floor_clause}
-    GROUP BY mc.id, mc.ogrn, mc.inn, mc.name, mc.phone
-    ORDER BY object_count DESC
+    JOIN uk_objects u ON u.uk_id = mc.id
+    GROUP BY mc.id, mc.ogrn, mc.inn, mc.name, mc.phone, mc.address
+    ORDER BY total_underground_floors DESC, object_count DESC
     """
     rows = db.query_all(sql, tuple(params) if params else None)
     for row in rows:
         ogrn = row.get("uk_ogrn") or ""
         row["marker_color"] = color_from_ogrn(ogrn) if ogrn else "#94A3B8"
     return rows
+
+
+def fetch_uk_object_addresses(db: ParkingDatabase, min_floors: int = 0) -> list[dict]:
+    """Адреса объектов по УК — нужны для сопоставления с торгами 615-ПП."""
+    floor_clause = ""
+    params: list[Any] = []
+    if min_floors >= 1:
+        floor_clause = " AND co.floors_underground >= %s"
+        params.append(min_floors)
+
+    sql = f"""
+    SELECT
+        mc.id AS uk_id,
+        mc.ogrn AS uk_ogrn,
+        mc.inn AS uk_inn,
+        mc.name AS uk_name,
+        co.id AS object_id,
+        co.cadastral_number,
+        co.address_text,
+        co.floors_underground
+    FROM management_company mc
+    JOIN cadastral_object_management cm
+        ON cm.management_company_id = mc.id AND cm.status = 'DONE'
+    JOIN cadastral_object co ON co.id = cm.cadastral_object_id
+    WHERE co.lat IS NOT NULL AND co.lon IS NOT NULL
+      AND co.address_text IS NOT NULL
+      {floor_clause}
+    """
+    return db.query_all(sql, tuple(params) if params else None)
 
 
 def fetch_map_stats(db: ParkingDatabase) -> dict:

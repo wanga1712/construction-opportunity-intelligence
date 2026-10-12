@@ -48,7 +48,14 @@ def _di_conn() -> Any:
     return _DI_CONN
 
 
-def _safe_di(sql: str, params: tuple = ()) -> List[Dict[str, Any]]:
+def _record_error(errors: Optional[List[str]], label: str, exc: Exception) -> None:
+    """Ошибка секции не глушится: она попадает в dossier['errors'] и видна в UI."""
+    if errors is not None:
+        errors.append("%s: %s: %s" % (label, type(exc).__name__, exc))
+
+
+def _safe_di(sql: str, params: tuple = (), errors: Optional[List[str]] = None,
+             label: str = "documents") -> List[Dict[str, Any]]:
     try:
         conn = _di_conn()
         with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
@@ -56,6 +63,7 @@ def _safe_di(sql: str, params: tuple = ()) -> List[Dict[str, Any]]:
             return [dict(r) for r in (cur.fetchall() or [])]
     except Exception as exc:  # noqa: BLE001
         logger.warning("dossier DI query failed: %s", exc)
+        _record_error(errors, label, exc)
         return []
 
 
@@ -71,8 +79,10 @@ def _di_write_conn() -> Any:
     return conn
 
 
-def _safe(db: Any, alias: Optional[str], sql: str, params: tuple = ()) -> List[Dict[str, Any]]:
+def _safe(db: Any, alias: Optional[str], sql: str, params: tuple = (),
+          errors: Optional[List[str]] = None, label: str = "crm") -> List[Dict[str, Any]]:
     if db is None:
+        _record_error(errors, label, RuntimeError("crm_db is None"))
         return []
     try:
         if alias:
@@ -88,6 +98,7 @@ def _safe(db: Any, alias: Optional[str], sql: str, params: tuple = ()) -> List[D
         return [dict(r) if not isinstance(r, dict) else r for r in (rows or [])]
     except Exception as exc:  # noqa: BLE001 - карточка не должна падать
         logger.warning("dossier query failed (%s): %s", alias or "crm", exc)
+        _record_error(errors, label, exc)
         return []
 
 
@@ -188,6 +199,7 @@ def load_procurement_dossier(db: Any, procurement_id: int) -> Dict[str, Any]:
         "counts": {},
         "errors": [],
     }
+    errors: List[str] = dossier["errors"]
 
     proc_rows = _safe(
         db,
@@ -204,6 +216,7 @@ def load_procurement_dossier(db: Any, procurement_id: int) -> Dict[str, Any]:
         FROM crm_procurements WHERE id = %s
         """,
         (int(procurement_id),),
+        errors=errors, label="identity",
     )
     if not proc_rows:
         dossier["errors"].append("procurement_not_found")
@@ -252,6 +265,7 @@ def load_procurement_dossier(db: Any, procurement_id: int) -> Dict[str, Any]:
         db, None,
         "SELECT balance_holder FROM crm_objects_index WHERE tender_id = %s LIMIT 1",
         (int(procurement_id),),
+        errors=errors, label="balance_holder",
     )
     dossier["parties"]["balance_holder"] = (
         balance[0].get("balance_holder") if balance else None
@@ -269,6 +283,7 @@ def load_procurement_dossier(db: Any, procurement_id: int) -> Dict[str, Any]:
         ORDER BY commercial_priority_score DESC NULLS LAST, commercial_category_code
         """,
         (int(procurement_id),),
+        errors=errors, label="opportunities",
     )
     # Коммерческий режим: подтверждённый источник — scope gate (см. §2 WIP по карточке).
     scope_rows = _safe(
@@ -282,6 +297,7 @@ def load_procurement_dossier(db: Any, procurement_id: int) -> Dict[str, Any]:
         LIMIT 1
         """,
         (int(procurement_id),),
+        errors=errors, label="scope",
     )
     dossier["scope"] = scope_rows[0] if scope_rows else {}
     # Ручные категории (MANUAL) — тот же источник данных, что и в таблице.
@@ -309,12 +325,13 @@ def load_procurement_dossier(db: Any, procurement_id: int) -> Dict[str, Any]:
         """
         SELECT id, file_name, content_type, download_status, file_size_bytes,
                url, url IS NOT NULL AS has_url, local_path IS NOT NULL AS has_local,
-               downloaded_at, local_deleted_at, retention_until, error_message
+               downloaded_at, local_deleted_at, error_message
         FROM document_files
         WHERE procurement_id = %s
         ORDER BY id
         """,
         (int(procurement_id),),
+        errors=errors, label="documents",
     )
 
     dossier["findings"] = _safe_di(
@@ -333,6 +350,7 @@ def load_procurement_dossier(db: Any, procurement_id: int) -> Dict[str, Any]:
         LIMIT 300
         """,
         (int(procurement_id),),
+        errors=errors, label="findings",
     )
 
     # «Что можно поставить»: извлечённые структурированные сущности (с trust state).
@@ -348,6 +366,7 @@ def load_procurement_dossier(db: Any, procurement_id: int) -> Dict[str, Any]:
         LIMIT 100
         """,
         (int(procurement_id),),
+        errors=errors, label="supply_candidates",
     )
 
     docs = dossier["documents"]

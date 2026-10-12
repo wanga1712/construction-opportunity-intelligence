@@ -67,7 +67,10 @@ def build_field_provenance(
         return {
             "object_type": unknown,
             "object_subtype": unknown,
-            "project_stage": unknown,
+            "object_stage": unknown,  # OBJECT_STAGE axis (NOT legacy project_stage)
+            "service_type": unknown,
+            "work_stage": unknown,
+            "legacy_tender_stage": unknown,
             "procurement_type": unknown,
             "category": unknown,
             "subcategory": unknown,
@@ -89,7 +92,13 @@ def build_field_provenance(
     return {
         "object_type": MODEL_VALIDATED if has_oc and oc.get("object_type") is not None else MODEL_VALIDATED,
         "object_subtype": MODEL_VALIDATED if has_oc else MODEL_VALIDATED,
-        "project_stage": MODEL_VALIDATED if has_oc else MODEL_VALIDATED,  # maps work_stage
+        # OBJECT_STAGE / SERVICE_TYPE are deterministic routing axes computed
+        # from the procurement form + title, not model claims, and they are
+        # NOT the legacy crm_object_ai_classifications.project_stage column.
+        "object_stage": BUSINESS_RULE,
+        "service_type": BUSINESS_RULE,
+        "work_stage": MODEL_VALIDATED if has_oc else UNKNOWN_LEGACY,
+        "legacy_tender_stage": UNKNOWN_LEGACY,
         "procurement_type": MODEL_VALIDATED if has_form else MODEL_VALIDATED,  # maps procurement_form
         "category": MODEL_VALIDATED if has_hyps else MODEL_VALIDATED,
         "subcategory": MODEL_VALIDATED,

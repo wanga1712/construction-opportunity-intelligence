@@ -215,22 +215,6 @@ def compose_annotation_card_view(
                 f"{source_document.get('source_document_id')}"
             )
 
-    # Sort documents: (1) with evidence, (2) researched no evidence, (3) processing/unobserved, (4) failed/unknown
-    def _doc_sort_key(doc: dict) -> tuple[int, str]:
-        ev_cnt = len(doc.get("research_evidence") or [])
-        st = doc.get("observation_state") or "UNOBSERVED"
-        name = str(doc.get("document_name") or "").casefold()
-        if ev_cnt > 0 or st == "OBSERVED_WITH_EVIDENCE":
-            group = 1
-        elif st in ("OBSERVED_NO_EVIDENCE", "COMPLETED", "PARSED", "OK"):
-            group = 2
-        elif st == "UNOBSERVED":
-            group = 3
-        else:
-            group = 4
-        return (group, name)
-
-    documents.sort(key=_doc_sort_key)
 
     orphan_observations = [
         row for row in observations if row.get("id") is None or row.get("id") not in used

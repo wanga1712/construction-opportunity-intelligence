@@ -10,17 +10,31 @@ from dotenv import load_dotenv
 _PROJECT_ROOT = Path(__file__).resolve().parent.parent
 _ENV_FILE = _PROJECT_ROOT / ".env"
 
-if _ENV_FILE.exists():
-    load_dotenv(_ENV_FILE)
-else:
-    load_dotenv()
 
-# Fallback: те же ключи БД из десктопного проекта (не перезаписывает локальный .env)
-_source_hint = os.environ.get("CRM_SOURCE_ROOT", "").strip()
-if _source_hint:
-    _source_env = Path(_source_hint) / ".env"
-    if _source_env.is_file():
-        load_dotenv(_source_env, override=False)
+def _load_own_env() -> None:
+    """Load this project's own .env as the authoritative configuration.
+
+    ``override=True`` is deliberate: CRM must never inherit database routing
+    from a parent shell, from the sibling desktop project or from any other
+    ambient environment.  There is deliberately NO cwd / ancestor
+    auto-discovery fallback: the file is resolved from this module's location,
+    never from the shell's working directory.
+    """
+    if _ENV_FILE.is_file():
+        load_dotenv(_ENV_FILE, override=True)
+
+
+_load_own_env()
+
+
+def crm_env_file() -> Path:
+    """Path of the single authoritative CRM configuration file.
+
+    Public accessor for runtime components (e.g. the Second Pass worker) that
+    must report which configuration source they use without re-implementing
+    any env discovery of their own.
+    """
+    return _ENV_FILE
 
 
 def setup_source_path() -> Path:
@@ -40,14 +54,13 @@ def setup_source_path() -> Path:
     if not source.is_dir():
         raise RuntimeError(f"CRM_SOURCE_ROOT не найден: {source}")
     source_str = str(source)
-    # Load source project .env after resolving CRM_SOURCE_ROOT (module-level
-    # load only runs when CRM_SOURCE_ROOT is already set in the environment).
-    source_env = source / ".env"
-    if source_env.is_file():
-        load_dotenv(source_env, override=False)
     if source_str not in sys.path:
         sys.path.insert(0, source_str)
     _ensure_designer_analytics_display_name()
+    # The sibling project is used ONLY as an import source.  Its .env is never
+    # loaded, but sibling modules may run their own dotenv at import time, so
+    # this project's authority over the environment is re-asserted afterwards.
+    _load_own_env()
     return source
 
 

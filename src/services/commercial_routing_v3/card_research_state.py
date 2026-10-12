@@ -21,25 +21,10 @@ VALID_RESEARCH_STATES = {
 }
 
 def _get_doc_db_conn():
-    from dotenv import load_dotenv
-    try:
-        load_dotenv("/opt/CRM_Streamlit/.env")
-    except Exception:
-        pass
-    try:
-        load_dotenv("/etc/crm_v3.env")
-    except Exception:
-        pass
-    user = os.getenv("S13_DOCUMENT_DB_USER") or "doc_worker"
-    password = os.getenv("S13_DOCUMENT_DB_PASSWORD") or "F6VaPWQIIYgDF3I8_kBTyDJhYpzWw1bT"
-    dsn = {
-        "host": os.getenv("S13_DOCUMENT_DB_HOST") if os.getenv("S13_DOCUMENT_DB_HOST") not in (None, "", "S7") else "127.0.0.1",
-        "port": int(os.getenv("S13_DOCUMENT_DB_PORT") or os.getenv("CRM_DB_PORT") or "5432"),
-        "dbname": "document_intelligence",
-        "user": user,
-        "password": password,
-    }
-    conn = psycopg2.connect(**dsn)
+    """Document-intelligence connection. Single authority: src.services.doc_db_runtime."""
+    from src.services.doc_db_runtime import require_doc_db_connect_kwargs
+
+    conn = psycopg2.connect(**require_doc_db_connect_kwargs())
     conn.autocommit = True
     return conn
 

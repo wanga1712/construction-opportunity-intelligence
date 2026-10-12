@@ -77,7 +77,14 @@ def test_human_labels_replace_raw_primary_widget_labels():
     assert 'st.text_input("expert_object_subtype"' not in source
     assert 'st.text_input("expert_work_stage"' not in source
     assert 'st.selectbox("annotation_review_scope"' not in source
-    for label in ("Тип объекта", "Подтип / уточнение объекта", "Стадия / вид работ", "Объём проверки"):
+    for label in (
+        "Тип объекта",
+        "Подтип / уточнение объекта",
+        "Стадия объекта",
+        "Тип услуги",
+        "Характер работ",
+        "Объём проверки",
+    ):
         assert label in source
 
 

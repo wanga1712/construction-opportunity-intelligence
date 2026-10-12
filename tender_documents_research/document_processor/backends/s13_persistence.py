@@ -137,11 +137,14 @@ class S13V2TaskPersistenceService:
 
                     is_archive_member = bool(getattr(file_res, "archive_member_path", None))
                     if not is_archive_member:
+                        dl_status = "COMPLETED" if file_res.status in ("COMPLETED", "UNSUPPORTED") else (
+                            "SKIPPED" if file_res.status == "SKIPPED" else "FAILED"
+                        )
                         cursor.execute("""
                             UPDATE document_files
                             SET download_status = %s, error_message = %s
                             WHERE id = %s AND pipeline_generation = %s
-                        """, (file_res.status, file_res.error_message, file_id, self.pipeline_generation))
+                        """, (dl_status, file_res.error_message, file_id, self.pipeline_generation))
 
                     if file_id:
                         matches_found = sum(m.match_count for m in file_res.matches) if file_res.status == "COMPLETED" else 0

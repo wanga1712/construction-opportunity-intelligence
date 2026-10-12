@@ -1,0 +1,18 @@
+# CPU performance ceiling - analog of nvidia-powerlimit.service for the CPU.
+# RAPL package capping is locked by firmware on this host, so the ceiling is
+# applied through intel_pstate no_turbo + per-policy scaling_max_freq.
+
+[Unit]
+Description=Cap CPU performance ceiling (quiet/heat)
+After=multi-user.target power-profiles-daemon.service
+Wants=power-profiles-daemon.service
+
+[Service]
+Type=oneshot
+ExecStart=/bin/sh -c 'echo 1 > /sys/devices/system/cpu/intel_pstate/no_turbo'
+ExecStart=/bin/sh -c 'echo 84 > /sys/devices/system/cpu/intel_pstate/max_perf_pct'
+ExecStart=/bin/sh -c 'for p in /sys/devices/system/cpu/cpufreq/policy*; do echo 3200000 > $p/scaling_max_freq; done'
+RemainAfterExit=yes
+
+[Install]
+WantedBy=multi-user.target

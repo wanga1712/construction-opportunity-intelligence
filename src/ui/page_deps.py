@@ -20,6 +20,7 @@ PAGE_DEPENDENCY: dict[str, PageDependency] = {
     # Analytics V2 renders from CRM DB + local snapshot only; CompaniesService
     # (Radar designer load_sync) is never used by the page, so keep it light.
     "objects_v2": PageDependency.CRM_DB_ONLY,
+    "table_workspace": PageDependency.CRM_DB_ONLY,
     "objects": PageDependency.COMPANIES_SERVICE,
     "objects_copy": PageDependency.COMPANIES_SERVICE,
     "analytics_v3": PageDependency.COMPANIES_SERVICE,
@@ -34,6 +35,7 @@ PAGE_DEPENDENCY: dict[str, PageDependency] = {
     "infrastructure": PageDependency.OTHER,
     # Snapshot-only / local CRM config — no CompaniesService
     "system_health": PageDependency.NO_SERVICE,
+    "pipeline": PageDependency.NO_SERVICE,
     "crm_profiles": PageDependency.NO_SERVICE,
     # Parking DB via session_deps — not CompaniesService
     "customers": PageDependency.NO_SERVICE,

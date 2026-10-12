@@ -1,204 +1,261 @@
-"""Management-company contour tab for waterproofing CRM."""
+﻿"""Detailed УК card for the waterproofing CRM, opened from the kanban board."""
 from __future__ import annotations
 
-from datetime import date, timedelta
+from datetime import date
 from typing import Any
 
 import streamlit as st
 
-from src.services.map_export import MapFilters, fetch_map_objects, fetch_uk_summary, rows_to_geojson
+from src.services.map_export import MapFilters, fetch_map_objects, fetch_uk_summary
 from src.services.objects_service import ObjectsService
+from src.services.waterproofing_615_store import read_uk_summary
 from src.services.waterproofing_contour import (
-    CONTOUR_STAGES, FIRST_STEP_OPTIONS, ask_contour_ai, contour_ai_payload, contour_key,
-    fallback_next_step_script, load_contour_states, save_contour_state,
+    contour_key,
+    latest_contour_state,
+    merge_contour_state,
 )
-from src.ui.map_view import render_map
+from src.services.waterproofing_crm import (
+    CRM_CLOSED_STAGE,
+    CRM_STAGE_DESCRIPTIONS,
+    CRM_STAGE_LABELS,
+    CRM_STAGES,
+    PRIORITIES,
+    STAGE_DEFAULT_ACTIONS,
+    build_card,
+    next_touch_default,
+    normalize_stage,
+    parse_date,
+)
+from src.ui.hydro_uk_panel import render_uk_crm_panel
 from src.ui.session_deps import get_parking_db
+from src.ui.waterproofing_uk_activity import render_uk_activity
 
 
-def _next_date(state: dict[str, Any]) -> date:
-    try:
-        return date.fromisoformat(state["next_action_date"])
-    except (KeyError, TypeError, ValueError):
-        return date.today() + timedelta(days=1)
+def _planned_date(state: dict[str, Any]) -> date:
+    return (
+        parse_date(state.get("next_action_date"))
+        or parse_date(next_touch_default(state.get("stage")))
+        or date.today()
+    )
 
 
-def _render_saved_contours(states: list[dict[str, Any]]) -> None:
-    if not states:
-        return
-    with st.expander("📋 Контуры в работе", expanded=True):
-        rows = [{
-            "УК": state.get("uk_name"), "Этап": state.get("stage"),
-            "Следующее действие": state.get("next_action"), "Дата": state.get("next_action_date"),
-            "Контакт эксплуатации": state.get("exploitation_contact"),
-            "Телефон": state.get("secretary_phone") or state.get("uk_phone"),
-            "Объектов": state.get("object_count"),
-        } for state in sorted(states, key=lambda state: (
-            state.get("next_action_date") or "9999-12-31", state.get("uk_name") or ""
-        ))]
-        st.dataframe(rows, use_container_width=True, hide_index=True)
-
-
-def _render_company_card(selected: dict[str, Any], state: dict[str, Any]) -> None:
-    st.markdown("### Карточка управляющей компании")
-    with st.container(border=True):
-        columns = st.columns(4)
-        for column, label, value in zip(columns, ("Объектов", "≥2 подземных этажа", "ИНН", "ОГРН"), (
-            int(selected.get("object_count") or 0), int(selected.get("ge2_floors") or 0),
-            selected.get("uk_inn") or "—", selected.get("uk_ogrn") or "—",
-        )):
-            column.metric(label, value)
-        st.markdown(f"**{selected.get('uk_name') or '—'}**")
-        st.caption(f"Телефон: {selected.get('uk_phone') or '—'}")
-        if state:
-            st.success(
-                f"CRM-этап: {state.get('stage') or '—'} · следующее действие: "
-                f"{state.get('next_action') or '—'} · дата: {state.get('next_action_date') or '—'}"
-            )
-        else:
-            st.warning("Контур ещё не квалифицирован: начните с секретаря / общего телефона.")
-        st.info("Сначала работаем с этим контуром/УК, затем выбираем объекты для обследования, ТКП и торгов.")
-
-
-def _render_qualification(selected: dict[str, Any], state: dict[str, Any], key: str) -> None:
-    st.markdown("### Первый шаг квалификации контура")
-    with st.container(border=True):
-        st.caption("Цель — выйти через секретаря на эксплуатацию и договориться о встрече по портфелю подземных помещений.")
-        left, right = st.columns([1.2, 1])
-        with left:
-            stage_default = state.get("stage") or CONTOUR_STAGES[0]
-            stage = st.selectbox("Этап контура", CONTOUR_STAGES,
-                index=CONTOUR_STAGES.index(stage_default) if stage_default in CONTOUR_STAGES else 0,
-                key=f"hydro_stage_{key}")
-            action_default = state.get("next_action") or FIRST_STEP_OPTIONS[0]
-            next_action = st.selectbox("Следующее действие", FIRST_STEP_OPTIONS,
-                index=FIRST_STEP_OPTIONS.index(action_default) if action_default in FIRST_STEP_OPTIONS else 0,
-                key=f"hydro_next_{key}")
-            note = st.text_area("Комментарий / результат звонка", value=state.get("note") or "",
-                placeholder="Например: секретарь сказала звонить завтра после 11:00.",
-                key=f"hydro_note_{key}")
-        with right:
-            secretary_phone = st.text_input("Телефон секретаря / общий",
-                value=state.get("secretary_phone") or selected.get("uk_phone") or "",
-                key=f"hydro_secretary_phone_{key}")
-            exploitation_contact = st.text_input("Начальник эксплуатации / тех. контакт",
-                value=state.get("exploitation_contact") or "", placeholder="ФИО, должность, телефон",
-                key=f"hydro_exploitation_contact_{key}")
-            next_action_date = st.date_input("Дата следующего касания", value=_next_date(state),
-                key=f"hydro_next_date_{key}")
-            responsible = st.text_input("Ответственный", value=state.get("responsible") or "<S13_SSH_USER>",
-                key=f"hydro_responsible_{key}")
-        if st.button("Сохранить первый шаг по УК", key=f"hydro_save_contour_{key}", type="primary"):
-            save_contour_state(key, {
-                "uk_name": selected.get("uk_name"), "uk_ogrn": selected.get("uk_ogrn"),
-                "uk_inn": selected.get("uk_inn"), "uk_phone": selected.get("uk_phone"),
-                "object_count": int(selected.get("object_count") or 0),
-                "ge2_floors": int(selected.get("ge2_floors") or 0), "stage": stage,
-                "next_action": next_action, "next_action_date": next_action_date.isoformat(),
-                "secretary_phone": secretary_phone, "exploitation_contact": exploitation_contact,
-                "responsible": responsible, "note": note,
-            })
-            st.success("Контур УК сохранён. Теперь его можно вести как CRM-карточку заказчика.")
-            st.rerun()
-
-
-def _render_ai_next_step(selected: dict[str, Any], state: dict[str, Any], rows: list[dict[str, Any]], key: str) -> None:
-    if not state:
-        return
-    st.markdown("### AI: следующий шаг по контуру")
-    with st.container(border=True):
-        st.caption("AI использует данные УК и приоритетных объектов; проверяйте ответ перед фиксацией в CRM.")
-        st.markdown(f"**Контакт эксплуатации:** {state.get('exploitation_contact') or 'не указан'}")
-        st.code(fallback_next_step_script(selected, state, rows), language="text")
-        if st.button("Сформировать следующий шаг с AI", key=f"hydro_ai_next_step_{key}"):
-            with st.spinner("AI формирует следующий шаг по УК…"):
-                st.session_state[f"hydro_ai_next_step_answer_{key}"] = ask_contour_ai(selected, state, rows)
-        answer = st.session_state.get(f"hydro_ai_next_step_answer_{key}")
-        if answer:
-            st.markdown("#### Ответ AI")
-            st.write(answer)
-        with st.expander("Контекст для AI"):
-            st.json(contour_ai_payload(selected, state, rows))
-
-
-def _render_object_tabs(rows: list[dict[str, Any]], selected_ogrn: str | None) -> None:
-    tab_map, tab_objects, tab_recommendations = st.tabs(["🗺 Карта объектов УК", "🏗️ Объекты УК", "🤖 Рекомендации по контуру"])
-    with tab_map:
-        if rows:
-            st.caption(f"На карте объекты выбранной УК: **{len(rows)}**")
-            render_map(rows_to_geojson(rows), zoom=12, highlight_ogrn=selected_ogrn)
-        else:
-            st.warning("По выбранной УК нет объектов с координатами.")
-    with tab_objects:
-        if not rows:
-            st.info("Нет объектов для отображения.")
-        for row in rows[:100]:
-            with st.container(border=True):
-                st.markdown(f"**{row.get('name') or row.get('address') or 'Объект'}**")
-                st.caption(row.get("address") or "")
-                for column, label, value in zip(st.columns(4), ("Подземных этажей", "Площадь", "Confidence", "КН"), (
-                    row.get("floors_underground") or "—", row.get("area_total") or "—",
-                    f"{float(row.get('confidence_score') or 0):.2f}", row.get("cadastral_number") or "—",
-                )):
-                    column.metric(label, value)
-        _render_priority_cards(rows)
-    with tab_recommendations:
-        st.markdown("#### Как вести этот контур")
-        st.write("1. Выбрать 3–5 адресов с подземными этажами.\n\n2. Найти технический контакт.\n\n3. Запросить проблемные помещения.\n\n4. Предложить обследование и фотофиксацию.\n\n5. После обследования завести сделку по объекту.")
-
-
-def _render_priority_cards(rows: list[dict[str, Any]]) -> None:
-    if not rows:
-        return
-    st.markdown("### Приоритетные карточки паркингов")
-    for row in sorted(rows, key=lambda item: int(item.get("hydro_score") or 0), reverse=True)[:20]:
-        with st.container(border=True):
-            st.markdown(f"**{row.get('hydro_icon') or '🅿️'} {row.get('name') or row.get('address') or 'Объект'}**")
-            st.caption(row.get("address") or "")
-            for column, label, value in zip(st.columns(5), ("Приоритет", "Подземка", "Площадь", "Уверенность", "КН"), (
-                f"{row.get('hydro_grade') or '—'} / {int(row.get('hydro_score') or 0)}",
-                row.get("floors_underground") or "—", row.get("area_total") or "—",
-                f"{float(row.get('confidence_score') or 0):.2f}", row.get("cadastral_number") or "—",
-            )):
-                column.metric(label, value)
-            st.caption(f"{row.get('hydro_label') or 'Паркинг / подземка'} · {row.get('hydro_reasons') or row.get('candidate_reason') or 'нет причины'}")
-
-
-def render_uk_tab(service: ObjectsService) -> None:
-    """Render the UK-contour workflow with its persistence and map views."""
-    st.caption("Для гидроизоляции работа начинается с управляющей компании: один контур может дать несколько объектов.")
-    parking_db = get_parking_db()
-    if not parking_db.connect():
-        st.error(f"НСПД / база паркингов недоступна: {parking_db.last_error}")
-        return
-    c1, c2, c3 = st.columns([1, 1, 2])
-    with c1:
-        min_floors = st.selectbox("Подземные этажи", [1, 2, 3, 0], index=0,
-            format_func=lambda value: "Любые" if value == 0 else f"≥ {value}", key="hydro_uk_min_floors")
-    with c2:
-        limit = st.selectbox("Показать УК", [10, 25, 50, 100], index=1, key="hydro_uk_limit")
-    with c3:
-        query = st.text_input("Поиск УК / ОГРН / ИНН", key="hydro_uk_query").strip().lower()
-    rows = fetch_uk_summary(parking_db, min_floors=min_floors)
-    if query:
-        rows = [row for row in rows if query in " ".join(str(row.get(field) or "").lower() for field in ("uk_name", "uk_ogrn", "uk_inn"))]
-    rows = rows[:int(limit)]
-    if not rows:
-        st.warning("УК по выбранным фильтрам не найдены.")
-        return
-    states = load_contour_states()
-    _render_saved_contours(list(states.values()))
-    metrics = st.columns(3)
-    for column, label, value in zip(metrics, ("УК / контуров", "Объектов в портфелях", "С ≥2 подземными этажами"), (
-        len(rows), sum(int(row.get("object_count") or 0) for row in rows),
-        sum(int(row.get("ge2_floors") or 0) for row in rows),
-    )):
+def _render_summary(card: dict[str, Any], tenders_615: dict[str, Any]) -> None:
+    st.markdown(f"## {card['uk_name_short']}")
+    caption = f"ИНН {card['uk_inn']} · ☎ {card['phone'] or '—'}"
+    if card.get("uk_address"):
+        caption += f" · 📍 {card['uk_address']}"
+    st.caption(caption)
+    values = (
+        ("Объектов", card["object_count"]),
+        ("Паркингов", card["parking_count"]),
+        ("Подземных этажей", card["total_underground_floors"]),
+        ("Потенциал", card["potential_amount_label"]),
+        ("Приоритет", f"{card['priority_icon']} {card['priority']}"),
+        ("Этап", card.get("stage_label") or card["stage"]),
+    )
+    for column, (label, value) in zip(st.columns(len(values)), values):
         column.metric(label, value)
-    labels = [f"{row.get('uk_name') or 'Без названия'} · объектов: {row.get('object_count')} · ОГРН {row.get('uk_ogrn') or '—'}" for row in rows]
-    selected = rows[labels.index(st.selectbox("Выберите УК / ответственный контур", labels, key="hydro_selected_uk"))]
-    key, state, ogrn = contour_key(selected), states.get(contour_key(selected), {}), selected.get("uk_ogrn")
-    _render_company_card(selected, state)
-    _render_qualification(selected, state, key)
-    object_rows = fetch_map_objects(parking_db, MapFilters(min_floors=min_floors, uk_status="DONE", uk_ogrn=ogrn, limit=2000)) if ogrn else []
-    _render_ai_next_step(selected, state, object_rows, key)
-    _render_object_tabs(object_rows, ogrn)
+    st.caption(f"Приоритет по объёму работ: {card['priority_reason']}")
+    badges = [
+        "✅ тех. контакт найден" if card["tech_contact"] else "⛔ тех. контакта нет",
+        f"👤 ответственный: {card['responsible']}",
+        f"📅 следующее касание: {card['next_action_date'] or 'не назначено'}",
+    ]
+    if card["overdue"]:
+        badges.append(f"🔴 просрочка {card['overdue_days']} дн.")
+    st.markdown(" · ".join(badges))
+    if tenders_615.get("has_tenders"):
+        line = (
+            f"🏗 615-ПП: по домам этой УК уже {tenders_615['history_tenders']} торг(ов) "
+            f"на {tenders_615['history_amount_label']} (последний — "
+            f"{tenders_615.get('history_last_date') or '—'})"
+        )
+        if tenders_615.get("tenders"):
+            line += (
+                f", в том числе в {tenders_615.get('year')}: {tenders_615['tenders']} "
+                f"на {tenders_615['amount_label']}"
+            )
+        st.info(line + ".")
+    elif tenders_615:
+        st.info(
+            f"🏗 615-ПП: по {tenders_615.get('checked_addresses') or 0} адресам домов "
+            f"этой УК торгов капремонта не найдено "
+            f"(история с {tenders_615.get('history_from')} года)."
+        )
+
+
+def _render_615(tenders_615: dict[str, Any]) -> None:
+    """Блок 615-ПП: были ли торги по капремонту и на какую сумму."""
+    st.markdown("### 615-ПП: капремонт по домам УК")
+    if not tenders_615:
+        st.caption(
+            "Нет данных 615-ПП по этой УК: у неё нет домов с адресами или связка "
+            "с реестром капремонта ещё не рассчитана."
+        )
+        return
+    overview = tenders_615.get("overview") or {}
+    year = tenders_615.get("year") or overview.get("year") or ""
+    left, right, third = st.columns(3)
+    left.metric("Торгов по домам УК", tenders_615.get("history_tenders", 0))
+    right.metric("Объём по домам УК", tenders_615.get("history_amount_label", "—"))
+    third.metric(
+        f"Из них в {year}",
+        f"{tenders_615.get('tenders', 0)} · {tenders_615.get('amount_label', '—')}",
+    )
+    if overview:
+        st.caption(
+            f"Для сравнения, вся программа {overview.get('year')}: "
+            f"{overview.get('tenders')} торгов на {overview.get('amount_label')}, "
+            f"в том числе гидроизоляция — {overview.get('waterproofing_tenders')} "
+            f"на {overview.get('waterproofing_amount_label')}."
+        )
+    matches = tenders_615.get("matches") or []
+    if not matches:
+        st.caption(
+            f"По {tenders_615.get('checked_addresses') or 0} адресам домов этой УК торгов "
+            f"капремонта не найдено (история с {tenders_615.get('history_from')} года). "
+            "Сопоставление идёт по «улица + дом»: тип улицы, корпус и округ не различаются."
+        )
+        return
+    st.dataframe(
+        [
+            {
+                "Дом": match["address"],
+                "Торгов": match["tenders"],
+                "Сумма": match["amount_label"],
+                "Годы": ", ".join(str(year) for year in match.get("years") or []),
+                "Последний": match["last_date"],
+                "Совпадение": match.get("confidence") or "",
+            }
+            for match in matches
+        ],
+        use_container_width=True,
+        hide_index=True,
+    )
+    note = "Сопоставление идёт по «улица + дом»: тип улицы, корпус и округ не различаются."
+    approximate = tenders_615.get("approximate_matches") or 0
+    if approximate:
+        note += f" Часть строк ({approximate}) найдена по похожему адресу — проверьте вручную."
+    st.caption(note)
+
+
+def _render_status_form(key: str, card: dict[str, Any], state: dict[str, Any]) -> None:
+    st.markdown("### CRM-статус и следующий шаг")
+    # A closed contour is not a board column, but its stage must stay selectable
+    # and a legacy saved value must never raise here.
+    stage_ids = [*CRM_STAGES, CRM_CLOSED_STAGE]
+    current_stage = normalize_stage(card["stage"])
+    left, right = st.columns(2)
+    with left:
+        stage = st.selectbox(
+            "Этап воронки",
+            stage_ids,
+            index=stage_ids.index(current_stage) if current_stage in stage_ids else 0,
+            format_func=lambda value: CRM_STAGE_LABELS.get(value, value),
+            key=f"uk_stage_{key}",
+        )
+        next_action = st.text_input(
+            "Следующее действие",
+            value=state.get("next_action") or STAGE_DEFAULT_ACTIONS.get(stage, ""),
+            key=f"uk_next_{key}",
+        )
+        st.caption(CRM_STAGE_DESCRIPTIONS.get(stage, STAGE_DEFAULT_ACTIONS.get(stage, "—")))
+        next_date = st.date_input("Дата следующего касания", value=_planned_date(state), key=f"uk_date_{key}")
+        responsible = st.text_input("Ответственный", value=state.get("responsible") or "", key=f"uk_resp_{key}")
+    with right:
+        priority = st.selectbox(
+            "Приоритет", PRIORITIES, index=PRIORITIES.index(card["priority"]), key=f"uk_prio_{key}"
+        )
+        amount = st.text_input(
+            "Потенциальная сумма",
+            value=str(state.get("potential_amount") or ""),
+            placeholder="например 4,2 млн",
+            key=f"uk_amount_{key}",
+        )
+        tech_contact = st.text_input(
+            "Тех. контакт (ФИО, должность)",
+            value=state.get("exploitation_contact") or "",
+            key=f"uk_tech_{key}",
+        )
+        tech_phone = st.text_input(
+            "Телефон тех. контакта", value=state.get("tech_contact_phone") or "", key=f"uk_tech_phone_{key}"
+        )
+        secretary_phone = st.text_input(
+            "Телефон секретаря / общий",
+            value=state.get("secretary_phone") or card.get("uk_phone") or "",
+            key=f"uk_sec_phone_{key}",
+        )
+    note = st.text_area(
+        "Комментарий / результат касания", value=state.get("note") or "", key=f"uk_note_{key}"
+    )
+    if st.button("Сохранить и зафиксировать касание", key=f"uk_save_{key}", type="primary"):
+        merge_contour_state(key, {
+            "uk_name": card["uk_name"], "uk_inn": card["uk_inn"], "uk_ogrn": card["uk_ogrn"],
+            "uk_phone": card.get("uk_phone") or state.get("uk_phone") or "",
+            "uk_address": card.get("uk_address") or state.get("uk_address") or "",
+            "object_count": card["object_count"],
+            "parking_count": card["parking_count"],
+            "total_underground_floors": card["total_underground_floors"],
+            "max_underground_floors": card["max_underground_floors"],
+            "ge1_floors": card["ge1_floors"], "ge2_floors": card["ge2_floors"],
+            "stage": stage, "next_action": next_action, "next_action_date": next_date.isoformat(),
+            "responsible": responsible, "priority": priority, "potential_amount": amount,
+            "exploitation_contact": tech_contact, "tech_contact_phone": tech_phone,
+            "secretary_phone": secretary_phone, "note": note,
+        })
+        st.success("Карточка УК обновлена, касание записано в историю.")
+        st.rerun()
+
+
+def _render_contacts(card: dict[str, Any], state: dict[str, Any]) -> None:
+    st.markdown("### Контакты")
+    st.dataframe([{
+        "Роль": role, "Значение": value or "—",
+    } for role, value in (
+        ("Компания", card["uk_name_short"]),
+        ("Полное название", card["uk_name"]),
+        ("ИНН", card["uk_inn"]),
+        ("Адрес УК", card.get("uk_address")),
+        ("Общий телефон УК", card.get("uk_phone")),
+        ("Секретарь / диспетчер", state.get("secretary_phone")),
+        ("Тех. контакт", state.get("exploitation_contact")),
+        ("Телефон тех. контакта", state.get("tech_contact_phone")),
+        ("Ответственный менеджер", card.get("responsible")),
+    )], use_container_width=True, hide_index=True)
+
+
+def render_uk_card(service: ObjectsService, key: str) -> None:
+    """Render the detailed УК card: summary, next step, contacts and nested data."""
+    if st.button("⬅ Вернуться к CRM-канбану УК"):
+        st.session_state.pop("hydro_open_uk", None)
+        st.rerun()
+    state = latest_contour_state(key)
+    parking_db = get_parking_db()
+    db_ok = bool(parking_db.connect())
+    if not db_ok:
+        st.warning(f"База объектов недоступна: {parking_db.last_error}")
+    row: dict[str, Any] = {}
+    if db_ok:
+        for candidate in fetch_uk_summary(parking_db, min_floors=0):
+            if contour_key(candidate) == key:
+                row = candidate
+                break
+    if not row and not state:
+        st.error("Контур не найден: он не сохранён в CRM и отсутствует в базе объектов.")
+        return
+    card = build_card(row, state)
+    ogrn = str(row.get("uk_ogrn") or state.get("uk_ogrn") or "").strip()
+    object_rows: list[dict[str, Any]] = []
+    if ogrn and db_ok:
+        object_rows = fetch_map_objects(
+            parking_db, MapFilters(min_floors=0, uk_status="DONE", uk_ogrn=ogrn, limit=2000)
+        )
+    tenders_615 = read_uk_summary(getattr(service, "crm_db", None), key)
+    _render_summary(card, tenders_615)
+    _render_status_form(key, card, state)
+    _render_contacts(card, state)
+    render_uk_crm_panel(getattr(service, "crm_db", None),
+                        row.get("uk_inn") or card.get("uk_inn"),
+                        card.get("uk_name") or card.get("uk_name_short"))
+    _render_615(tenders_615)
+    render_uk_activity(key, card, state, object_rows, ogrn or None)

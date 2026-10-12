@@ -86,17 +86,32 @@ class TableRowEnricher:
         lines: List[str],
         allowed: Set[int],
     ) -> Tuple[List[str], List[str]]:
+        before, after = self._collect_context_within(line_number, lines, allowed)
+        if before or after:
+            return before, after
+        # Fallback: у табличных совпадений (pdf-сметы, ВОР) группировка строк таблицы
+        # бывает разреженной, и окно выходит пустым. Тогда валидатор получает одну
+        # строку без окружения и не может подтвердить даже очевидное («Линолеум ПВХ»).
+        # Поэтому, если контекст пуст, берём соседние строки без ограничения по таблице.
+        return self._collect_context_within(line_number, lines, None)
+
+    def _collect_context_within(
+        self,
+        line_number: int,
+        lines: List[str],
+        allowed: Optional[Set[int]],
+    ) -> Tuple[List[str], List[str]]:
         n = self.context_lines
         before: List[str] = []
         after: List[str] = []
         for ln in range(line_number - 1, max(0, line_number - n - 1), -1):
-            if ln not in allowed:
+            if allowed is not None and ln not in allowed:
                 break
             idx = ln - 1
             if 0 <= idx < len(lines) and lines[idx].strip():
                 before.insert(0, lines[idx].strip())
         for ln in range(line_number + 1, min(len(lines) + 1, line_number + n + 1)):
-            if ln not in allowed:
+            if allowed is not None and ln not in allowed:
                 break
             idx = ln - 1
             if 0 <= idx < len(lines) and lines[idx].strip():

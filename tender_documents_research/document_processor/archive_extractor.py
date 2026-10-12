@@ -50,13 +50,19 @@ class ArchiveExtractor:
         return cleaned
 
     def is_archive(self, path: Path) -> bool:
-        return self._is_zip(path) or self._is_rar_entry_point(path)
+        return self._is_zip(path) or self._is_rar_entry_point(path) or self._is_7z(path)
 
     def _is_zip(self, path: Path) -> bool:
         # Recognize by extension so corrupt ZIPs reach extraction diagnostics
         # instead of being silently treated as unsupported ordinary files.
         try:
             return path.suffix.lower() == ".zip"
+        except Exception:
+            return False
+
+    def _is_7z(self, path: Path) -> bool:
+        try:
+            return path.suffix.lower() == ".7z"
         except Exception:
             return False
 
@@ -117,13 +123,15 @@ class ArchiveExtractor:
         unrar найдёт автоматически если они лежат в той же папке."""
         extracted_before: set = set()
         try:
-            for p in dest_dir.iterdir():
-                if p.is_file():
-                    extracted_before.add(p.resolve())
+            extracted_before = {
+                p.resolve()
+                for p in dest_dir.rglob("*")
+                if p.is_file()
+            }
         except Exception:
             pass
         try:
-            cmd = ["unrar", "--extract", "--force", str(rar_path), str(dest_dir) + "/"]
+            cmd = ["unrar", "x", "-o+", str(rar_path), str(dest_dir) + "/"]
             result = subprocess.run(cmd, check=False, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE)
             if result.returncode != 0 and result.stderr:
                 self.logger.warning(f"unrar вернул ошибку для {rar_path.name}: {result.stderr[:200]}")
@@ -132,9 +140,9 @@ class ArchiveExtractor:
             return []
         extracted: List[Path] = []
         try:
-            for p in dest_dir.iterdir():
+            for p in dest_dir.rglob("*"):
                 try:
-                    if p.is_file() and p.resolve() not in extracted_before and p.suffix.lower() not in (".rar", ".r00", ".r01", ".r02", ".r03", ".r04", ".r05", ".r06", ".r07", ".r08", ".r09"):
+                    if p.is_file() and p.resolve() not in extracted_before:
                         extracted.append(p)
                 except Exception:
                     continue
@@ -143,8 +151,51 @@ class ArchiveExtractor:
         # Do not delete the canonical durable source archive here.
         return extracted
 
+    def _extract_7z_and_collect(self, seven_zip_path: Path, dest_dir: Path) -> List[Path]:
+        extracted_before = set()
+        try:
+            extracted_before = {
+                p.resolve()
+                for p in dest_dir.rglob("*")
+                if p.is_file()
+            }
+        except Exception:
+            pass
+
+        try:
+            cmd = [
+                "/usr/bin/7z",
+                "x",
+                "-y",
+                f"-o{dest_dir}",
+                str(seven_zip_path),
+            ]
+            result = subprocess.run(
+                cmd,
+                check=False,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.PIPE,
+            )
+            if result.returncode != 0 and result.stderr:
+                self.logger.warning(
+                    f"7z extraction failed for {seven_zip_path.name}: "
+                    f"{result.stderr[:200]}"
+                )
+        except Exception as exc:
+            self.logger.warning(f"7z unavailable: {exc}")
+            return []
+
+        extracted: List[Path] = []
+        try:
+            for p in dest_dir.rglob("*"):
+                if p.is_file() and p.resolve() not in extracted_before:
+                    extracted.append(p)
+        except Exception:
+            pass
+        return extracted
+
     def extract_recursive(self, archive_path: Path, dest_dir: Path, depth: int = 0) -> List[Path]:
-        """Рекурсивное извлечение архивов (ZIP, RAR). Архивы внутри архивов тоже распаковываются."""
+        """Рекурсивное извлечение ZIP, RAR и 7z архивов."""
         MAX_DEPTH = 3
         if depth > MAX_DEPTH:
             self.logger.warning(f"Достигнут лимит глубины вложенности архивов ({MAX_DEPTH}): {archive_path.name}")
@@ -154,6 +205,8 @@ class ArchiveExtractor:
             raw = self._extract_zip_and_collect(archive_path, dest_dir)
         elif self._is_rar_entry_point(archive_path):
             raw = self._extract_rar_and_collect(archive_path, dest_dir)
+        elif self._is_7z(archive_path):
+            raw = self._extract_7z_and_collect(archive_path, dest_dir)
         else:
             return [archive_path]
 
@@ -162,6 +215,8 @@ class ArchiveExtractor:
             if p.suffix.lower() == ".zip" and zipfile.is_zipfile(p):
                 result.extend(self.extract_recursive(p, dest_dir, depth + 1))
             elif self._is_rar_entry_point(p):
+                result.extend(self.extract_recursive(p, dest_dir, depth + 1))
+            elif self._is_7z(p):
                 result.extend(self.extract_recursive(p, dest_dir, depth + 1))
             else:
                 result.append(p)

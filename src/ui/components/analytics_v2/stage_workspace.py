@@ -57,7 +57,23 @@ def _amount(card: dict, stage: str):
     return card.get("initial_price"), "НМЦК"
 
 
-def _deadline(card: dict, stage: str):
+def _has_project_track(opps: list | None) -> bool:
+    from src.services.commercial_routing_v3.project_lifecycle import is_project_track
+
+    return any(is_project_track(o.get("opportunity_track")) for o in (opps or []))
+
+
+def _deadline(card: dict, stage: str, opps: list | None = None):
+    """Deadline label. PROJECT track must never show the submission date as its life."""
+    if _has_project_track(opps):
+        from src.services.commercial_routing_v3.project_lifecycle import (
+            compute_project_clock,
+        )
+
+        clock = compute_project_clock(card)
+        if clock.project_end_at:
+            return clock.project_end_at, "Проект активен до"
+        return None, "Проект: срок не определён"
     if stage == "AWARDED":
         return card.get("execution_end_at") or card.get("delivery_end_date"), "Исполнение до"
     return card.get("end_date"), "Приём заявок завершён" if stage == "COMMISSION" else "Приём заявок до"
@@ -112,7 +128,7 @@ def _summary(card: dict, stage: str, effective: Any, state: dict, published: boo
              opps: list | None = None, evidence: dict | None = None,
              entities: dict | None = None) -> None:
     amount, amount_label = _amount(card, stage)
-    deadline, deadline_label = _deadline(card, stage)
+    deadline, deadline_label = _deadline(card, stage, opps)
     contour = resolve_source_contour(card.get("source_table"))
 
     # ── Status line: [law] [stage] [region] [deadline countdown] ───────────
@@ -121,9 +137,28 @@ def _summary(card: dict, stage: str, effective: Any, state: dict, published: boo
     region = card.get("delivery_region") or ""
     dl_countdown = fmt_deadline_countdown(deadline) if deadline else ""
     dl_text = fmt_date(deadline) if deadline else ""
+    date_chip = f"до {dl_text}" if dl_text else ""
     status_chips = [c for c in [law_label, contour.get("card_secondary", ""),
-                                region, f"до {dl_text}" if dl_text else "",
-                                dl_countdown] if c]
+                                region, date_chip, dl_countdown] if c]
+    if _has_project_track(opps):
+        from src.services.commercial_routing_v3.project_lifecycle import (
+            compute_project_clock,
+            project_ui_semantics,
+        )
+
+        clock = compute_project_clock(card)
+        sem = project_ui_semantics(
+            track="EMBEDDED_MATERIAL",
+            lifecycle="AWARDED" if stage == "AWARDED" else "OPEN",
+            project_clock=clock,
+        )
+        if sem:
+            # Submission vocabulary must never represent a live project's life.
+            status_chips = [
+                c for c in status_chips if c not in (date_chip, dl_countdown)
+            ]
+            status_chips.append(f"{sem['tender_label']}: {sem['tender_status']}")
+            status_chips.append(f"{sem['project_status']}")
     st.markdown(" ".join(f"`{escape(c)}`" for c in status_chips))
 
     # ── Effective, Base, Model, Preliminary & Expert Badges ─────────────────────────

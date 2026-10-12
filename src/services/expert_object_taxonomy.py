@@ -22,9 +22,15 @@ Contract
 * A direct goods purchase has no object: use object_axes_for_direct_supply(),
   which returns N/A on all three axes.
 * Prior HUMAN expert values may appear as suggestions only via collect_expert_* helpers.
+* WIP OBJECT-TAXONOMY-GAP-IMPLEMENTATION-V1 adds SOCIAL/COLLEGE and a set of
+  unambiguous aliases. Contextually ambiguous terms (administrative building,
+  pumping station, treatment plant, playground) stay documented boundary
+  examples, never deterministic aliases (see CONTEXTUAL_BOUNDARY_EXAMPLES).
 
-Size note: tables and resolvers stay in one file on purpose. Splitting the
-vocabulary out would recreate the second parallel enum this WIP removes.
+Size note: vocabulary tables, the semantic-boundary tables and the resolvers
+stay in one file on purpose. Splitting the vocabulary out would recreate the
+second parallel enum this WIP removes; the boundary tables add no codes and
+only document where adjacent canonical values must be separated by context.
 """
 from __future__ import annotations
 
@@ -73,6 +79,7 @@ OBJECT_TYPES_BY_SECTOR: dict[str, list[tuple[str, str]]] = {
         ("HOSPITAL", "Больница"),
         ("POLYCLINIC", "Поликлиника"),
         ("DISPENSARY", "Диспансер"),
+        ("COLLEGE", "Колледж / техникум (СПО)"),
         ("UNIVERSITY", "ВУЗ / университет"),
         ("SPORTS_FACILITY", "Спортивный объект"),
         ("SOCIAL_ADMIN", "Административное социальное учреждение"),
@@ -90,7 +97,7 @@ OBJECT_TYPES_BY_SECTOR: dict[str, list[tuple[str, str]]] = {
     COMMERCIAL: [
         ("HOTEL", "Гостиница"),
         ("SHOPPING_CENTER", "Торговый центр"),
-        ("OFFICE", "Офис"),
+        ("OFFICE", "Офис / административно-офисное здание"),
         ("RESTAURANT", "Ресторан / общепит"),
         ("WAREHOUSE", "Склад / логистический объект"),
         ("PARKING", "Парковка / паркинг"),
@@ -213,6 +220,19 @@ LEGACY_OBJECT_ALIASES: dict[str, tuple[str, str | None, str | None]] = {
     "IMPROVEMENT_LANDSCAPING": (URBAN_IMPROVEMENT, None, None),
     "GAS_PIPELINE": (INFRASTRUCTURE, "UTILITY_NETWORKS", "GAS_NETWORK"),
     "BUILDING_OR_STRUCTURE": (OTHER, "OTHER_OBJECT", None),
+    # WIP=OBJECT-TAXONOMY-GAP-IMPLEMENTATION-V1: safe aliases with an
+    # unambiguous canonical target. Contextually ambiguous terms are
+    # deliberately NOT aliased (see CONTEXTUAL_BOUNDARY_EXAMPLES).
+    "LIBRARY": (SOCIAL, "CULTURE_FACILITY", None),
+    "TECHNICUM": (SOCIAL, "COLLEGE", None),
+    "VOCATIONAL_SCHOOL": (SOCIAL, "COLLEGE", None),
+    "SPO": (SOCIAL, "COLLEGE", None),
+    "POLYCLINIC": (SOCIAL, "POLYCLINIC", None),
+    "DISPENSARY": (SOCIAL, "DISPENSARY", None),
+    "OVERHEAD_POWER_LINE": (INFRASTRUCTURE, "UTILITY_NETWORKS", "POWER_NETWORK"),
+    "CABLE_LINE": (INFRASTRUCTURE, "UTILITY_NETWORKS", "POWER_NETWORK"),
+    "HEATING_MAIN": (INFRASTRUCTURE, "UTILITY_NETWORKS", "HEATING_NETWORK"),
+    "HEATING_PIPELINE": (INFRASTRUCTURE, "UTILITY_NETWORKS", "HEATING_NETWORK"),
 }
 
 # Legacy DB free text (crm_object_ai_classifications.object_type). Read-only
@@ -238,7 +258,83 @@ LEGACY_RUSSIAN_OBJECT_TYPES: dict[str, tuple[str, str | None, str | None]] = {
     "сквер": (URBAN_IMPROVEMENT, "SQUARE", None),
     "дворовые территории": (URBAN_IMPROVEMENT, "COURTYARD", None),
     "котельная": (INDUSTRIAL, "ENERGY_FACILITY", None),
+    # WIP=OBJECT-TAXONOMY-GAP-IMPLEMENTATION-V1: Russian lexical forms.
+    "библиотека": (SOCIAL, "CULTURE_FACILITY", None),
+    "колледж": (SOCIAL, "COLLEGE", None),
+    "техникум": (SOCIAL, "COLLEGE", None),
+    "училище": (SOCIAL, "COLLEGE", None),
+    "спо": (SOCIAL, "COLLEGE", None),
+    "диспансер": (SOCIAL, "DISPENSARY", None),
+    "кабельная линия": (INFRASTRUCTURE, "UTILITY_NETWORKS", "POWER_NETWORK"),
+    "вл": (INFRASTRUCTURE, "UTILITY_NETWORKS", "POWER_NETWORK"),
+    "тепломагистраль": (INFRASTRUCTURE, "UTILITY_NETWORKS", "HEATING_NETWORK"),
+    "теплотрасса": (INFRASTRUCTURE, "UTILITY_NETWORKS", "HEATING_NETWORK"),
 }
+
+
+# --- Contextually ambiguous terms: boundary examples, not aliases -----------
+# These terms must never be resolved by the deterministic normalizer: their
+# canonical target depends on document context. They are intentionally absent
+# from LEGACY_OBJECT_ALIASES / LEGACY_RUSSIAN_OBJECT_TYPES and live here as
+# review examples only.
+CONTEXTUAL_BOUNDARY_EXAMPLES: dict[str, tuple[str, ...]] = {
+    "ADMINISTRATIVE_BUILDING": (
+        "COMMERCIAL/OFFICE - company office / business building",
+        "SOCIAL/SOCIAL_ADMIN - state or municipal institution (tax office, administration)",
+    ),
+    "PLAYGROUND": (
+        "URBAN_IMPROVEMENT/PLAYGROUND - standalone playground in a landscaping contour",
+        "OBJECT_CONTEXT only - playground inside a school / MKD territory",
+    ),
+    "PUMPING_STATION": (
+        "INFRASTRUCTURE/MUNICIPAL_INFRASTRUCTURE - standalone communal structure",
+        "INDUSTRIAL/ENERGY_FACILITY - standalone energy object",
+    ),
+    "TREATMENT_PLANT": (
+        "INFRASTRUCTURE/MUNICIPAL_INFRASTRUCTURE - standalone communal structure",
+    ),
+}
+
+# --- Semantic boundaries for adjacent canonical codes -----------------------
+# Definitions only: no new codes, no normalizer behaviour change.
+OBJECT_SEMANTIC_BOUNDARIES: dict[str, str] = {
+    "OFFICE": "Office / administrative-office building whose primary purpose is "
+              "business; not every object with the word 'administrative'.",
+    "SOCIAL_ADMIN": "Administrative object of a state, municipal or social "
+                    "institution where the administrative function is the context.",
+    "WAREHOUSE": "Warehouse / logistics object whose primary purpose is storage.",
+    "FACTORY": "Plant / industrial enterprise as a whole object.",
+    "PRODUCTION_BUILDING": "A concrete production block / shop / building.",
+    "INDUSTRIAL_SITE": "Industrial territory / site / complex without a more "
+                       "specific building or plant object.",
+    "ENERGY_FACILITY": "Standalone energy object: boiler house, CHPP, power "
+                       "plant, substation.",
+    "UTILITY_NETWORKS": "Linear engineering network: heat main, water supply, "
+                        "sewer, gas pipeline, cable line, overhead line.",
+    "MUNICIPAL_INFRASTRUCTURE": "Standalone communal structure that is not a "
+                                "linear network (treatment plant, pumping station).",
+    "PARK": "Park as a standalone, named object.",
+    "SQUARE": "Square / skver (small public green space).",
+    "COURTYARD": "Standalone courtyard territory when the primary MKD object "
+                 "is not identified.",
+    "PUBLIC_SPACE": "Public space that cannot be classified more precisely.",
+    "PEDESTRIAN_ZONE": "Standalone pedestrian zone / pedestrian communication.",
+    "STREETSCAPE": "Street improvement as urban environment, not road works.",
+    "PLAYGROUND": "Standalone children's / sports playground in a landscaping contour.",
+    "GREEN_AREA": "Green / forest-park territory when PARK or SQUARE do not fit.",
+}
+
+# --- OBJECT_SUBTYPE vs OBJECT_CONTEXT ---------------------------------------
+# A network kind is always an OBJECT_SUBTYPE, never an OBJECT_CONTEXT. Territory
+# context attaches to the primary object and never replaces it.
+OBJECT_VS_CONTEXT_RULES: tuple[str, ...] = (
+    "Landscaping of school territory -> SOCIAL/SCHOOL + OBJECT_CONTEXT=LANDSCAPING",
+    "Landscaping of an MKD courtyard -> RESIDENTIAL/APARTMENT_BUILDING + "
+    "OBJECT_CONTEXT=COURTYARD",
+    "Standalone courtyard territory -> URBAN_IMPROVEMENT/COURTYARD",
+    "Heat network overhaul -> INFRASTRUCTURE/UTILITY_NETWORKS/HEATING_NETWORK "
+    "(subtype, never context)",
+)
 
 
 def _norm(value: Any) -> str:

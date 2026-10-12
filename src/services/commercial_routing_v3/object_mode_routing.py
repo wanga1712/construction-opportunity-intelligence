@@ -4,7 +4,18 @@ from __future__ import annotations
 import re
 from typing import Any, Dict, List, Optional, Set, Tuple
 
-from src.domain.commercial_routing_v3 import ProcurementForm, ResearchAction
+from src.domain.commercial_routing_v3 import (
+    ObjectStage,
+    ProcurementForm,
+    ResearchAction,
+    ServiceType,
+)
+from src.services.expert_object_taxonomy import (
+    INFRASTRUCTURE,
+    OTHER,
+    SOCIAL,
+    UNCERTAIN,
+)
 from src.services.commercial_routing_v3.construction_semantics import (
     card_is_genuine_construction,
     is_genuine_construction_object,
@@ -54,7 +65,7 @@ _DESIGN_DOC_PRIORITY = [
 _ROAD_RE = re.compile(r"дорог|покрыти|асфальт|магистрал|автомобильн\w*\s+дорог", re.I)
 _BRIDGE_RE = re.compile(r"мост|путепровод|эстакад", re.I)
 _SCHOOL_RE = re.compile(r"школ|образовательн", re.I)
-_HEALTH_RE = re.compile(r"поликлиник|больниц|медицин|здрав", re.I)
+_HEALTH_RE = re.compile(r"поликлиник|больниц|диспансер|госпитал|стационар|медицин|здрав", re.I)
 _GAS_PIPE_RE = re.compile(r"газопровод|газопров", re.I)
 _REPAIR_RE = re.compile(r"ремонт|ликвидаци|деформац|восстанов", re.I)
 _CAPITAL_RE = re.compile(r"капитальн\w*\s+ремонт|капремонт|реконструкц", re.I)
@@ -102,53 +113,163 @@ def classify_work_stage(*, title: str, form: str) -> str:
     return "UNKNOWN"
 
 
+# ── OBJECT_STAGE / SERVICE_TYPE (canonical axes, WIP OBJECT-STAGE-SERVICE-TYPE) ──
+# Deterministic, metadata-only classifiers. Price is never read here.
+# OBJECT_STAGE answers "where is the object in its lifecycle?" and is a
+# different axis from WORK_STAGE ("what nature of works?") and from the legacy
+# crm_object_ai_classifications.project_stage column (tender stage).
+
+_ENGINEERING_SURVEY_RE = re.compile(
+    r"геодез|геолог|топограф|изыскан|инженерн\w*\s*[-–—]?\s*геодез", re.I
+)
+_CONSTRUCTION_CONTROL_RE = re.compile(
+    r"строительн\w*\s+контрол|техническ\w*\s+надзор|технадзор|авторск\w*\s+надзор", re.I
+)
+_AUTHOR_SUPERVISION_RE = re.compile(r"авторск\w*\s+надзор", re.I)
+_TECHNICAL_SURVEY_RE = re.compile(r"обследован|техническ\w*\s+состояни", re.I)
+_LAB_TESTING_RE = re.compile(r"лабораторн|испытани|исследовани", re.I)
+_MAINTENANCE_SERVICE_RE = re.compile(
+    r"техническ\w*\s+обслуживан|обслуживан|эксплуатац", re.I
+)
+_WORKING_DOCS_RE = re.compile(
+    r"рабоч\w*\s+документац|проектно-сметн", re.I
+)
+_EXPERTISE_RE = re.compile(r"экспертиз", re.I)
+
+_SERVICE_TYPE_TO_OBJECT_STAGE: Dict[str, str] = {
+    ServiceType.ENGINEERING_SURVEY.value: ObjectStage.SURVEY.value,
+    ServiceType.TECHNICAL_SURVEY.value: ObjectStage.SURVEY.value,
+    ServiceType.CONSTRUCTION_CONTROL.value: ObjectStage.CONSTRUCTION.value,
+    ServiceType.AUTHOR_SUPERVISION.value: ObjectStage.CONSTRUCTION.value,
+    ServiceType.MAINTENANCE_SERVICE.value: ObjectStage.OPERATION.value,
+}
+
+
+def classify_service_type(*, title: str, form: str) -> str:
+    """Canonical SERVICE_TYPE for a procurement (deterministic, no price).
+
+    Only the service-bearing form (SERVICES_OTHER) can yield a named service;
+    goods / design / construction forms are not services => NONE.
+    """
+    f = str(form or "").upper()
+    if f != ProcurementForm.SERVICES_OTHER.value:
+        return ServiceType.NONE.value
+    t = title or ""
+    if _AUTHOR_SUPERVISION_RE.search(t):
+        return ServiceType.AUTHOR_SUPERVISION.value
+    if _ENGINEERING_SURVEY_RE.search(t):
+        return ServiceType.ENGINEERING_SURVEY.value
+    if _CONSTRUCTION_CONTROL_RE.search(t):
+        return ServiceType.CONSTRUCTION_CONTROL.value
+    if _TECHNICAL_SURVEY_RE.search(t):
+        return ServiceType.TECHNICAL_SURVEY.value
+    if _MAINTENANCE_SERVICE_RE.search(t):
+        return ServiceType.MAINTENANCE_SERVICE.value
+    if _LAB_TESTING_RE.search(t):
+        return ServiceType.LAB_TESTING.value
+    return ServiceType.OTHER_SERVICE.value
+
+
+def classify_object_stage(
+    *,
+    title: str,
+    form: str,
+    service_type: Optional[str] = None,
+) -> str:
+    """Canonical OBJECT_STAGE for a procurement (deterministic, no price).
+
+    Direct supply has no object lifecycle => UNKNOWN (UI renders
+    "не применимо"). Services derive the stage from SERVICE_TYPE. Design-only
+    forms split by explicit expertise / working-documentation signals.
+    """
+    f = str(form or "").upper()
+    if f == ProcurementForm.DIRECT_GOODS_PURCHASE.value:
+        return ObjectStage.UNKNOWN.value
+    if f == ProcurementForm.SURVEY_AND_DESIGN.value:
+        return ObjectStage.DESIGN.value
+    if f == ProcurementForm.DESIGN_ONLY.value:
+        t = title or ""
+        if _EXPERTISE_RE.search(t):
+            return ObjectStage.EXPERTISE.value
+        if _WORKING_DOCS_RE.search(t):
+            return ObjectStage.WORKING_DOCUMENTATION.value
+        return ObjectStage.DESIGN.value
+    if f in (
+        ProcurementForm.CONSTRUCTION_WORKS.value,
+        ProcurementForm.DESIGN_AND_BUILD.value,
+        ProcurementForm.DESIGN_EXPERTISE_AND_BUILD.value,
+    ):
+        return ObjectStage.CONSTRUCTION.value
+    if f == ProcurementForm.SERVICES_OTHER.value:
+        st = service_type or classify_service_type(title=title, form=form)
+        return _SERVICE_TYPE_TO_OBJECT_STAGE.get(st, ObjectStage.UNKNOWN.value)
+    return ObjectStage.UNKNOWN.value
+
+
+def is_object_stage_applicable(*, form: str) -> bool:
+    """Direct goods purchases have no object lifecycle stage."""
+    return str(form or "").upper() != ProcurementForm.DIRECT_GOODS_PURCHASE.value
+
+
 def classify_object(
     procurement: Dict[str, Any],
     *,
     form: str,
 ) -> Dict[str, Any]:
-    """Structured object classification from title + OKPD + form (not OKPD prefix alone)."""
+    """Structured object classification from title + OKPD + form (not OKPD prefix alone).
+
+    Emits canonical OBJECT_SECTOR / OBJECT_TYPE / OBJECT_SUBTYPE codes only
+    (see src/services/expert_object_taxonomy.py). The ad-hoc names this function
+    used to invent (TRANSPORT_INFRASTRUCTURE, SOCIAL_INFRASTRUCTURE, HEALTHCARE,
+    UTILITY_INFRASTRUCTURE, GENERAL_CONSTRUCTION, GAS_PIPELINE,
+    BUILDING_OR_STRUCTURE, "UNKNOWN") are no longer produced here.
+    """
     mi = _model_input(procurement)
     title = str(procurement.get("title") or procurement.get("auction_name") or mi.get("title") or "")
     codes = list(mi.get("okpd_codes") or [])
     if procurement.get("okpd_code"):
         codes.insert(0, str(procurement["okpd_code"]))
     work_stage = classify_work_stage(title=title, form=form)
+    lowered = title.lower()
 
-    sector = "UNKNOWN"
-    obj_type = "UNKNOWN"
-    subtype = "UNKNOWN"
+    sector = UNCERTAIN
+    obj_type = "UNCERTAIN_OBJECT"
+    subtype: Optional[str] = None
     context: List[str] = []
 
     if _ROAD_RE.search(title):
-        sector = "TRANSPORT_INFRASTRUCTURE"
+        sector = INFRASTRUCTURE
         obj_type = "ROAD"
-        subtype = "ROAD_PAVEMENT" if _REPAIR_RE.search(title) else "ROAD"
-        context.append("ROAD_REPAIR" if _REPAIR_RE.search(title) else "ROAD_WORKS")
+        is_repair = bool(_REPAIR_RE.search(title) or _CAPITAL_RE.search(title))
+        subtype = "ROAD_REPAIR" if is_repair else "ROAD_PAVEMENT"
+        context.append("ROAD_REPAIR" if is_repair else "ROAD_WORKS")
     elif _BRIDGE_RE.search(title):
-        sector = "TRANSPORT_INFRASTRUCTURE"
+        sector = INFRASTRUCTURE
         obj_type = "BRIDGE"
         context.append("BRIDGE_WORKS")
     elif _SCHOOL_RE.search(title):
-        sector = "SOCIAL_INFRASTRUCTURE"
+        sector = SOCIAL
         obj_type = "SCHOOL"
-        subtype = (
-            "SCHOOL_BUILDING"
-            if _CAPITAL_RE.search(title) or _REPAIR_RE.search(title)
-            else "SCHOOL"
-        )
+        if _CAPITAL_RE.search(title) or _REPAIR_RE.search(title):
+            subtype = "SCHOOL_BUILDING"
         context.append("EDUCATION_FACILITY")
     elif _HEALTH_RE.search(title):
-        sector = "HEALTHCARE"
-        obj_type = "POLYCLINIC"
+        sector = SOCIAL
+        if "больниц" in lowered or "госпитал" in lowered:
+            obj_type = "HOSPITAL"
+        elif "диспансер" in lowered:
+            obj_type = "DISPENSARY"
+        else:
+            obj_type = "POLYCLINIC"
         context.append("HEALTHCARE_FACILITY")
     elif _GAS_PIPE_RE.search(title):
-        sector = "UTILITY_INFRASTRUCTURE"
-        obj_type = "GAS_PIPELINE"
+        sector = INFRASTRUCTURE
+        obj_type = "UTILITY_NETWORKS"
+        subtype = "GAS_NETWORK"
         context.append("UTILITY_NETWORK")
     elif is_genuine_construction_object(title=title, okpd_codes=codes)[0]:
-        sector = "GENERAL_CONSTRUCTION"
-        obj_type = "BUILDING_OR_STRUCTURE"
+        sector = OTHER
+        obj_type = "OTHER_OBJECT"
         context.append("CONSTRUCTION_OBJECT")
 
     if work_stage == "REPAIR":

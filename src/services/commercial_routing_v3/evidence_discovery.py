@@ -22,6 +22,8 @@ import logging
 import os
 from typing import Any, Dict, List, Optional, Set, Tuple
 
+from src.services.db_host_guard import assert_host_allowed
+
 logger = logging.getLogger("commercial_routing_v3.evidence_discovery")
 
 PIPELINE_GENERATION = "S13_V4_EXHAUSTIVE_CONTEXT"
@@ -82,7 +84,9 @@ def load_discovery_vocabulary(crm_db) -> List[Dict[str, Any]]:
 
 def _get_doc_dsn() -> Dict[str, Any]:
     return {
-        "host": os.getenv("S13_DOCUMENT_DB_HOST", "127.0.0.1"),
+        "host": assert_host_allowed(
+            os.getenv("S13_DOCUMENT_DB_HOST") or "127.0.0.1", "S13_DOCUMENT_DB_HOST"
+        ),
         "port": int(os.getenv("S13_DOCUMENT_DB_PORT", "5432")),
         "dbname": "document_intelligence",
         "user": os.getenv("S13_DOCUMENT_DB_USER", "doc_worker"),

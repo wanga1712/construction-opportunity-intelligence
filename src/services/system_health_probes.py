@@ -476,6 +476,28 @@ def collect_network() -> List[Dict[str, Any]]:
     return out
 
 
+_SECRET_HINT = ("password", "passwd", "token", "secret", "apikey", "api_key", "credential", "pwd")
+
+
+def _proc_cmdline(pid_dir: Path, comm: str) -> str:
+    """Best-effort /proc/<pid>/cmdline: secret-masked, truncated, no env vars."""
+    try:
+        raw = (pid_dir / "cmdline").read_bytes()
+    except Exception:
+        raw = b""
+    parts = [chunk.decode("utf-8", "replace") for chunk in raw.split(b"\x00") if chunk]
+    if not parts:
+        return f"[{comm}]" if comm else ""
+    masked = []
+    for part in parts:
+        if any(hint in part.lower() for hint in _SECRET_HINT):
+            masked.append(part.split("=", 1)[0] + "=***" if "=" in part else "***")
+        else:
+            masked.append(part)
+    text = " ".join(masked).strip()
+    return text[:200] + ("\u2026" if len(text) > 200 else "")
+
+
 def collect_top_processes(limit: int = 8) -> Dict[str, List[Dict[str, Any]]]:
     """Top by CPU and RSS — name only, no full cmdline (secret-safe)."""
     procs = []
@@ -501,7 +523,8 @@ def collect_top_processes(limit: int = 8) -> Dict[str, List[Dict[str, Any]]]:
                 utime = int(fields[11])
                 stime = int(fields[12])
                 cpu_ticks = utime + stime
-            procs.append({"pid": pid, "name": comm[:64], "rss_b": rss_kb * 1024, "cpu_ticks": cpu_ticks})
+            procs.append({"pid": pid, "name": comm[:64], "cmdline": _proc_cmdline(pid_dir, comm),
+                          "rss_b": rss_kb * 1024, "cpu_ticks": cpu_ticks})
         except Exception:
             continue
     by_ram = sorted(procs, key=lambda p: p["rss_b"], reverse=True)[:limit]
@@ -509,6 +532,7 @@ def collect_top_processes(limit: int = 8) -> Dict[str, List[Dict[str, Any]]]:
     global _prev_proc_ticks, _prev_proc_ts
     now = time.time()
     by_cpu = []
+    cpu_by_pid: Dict[int, float] = {}
     if "_prev_proc_ticks" in globals() and _prev_proc_ticks is not None and _prev_proc_ts:
         dt = now - _prev_proc_ts
         hz = os.sysconf(os.sysconf_names.get("SC_CLK_TCK", "SC_CLK_TCK")) if hasattr(os, "sysconf") else 100
@@ -524,11 +548,13 @@ def collect_top_processes(limit: int = 8) -> Dict[str, List[Dict[str, Any]]]:
             d_ticks = p["cpu_ticks"] - prev
             cpu_pct = max(0.0, (d_ticks / hz) / dt * 100.0)
             scored.append({**p, "cpu_pct": round(cpu_pct, 1), "ram_mb": round(p["rss_b"] / 1048576, 1)})
+            cpu_by_pid[p["pid"]] = round(cpu_pct, 1)
         by_cpu = sorted(scored, key=lambda x: x["cpu_pct"], reverse=True)[:limit]
     _prev_proc_ticks = {p["pid"]: p["cpu_ticks"] for p in procs}
     _prev_proc_ts = now
     for p in by_ram:
         p["ram_mb"] = round(p["rss_b"] / 1048576, 1)
+        p.setdefault("cpu_pct", cpu_by_pid.get(p["pid"], 0.0))
         p.pop("cpu_ticks", None)
         p.pop("rss_b", None)
     for p in by_cpu:

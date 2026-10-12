@@ -11,13 +11,16 @@ from typing import Any, Dict, Optional
 
 import psycopg2
 import psycopg2.extras
+from src.services.db_host_guard import assert_host_allowed
 
 PIPELINE_GENERATION = "S13_V2"
 
 
 def _doc_dsn() -> Dict[str, Any]:
     return {
-        "host":     os.getenv("S13_DOCUMENT_DB_HOST", "localhost"),
+        "host":     assert_host_allowed(
+            os.getenv("S13_DOCUMENT_DB_HOST") or "localhost", "S13_DOCUMENT_DB_HOST"
+        ),
         "port":     int(os.getenv("S13_DOCUMENT_DB_PORT", "5432")),
         "dbname":   os.getenv("S13_DOCUMENT_DB_NAME", "document_intelligence"),
         "user":     os.getenv("S13_DOCUMENT_DB_USER", "doc_worker"),

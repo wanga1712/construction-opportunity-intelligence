@@ -21,7 +21,10 @@ from src.services.commercial_routing_v3.source_lifecycle import (
     normalize_source_lifecycle_event,
 )
 from src.services.commercial_routing_v3.submission_window import (
-    TOO_SHORT_REASON, is_actionable_submission_window,
+    DIRECT_SUPPLY_WINDOW_DEPLETED_REASON,
+    TOO_SHORT_REASON,
+    direct_supply_window_depleted,
+    is_actionable_submission_window,
 )
 
 PLACEHOLDER_TITLES = frozenset(
@@ -141,6 +144,12 @@ def evaluate_routing_eligibility(
         if not is_actionable_submission_window(proc.get("end_date"), now=now, today=as_of):
             return RoutingEligibilityDecision(
                 False, None, TOO_SHORT_REASON, lifecycle, True, "NONE", attempts, status
+            )
+        if form.value == "DIRECT_GOODS_PURCHASE" and direct_supply_window_depleted(
+            proc.get("start_date"), proc.get("end_date"), now=now
+        ):
+            return RoutingEligibilityDecision(
+                False, None, DIRECT_SUPPLY_WINDOW_DEPLETED_REASON, lifecycle, True, "NONE", attempts, status
             )
         lane, commercial = LANE_ACTIVE_OPEN, "ACTIVE"
     elif lifecycle == "WAITING_SOURCE_OUTCOME":

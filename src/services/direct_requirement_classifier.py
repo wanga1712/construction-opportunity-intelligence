@@ -56,7 +56,7 @@ _ADDITIONAL_MARKERS = (
 #: Группы технических требований: ключ -> подписи.
 PRODUCT_GROUPS = (
     ("processor", "Процессор и вычисления",
-     ("процессор", "ядр", "тактов", "частот", "cpu", "виртуализац", "вычислен")),
+     ("процессор", "ядр", "тактов", "cpu", "виртуализац", "вычислен")),
     ("memory", "Оперативная память", ("оперативн", "озу", "память", "ddr", "модул")),
     ("storage", "Хранение данных",
      ("накопител", "диск", "ssd", "hdd", "raid", "lff", "sff", "хранилищ", "массив")),
@@ -71,6 +71,10 @@ PRODUCT_GROUPS = (
     ("reliability", "Надёжность и совместимость",
      ("надежн", "надёжн", "резервирован", "ошибк", "ecc", "совместим", "отказоустойчив",
       "бесперебойн")),
+    ("display", "Дисплей и экран",
+     ("экран", "монитор", "дисплей", "разрешение", "яркост", "контрастност", "углы обзора",
+      "угол обзора", "время отклика", "покрытие", "диагонал", "соотношение сторон",
+      "частота обновлен", "матриц", "пиксел")),
     ("other", "Прочие характеристики товара", ()),
 )
 
@@ -185,6 +189,7 @@ def _tech_record(row: Dict[str, Any], index: int) -> Dict[str, Any]:
     param = cells[0] if cells else ""
     value = cells[1] if len(cells) > 1 else ""
     unit = cells[2] if len(cells) > 2 else ""
+    item = _norm(row.get("item") or "")
     return {
         "id": "tech:%d" % index,
         "section": "product",
@@ -193,6 +198,8 @@ def _tech_record(row: Dict[str, Any], index: int) -> Dict[str, Any]:
         "param": param or value,
         "value": value if param else "",
         "unit": unit,
+        # Позиция товара, к которой относится параметр (если таблица ТЗ её даёт).
+        "item": item or None,
         "text": _norm(" | ".join(c for c in cells if c))[:400],
         "group": product_group(param or value),
         "mandatory": _mandatory(param or value),

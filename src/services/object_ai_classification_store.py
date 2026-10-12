@@ -34,6 +34,8 @@ CREATE TABLE IF NOT EXISTS crm_object_ai_classifications (
     social_status TEXT,
     work_type TEXT,
     project_stage TEXT,
+    object_stage TEXT,
+    service_type TEXT,
     stage_signals JSONB NOT NULL DEFAULT '[]'::jsonb,
     stage_primary TEXT,
     stage_reason TEXT,
@@ -61,6 +63,8 @@ ALTER TABLE crm_object_ai_classifications
     ADD COLUMN IF NOT EXISTS social_status TEXT,
     ADD COLUMN IF NOT EXISTS work_type TEXT,
     ADD COLUMN IF NOT EXISTS project_stage TEXT,
+    ADD COLUMN IF NOT EXISTS object_stage TEXT,
+    ADD COLUMN IF NOT EXISTS service_type TEXT,
     ADD COLUMN IF NOT EXISTS stage_signals JSONB NOT NULL DEFAULT '[]'::jsonb,
     ADD COLUMN IF NOT EXISTS stage_primary TEXT,
     ADD COLUMN IF NOT EXISTS stage_reason TEXT,
@@ -106,6 +110,62 @@ def _table_exists(db: CrmDatabaseManager) -> bool:
         return False
     reg = rows[0].get("reg") if isinstance(rows[0], dict) else None
     return bool(reg)
+
+
+_OPTIONAL_AXIS_COLUMNS = ("object_stage", "service_type")
+_COLUMN_CACHE: Dict[str, frozenset] = {}
+
+
+def _known_columns(db: CrmDatabaseManager) -> frozenset:
+    """Column names of crm_object_ai_classifications, cached for this process.
+
+    Used only to guard the additive OBJECT_STAGE / SERVICE_TYPE columns: an
+    unapplied additive migration must never break the legacy write path.
+    """
+    cached = _COLUMN_CACHE.get("columns")
+    if cached is not None:
+        return cached
+    try:
+        rows = db.execute_query(
+            """
+            SELECT column_name
+            FROM information_schema.columns
+            WHERE table_schema = 'public'
+              AND table_name = 'crm_object_ai_classifications'
+            """
+        )
+        cols = frozenset(str(r.get("column_name") or "") for r in (rows or []))
+    except Exception as exc:
+        logger.warning(f"column introspection failed: {exc}")
+        cols = frozenset()
+    if cols:
+        _COLUMN_CACHE["columns"] = cols
+    return cols
+
+
+def _persist_optional_axes(db: CrmDatabaseManager, object_key: str, result: dict) -> None:
+    """Additive UPDATE for the canonical OBJECT_STAGE / SERVICE_TYPE axes.
+
+    These axes come from business rules, not from the legacy classifier, so they
+    are written only when a producer supplies them and only once the additive
+    migration has added the columns.
+    """
+    supplied = {c: result.get(c) for c in _OPTIONAL_AXIS_COLUMNS if result.get(c)}
+    if not supplied:
+        return
+    usable = [c for c in _OPTIONAL_AXIS_COLUMNS if c in _known_columns(db)]
+    if not usable:
+        return
+    assignments = ", ".join(f"{c} = %({c})s" for c in usable)
+    payload = {"object_key": object_key, **{c: supplied.get(c) for c in usable}}
+    try:
+        db.execute_update(
+            f"UPDATE crm_object_ai_classifications SET {assignments} "
+            f"WHERE object_key = %(object_key)s",
+            payload,
+        )
+    except Exception as exc:
+        logger.warning(f"optional axes persist failed: {exc}")
 
 
 def ensure_schema(crm_db: Optional[CrmDatabaseManager] = None) -> bool:
@@ -179,6 +239,8 @@ def apply_ai_classifications(items: Iterable[ObjectViewItem], crm_db: Optional[C
         item.ai_social_status = row.get("social_status")
         item.ai_work_type = row.get("work_type")
         item.ai_project_stage = row.get("project_stage")
+        item.ai_object_stage = row.get("object_stage")
+        item.ai_service_type = row.get("service_type")
         item.ai_stage_signals = row.get("stage_signals") or []
         item.ai_stage_reason = row.get("stage_reason")
         item.ai_infrastructure_tags = row.get("infrastructure_tags") or []
@@ -318,4 +380,5 @@ def save_ai_classification(
         """,
         row,
     )
+    _persist_optional_axes(db, object_key, result)
     return row

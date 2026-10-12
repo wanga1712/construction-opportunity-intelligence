@@ -102,12 +102,65 @@ SYSTEM_PROMPT = """Ты — эксперт-валидатор совпадени
 }"""
 
 
+#: Маркер раздела промпта: модель иногда копирует его как часть «цитаты».
+_PROMPT_MARKER_RE = re.compile(r">>>\s*найденн\w*\s+строка\s*:", re.IGNORECASE)
+#: Наклейки, которые модель добавляет перед цитатой.
+_QUOTE_LABEL_RE = re.compile(
+    r"^\s*(?:>>>\s*)?(?:найденн\w*\s+строка|строка|цитата|фрагмент|"
+    r"документ(?:альный)?\s+(?:текст|контекст)|supporting_quote|quote)\s*[:\-–—]\s*",
+    re.IGNORECASE,
+)
+_ZERO_WIDTH = dict.fromkeys(map(ord, "\u200b\u200c\u200d\ufeff"), None)
+
+
 def _normalize_whitespace(text: str) -> str:
+    """Единая нормализация для сравнения цитаты с видимым источником.
+
+    Только нормализация (регистр, пробелы, кавычки, тире, невидимые символы и
+    служебный маркер промпта) — требование «цитата обязана дословно
+    присутствовать» не ослабляется: после нормализации проверяется вхождение.
+    """
     if not text:
         return ""
+    text = str(text).translate(_ZERO_WIDTH).replace("\u00a0", " ")
     for ch in ['«', '»', '"', "'", '„', '“', '”']:
         text = text.replace(ch, " ")
+    for ch in ("—", "–", "−", "‑", "‐"):
+        text = text.replace(ch, "-")
+    text = _PROMPT_MARKER_RE.sub(" ", text)
     return re.sub(r"\s+", " ", text).strip().lower()
+
+
+def _strip_quote_wrappers(quote: str) -> str:
+    """Снять наклейки модели («НАЙДЕННАЯ СТРОКА:», «цитата:», буллеты) вокруг цитаты."""
+    text = str(quote or "").strip()
+    for _ in range(3):
+        new = _QUOTE_LABEL_RE.sub("", text)
+        new = re.sub(r"^\s*[-•*\u2013\u2014]+\s*", "", new)
+        new = new.strip().strip('«»"\'' "`").strip()
+        if new == text:
+            break
+        text = new
+    return text
+
+
+def _reanchor_quote(quote: str, norm_source: str, min_words: int = 4,
+                    min_chars: int = 24) -> Optional[str]:
+    """Найти самый длинный дословный фрагмент цитаты внутри источника.
+
+    Модель часто добавляет обрамление или склеивает соседние строки. Берём
+    самое длинное словесное окно, которое БУКВАЛЬНО есть в источнике, — так
+    требование exact-support сохраняется, а не ослабляется.
+    """
+    words = str(quote or "").split()
+    if len(words) < min_words:
+        return None
+    for size in range(len(words), min_words - 1, -1):
+        for start in range(0, len(words) - size + 1):
+            window = " ".join(words[start:start + size])
+            if len(window) >= min_chars and window in norm_source:
+                return window
+    return None
 
 
 def _is_empty_context(val) -> bool:
@@ -556,11 +609,50 @@ class ContextValidator:
         payload = self.build_context_payload(candidate)
         return payload["context_block"]
 
+    def _repair_supporting_quote(self, context_block: str, visible_source_text: str) -> str:
+        """Ограниченный ретрай: попросить у модели дословную строку из видимого контекста.
+
+        Решение модели (CONFIRMED/REJECTED) сохраняется, но подтвердить его можно
+        только цитатой, которая буквально присутствует в видимом источнике.
+        """
+        if not context_block:
+            return ""
+        prompt = (
+            "Ниже контекст документа.\n"
+            "Верни СТРОГО JSON вида "
+            '{"supporting_quote": "<одна строка, скопированная СИМВОЛ-В-СИМВОЛ '
+            'из раздела [ДОКУМЕНТАЛЬНЫЙ КОНТЕКСТ]; если подходящей строки нет — пустая строка>"}\n'
+            "Не добавляй пояснений и меток.\n\n"
+            f"{context_block}"
+        )
+        try:
+            resp_text = self._ai_caller(prompt)
+        except Exception as exc:  # noqa: BLE001 - ретрай не должен ломать валидацию
+            logger.warning("supporting_quote repair failed: %s", exc)
+            return ""
+        match = re.search(r"\{.*\}", resp_text or "", re.DOTALL)
+        if not match:
+            return ""
+        try:
+            quote = str(json.loads(match.group(0)).get("supporting_quote") or "").strip()
+        except Exception:  # noqa: BLE001
+            return ""
+        if not quote:
+            return ""
+        stripped = _strip_quote_wrappers(quote)
+        norm_source = _normalize_whitespace(visible_source_text)
+        norm_quote = _normalize_whitespace(stripped)
+        if norm_quote and norm_quote in norm_source:
+            return stripped
+        anchored = _reanchor_quote(norm_quote, norm_source)
+        return anchored or ""
+
     def _verify_and_gate_decision(
         self,
         raw_decision: Dict[str, Any],
         candidate: Dict[str, Any],
         visible_source_text: str,
+        context_block: str = "",
     ) -> Dict[str, Any]:
         """Applies conservative threshold gating, quote verification against visible_source_text, and fail-closed defaults."""
         detail_id = candidate.get("detail_id") or candidate.get("id")
@@ -588,19 +680,31 @@ class ContextValidator:
         norm_visible_source = _normalize_whitespace(visible_source_text)
 
         if decision in ("CONFIRMED", "REJECTED"):
+            decided = decision
+            if not quote:
+                # Один ограниченный ретрай: просим дословную строку из видимого контекста.
+                quote = self._repair_supporting_quote(context_block, visible_source_text)
             if not quote:
                 decision = "UNKNOWN"
                 reason_code = "MISSING_SUPPORTING_QUOTE"
                 confidence = 0.0
-                reason = f"Decision {decision} requires explicit non-empty supporting_quote from document context"
+                reason = f"Decision {decided} requires explicit non-empty supporting_quote from document context"
                 is_technical = False
             else:
-                norm_quote = _normalize_whitespace(quote)
-                if norm_quote not in norm_visible_source:
+                stripped = _strip_quote_wrappers(quote)
+                norm_quote = _normalize_whitespace(stripped)
+                if norm_quote and norm_quote in norm_visible_source:
+                    quote = stripped
+                else:
+                    anchored = _reanchor_quote(norm_quote, norm_visible_source)
+                    if anchored:
+                        quote = anchored
+                        norm_quote = anchored
+                if not norm_quote or norm_quote not in norm_visible_source:
                     decision = "UNKNOWN"
                     reason_code = "HALLUCINATED_QUOTE"
                     confidence = 0.0
-                    reason = f"Supporting quote not found in prompt-visible documentary source: {quote[:60]}"
+                    reason = f"Supporting quote not found in prompt-visible documentary source: {stripped[:60]}"
                     is_technical = False
 
         # Confidence gating
@@ -677,7 +781,9 @@ class ContextValidator:
                 "is_technical_error": True,
             }
 
-        return self._verify_and_gate_decision(raw_decision, candidate, visible_source_text)
+        return self._verify_and_gate_decision(
+            raw_decision, candidate, visible_source_text, context_block
+        )
 
     def validate_candidates(self, candidates: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
         results = []

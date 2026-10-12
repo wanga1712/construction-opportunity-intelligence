@@ -145,11 +145,17 @@ def disk_summary_ru(host: Dict[str, Any]) -> Tuple[str, str]:
     return line, status
 
 
-def history_series(rows: List[Dict[str, Any]], metric: str) -> Dict[str, List[float]]:
+def history_series(
+    rows: List[Dict[str, Any]],
+    metric: str,
+    host_id: Optional[str] = None,
+) -> Dict[str, List[float]]:
     xs: List[str] = []
     ys: List[float] = []
     for r in rows:
         if r.get("metric") != metric or r.get("value") is None:
+            continue
+        if host_id and r.get("host_id") and r.get("host_id") != host_id:
             continue
         try:
             ts = datetime.fromtimestamp(float(r["ts"]))
@@ -158,3 +164,24 @@ def history_series(rows: List[Dict[str, Any]], metric: str) -> Dict[str, List[fl
         except Exception:
             continue
     return {"t": xs, metric: ys}
+
+
+def history_points(
+    rows: List[Dict[str, Any]],
+    metric: str,
+    host_id: Optional[str] = None,
+) -> List[Dict[str, Any]]:
+    """Chart points (oldest to newest) as {"ts": ISO-8601, "value": float}."""
+    points: List[Dict[str, Any]] = []
+    for r in rows:
+        if r.get("metric") != metric or r.get("value") is None:
+            continue
+        if host_id and r.get("host_id") and r.get("host_id") != host_id:
+            continue
+        try:
+            ts = datetime.fromtimestamp(float(r["ts"]), tz=timezone.utc)
+            points.append({"ts": ts.strftime("%Y-%m-%dT%H:%M:%S"), "value": round(float(r["value"]), 2)})
+        except Exception:
+            continue
+    points.sort(key=lambda p: p["ts"])
+    return points

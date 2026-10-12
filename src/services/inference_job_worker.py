@@ -9,8 +9,25 @@ from src.services.inference_job_queue import (
     claim_next_jobs, heartbeat, mark_cancelled, mark_failed, mark_succeeded, recover_stale_jobs,
 )
 from src.services.commercial_routing_v3.submission_window import (
-    TOO_SHORT_REASON, is_actionable_submission_window,
+    DIRECT_SUPPLY_WINDOW_DEPLETED_REASON,
+    TOO_SHORT_REASON,
+    direct_supply_window_depleted,
+    is_actionable_submission_window,
 )
+from src.services.commercial_routing_v3.procurement_form import classify_procurement_form
+
+
+def _is_depleted_direct_supply(proc: dict) -> bool:
+    form = classify_procurement_form(
+        {
+            "auction_name": proc.get("auction_name"),
+            "okpd_code": proc.get("okpd_code"),
+            "okpd_name": proc.get("okpd_name"),
+        }
+    )
+    if form.value != "DIRECT_GOODS_PURCHASE":
+        return False
+    return direct_supply_window_depleted(proc.get("start_date"), proc.get("end_date"))
 
 
 def execute_claimed_job(job: dict, *, tender_db: Any, crm_db: Any, worker_id: str) -> dict:
@@ -18,11 +35,18 @@ def execute_claimed_job(job: dict, *, tender_db: Any, crm_db: Any, worker_id: st
     job_id = int(job["id"]); procurement_id = int(job["procurement_id"])
     heartbeat(crm_db, job_id, worker_id)
     try:
-        rows = crm_db.execute_query("SELECT crm_stage,end_date FROM crm_procurements WHERE id=%s", (procurement_id,)) or []
+        rows = crm_db.execute_query(
+            "SELECT crm_stage,end_date,start_date,auction_name,okpd_code,okpd_name"
+            " FROM crm_procurements WHERE id=%s",
+            (procurement_id,),
+        ) or []
         proc = rows[0] if rows else {}
         if str(proc.get("crm_stage") or "").lower() == "torgi" and not is_actionable_submission_window(proc.get("end_date")):
             mark_cancelled(crm_db, job_id, worker_id, TOO_SHORT_REASON)
             return {"job_id": job_id, "status": "CANCELLED", "reason": TOO_SHORT_REASON}
+        if str(proc.get("crm_stage") or "").lower() == "torgi" and _is_depleted_direct_supply(proc):
+            mark_cancelled(crm_db, job_id, worker_id, DIRECT_SUPPLY_WINDOW_DEPLETED_REASON)
+            return {"job_id": job_id, "status": "CANCELLED", "reason": DIRECT_SUPPLY_WINDOW_DEPLETED_REASON}
         outcome = run_live(
             tender_db, crm_db, limit=1, procurement_id=procurement_id,
             force_reassess=True, reassess_reason=f"durable_job:{job_id}",

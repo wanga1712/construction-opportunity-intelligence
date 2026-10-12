@@ -226,6 +226,70 @@ def inject_global_styles() -> None:
             min-height: 2.15rem !important;
         }}
 
+        .crm-kpi-row {{
+            display: flex;
+            flex-wrap: wrap;
+            gap: 0.5rem;
+            margin: 0.3rem 0 0.6rem 0;
+        }}
+        .crm-kpi-row .crm-chip {{
+            min-width: 8.5rem;
+            flex: 0 1 auto;
+        }}
+        .crm-board-head {{
+            display: flex;
+            align-items: baseline;
+            justify-content: space-between;
+            gap: 0.4rem;
+            padding: 0.35rem 0 0.25rem 0;
+            border-top: 3px solid var(--crm-border-soft);
+            border-bottom: 2px solid var(--crm-border-soft);
+        }}
+        .crm-board-name {{
+            font-size: 0.86rem;
+            font-weight: 700;
+            color: var(--crm-text);
+            line-height: 1.2;
+        }}
+        .crm-board-count {{
+            font-size: 0.72rem;
+            font-weight: 700;
+            color: var(--crm-chip-text);
+            background: var(--crm-chip-bg);
+            border-radius: 0.7rem;
+            padding: 0.05rem 0.45rem;
+            white-space: nowrap;
+        }}
+        .crm-board-desc {{
+            font-size: 0.68rem;
+            color: var(--crm-muted-2);
+            line-height: 1.25;
+            margin: 0.28rem 0 0.5rem 0;
+            min-height: 1.75rem;
+        }}
+        .crm-chip-sub {{
+            font-size: 0.63rem;
+            color: var(--crm-muted);
+            line-height: 1.2;
+        }}
+        .crm-phase {{
+            display: flex;
+            align-items: baseline;
+            flex-wrap: wrap;
+            gap: 0.55rem;
+            margin: 0.85rem 0 0.35rem 0;
+        }}
+        .crm-phase-name {{
+            font-size: 0.95rem;
+            font-weight: 700;
+            letter-spacing: 0.01em;
+            color: var(--crm-text);
+        }}
+        .crm-phase-desc {{
+            font-size: 0.7rem;
+            color: var(--crm-muted-2);
+        }}
+
         {SALESFORCE_STYLES.replace("{{", "{").replace("}}", "}")}
         </style>
         """,

@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import os
 from typing import Dict, List
+from src.services.db_host_guard import assert_host_allowed
 
 
 class CrmDbConfigError(RuntimeError):
@@ -47,7 +48,7 @@ def require_crm_db_connect_kwargs() -> Dict[str, object]:
     except ValueError as exc:
         raise CrmDbConfigError("CRM_DB_PORT must be an integer.") from exc
     return {
-        "host": str(os.environ["CRM_DB_HOST"]).strip(),
+        "host": assert_host_allowed(os.environ["CRM_DB_HOST"], "CRM_DB_HOST"),
         "port": port,
         "user": str(os.environ["CRM_DB_USER"]).strip(),
         "password": os.environ["CRM_DB_PASSWORD"],

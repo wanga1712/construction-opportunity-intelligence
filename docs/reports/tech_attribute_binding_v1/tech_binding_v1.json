@@ -1,0 +1,1259 @@
+{
+  "tech_rows_input": 200000,
+  "attribute_total": 72679,
+  "attribute_with_value": 18400,
+  "attribute_with_unit": 13867,
+  "attribute_with_material": 70933,
+  "attribute_relation_ambiguous": 1746,
+  "by_type": {
+    "THICKNESS": 15061,
+    "HEIGHT": 8696,
+    "VOLUME": 9623,
+    "LENGTH": 6183,
+    "DIAMETER": 7403,
+    "AREA": 10028,
+    "WEIGHT": 4433,
+    "APPLICATION_CLASS": 345,
+    "STRENGTH_CLASS": 4089,
+    "WIDTH": 6071,
+    "FIRE_HAZARD_CLASS": 747
+  },
+  "wrong_cross_material_bindings": 0,
+  "http_requests": 0,
+  "crm_writes": 0,
+  "queue_writes": 0,
+  "examples": {
+    "THICKNESS": [
+      {
+        "attribute_type": "THICKNESS",
+        "attribute_name": "толщина",
+        "value_raw": "толщина 2 мм",
+        "value_normalized": "2",
+        "unit": "MM",
+        "material_context": null,
+        "relation_status": "CANDIDATE",
+        "source_row": "| 'КМ2 (71, B2, Д2, T2, РПЛ), толщина 2 мм, вес 2950 | i i | | | 'КМ2 (71, B2, Д2, T2, РПЛ), толщина 2 мм, вес 2950 | i i |",
+        "context": "",
+        "detail_id": 1109083,
+        "procurement_id": 459603
+      },
+      {
+        "attribute_type": "THICKNESS",
+        "attribute_name": "толщина",
+        "value_raw": "толщина м2",
+        "value_normalized": "2",
+        "unit": "MM",
+        "material_context": "гипсокартонные гкл",
+        "relation_status": "CONFIRMED",
+        "source_row": "18.1 01.6.01.02-0006 Листы гипсокартонные ГКЛ, толщина м2 107 3,1886 124,46 396,85 | 18.1 01.6.01.02-0006 Листы гипсокартонные ГКЛ, толщина м2 107 3,1886 124,46 396,85 12,5 мм",
+        "context": "",
+        "detail_id": 1109065,
+        "procurement_id": 459603
+      },
+      {
+        "attribute_type": "THICKNESS",
+        "attribute_name": "толщиной",
+        "value_raw": "толщиной 5 мм",
+        "value_normalized": "5",
+        "unit": "MM",
+        "material_context": null,
+        "relation_status": "CANDIDATE",
+        "source_row": "м2 | Огнезащитное покрытие на основе минераловатных плит толщиной 5 мм | 31. | Огнезащитное покрытие на основе минераловатных плит толщиной 5 мм",
+        "context": "",
+        "detail_id": 1108699,
+        "procurement_id": 809
+      },
+      {
+        "attribute_type": "THICKNESS",
+        "attribute_name": "толщиной",
+        "value_raw": "толщиной 5 мм",
+        "value_normalized": "5",
+        "unit": "MM",
+        "material_context": null,
+        "relation_status": "CANDIDATE",
+        "source_row": "м2 | Огнезащитное покрытие на основе минераловатных плит толщиной 5 мм | 23. | Огнезащитное покрытие на основе минераловатных плит толщиной 5 мм",
+        "context": "",
+        "detail_id": 1108698,
+        "procurement_id": 809
+      },
+      {
+        "attribute_type": "THICKNESS",
+        "attribute_name": "толщиной",
+        "value_raw": "толщиной б=9 мм",
+        "value_normalized": "9",
+        "unit": "MM",
+        "material_context": "радиаторы",
+        "relation_status": "CONFIRMED",
+        "source_row": "Ведомость рабочих чертежей основного комплекта Общие указания: Отопление. 1. Система отопления однотрубная с нижней разводкой подающей/обратной магистрали Лист Наименование Примечание 2. Отопительные приборы биметалличес",
+        "context": "",
+        "detail_id": 1108685,
+        "procurement_id": 809
+      },
+      {
+        "attribute_type": "THICKNESS",
+        "attribute_name": "толщиной",
+        "value_raw": "толщиной б=9 мм",
+        "value_normalized": "9",
+        "unit": "MM",
+        "material_context": "радиаторы",
+        "relation_status": "CONFIRMED",
+        "source_row": "Ведомость рабочих чертежей основного комплекта Общие указания: Отопление. 1. Система отопления однотрубная с нижней разводкой подающей/обратной магистрали Лист Наименование Примечание 2. Отопительные приборы биметалличес",
+        "context": "",
+        "detail_id": 1108680,
+        "procurement_id": 809
+      }
+    ],
+    "HEIGHT": [
+      {
+        "attribute_type": "HEIGHT",
+        "attribute_name": "высоту",
+        "value_raw": null,
+        "value_normalized": null,
+        "unit": null,
+        "material_context": "профилактического",
+        "relation_status": "CONFIRMED",
+        "source_row": "Для обеспечения горячего водоснабжения на период профилактического отключения проектом предусматривается установка накопительных водонагревателей в помещениях пищеблока. Во всех производственных помещениях для мытья рук ",
+        "context": "",
+        "detail_id": 1109030,
+        "procurement_id": 809
+      },
+      {
+        "attribute_type": "HEIGHT",
+        "attribute_name": "высоту",
+        "value_raw": null,
+        "value_normalized": null,
+        "unit": null,
+        "material_context": "профилактического",
+        "relation_status": "CONFIRMED",
+        "source_row": "Для обеспечения горячего водоснабжения на период профилактического отключения проектом предусматривается установка накопительных водонагревателей в помещениях пищеблока. Во всех производственных помещениях для мытья рук ",
+        "context": "",
+        "detail_id": 1108991,
+        "procurement_id": 809
+      },
+      {
+        "attribute_type": "HEIGHT",
+        "attribute_name": "высоту",
+        "value_raw": null,
+        "value_normalized": null,
+        "unit": null,
+        "material_context": "профилактического",
+        "relation_status": "CONFIRMED",
+        "source_row": "Для обеспечения горячего водоснабжения на период профилактического отключения проектом предусматривается установка накопительных водонагревателей в помещениях пищеблока. Во всех производственных помещениях для мытья рук ",
+        "context": "",
+        "detail_id": 1108985,
+        "procurement_id": 809
+      },
+      {
+        "attribute_type": "HEIGHT",
+        "attribute_name": "высоту",
+        "value_raw": null,
+        "value_normalized": null,
+        "unit": null,
+        "material_context": "профилактического",
+        "relation_status": "CONFIRMED",
+        "source_row": "Для обеспечения горячего водоснабжения на период профилактического отключения проектом предусматривается установка накопительных водонагревателей в помещениях пищеблока. Во всех производственных помещениях для мытья рук ",
+        "context": "",
+        "detail_id": 1108975,
+        "procurement_id": 809
+      },
+      {
+        "attribute_type": "HEIGHT",
+        "attribute_name": "высоту",
+        "value_raw": null,
+        "value_normalized": null,
+        "unit": null,
+        "material_context": "профилактического",
+        "relation_status": "CONFIRMED",
+        "source_row": "Для обеспечения горячего водоснабжения на период профилактического отключения проектом предусматривается установка накопительных водонагревателей в помещениях пищеблока. Во всех производственных помещениях для мытья рук ",
+        "context": "",
+        "detail_id": 1108965,
+        "procurement_id": 809
+      },
+      {
+        "attribute_type": "HEIGHT",
+        "attribute_name": "высоту",
+        "value_raw": null,
+        "value_normalized": null,
+        "unit": null,
+        "material_context": "профилактического",
+        "relation_status": "CONFIRMED",
+        "source_row": "Для обеспечения горячего водоснабжения на период профилактического отключения проектом предусматривается установка накопительных водонагревателей в помещениях пищеблока. Во всех производственных помещениях для мытья рук ",
+        "context": "",
+        "detail_id": 1108963,
+        "procurement_id": 809
+      }
+    ],
+    "VOLUME": [
+      {
+        "attribute_type": "VOLUME",
+        "attribute_name": "объемно",
+        "value_raw": null,
+        "value_normalized": null,
+        "unit": null,
+        "material_context": "блоком",
+        "relation_status": "CONFIRMED",
+        "source_row": "Пищеблок Организация технологического процесса Помещения школьной столовой размещаются на 1-м этаже здания в осях 1-8, А-В, самостоятельным блоком помещений. В состав помещений пищеблока входят: горячий цех, холодный цех",
+        "context": "",
+        "detail_id": 1109029,
+        "procurement_id": 809
+      },
+      {
+        "attribute_type": "VOLUME",
+        "attribute_name": "объемно",
+        "value_raw": null,
+        "value_normalized": null,
+        "unit": null,
+        "material_context": "блоком",
+        "relation_status": "CONFIRMED",
+        "source_row": "Пищеблок Организация технологического процесса Помещения школьной столовой размещаются на 1-м этаже здания в осях 1-8, А-В, самостоятельным блоком помещений. В состав помещений пищеблока входят: горячий цех, холодный цех",
+        "context": "",
+        "detail_id": 1109020,
+        "procurement_id": 809
+      },
+      {
+        "attribute_type": "VOLUME",
+        "attribute_name": "объемно",
+        "value_raw": null,
+        "value_normalized": null,
+        "unit": null,
+        "material_context": "блоком",
+        "relation_status": "CONFIRMED",
+        "source_row": "Пищеблок Организация технологического процесса Помещения школьной столовой размещаются на 1-м этаже здания в осях 1-8, А-В, самостоятельным блоком помещений. В состав помещений пищеблока входят: горячий цех, холодный цех",
+        "context": "",
+        "detail_id": 1108994,
+        "procurement_id": 809
+      },
+      {
+        "attribute_type": "VOLUME",
+        "attribute_name": "объемно",
+        "value_raw": null,
+        "value_normalized": null,
+        "unit": null,
+        "material_context": "блоком",
+        "relation_status": "CONFIRMED",
+        "source_row": "Пищеблок Организация технологического процесса Помещения школьной столовой размещаются на 1-м этаже здания в осях 1-8, А-В, самостоятельным блоком помещений. В состав помещений пищеблока входят: горячий цех, холодный цех",
+        "context": "",
+        "detail_id": 1108988,
+        "procurement_id": 809
+      },
+      {
+        "attribute_type": "VOLUME",
+        "attribute_name": "объемно",
+        "value_raw": null,
+        "value_normalized": null,
+        "unit": null,
+        "material_context": "блоком",
+        "relation_status": "CONFIRMED",
+        "source_row": "Пищеблок Организация технологического процесса Помещения школьной столовой размещаются на 1-м этаже здания в осях 1-8, А-В, самостоятельным блоком помещений. В состав помещений пищеблока входят: горячий цех, холодный цех",
+        "context": "",
+        "detail_id": 1108978,
+        "procurement_id": 809
+      },
+      {
+        "attribute_type": "VOLUME",
+        "attribute_name": "объемно",
+        "value_raw": null,
+        "value_normalized": null,
+        "unit": null,
+        "material_context": "блоком",
+        "relation_status": "CONFIRMED",
+        "source_row": "Пищеблок Организация технологического процесса Помещения школьной столовой размещаются на 1-м этаже здания в осях 1-8, А-В, самостоятельным блоком помещений. В состав помещений пищеблока входят: горячий цех, холодный цех",
+        "context": "",
+        "detail_id": 1108969,
+        "procurement_id": 809
+      }
+    ],
+    "LENGTH": [
+      {
+        "attribute_type": "LENGTH",
+        "attribute_name": "длина",
+        "value_raw": null,
+        "value_normalized": null,
+        "unit": null,
+        "material_context": "кабеля",
+        "relation_status": "CONFIRMED",
+        "source_row": "17 Корпус 2 Корпус 3 Корпус 1 жатэ й-3 Условные обозначения ТВ2 -купольная видеокамера внутреннего исполнения №2, 12В. жатэ жатэ ТВ1 -стандартная видеокамера уличная в кожухе№1, 12В. -стандартная видеокамера внутреннего ",
+        "context": "",
+        "detail_id": 1108934,
+        "procurement_id": 809
+      },
+      {
+        "attribute_type": "LENGTH",
+        "attribute_name": "длина",
+        "value_raw": null,
+        "value_normalized": null,
+        "unit": null,
+        "material_context": "шкаф",
+        "relation_status": "CONFIRMED",
+        "source_row": "16 Корпус 2 Корпус 3 Корпус 1 жатэ й-3 Шкаф 9U жатэ жатэ первичные часы й-2 й-3 UPS 650VA 116 107 104 DIN-рейка )9.0( )9.0( )9.0( )2.0( (25.0) (38.0) (10.0) жатэ жатэ жатэ й-2 й-2 й-1 ст.4 )0.7( жатэ жатэ шкаф навесной 9",
+        "context": "",
+        "detail_id": 1108931,
+        "procurement_id": 809
+      },
+      {
+        "attribute_type": "LENGTH",
+        "attribute_name": "длина",
+        "value_raw": null,
+        "value_normalized": null,
+        "unit": null,
+        "material_context": "шкаф",
+        "relation_status": "CONFIRMED",
+        "source_row": "15 СХЕМА ТЕЛЕФОНИЗАЦИИ СХЕМА ДОСТУПА В ИНТЕРНЕТ Корпус 2 Корпус 3 Корпус 1 Корпус 2 Корпус 3 Корпус 1 Шкаф 15U жатэ жатэ ялворК 15U Патч-панель 48 портов й-3 й-3 14U 13U Органайзер кабельный SPLyionsEktem 2 5 2 7 2 9 3 1",
+        "context": "",
+        "detail_id": 1108928,
+        "procurement_id": 809
+      },
+      {
+        "attribute_type": "LENGTH",
+        "attribute_name": "длина",
+        "value_raw": null,
+        "value_normalized": null,
+        "unit": null,
+        "material_context": "кабель-канал",
+        "relation_status": "CONFIRMED",
+        "source_row": "5 | 25х16 | Кабель-канал из самозатухающего пластика, длина 2м | Кабель-канал из самозатухающего пластика, длина 2м",
+        "context": "",
+        "detail_id": 1108803,
+        "procurement_id": 809
+      },
+      {
+        "attribute_type": "LENGTH",
+        "attribute_name": "длина",
+        "value_raw": null,
+        "value_normalized": null,
+        "unit": null,
+        "material_context": "кабель-канал",
+        "relation_status": "CONFIRMED",
+        "source_row": "3 | 25х16 | Кабель-канал из самозатухающего пластика, длина 2м | Кабель-канал из самозатухающего пластика, длина 2м",
+        "context": "",
+        "detail_id": 1108800,
+        "procurement_id": 809
+      },
+      {
+        "attribute_type": "LENGTH",
+        "attribute_name": "длина",
+        "value_raw": null,
+        "value_normalized": null,
+        "unit": null,
+        "material_context": "кабель-канал",
+        "relation_status": "CONFIRMED",
+        "source_row": "6 | 60х40 | Кабель-канал из самозатухающего пластика, длина 2м | Кабель-канал из самозатухающего пластика, длина 2м",
+        "context": "",
+        "detail_id": 1108797,
+        "procurement_id": 809
+      }
+    ],
+    "DIAMETER": [
+      {
+        "attribute_type": "DIAMETER",
+        "attribute_name": "диаметром",
+        "value_raw": null,
+        "value_normalized": null,
+        "unit": null,
+        "material_context": "кабели",
+        "relation_status": "CONFIRMED",
+        "source_row": "10 подвесные потолки кабели прокладываются в кабель-канале из самозатухающего пластика. Между этажами кабели прокладываются в стояке из жестких гладких ПВХ-труб диаметром 50мм. Кабельные подводки к наружным камерам видео",
+        "context": "",
+        "detail_id": 1108862,
+        "procurement_id": 809
+      },
+      {
+        "attribute_type": "DIAMETER",
+        "attribute_name": "диаметром",
+        "value_raw": null,
+        "value_normalized": null,
+        "unit": null,
+        "material_context": "кабели",
+        "relation_status": "CONFIRMED",
+        "source_row": "10 подвесные потолки кабели прокладываются в кабель-канале из самозатухающего пластика. Между этажами кабели прокладываются в стояке из жестких гладких ПВХ-труб диаметром 50мм. Кабельные подводки к наружным камерам видео",
+        "context": "",
+        "detail_id": 1108837,
+        "procurement_id": 809
+      },
+      {
+        "attribute_type": "DIAMETER",
+        "attribute_name": "диаметром",
+        "value_raw": null,
+        "value_normalized": null,
+        "unit": null,
+        "material_context": "кабели",
+        "relation_status": "CONFIRMED",
+        "source_row": "10 подвесные потолки кабели прокладываются в кабель-канале из самозатухающего пластика. Между этажами кабели прокладываются в стояке из жестких гладких ПВХ-труб диаметром 50мм. Кабельные подводки к наружным камерам видео",
+        "context": "",
+        "detail_id": 1108824,
+        "procurement_id": 809
+      },
+      {
+        "attribute_type": "DIAMETER",
+        "attribute_name": "диаметром",
+        "value_raw": null,
+        "value_normalized": null,
+        "unit": null,
+        "material_context": "труба",
+        "relation_status": "CONFIRMED",
+        "source_row": "м | Труба гибкая гофрированная из самозатухающего ПВХ-пластиката с внешним диаметром 16мм | Труба гибкая гофрированная из самозатухающего ПВХ-пластиката с внешним диаметром 16мм",
+        "context": "",
+        "detail_id": 1108802,
+        "procurement_id": 809
+      },
+      {
+        "attribute_type": "DIAMETER",
+        "attribute_name": "диаметром",
+        "value_raw": null,
+        "value_normalized": null,
+        "unit": null,
+        "material_context": "труба",
+        "relation_status": "CONFIRMED",
+        "source_row": "м | Труба гибкая гофрированная из самозатухающего ПВХ-пластиката с внешним диаметром 16мм | Труба гибкая гофрированная из самозатухающего ПВХ-пластиката с внешним диаметром 16мм",
+        "context": "",
+        "detail_id": 1108799,
+        "procurement_id": 809
+      },
+      {
+        "attribute_type": "DIAMETER",
+        "attribute_name": "диаметром",
+        "value_raw": null,
+        "value_normalized": null,
+        "unit": null,
+        "material_context": "труба",
+        "relation_status": "CONFIRMED",
+        "source_row": "м | Труба гибкая гофрированная из самозатухающего ПВХ-пластиката с внешним диаметром 16мм | Труба гибкая гофрированная из самозатухающего ПВХ-пластиката с внешним диаметром 16мм",
+        "context": "",
+        "detail_id": 1108793,
+        "procurement_id": 809
+      }
+    ],
+    "AREA": [
+      {
+        "attribute_type": "AREA",
+        "attribute_name": "площадь",
+        "value_raw": null,
+        "value_normalized": null,
+        "unit": null,
+        "material_context": "трубопроводов",
+        "relation_status": "CONFIRMED",
+        "source_row": "Экспликация помещений План первого этажа. Система водоснабжения. Номер Кат. помеще- Наименование Площадь м2 помеще- ния ния АРН 600х300 1 Душевая 2.30 600х300 2 Уборная для персонала пищеблока 3.50 CG 160 CG 160 CG 160 6",
+        "context": "",
+        "detail_id": 1108724,
+        "procurement_id": 809
+      },
+      {
+        "attribute_type": "AREA",
+        "attribute_name": "площадь",
+        "value_raw": null,
+        "value_normalized": null,
+        "unit": null,
+        "material_context": "трубопроводов",
+        "relation_status": "CONFIRMED",
+        "source_row": "Экспликация помещений План первого этажа. Система водоснабжения. Номер Кат. помеще- Наименование Площадь м2 помеще- ния ния 1 Душевая 2.30 10 12 12 12 12 12 14 14 2 Уборная для персонала пищеблока 3.50 Г 3 Гардеробная 8.",
+        "context": "",
+        "detail_id": 1108723,
+        "procurement_id": 809
+      },
+      {
+        "attribute_type": "AREA",
+        "attribute_name": "площадь",
+        "value_raw": null,
+        "value_normalized": null,
+        "unit": null,
+        "material_context": "трубопроводов",
+        "relation_status": "CONFIRMED",
+        "source_row": "Экспликация помещений План первого этажа. Система водоснабжения. Номер Кат. помеще- Наименование Площадь м2 помеще- ния ния АРН 600х300 1 Душевая 2.30 600х300 2 Уборная для персонала пищеблока 3.50 CG 160 CG 160 CG 160 6",
+        "context": "",
+        "detail_id": 1108721,
+        "procurement_id": 809
+      },
+      {
+        "attribute_type": "AREA",
+        "attribute_name": "площадь",
+        "value_raw": null,
+        "value_normalized": null,
+        "unit": null,
+        "material_context": "трубопроводов",
+        "relation_status": "CONFIRMED",
+        "source_row": "Экспликация помещений План первого этажа. Система водоснабжения. Номер Кат. помеще- Наименование Площадь м2 помеще- ния ния 1 Душевая 2.30 10 12 12 12 12 12 14 14 2 Уборная для персонала пищеблока 3.50 Г 3 Гардеробная 8.",
+        "context": "",
+        "detail_id": 1108720,
+        "procurement_id": 809
+      },
+      {
+        "attribute_type": "AREA",
+        "attribute_name": "площадь",
+        "value_raw": null,
+        "value_normalized": null,
+        "unit": null,
+        "material_context": "трубопроводов",
+        "relation_status": "CONFIRMED",
+        "source_row": "Экспликация помещений План первого этажа. Система водоснабжения. Номер Кат. помеще- Наименование Площадь м2 помеще- ния ния АРН 600х300 1 Душевая 2.30 600х300 2 Уборная для персонала пищеблока 3.50 CG 160 CG 160 CG 160 6",
+        "context": "",
+        "detail_id": 1108719,
+        "procurement_id": 809
+      },
+      {
+        "attribute_type": "AREA",
+        "attribute_name": "площадь",
+        "value_raw": null,
+        "value_normalized": null,
+        "unit": null,
+        "material_context": "трубопроводов",
+        "relation_status": "CONFIRMED",
+        "source_row": "Экспликация помещений План первого этажа. Система водоснабжения. Номер Кат. помеще- Наименование Площадь м2 помеще- ния ния 1 Душевая 2.30 10 12 12 12 12 12 14 14 2 Уборная для персонала пищеблока 3.50 Г 3 Гардеробная 8.",
+        "context": "",
+        "detail_id": 1108718,
+        "procurement_id": 809
+      }
+    ],
+    "WEIGHT": [
+      {
+        "attribute_type": "WEIGHT",
+        "attribute_name": "массовых",
+        "value_raw": null,
+        "value_normalized": null,
+        "unit": null,
+        "material_context": "проводник",
+        "relation_status": "CONFIRMED",
+        "source_row": "СХЕМА СИСТЕМЫ УРАВНИВАНИЯ ПОТЕНЦИАЛОВ Душевой поддон Металлические столы, стеллажи в электрооборудованных помещениях ПуГВ 1х4мм2 Кухонное оборудование приводы вентустановок Децентрализованные Металлический корпус вентсис",
+        "context": "",
+        "detail_id": 1108235,
+        "procurement_id": 809
+      },
+      {
+        "attribute_type": "WEIGHT",
+        "attribute_name": "массовых",
+        "value_raw": null,
+        "value_normalized": null,
+        "unit": null,
+        "material_context": "проводник",
+        "relation_status": "CONFIRMED",
+        "source_row": "СХЕМА СИСТЕМЫ УРАВНИВАНИЯ ПОТЕНЦИАЛОВ Душевой поддон Металлические столы, стеллажи в электрооборудованных помещениях ПуГВ 1х4мм2 Кухонное оборудование приводы вентустановок Децентрализованные Металлический корпус вентсис",
+        "context": "",
+        "detail_id": 1108224,
+        "procurement_id": 809
+      },
+      {
+        "attribute_type": "WEIGHT",
+        "attribute_name": "массовых",
+        "value_raw": null,
+        "value_normalized": null,
+        "unit": null,
+        "material_context": "проводник",
+        "relation_status": "CONFIRMED",
+        "source_row": "СХЕМА СИСТЕМЫ УРАВНИВАНИЯ ПОТЕНЦИАЛОВ Душевой поддон Металлические столы, стеллажи в электрооборудованных помещениях ПуГВ 1х4мм2 Кухонное оборудование приводы вентустановок Децентрализованные Металлический корпус вентсис",
+        "context": "",
+        "detail_id": 1108137,
+        "procurement_id": 809
+      },
+      {
+        "attribute_type": "WEIGHT",
+        "attribute_name": "массовых",
+        "value_raw": null,
+        "value_normalized": null,
+        "unit": null,
+        "material_context": "проводник",
+        "relation_status": "CONFIRMED",
+        "source_row": "СХЕМА СИСТЕМЫ УРАВНИВАНИЯ ПОТЕНЦИАЛОВ Душевой поддон Металлические столы, стеллажи в электрооборудованных помещениях ПуГВ 1х4мм2 Кухонное оборудование приводы вентустановок Децентрализованные Металлический корпус вентсис",
+        "context": "",
+        "detail_id": 1108008,
+        "procurement_id": 809
+      },
+      {
+        "attribute_type": "WEIGHT",
+        "attribute_name": "массовых",
+        "value_raw": null,
+        "value_normalized": null,
+        "unit": null,
+        "material_context": "проводник",
+        "relation_status": "CONFIRMED",
+        "source_row": "СХЕМА СИСТЕМЫ УРАВНИВАНИЯ ПОТЕНЦИАЛОВ Душевой поддон Металлические столы, стеллажи в электрооборудованных помещениях ПуГВ 1х4мм2 Кухонное оборудование приводы вентустановок Децентрализованные Металлический корпус вентсис",
+        "context": "",
+        "detail_id": 1107985,
+        "procurement_id": 809
+      },
+      {
+        "attribute_type": "WEIGHT",
+        "attribute_name": "масса",
+        "value_raw": null,
+        "value_normalized": null,
+        "unit": null,
+        "material_context": "проводятся",
+        "relation_status": "CONFIRMED",
+        "source_row": "Экспликация помещений ПЛАН ПЕРВОГО ЭТАЖА ПОСЛЕ КАПИТАЛЬНОГО РЕМОНТА В ОСЯХ 1-11/А-Г Номер ещемоп Площадь помеще Наименование .таК яин м2 ния 1 Душевая 2.30 2 Уборная для персонала пищеблока 3.50 ОК-4 ОК-4 ОК-5 ОК-5 Г 3 Г",
+        "context": "",
+        "detail_id": 1107930,
+        "procurement_id": 809
+      }
+    ],
+    "APPLICATION_CLASS": [
+      {
+        "attribute_type": "APPLICATION_CLASS",
+        "attribute_name": "класс износостойкости",
+        "value_raw": "класс овощей (05",
+        "value_normalized": "05",
+        "unit": null,
+        "material_context": "керамогранит",
+        "relation_status": "CONFIRMED",
+        "source_row": "Экспликация полов (начало) Экспликация полов (окончание) Данные элементов пола Данные элементов пола Номер Тип Схема пола или тип Площадь, Номер Тип Схема пола или тип Площадь, (наименование, толщина, (наименование, толщ",
+        "context": "",
+        "detail_id": 1107933,
+        "procurement_id": 809
+      },
+      {
+        "attribute_type": "APPLICATION_CLASS",
+        "attribute_name": "класс износостойкости",
+        "value_raw": "класс овощей (05",
+        "value_normalized": "05",
+        "unit": null,
+        "material_context": "керамогранит",
+        "relation_status": "CONFIRMED",
+        "source_row": "Экспликация полов (начало) Экспликация полов (окончание) Данные элементов пола Данные элементов пола Номер Тип Схема пола или тип Площадь, Номер Тип Схема пола или тип Площадь, (наименование, толщина, (наименование, толщ",
+        "context": "",
+        "detail_id": 1107931,
+        "procurement_id": 809
+      },
+      {
+        "attribute_type": "APPLICATION_CLASS",
+        "attribute_name": "класс износостойкости",
+        "value_raw": null,
+        "value_normalized": null,
+        "unit": null,
+        "material_context": "керамогранит",
+        "relation_status": "CONFIRMED",
+        "source_row": "- Противоскользящий, матовый керамогранит (высокий класс износостойкости, высокий класс антискольжения, низкое водопоглащение) - 10 мм - Клей из сухих смесей Ceresit СМ 14 или аналог -10мм - Огрунтование поверхности унив",
+        "context": "",
+        "detail_id": 1107915,
+        "procurement_id": 809
+      },
+      {
+        "attribute_type": "APPLICATION_CLASS",
+        "attribute_name": "класс износостойкости",
+        "value_raw": null,
+        "value_normalized": null,
+        "unit": null,
+        "material_context": "керамогранит",
+        "relation_status": "CONFIRMED",
+        "source_row": "- Противоскользящий, матовый керамогранит (высокий класс износостойкости, высокий класс антискольжения, низкое водопоглащение) - 10 мм - Клей из сухих смесей Ceresit СМ 14 или аналог -10мм - Огрунтование поверхности унив",
+        "context": "",
+        "detail_id": 1107914,
+        "procurement_id": 809
+      },
+      {
+        "attribute_type": "APPLICATION_CLASS",
+        "attribute_name": "класс износостойкости",
+        "value_raw": "класс овощей (05",
+        "value_normalized": "05",
+        "unit": null,
+        "material_context": "керамогранит",
+        "relation_status": "CONFIRMED",
+        "source_row": "Экспликация полов (начало) Экспликация полов (окончание) Данные элементов пола Данные элементов пола Номер Тип Схема пола или тип Площадь, Номер Тип Схема пола или тип Площадь, (наименование, толщина, (наименование, толщ",
+        "context": "",
+        "detail_id": 1107913,
+        "procurement_id": 809
+      },
+      {
+        "attribute_type": "APPLICATION_CLASS",
+        "attribute_name": "класс износостойкости",
+        "value_raw": null,
+        "value_normalized": null,
+        "unit": null,
+        "material_context": "керамогранит",
+        "relation_status": "CONFIRMED",
+        "source_row": "- Противоскользящий, матовый керамогранит (высокий класс износостойкости, высокий класс антискольжения, низкое водопоглащение) - 10 мм - Клей из сухих смесей Ceresit СМ 14 или аналог -10мм - Огрунтование поверхности унив",
+        "context": "",
+        "detail_id": 1107906,
+        "procurement_id": 809
+      }
+    ],
+    "STRENGTH_CLASS": [
+      {
+        "attribute_type": "STRENGTH_CLASS",
+        "attribute_name": "бетонная подготовка b7.5",
+        "value_raw": "бетонная подготовка b7.5",
+        "value_normalized": "B7.5",
+        "unit": null,
+        "material_context": "бетонная",
+        "relation_status": "CONFIRMED",
+        "source_row": "Ведомость деталей к схеме Схема крыльца Марка Кол. Масса Обозначение Наименование Примечание армирования крыльца (начало) поз. шт. ед.кг 1 Поз. Эскиз Крыльцо шт. Существующее здание 1 ∅12А500С, ГОСТ34028-2016, L=2530мм 2",
+        "context": "",
+        "detail_id": 1107923,
+        "procurement_id": 809
+      },
+      {
+        "attribute_type": "STRENGTH_CLASS",
+        "attribute_name": "бетонная подготовка b7.5",
+        "value_raw": "бетонная подготовка b7.5",
+        "value_normalized": "B7.5",
+        "unit": null,
+        "material_context": "бетонная",
+        "relation_status": "CONFIRMED",
+        "source_row": "Ведомость деталей к схеме Схема крыльца Марка Кол. Масса Обозначение Наименование Примечание армирования крыльца (начало) поз. шт. ед.кг 1 Поз. Эскиз Крыльцо шт. Существующее здание 1 ∅12А500С, ГОСТ34028-2016, L=2530мм 2",
+        "context": "",
+        "detail_id": 1107911,
+        "procurement_id": 809
+      },
+      {
+        "attribute_type": "STRENGTH_CLASS",
+        "attribute_name": "бетонная подготовка b7.5",
+        "value_raw": "бетонная подготовка b7.5",
+        "value_normalized": "B7.5",
+        "unit": null,
+        "material_context": "бетонная",
+        "relation_status": "CONFIRMED",
+        "source_row": "Ведомость деталей к схеме Схема крыльца Марка Кол. Масса Обозначение Наименование Примечание армирования крыльца (начало) поз. шт. ед.кг 1 Поз. Эскиз Крыльцо шт. Существующее здание 1 ∅12А500С, ГОСТ34028-2016, L=2530мм 2",
+        "context": "",
+        "detail_id": 1107903,
+        "procurement_id": 809
+      },
+      {
+        "attribute_type": "STRENGTH_CLASS",
+        "attribute_name": "бетонная подготовка b7.5",
+        "value_raw": "бетонная подготовка b7.5",
+        "value_normalized": "B7.5",
+        "unit": null,
+        "material_context": "бетонная",
+        "relation_status": "CONFIRMED",
+        "source_row": "Ведомость деталей к схеме Схема крыльца Марка Кол. Масса Обозначение Наименование Примечание армирования крыльца (начало) поз. шт. ед.кг 1 Поз. Эскиз Крыльцо шт. Существующее здание 1 ∅12А500С, ГОСТ34028-2016, L=2530мм 2",
+        "context": "",
+        "detail_id": 1107901,
+        "procurement_id": 809
+      },
+      {
+        "attribute_type": "STRENGTH_CLASS",
+        "attribute_name": "бетонная подготовка b7.5",
+        "value_raw": "бетонная подготовка b7.5",
+        "value_normalized": "B7.5",
+        "unit": null,
+        "material_context": "бетонная",
+        "relation_status": "CONFIRMED",
+        "source_row": "Ведомость деталей к схеме Схема крыльца Марка Кол. Масса Обозначение Наименование Примечание армирования крыльца (начало) поз. шт. ед.кг 1 Поз. Эскиз Крыльцо шт. Существующее здание 1 ∅12А500С, ГОСТ34028-2016, L=2530мм 2",
+        "context": "",
+        "detail_id": 1107756,
+        "procurement_id": 809
+      },
+      {
+        "attribute_type": "STRENGTH_CLASS",
+        "attribute_name": "бетонная подготовка b7.5",
+        "value_raw": "бетонная подготовка b7.5",
+        "value_normalized": "B7.5",
+        "unit": null,
+        "material_context": "бетонная",
+        "relation_status": "CONFIRMED",
+        "source_row": "Ведомость деталей к схеме Схема крыльца Марка Кол. Масса Обозначение Наименование Примечание армирования крыльца (начало) поз. шт. ед.кг 1 Поз. Эскиз Крыльцо шт. Существующее здание 1 ∅12А500С, ГОСТ34028-2016, L=2530мм 2",
+        "context": "",
+        "detail_id": 1107749,
+        "procurement_id": 809
+      }
+    ],
+    "WIDTH": [
+      {
+        "attribute_type": "WIDTH",
+        "attribute_name": "ширина",
+        "value_raw": null,
+        "value_normalized": null,
+        "unit": null,
+        "material_context": "анкер",
+        "relation_status": "CONFIRMED",
+        "source_row": "Спецификация элементов козырька К-1 ПЛАН КОЗЫРЬКА К-1 СХЕМА КОЗЫРЬКА К-1 Масса Приме- Ст-1 Поз. Обозначение Наименование Кол. ед.,кг. чание Ст-1 Козырек К-1 1 шт 1500 Фм-1 Ферма металлическая Фм-1 3 шт 5443 -0.360 0.000 ",
+        "context": "",
+        "detail_id": 1107895,
+        "procurement_id": 809
+      },
+      {
+        "attribute_type": "WIDTH",
+        "attribute_name": "ширину",
+        "value_raw": null,
+        "value_normalized": null,
+        "unit": null,
+        "material_context": "блоки",
+        "relation_status": "CONFIRMED",
+        "source_row": "Спецификация элементов заполнения дверных проёмов ДСН-1* ДСН-2 05 1. Данный лист см. совместно с л. 7. 2. Дверные блоки замаркированы на плане этажа на л. 7. 054 Масса Приме- 05 3. Перед заказом дверных блоков уточнить р",
+        "context": "",
+        "detail_id": 1107881,
+        "procurement_id": 809
+      },
+      {
+        "attribute_type": "WIDTH",
+        "attribute_name": "ширину",
+        "value_raw": null,
+        "value_normalized": null,
+        "unit": null,
+        "material_context": "блоки",
+        "relation_status": "CONFIRMED",
+        "source_row": "Спецификация элементов заполнения дверных проёмов ДСН-1* ДСН-2 05 1. Данный лист см. совместно с л. 7. 2. Дверные блоки замаркированы на плане этажа на л. 7. 054 Масса Приме- 05 3. Перед заказом дверных блоков уточнить р",
+        "context": "",
+        "detail_id": 1107809,
+        "procurement_id": 809
+      },
+      {
+        "attribute_type": "WIDTH",
+        "attribute_name": "ширину",
+        "value_raw": null,
+        "value_normalized": null,
+        "unit": null,
+        "material_context": "блоки",
+        "relation_status": "CONFIRMED",
+        "source_row": "Спецификация элементов заполнения дверных проёмов ДСН-1* ДСН-2 05 1. Данный лист см. совместно с л. 7. 2. Дверные блоки замаркированы на плане этажа на л. 7. 054 Масса Приме- 05 3. Перед заказом дверных блоков уточнить р",
+        "context": "",
+        "detail_id": 1107786,
+        "procurement_id": 809
+      },
+      {
+        "attribute_type": "WIDTH",
+        "attribute_name": "ширину",
+        "value_raw": null,
+        "value_normalized": null,
+        "unit": null,
+        "material_context": "блоки",
+        "relation_status": "CONFIRMED",
+        "source_row": "Спецификация элементов заполнения дверных проёмов ДСН-1* ДСН-2 05 1. Данный лист см. совместно с л. 7. 2. Дверные блоки замаркированы на плане этажа на л. 7. 054 Масса Приме- 05 3. Перед заказом дверных блоков уточнить р",
+        "context": "",
+        "detail_id": 1107783,
+        "procurement_id": 809
+      },
+      {
+        "attribute_type": "WIDTH",
+        "attribute_name": "ширину",
+        "value_raw": null,
+        "value_normalized": null,
+        "unit": null,
+        "material_context": "блоки",
+        "relation_status": "CONFIRMED",
+        "source_row": "Спецификация элементов заполнения дверных проёмов ДСН-1* ДСН-2 05 1. Данный лист см. совместно с л. 7. 2. Дверные блоки замаркированы на плане этажа на л. 7. 054 Масса Приме- 05 3. Перед заказом дверных блоков уточнить р",
+        "context": "",
+        "detail_id": 1107781,
+        "procurement_id": 809
+      }
+    ],
+    "FIRE_HAZARD_CLASS": [
+      {
+        "attribute_type": "FIRE_HAZARD_CLASS",
+        "attribute_name": "класс пожарной опасности",
+        "value_raw": "км2",
+        "value_normalized": "KM2",
+        "unit": null,
+        "material_context": "линолеум пвх",
+        "relation_status": "CONFIRMED",
+        "source_row": "Линолеум ПВХ на подоснове из стеклохолста для транспортных средств, класс пожарной опасности КМ2 (Г1, В2, Д2, Т2, РП1), толщина защитного слоя 0,9 мм, толщина общая 2 мм, вес 1200 г/м2 | Линолеум ПВХ на подоснове из стек",
+        "context": "",
+        "detail_id": 1106887,
+        "procurement_id": 809
+      },
+      {
+        "attribute_type": "FIRE_HAZARD_CLASS",
+        "attribute_name": "класс пожарной опасности",
+        "value_raw": "км2",
+        "value_normalized": "KM2",
+        "unit": null,
+        "material_context": "линолеум пвх",
+        "relation_status": "CONFIRMED",
+        "source_row": "74 ФСБЦ-01.6.03.04-0043 Линолеум ПВХ на подоснове из стеклохолста для транспортных м2 11,322 1 11,322 663,27 1,2 795,92 9 011,41 средств, класс пожарной опасности КМ2 (Г1, В2, Д2, Т2, РП1), толщина защитного слоя 0,9 мм,",
+        "context": "",
+        "detail_id": 1106885,
+        "procurement_id": 809
+      },
+      {
+        "attribute_type": "FIRE_HAZARD_CLASS",
+        "attribute_name": "класс пожарной опасности",
+        "value_raw": "км1",
+        "value_normalized": "KM1",
+        "unit": null,
+        "material_context": "панели",
+        "relation_status": "CONFIRMED",
+        "source_row": "Панели потолочные акустические из минерального волокна в комплекте с подвесной системой из оцинкованной стали, твердые, с кромкой ступенью, класс пожарной опасности КМ1, класс звукопоглощения А-В, толщина 18-20 мм | Пане",
+        "context": "",
+        "detail_id": 1106818,
+        "procurement_id": 809
+      },
+      {
+        "attribute_type": "FIRE_HAZARD_CLASS",
+        "attribute_name": "класс пожарной опасности",
+        "value_raw": "км0",
+        "value_normalized": "KM0",
+        "unit": null,
+        "material_context": "панели",
+        "relation_status": "CONFIRMED",
+        "source_row": "Панели потолочные акустические из минерального волокна в комплекте с подвесной системой из оцинкованной стали, твердые, с прямой кромкой, класс пожарной опасности КМ0, класс звукопоглощения C-D, толщина 15-17 мм | Панели",
+        "context": "",
+        "detail_id": 1106817,
+        "procurement_id": 809
+      },
+      {
+        "attribute_type": "FIRE_HAZARD_CLASS",
+        "attribute_name": "класс пожарной опасности",
+        "value_raw": "км2",
+        "value_normalized": "KM2",
+        "unit": null,
+        "material_context": "линолеум пвх",
+        "relation_status": "CONFIRMED",
+        "source_row": "Линолеум ПВХ на подоснове из стеклохолста для транспортных средств, класс пожарной опасности КМ2 (Г1, В2, Д2, Т2, РП1), толщина защитного слоя 0,9 мм, толщина общая 2 мм, вес 1200 г/м2 | Линолеум ПВХ на подоснове из стек",
+        "context": "",
+        "detail_id": 1106816,
+        "procurement_id": 809
+      },
+      {
+        "attribute_type": "FIRE_HAZARD_CLASS",
+        "attribute_name": "класс пожарной опасности",
+        "value_raw": "км1",
+        "value_normalized": "KM1",
+        "unit": null,
+        "material_context": "панели",
+        "relation_status": "CONFIRMED",
+        "source_row": "121 ФСБЦ-01.6.04.01-0035 Панели потолочные акустические из минерального волокна в м2 307,455 1 307,455 2 295,26 1,75 4 016,71 1 234 957,57 комплекте с подвесной системой из оцинкованной стали, твердые, с кромкой ступенью",
+        "context": "",
+        "detail_id": 1106790,
+        "procurement_id": 809
+      }
+    ]
+  },
+  "category_review_top50": [
+    {
+      "phrase": "сталь арматурн",
+      "procs": 109,
+      "occ": 1524,
+      "verdict": "NEW_CATEGORY",
+      "quote": "Сталь арматурная горячекатаная гладкая"
+    },
+    {
+      "phrase": "арматурн горячекатан",
+      "procs": 93,
+      "occ": 541,
+      "verdict": "NEW_CATEGORY",
+      "quote": "Сталь арматурная горячекатаная гладкая"
+    },
+    {
+      "phrase": "сталь арматурн горячекатан",
+      "procs": 93,
+      "occ": 530,
+      "verdict": "NEW_CATEGORY",
+      "quote": "Сталь арматурная горячекатаная гладкая"
+    },
+    {
+      "phrase": "арматурн горячекатан гладк",
+      "procs": 76,
+      "occ": 420,
+      "verdict": "NEW_CATEGORY",
+      "quote": "Сталь арматурная горячекатаная гладкая"
+    },
+    {
+      "phrase": "пленк полиэтиленов",
+      "procs": 63,
+      "occ": 325,
+      "verdict": "NEW_CATEGORY",
+      "quote": "Пленка полиэтиленовая изоловая"
+    },
+    {
+      "phrase": "асфальтобетонных смес",
+      "procs": 53,
+      "occ": 475,
+      "verdict": "MATERIAL_FAMILY",
+      "quote": "Устройство покрытия из горячих асфальтобетонных смесей (тип А16ВН) асфальтоукладчиками второго типоразмера"
+    },
+    {
+      "phrase": "трубопровод из",
+      "procs": 47,
+      "occ": 924,
+      "verdict": "OBJECT/SYSTEM",
+      "quote": "Разборка трубопроводов из водогазопроводных труб диаметром: свыше 40 до 50 мм"
+    },
+    {
+      "phrase": "труб стальн",
+      "procs": 46,
+      "occ": 439,
+      "verdict": "NEW_CATEGORY",
+      "quote": "Трубы стальные сварные оцинкованные водогазопроводные с резьбой"
+    },
+    {
+      "phrase": "смес сухи",
+      "procs": 45,
+      "occ": 1119,
+      "verdict": "MATERIAL_FAMILY",
+      "quote": "Смеси сухие наливные быстротвердеющие на цементной основе для выравнивания оснований пола"
+    },
+    {
+      "phrase": "смес асфальтобетонн",
+      "procs": 45,
+      "occ": 570,
+      "verdict": "MATERIAL_FAMILY",
+      "quote": "7.Смеси асфальтобетонные А 16 ВН на БНД"
+    },
+    {
+      "phrase": "горячих асфальтобетонных смес",
+      "procs": 45,
+      "occ": 399,
+      "verdict": "MATERIAL_FAMILY",
+      "quote": "Устройство покрытия из горячих асфальтобетонных смесей (тип А16ВН) асфальтоукладчиками второго типоразмера"
+    },
+    {
+      "phrase": "труб диаметром",
+      "procs": 42,
+      "occ": 1691,
+      "verdict": "NEW_CATEGORY",
+      "quote": "Разборка трубопроводов из водогазопроводных труб диаметром: свыше 40 до 50 мм"
+    },
+    {
+      "phrase": "смес асфальтобетонн а",
+      "procs": 39,
+      "occ": 497,
+      "verdict": "MATERIAL_FAMILY",
+      "quote": "7.Смеси асфальтобетонные А 16 ВН на БНД"
+    },
+    {
+      "phrase": "пвх профил",
+      "procs": 38,
+      "occ": 571,
+      "verdict": "NEW_CATEGORY",
+      "quote": "Установка в жилых и общественных зданиях оконных блоков из ПВХ профилей: глухих с площадью проема до 2 м2"
+    },
+    {
+      "phrase": "плитк керамогранитн",
+      "procs": 36,
+      "occ": 857,
+      "verdict": "SYNONYM_EXISTING",
+      "quote": "Плитка керамогранитная"
+    },
+    {
+      "phrase": "смес бетонн",
+      "procs": 35,
+      "occ": 2862,
+      "verdict": "MATERIAL_FAMILY",
+      "quote": "Смеси бетонные тяжелого бетона (БСТ) на щебне из гравия"
+    },
+    {
+      "phrase": "из пвх профил",
+      "procs": 35,
+      "occ": 518,
+      "verdict": "NEW_CATEGORY",
+      "quote": "Установка в жилых и общественных зданиях оконных блоков из ПВХ профилей: глухих с площадью проема до 2 м2"
+    },
+    {
+      "phrase": "смес асфальтоукладчик",
+      "procs": 33,
+      "occ": 268,
+      "verdict": "MATERIAL_FAMILY",
+      "quote": "6. Устройство покрытия из горячих асфальтобетонных смесей асфальтоукладчиками второго типоразмера"
+    },
+    {
+      "phrase": "асфальтобетонных смес асфальтоукладчик",
+      "procs": 33,
+      "occ": 268,
+      "verdict": "MATERIAL_FAMILY",
+      "quote": "6. Устройство покрытия из горячих асфальтобетонных смесей асфальтоукладчиками второго типоразмера"
+    },
+    {
+      "phrase": "линолеум поливинилхлоридн",
+      "procs": 33,
+      "occ": 54,
+      "verdict": "SYNONYM_EXISTING",
+      "quote": "Линолеум поливинилхлоридный антистатический"
+    },
+    {
+      "phrase": "бетон бст",
+      "procs": 32,
+      "occ": 2722,
+      "verdict": "NEW_CATEGORY",
+      "quote": "Смеси бетонные тяжелого бетона (БСТ) на щебне из гравия"
+    },
+    {
+      "phrase": "тяжелого бетон",
+      "procs": 32,
+      "occ": 2716,
+      "verdict": "NEW_CATEGORY",
+      "quote": "Смеси бетонные тяжелого бетона (БСТ) на щебне из гравия"
+    },
+    {
+      "phrase": "бетонн тяжелого",
+      "procs": 31,
+      "occ": 2714,
+      "verdict": "NEW_CATEGORY",
+      "quote": "Смеси бетонные тяжелого бетона (БСТ) на щебне из гравия"
+    },
+    {
+      "phrase": "бетонн тяжелого бетон",
+      "procs": 31,
+      "occ": 2714,
+      "verdict": "NEW_CATEGORY",
+      "quote": "Смеси бетонные тяжелого бетона (БСТ) на щебне из гравия"
+    },
+    {
+      "phrase": "смес бетонн тяжелого",
+      "procs": 31,
+      "occ": 2714,
+      "verdict": "MATERIAL_FAMILY",
+      "quote": "Смеси бетонные тяжелого бетона (БСТ) на щебне из гравия"
+    },
+    {
+      "phrase": "тяжелого бетон бст",
+      "procs": 31,
+      "occ": 2710,
+      "verdict": "NEW_CATEGORY",
+      "quote": "Смеси бетонные тяжелого бетона (БСТ) на щебне из гравия"
+    },
+    {
+      "phrase": "трубопровод водоснабжени",
+      "procs": 30,
+      "occ": 983,
+      "verdict": "OBJECT/SYSTEM",
+      "quote": "Демонтаж внутренних трубопроводов водоснабжения и отопления из многослойных полипропиленовых труб"
+    },
+    {
+      "phrase": "бетонн железобетонн",
+      "procs": 30,
+      "occ": 807,
+      "verdict": "NEW_CATEGORY",
+      "quote": "Приказ Минстроя России № СП Бетонные и железобетонные монолитные % 58 58 39"
+    },
+    {
+      "phrase": "из плит керамогранитных",
+      "procs": 29,
+      "occ": 185,
+      "verdict": "SYNONYM_EXISTING",
+      "quote": "Устройство покрытий из плит керамогранитных размером: 60х60 см"
+    },
+    {
+      "phrase": "керамогранитных размером",
+      "procs": 29,
+      "occ": 185,
+      "verdict": "SYNONYM_EXISTING",
+      "quote": "Устройство покрытий из плит керамогранитных размером: 60х60 см"
+    },
+    {
+      "phrase": "плит керамогранитных",
+      "procs": 29,
+      "occ": 185,
+      "verdict": "SYNONYM_EXISTING",
+      "quote": "Устройство покрытий из плит керамогранитных размером: 60х60 см"
+    },
+    {
+      "phrase": "внутренних трубопровод",
+      "procs": 28,
+      "occ": 593,
+      "verdict": "OBJECT/SYSTEM",
+      "quote": "Демонтаж внутренних трубопроводов водоснабжения и отопления из многослойных полипропиленовых труб"
+    },
+    {
+      "phrase": "смес толщин",
+      "procs": 28,
+      "occ": 282,
+      "verdict": "MATERIAL_FAMILY",
+      "quote": "фундаментов ручным способом из сухих смесей: толщиной слоя 2 мм"
+    },
+    {
+      "phrase": "линолеум поливинилхлоридн высок",
+      "procs": 28,
+      "occ": 34,
+      "verdict": "SYNONYM_EXISTING",
+      "quote": "Линолеум поливинилхлоридный высокой износостойкости"
+    },
+    {
+      "phrase": "бетонн железобетонн монолитн",
+      "procs": 27,
+      "occ": 716,
+      "verdict": "NEW_CATEGORY",
+      "quote": "Приказ Минстроя России № СП Бетонные и железобетонные монолитные % 58 58 39"
+    },
+    {
+      "phrase": "плитк керамическ",
+      "procs": 27,
+      "occ": 368,
+      "verdict": "NEW_CATEGORY",
+      "quote": "Плитка керамическая для внутренней облицовки стен"
+    },
+    {
+      "phrase": "кирпичных стен",
+      "procs": 27,
+      "occ": 340,
+      "verdict": "NEW_CATEGORY",
+      "quote": "Пробивка в кирпичных стенах борозд площадью сечения: до 20 см2"
+    },
+    {
+      "phrase": "труб диаметром 50",
+      "procs": 27,
+      "occ": 295,
+      "verdict": "NEW_CATEGORY",
+      "quote": "Прокладка трубопроводов водоснабжения из стальных водогазопроводных оцинкованных труб диаметром: 50 мм"
+    },
+    {
+      "phrase": "блок из пвх",
+      "procs": 27,
+      "occ": 266,
+      "verdict": "NEW_CATEGORY",
+      "quote": "Установка в жилых и общественных зданиях оконных блоков из ПВХ профилей: глухих с площадью проема до 2 м2"
+    },
+    {
+      "phrase": "бетонн тротуарн",
+      "procs": 27,
+      "occ": 201,
+      "verdict": "NEW_CATEGORY",
+      "quote": "63 ФССЦ-05.2.04.04-1002 Плиты бетонные тротуарные тактильные"
+    },
+    {
+      "phrase": "прокладк внутренних трубопровод",
+      "procs": 26,
+      "occ": 526,
+      "verdict": "OBJECT/SYSTEM",
+      "quote": "Прокладка внутренних трубопроводов водоснабжения и отопления из многослойных полипропиленовых труб"
+    },
+    {
+      "phrase": "прокладк внутренних",
+      "procs": 26,
+      "occ": 526,
+      "verdict": "NEW_CATEGORY",
+      "quote": "Прокладка внутренних трубопроводов водоснабжения и отопления из многослойных полипропиленовых труб"
+    },
+    {
+      "phrase": "асфальтобетонн смес",
+      "procs": 26,
+      "occ": 190,
+      "verdict": "MATERIAL_FAMILY",
+      "quote": "Устройство выравнивающего слоя из асфальтобетонной смеси: с применением укладчиков асфальтобетона толщиной до 5 см из смеси А 16 НТ на БНД с предварительным розливом эмульсии ЭБДК Б (0"
+    },
+    {
+      "phrase": "кабел электропитани",
+      "procs": 26,
+      "occ": 67,
+      "verdict": "NEW_CATEGORY",
+      "quote": "Наличие кабеля электропитания для подключения к сети 220В в комплекте поставки"
+    },
+    {
+      "phrase": "полипропиленовых труб",
+      "procs": 25,
+      "occ": 549,
+      "verdict": "NEW_CATEGORY",
+      "quote": "Демонтаж внутренних трубопроводов водоснабжения и отопления из многослойных полипропиленовых труб"
+    },
+    {
+      "phrase": "разборк трубопровод",
+      "procs": 25,
+      "occ": 280,
+      "verdict": "NOISE",
+      "quote": "Разборка трубопроводов из водогазопроводных труб диаметром: свыше 40 до 50 мм"
+    },
+    {
+      "phrase": "налич кабел",
+      "procs": 25,
+      "occ": 63,
+      "verdict": "NEW_CATEGORY",
+      "quote": "Наличие кабеля электропитания для подключения к сети 220В в комплекте поставки"
+    },
+    {
+      "phrase": "налич кабел электропитани",
+      "procs": 25,
+      "occ": 63,
+      "verdict": "NEW_CATEGORY",
+      "quote": "Наличие кабеля электропитания для подключения к сети 220В в комплекте поставки"
+    },
+    {
+      "phrase": "кабел электропитани подключени",
+      "procs": 25,
+      "occ": 63,
+      "verdict": "NEW_CATEGORY",
+      "quote": "Наличие кабеля электропитания для подключения к сети 220В в комплекте поставки"
+    },
+    {
+      "phrase": "труб диаметром 25",
+      "procs": 24,
+      "occ": 308,
+      "verdict": "NEW_CATEGORY",
+      "quote": "Разборка трубопроводов из водогазопроводных труб диаметром: до 25 мм"
+    }
+  ]
+}

@@ -494,6 +494,12 @@ def _classify(rows: List[List[str]]) -> Optional[str]:
     return None
 
 
+def _is_estimate_source(name: str) -> bool:
+    """Даёт ли файл состав закупки (смету/техпараметры) — шаблон T8."""
+    low = str(name or "").lower()
+    return not any(marker in low for marker in _NON_ESTIMATE_FILE_MARKERS)
+
+
 def _classify_with_offset(rows: List[List[str]], window: int = 40) -> "tuple[Optional[str], int]":
     """Искать шапку таблицы не только в первой строке.
 
@@ -516,6 +522,15 @@ def _classify_with_offset(rows: List[List[str]], window: int = 40) -> "tuple[Opt
 
 _SPEC_HEADER = ["Наименование", "Код ОКПД2", "Кол-во"]
 _TECH_HEADER = ["Параметр", "Значение", "Единица"]
+
+#: Шаблон T8: роли документов, которые НЕ дают состав закупки и техпараметры.
+#: Конкурсная документация по оценке заявок содержит таблицы критериев и
+#: показателей, описание объекта закупки — КТРУ/КОЗ, проект договора — график
+#: оплаты. Ни одно из них не является составом закупки (сметой).
+_NON_ESTIMATE_FILE_MARKERS = (
+    "порядок рассмотрения", "оценк заявок", "оценки заявок",
+    "приложение пик", "проект контракта", "умный контракт",
+)
 
 #: Служебные ячейки ТЗ — это инструкция участнику, а не значение характеристики.
 _INSTRUCTION_MARKERS = (
@@ -590,7 +605,7 @@ def _emit_pair_rows(out: Dict[str, List[Dict[str, Any]]], data_rows: List[List[s
         if not _looks_like_param(param) or not _looks_like_value(value):
             continue
         out["tech"].append({"source_file": name, "header": _TECH_HEADER,
-                            "cells": [param, value, unit]})
+                            "cells": [param, value, unit], "item": None})
         added += 1
     return added
 
@@ -652,7 +667,7 @@ def _emit_spec_tech(out: Dict[str, List[Dict[str, Any]]], data_rows: List[List[s
             continue
         out["tech"].append({
             "source_file": name, "header": _TECH_HEADER,
-            "cells": [param, value, unit],
+            "cells": [param, value, unit], "item": item,
         })
 
 
@@ -677,10 +692,15 @@ def extract_tables(local_paths: List[str],
                 continue
             header = rows[offset]
             data_rows = rows[offset + 1:]
+            # Шаблон T8: смету и техпараметры дают не все документы закупки.
+            estimate_source = _is_estimate_source(name)
             if kind == "spec_tech":
-                _emit_spec_tech(out, data_rows, header, name)
+                if estimate_source:
+                    _emit_spec_tech(out, data_rows, header, name)
                 continue
             if kind == "tech":
+                if not estimate_source:
+                    continue
                 header_low = [_norm_cell(h).lower() for h in header]
                 i_name = _find_col(header_low, "наименован", "характеристик", "параметр")
                 i_val = _find_col(header_low, "значени", "требуем")
@@ -700,12 +720,16 @@ def extract_tables(local_paths: List[str],
                         out["tech"].append({
                             "source_file": name, "header": _TECH_HEADER,
                             "cells": [param, value, _norm_cell(_cell(row, i_unit))],
+                            "item": None,
                         })
                     else:
                         param = next((_norm_cell(c) for c in row if _looks_like_param(c)), "")
                         if not param:
                             continue
-                        out["tech"].append({"source_file": name, "header": header, "cells": row})
+                        out["tech"].append({"source_file": name, "header": header, "cells": row,
+                                            "item": None})
+                continue
+            if kind == "spec" and not estimate_source:
                 continue
             for row in data_rows:
                 if not any(_norm_cell(c) for c in row):

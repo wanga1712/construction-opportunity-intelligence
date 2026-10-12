@@ -1,0 +1,13 @@
+[Unit]
+Description=CRM waterproofing 615-PP to UK linkage refresh (CRM DB store)
+After=network.target postgresql.service
+
+[Service]
+Type=oneshot
+User=sergey
+Group=sergey
+WorkingDirectory=/opt/CRM_Streamlit
+EnvironmentFile=/opt/CRM_Streamlit/.env
+Environment=PYTHONUNBUFFERED=1
+Environment=PYTHONPATH=/opt/CRM_Streamlit:/opt/pythonProject89
+ExecStart=/opt/CRM_Streamlit/.venv313/bin/python /opt/CRM_Streamlit/scripts/refresh_waterproofing_615_link.py

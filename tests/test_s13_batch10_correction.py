@@ -22,6 +22,14 @@ def test_child_hash_is_deterministic_and_path_sensitive() -> None:
     assert len(first) == 64
 
 
+def test_child_persistence_does_not_overwrite_parent_by_canonical_id() -> None:
+    from tender_documents_research.document_processor.backends.state_repository import S13V2StateRepository
+
+    source = inspect.getsource(S13V2StateRepository.ensure_download_file)
+    assert "SELECT id, url_hash FROM document_files" in source
+    assert "row[1] != url_hash" in source
+
+
 def test_state_repository_rolls_back_and_reuses_connection() -> None:
     from tender_documents_research.document_processor.backends.state_repository import S13V2StateRepository
 

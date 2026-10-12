@@ -1,0 +1,11 @@
+[Unit]
+Description=Trigger CRM STAGE 1 object-routing LoRA fine-tune on boot and daily
+
+[Timer]
+Unit=crm-training-routing-v1.service
+OnCalendar=*-*-* 06:05:00
+Persistent=true
+AccuracySec=30s
+
+[Install]
+WantedBy=timers.target

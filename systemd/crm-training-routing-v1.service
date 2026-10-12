@@ -1,0 +1,19 @@
+[Unit]
+Description=CRM STAGE 1 object-routing LoRA fine-tune (qwen2.5:7b -> qwen2.5-7b-routing-v1)
+Documentation=file:/opt/CRM_Streamlit/training/object_routing_v1/README_STAGE1.md
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=sergey
+Group=sergey
+WorkingDirectory=/opt/CRM_Streamlit
+Environment=HF_HOME=/home/sergey/crm-training/hf
+Environment=PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True
+ExecStart=/opt/CRM_Streamlit/training/object_routing_v1/run_stage1_training.sh
+TimeoutStartSec=infinity
+RemainAfterExit=no
+
+[Install]
+WantedBy=multi-user.target

@@ -83,13 +83,25 @@ def test_awarded_maps_awarded() -> None:
     )
 
 
-def test_null_deadline_on_open_stays_open() -> None:
-    assert (
-        normalize_source_lifecycle_event(
-            source_table="reestr_contract_44_fz",
-            crm_stage="torgi",
-            award_status="submission_open",
-            end_date=None,
-        )
-        == SourceLifecycleEvent.OPEN
+def test_null_deadline_is_never_active_open() -> None:
+    """WIP=S7-S13-LIFECYCLE-SYNC-1 section 3: NULL deadline is not an open tender."""
+    ev = normalize_source_lifecycle_event(
+        source_table="reestr_contract_44_fz",
+        crm_stage="torgi",
+        award_status="submission_open",
+        end_date=None,
     )
+    assert ev == SourceLifecycleEvent.WAITING_SOURCE_OUTCOME
+    stage, status = lifecycle_crm_stage_status(ev, source_table="reestr_contract_44_fz")
+    assert stage == "torgi"
+    assert status == "submission_closed_waiting_award"
+
+
+def test_explicit_deadline_unknown_maps_waiting() -> None:
+    ev = normalize_source_lifecycle_event(
+        source_table="reestr_contract_44_fz",
+        crm_stage="torgi",
+        award_status="deadline_unknown",
+        end_date=None,
+    )
+    assert ev == SourceLifecycleEvent.WAITING_SOURCE_OUTCOME

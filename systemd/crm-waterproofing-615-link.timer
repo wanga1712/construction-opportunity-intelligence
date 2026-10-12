@@ -1,0 +1,9 @@
+[Unit]
+Description=CRM waterproofing 615-PP to UK linkage refresh timer
+
+[Timer]
+OnCalendar=daily
+Persistent=true
+
+[Install]
+WantedBy=timers.target

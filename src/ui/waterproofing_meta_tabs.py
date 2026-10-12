@@ -11,13 +11,18 @@ from src.services.waterproofing_process import (
     SCORING_RULES,
     STAGES,
 )
+from src.services.waterproofing_crm import CRM_STAGES, STAGE_DEFAULT_ACTIONS
 
 
 def render_pipeline_tab() -> None:
-    st.markdown("### Воронки")
+    st.markdown("### Воронка УК — главная")
+    st.caption("Движение управляющей компании по этапам продажи: на этих этапах живут карточки УК.")
+    for index, stage in enumerate(CRM_STAGES, start=1):
+        st.markdown(f"- **{index}. {stage}** — {STAGE_DEFAULT_ACTIONS.get(stage, '—')}")
+    st.markdown("### Портфели / направления")
     for pipeline in PIPELINES:
         st.markdown(f"- **{pipeline.name}** — {pipeline.description}")
-    st.markdown("### Этапы основной воронки")
+    st.markdown("### Этапы работы с объектом внутри УК")
     for stage in STAGES:
         with st.expander(f"{stage.number}. {stage.name}"):
             st.caption("Обязательные поля для перехода дальше:")

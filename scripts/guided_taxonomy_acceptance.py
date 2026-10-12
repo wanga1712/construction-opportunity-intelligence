@@ -46,19 +46,22 @@ def main() -> int:
         "subcategory_selector": any(label.startswith("Подкатегория —") for label in select_labels),
         "object_selector": "Тип объекта" in select_labels,
         "object_subtype_selector": "Подтип / уточнение объекта" in select_labels,
-        "work_stage_selector": "Стадия / вид работ" in select_labels,
+        "work_stage_selector": "Характер работ" in select_labels,
+        "object_stage_axis": "Стадия объекта" in markdown,
+        "service_type_axis": "Тип услуги" in markdown,
         "medal_selector": medal is not None and list(medal.options) == [
             "Не выбрано", "🥇 GOLD", "🥈 SILVER", "🥉 BRONZE", "🪵 WOOD"
         ],
         "medal_options": list(medal.options) if medal is not None else [],
         "english_placeholder": "Choose an option" in markdown,
-        "primary_giant_text_inputs": any(label in {"Тип объекта", "Подтип / уточнение объекта", "Стадия / вид работ"} for label in text_labels),
+        "primary_giant_text_inputs": any(label in {"Тип объекта", "Подтип / уточнение объекта", "Характер работ"} for label in text_labels),
         "exceptions": [str(item.value) for item in at.exception],
     }
     result["pass"] = all((
         result["first_scope_gate"], result["category_selector"], result["category_option_count"] == 14,
         result["registry_category_selected"], result["subcategory_selector"], result["object_selector"],
         result["object_subtype_selector"], result["work_stage_selector"], result["medal_selector"],
+        result["object_stage_axis"], result["service_type_axis"],
         not result["english_placeholder"], not result["primary_giant_text_inputs"], not result["exceptions"],
     ))
     print(json.dumps(result, ensure_ascii=False, indent=2))

@@ -44,12 +44,15 @@ def normalize_source_lifecycle_event(
     """Map source identity + temporal deadline to SourceLifecycleEvent.
 
     Rules (canonical):
-      awarded / razygranye                         → AWARDED
-      commission_work / commission / award_not_found → WAITING_SOURCE_OUTCOME
-      open/torgi AND end_date < as_of              → WAITING_SOURCE_OUTCOME
-      open/torgi AND (end_date >= as_of or unknown) → OPEN
-        (unknown deadline stays OPEN only when still in open table; prefer
-         filling end_date from source — do not invent.)
+  awarded / razygranye                         → AWARDED
+  commission_work / commission / award_not_found / deadline_unknown
+                                               → WAITING_SOURCE_OUTCOME
+  open/torgi AND end_date < as_of              → WAITING_SOURCE_OUTCOME
+  open/torgi AND end_date IS NULL              → WAITING_SOURCE_OUTCOME
+    (WIP=S7-S13-LIFECYCLE-SYNC-1 section 3: a NULL deadline is NOT an open
+     tender — no verifiable submission window exists, so it must never be
+     ACTIVE_OPEN.)
+  open/torgi AND end_date >= as_of             → OPEN
     """
     table = (source_table or "").strip().lower()
     stage = (crm_stage or "").strip().lower()
@@ -61,11 +64,12 @@ def normalize_source_lifecycle_event(
     if "awarded" in table or stage == "razygranye" or award == "awarded":
         return SourceLifecycleEvent.AWARDED
 
-    # WAITING: commission layer or explicit award_not_found
+    # WAITING: commission layer, explicit award_not_found, or an explicit
+    # projection state recording that the deadline is unknown.
     if (
         "commission" in table
         or stage == "commission"
-        or award in ("award_not_found", "commission")
+        or award in ("award_not_found", "commission", "deadline_unknown")
     ):
         return SourceLifecycleEvent.WAITING_SOURCE_OUTCOME
 
@@ -82,7 +86,10 @@ def normalize_source_lifecycle_event(
         )
     )
     if is_open_surface:
-        if deadline is not None and deadline < today:
+        if deadline is None:
+            # NULL deadline is not open and must never be active-open.
+            return SourceLifecycleEvent.WAITING_SOURCE_OUTCOME
+        if deadline < today:
             return SourceLifecycleEvent.WAITING_SOURCE_OUTCOME
         return SourceLifecycleEvent.OPEN
 

@@ -60,6 +60,8 @@ class ObjectViewItem:
     ai_stage_reason: Optional[str] = None
     ai_infrastructure_tags: List[str] = field(default_factory=list)
     ai_classification_confidence: int = 0
+    ai_object_stage: Optional[str] = None
+    ai_service_type: Optional[str] = None
     expertise_developer: Optional[str] = None
     expertise_technical_customer: Optional[str] = None
     expertise_planner: Optional[str] = None

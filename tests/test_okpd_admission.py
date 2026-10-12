@@ -121,7 +121,12 @@ def test_target_with_docs_initial_status_pre_research_waiting(mock_doc_conn) -> 
         sql = execute_args[0]
         params = execute_args[1]
         assert "INSERT INTO document_processing_queue" in sql
-        assert params[4] == "PRE_RESEARCH_WAITING"
+        assert "PRE_RESEARCH_WAITING" in params
+        assert "PENDING" not in params
+        # status is the 9th bind parameter: the First Pass projection columns
+        # (priority_score, candidate_level, candidate_score, procurement_scope_type)
+        # precede it in the queue INSERT.
+        assert params[8] == "PRE_RESEARCH_WAITING"
 
 
 def test_target_cannot_become_pending_before_blind_predictor_release() -> None:

@@ -3,9 +3,12 @@ import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
-from dotenv import load_dotenv
+# Configuration authority is the CRM project's own .env (loaded by
+# src.bootstrap / src.services.parking_db).  A sibling project's .env is never
+# loaded here: it carries different, stale database addresses.
+from src.bootstrap import setup_source_path
 
-load_dotenv(Path(r"<HOME>\Projects\pythonProject89\.env"))
+setup_source_path()
 from src.services.parking_db import ParkingDatabase
 
 kn = sys.argv[1] if len(sys.argv) > 1 else "77:06:0008011:4177"

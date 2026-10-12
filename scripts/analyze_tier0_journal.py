@@ -36,9 +36,12 @@ def main() -> int:
         "TASKS_COMPLETED": c(r"\[S13_V2\]\[\d+\] COMPLETED"),
         "TASKS_FAILED": c(r"\[S13_V2\]\[\d+\] FAILED"),
         "QUEUE_V2_TARGETED": c(r"QUEUE_V2 targeted links"),
+        "PARSE_TIME_HOOK_LINES": c(r"parse-time extraction"),
     }
     for k, v in rows.items():
         print(f"{k}={v}")
+    embedded = [int(x) for x in re.findall(r"parse-time extraction: facts=\d+ metadata=\d+ embedded=(\d+)", out)]
+    print(f"PARSE_TIME_EMBEDDED_SUM={sum(embedded)}")
     # how many targeted tasks resolved exactly the planned count
     planned = re.findall(r"plan_selected=(\d+) resolvable=(\d+)", out)
     mismatch = sum(1 for a, b in planned if a != b)

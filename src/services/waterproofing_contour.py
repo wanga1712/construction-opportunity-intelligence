@@ -11,28 +11,10 @@ from src.services.waterproofing_ai_context import (
     build_waterproofing_ai_payload,
     build_waterproofing_ai_prompt,
 )
+from src.services.waterproofing_crm import CRM_STAGES, contour_key as _crm_contour_key
 
-CONTOUR_STAGES = [
-    "Контур найден",
-    "Секретарь / общий телефон найден",
-    "Запрошен начальник эксплуатации",
-    "Контакт эксплуатации получен",
-    "Встреча назначена",
-    "Первая встреча проведена",
-    "Выбран объект для обследования",
-    "Обследование назначено",
-    "Обследование проведено",
-    "Сделка / ТКП по объекту",
-    "Отложено / отказ",
-]
-
-FIRST_STEP_OPTIONS = [
-    "Позвонить на общий телефон УК и выйти на секретаря или диспетчерскую",
-    "Запросить контакт начальника эксплуатации",
-    "Назначить короткую встречу с эксплуатацией по портфелю объектов",
-    "Отправить письмо с предложением обследования и запросить контакт эксплуатации",
-    "Уточнить проблемные помещения: паркинг, подвал, швы, вводы",
-]
+# The funnel defines stages once; the historical name stays importable.
+CONTOUR_STAGES = CRM_STAGES
 
 _STATE_PATH = (
     Path(__file__).resolve().parents[2] / "data" / "waterproofing" / "contour_states.jsonl"
@@ -41,9 +23,7 @@ _STATE_PATH = (
 
 def contour_key(row: dict[str, Any]) -> str:
     """Return the stable identifier for a management-company contour."""
-    return str(
-        row.get("uk_ogrn") or row.get("uk_inn") or row.get("uk_id") or row.get("uk_name") or ""
-    ).strip()
+    return _crm_contour_key(row)
 
 
 def load_contour_states() -> dict[str, dict[str, Any]]:
@@ -69,6 +49,38 @@ def save_contour_state(key: str, data: dict[str, Any]) -> dict[str, Any]:
     with _STATE_PATH.open("a", encoding="utf-8") as file:
         file.write(json.dumps(row, ensure_ascii=False) + "\n")
     return row
+
+
+def load_contour_history(key: str) -> list[dict[str, Any]]:
+    """Return every saved record of one contour, oldest first."""
+    history: list[dict[str, Any]] = []
+    if not _STATE_PATH.exists():
+        return history
+    for line in _STATE_PATH.read_text(encoding="utf-8").splitlines():
+        try:
+            row = json.loads(line)
+        except json.JSONDecodeError:
+            continue
+        if str(row.get("key") or "") == key:
+            history.append(row)
+    return history
+
+
+def latest_contour_state(key: str) -> dict[str, Any]:
+    """Return the newest saved record of one contour, or an empty dict."""
+    history = load_contour_history(key)
+    return history[-1] if history else {}
+
+
+def merge_contour_state(key: str, patch: dict[str, Any]) -> dict[str, Any]:
+    """Append a record that inherits every field of the newest saved state."""
+    merged = {
+        field: value
+        for field, value in latest_contour_state(key).items()
+        if field not in ("key", "updated_at")
+    }
+    merged.update(patch)
+    return save_contour_state(key, merged)
 
 
 def _candidate_payloads(object_rows: list[dict[str, Any]]) -> list[dict[str, Any]]:

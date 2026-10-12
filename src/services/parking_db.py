@@ -11,6 +11,8 @@ from dotenv import load_dotenv
 from loguru import logger
 from psycopg2.extras import RealDictCursor
 
+from src.services.db_host_guard import assert_host_allowed
+
 _PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
 
 
@@ -93,6 +95,7 @@ class ParkingDatabase:
             if self._conn and not self._conn.closed:
                 return True
             cfg = self.config
+            assert_host_allowed(cfg.host, "PARKING_DB_HOST/DB_HOST")
             if not cfg.user or not cfg.host:
                 self.last_error = "PARKING_DB_* не заданы (см. .env.example)"
                 return False

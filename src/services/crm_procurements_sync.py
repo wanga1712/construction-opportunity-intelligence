@@ -225,6 +225,8 @@ def sync_torgi(tender_db, crm_db, since_days: int = 180) -> dict:
         for row in rows:
             sid = int(row["source_id"])
             for m in cache_by_sid.get(sid, []):
+                if row.get("start_date") is None and row.get("end_date") is None:
+                    continue  # no dates at all -> not actionable, never reaches CRM
                 end_date = row.get("end_date")
                 today = date.today()
                 if end_date is None or today <= end_date:
@@ -592,6 +594,10 @@ def _sync_source(
 
     for row in rows:
         try:
+            if row.get("start_date") is None and row.get("end_date") is None:
+                # No dates at all -> source placeholder (EIS 0001-01-01 or absent).
+                # Such rows are not actionable and must not reach CRM.
+                continue
             end_date = row.get("end_date")
             today = date.today()
             if crm_stage == "torgi":

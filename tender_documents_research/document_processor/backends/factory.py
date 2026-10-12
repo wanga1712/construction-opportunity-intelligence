@@ -18,6 +18,8 @@ from typing import Optional
 from .queue_repository import QueueRepository, S13V2QueueRepository, LegacyQueueRepository
 from .state_repository import ProcessingStateRepository, LegacyStateRepository, S13V2StateRepository
 
+DEFAULT_DOCUMENT_PIPELINE_GENERATION = "S13_V4_EXHAUSTIVE_CONTEXT"
+
 
 @dataclass
 class ProcessingBackend:
@@ -34,7 +36,10 @@ def create_processing_backend(backend_name: str, db=None) -> ProcessingBackend:
     """
     if backend_name in ("S13_V2", "S13_V4"):
         dsn = _load_s13_dsn()
-        gen = "S13_V4_EXHAUSTIVE_CONTEXT" if backend_name == "S13_V4" else "S13_V2"
+        gen = os.getenv(
+            "DOCUMENT_PIPELINE_GENERATION",
+            DEFAULT_DOCUMENT_PIPELINE_GENERATION,
+        )
         queue_repo = S13V2QueueRepository(dsn, pipeline_generation=gen)
         
         from .s13_results import S13V2ResultStore

@@ -32,6 +32,10 @@ PRICE_SOURCE_LABELS = {
 }
 _PAGE_LIMIT = 40
 
+#: Строки-итоги таблиц ТЗ («Итого 1 100 040,00») — не требование к товару.
+_TOTAL_MARKERS = ("итого", "всего", "сумма", "нмцк", "начальная цена", "цена контракта",
+                  "стоимость", "в том числе")
+
 
 def _esc(value: Any) -> str:
     return html.escape(str(value if value is not None else ""))
@@ -88,6 +92,53 @@ def _filtered(records: List[Dict[str, Any]], query: str) -> List[Dict[str, Any]]
     return [r for r in records
             if needle in str(r.get("text") or "").lower()
             or needle in str(r.get("param") or "").lower()]
+
+
+def _squash(value: Any) -> str:
+    return re.sub(r"\s+", " ", str(value or "")).strip().lower()
+
+
+def _is_totals_row(record: Dict[str, Any]) -> bool:
+    low = _squash(record.get("param"))
+    if not low:
+        return False
+    return any(low == marker or low.startswith(marker + " ") or low.startswith(marker + ":")
+               for marker in _TOTAL_MARKERS)
+
+
+def _merge_tech_rows(items: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    """Одинаковые (параметр, значение, ед. изм.) сводим в одну строку с числом повторов.
+
+    В ТЗ одна характеристика часто повторяется для разных позиций (ноутбук и ПК) без
+    колонки товара. Привязки «требование → позиция» в этих данных нет, поэтому показываем
+    «повторов: N» и перечисляем источники, а не выдаём повторы за разные требования.
+    """
+    merged: List[Dict[str, Any]] = []
+    index: Dict[tuple, Dict[str, Any]] = {}
+    for record in items:
+        key = (_squash(record.get("param")), _squash(record.get("value")),
+               _squash(record.get("unit")))
+        param = record.get("param") or ""
+        if not _squash(param):
+            # Текстовое требование из раздела документа (без табличных колонок) —
+            # не сворачиваем с другими: у него нет общего ключа.
+            param = str(record.get("text") or "")[:200]
+            key = ("__text__", str(record.get("id") or len(merged)), "")
+        label = SOURCE_LABELS.get(str(record.get("source")), str(record.get("source") or ""))
+        file_name = str(record.get("source_file") or "")
+        source = ("%s · %s" % (label, file_name)) if file_name else label
+        entry = index.get(key)
+        if entry is None:
+            entry = {"param": param, "value": record.get("value") or "",
+                     "unit": record.get("unit") or "", "count": 1,
+                     "sources": [source] if source else []}
+            index[key] = entry
+            merged.append(entry)
+        else:
+            entry["count"] += 1
+            if source and source not in entry["sources"]:
+                entry["sources"].append(source)
+    return merged
 
 
 def _source_line(record: Dict[str, Any]) -> str:
@@ -207,6 +258,28 @@ def render_additional(state: Dict[str, Any]) -> None:
             _record_block(record)
 
 
+def _tech_table(items: List[Dict[str, Any]]) -> None:
+    """Таблица технических параметров одной группы/позиции (с сведением повторов)."""
+    merged = _merge_tech_rows(items)
+    rows = []
+    for entry in merged[:_PAGE_LIMIT]:
+        value = _esc(entry["value"])
+        if entry["count"] > 1:
+            value += ' <span class="pc-note">повторов: %d</span>' % entry["count"]
+        rows.append([_esc(entry["param"]), value, _esc(entry["unit"]),
+                     _esc(" · ".join(entry["sources"]))])
+    st.markdown(_table(["Параметр", "Значение", "Ед. изм.", "Источник"], rows),
+                unsafe_allow_html=True)
+    if len(merged) > _PAGE_LIMIT:
+        st.markdown('<div class="pc-note">Показано %d из %d — уточните поиск.</div>'
+                    % (_PAGE_LIMIT, len(merged)), unsafe_allow_html=True)
+    elif len(items) != len(merged):
+        st.markdown('<div class="pc-note">%d записей документов сведены в %d строк: одинаковые '
+                    'характеристика/значение/ед. изм. повторяются в ТЗ (число повторов — в '
+                    'колонке «Значение»).</div>' % (len(items), len(merged)),
+                    unsafe_allow_html=True)
+
+
 def render_product_delivery(state: Dict[str, Any]) -> None:
     product = _records(state, "product")
     delivery = _records(state, "delivery")
@@ -215,27 +288,48 @@ def render_product_delivery(state: Dict[str, Any]) -> None:
     st.markdown('<div class="pc-sect">1. Требования к товару</div>', unsafe_allow_html=True)
     if not product:
         st.info("Технические требования в документах не найдены.")
-    by_group: Dict[str, List[Dict[str, Any]]] = {}
+    totals_skipped = 0
+    records: List[Dict[str, Any]] = []
     for record in _filtered(product, query):
-        by_group.setdefault(record.get("group") or "other", []).append(record)
-    for key, title, _markers in PRODUCT_GROUPS:
-        items = by_group.get(key)
-        if not items:
+        if _is_totals_row(record):
+            totals_skipped += 1
             continue
-        with st.expander("%s (%d)" % (title, len(items)), expanded=(key == "processor")):
-            rows = []
-            for record in items[:_PAGE_LIMIT]:
-                rows.append([_esc(record.get("param") or ""),
-                             _esc(record.get("value") or ""),
-                             _esc(record.get("unit") or ""),
-                             _esc(SOURCE_LABELS.get(str(record.get("source")), ""))
-                             + (" · " + _esc(record.get("source_file"))
-                                if record.get("source_file") else "")])
-            st.markdown(_table(["Параметр", "Значение", "Ед. изм.", "Источник"], rows),
-                        unsafe_allow_html=True)
-            if len(items) > _PAGE_LIMIT:
-                st.markdown('<div class="pc-note">Показано %d из %d — уточните поиск.</div>'
-                            % (_PAGE_LIMIT, len(items)), unsafe_allow_html=True)
+        records.append(record)
+    if totals_skipped:
+        st.markdown('<div class="pc-muted">Строк-итогов таблиц («Итого», «Всего», сумма) '
+                    'скрыто: %d — это не требования к товару.</div>' % totals_skipped,
+                    unsafe_allow_html=True)
+
+    # Требования, для которых документ дал колонку товара, показываем по позициям —
+    # это ответ на «какие требования к какому товару». Остальное — по смыслу, как раньше.
+    by_item: Dict[str, List[Dict[str, Any]]] = {}
+    rest: List[Dict[str, Any]] = []
+    for record in records:
+        item_name = str(record.get("item") or "").strip()
+        if item_name:
+            by_item.setdefault(item_name, []).append(record)
+        else:
+            rest.append(record)
+    if by_item:
+        st.markdown('<div class="pc-muted">Позиции товара (колонка товара в таблице ТЗ): %d. '
+                    'Требования показаны внутри своей позиции.</div>' % len(by_item),
+                    unsafe_allow_html=True)
+        for item_name, items in sorted(by_item.items(), key=lambda kv: (-len(kv[1]), kv[0])):
+            with st.expander("%s (%d)" % (item_name, len(items)), expanded=False):
+                _tech_table(items)
+    if rest:
+        if by_item:
+            st.markdown('<div class="pc-muted">Без привязки к позиции (в документе нет колонки '
+                        'товара) — сгруппировано по смыслу:</div>', unsafe_allow_html=True)
+        by_group: Dict[str, List[Dict[str, Any]]] = {}
+        for record in rest:
+            by_group.setdefault(record.get("group") or "other", []).append(record)
+        for key, title, _markers in PRODUCT_GROUPS:
+            items = by_group.get(key)
+            if not items:
+                continue
+            with st.expander("%s (%d)" % (title, len(items)), expanded=(key == "processor")):
+                _tech_table(items)
     st.markdown('<div class="pc-sect">2. Требования к поставке</div>', unsafe_allow_html=True)
     if not delivery:
         st.info("Условия поставки в документах не найдены.")

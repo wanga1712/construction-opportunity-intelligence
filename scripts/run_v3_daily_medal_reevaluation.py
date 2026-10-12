@@ -51,7 +51,9 @@ def main() -> int:
                o.current_effective_medal, o.current_effective_score,
                o.semantic_hypothesis, o.initial_medal_provenance,
                p.source_table, p.crm_stage, p.award_status, p.end_date,
-               p.initial_price, p.award_date
+               p.initial_price, p.award_date,
+               p.delivery_start_date, p.delivery_end_date,
+               p.execution_start_at, p.execution_end_at
         FROM crm_procurement_category_opportunities o
         JOIN crm_procurements p ON p.id = o.procurement_id
         WHERE o.status = 'CURRENT'
@@ -94,7 +96,15 @@ def main() -> int:
                     "initial_price": r.get("initial_price"),
                     "award_date": str(r.get("award_date") or "")[:10] or None,
                     "end_date": str(r.get("end_date") or "")[:10] or None,
+                    "delivery_start_date": str(r.get("delivery_start_date") or "")[:10] or None,
+                    "delivery_end_date": str(r.get("delivery_end_date") or "")[:10] or None,
+                    "execution_start_at": str(r.get("execution_start_at") or "")[:10] or None,
+                    "execution_end_at": str(r.get("execution_end_at") or "")[:10] or None,
                 },
+                "delivery_start_date": str(r.get("delivery_start_date") or "")[:10] or None,
+                "delivery_end_date": str(r.get("delivery_end_date") or "")[:10] or None,
+                "execution_start_at": str(r.get("execution_start_at") or "")[:10] or None,
+                "execution_end_at": str(r.get("execution_end_at") or "")[:10] or None,
             }
         )
 

@@ -297,9 +297,10 @@ def _ssh_base() -> List[str]:
 
 def check_s7_reachable() -> bool:
     import socket
+    target_host = S7_SSH_TARGET.split("@")[-1] if "@" in S7_SSH_TARGET else S7_SSH_TARGET
     # Try port 22 (SSH) first
     try:
-        s = socket.create_connection(("10.8.0.7", 22), timeout=2.0)
+        s = socket.create_connection((target_host, 22), timeout=2.0)
         s.close()
         return True
     except Exception:
@@ -307,7 +308,7 @@ def check_s7_reachable() -> bool:
     # Try ping as fallback
     try:
         import subprocess
-        r = subprocess.run(["ping", "-c", "1", "-W", "2", "10.8.0.7"], capture_output=True, timeout=3)
+        r = subprocess.run(["ping", "-c", "1", "-W", "2", target_host], capture_output=True, timeout=3)
         return r.returncode == 0
     except Exception:
         return False
@@ -323,6 +324,14 @@ def collect_s7_host() -> Dict[str, Any]:
         "collection_errors": [],
         "alerts": [],
         "overall_status": "UNREACHABLE",
+        "source_collectors": [],
+        "source_collectors_summary": {
+            "ok": 0,
+            "total": len(S7_SOURCE_COLLECTORS),
+            "failing_units": list(S7_SOURCE_COLLECTORS),
+            "failing_statuses": ["UNREACHABLE"] * len(S7_SOURCE_COLLECTORS),
+            "failing_reasons": ["S7 unreachable"] * len(S7_SOURCE_COLLECTORS),
+        },
     }
     cmd = _ssh_base() + ["python3", "-"]
     try:
@@ -385,7 +394,20 @@ def collect_s7_host() -> Dict[str, Any]:
             c["expectation"] = "LONG_RUNNING"
             c["ui_status"] = "OK" if act == "active" else "CRITICAL"
             c["health_model"] = "LONG_RUNNING"
+    payload["source_collectors_summary"] = _collectors_summary(payload.get("source_collectors") or [])
     return payload
+
+
+def _collectors_summary(collectors: List[Dict[str, Any]]) -> Dict[str, Any]:
+    """ok/total plus the explicit names of failing collectors (UI shows «3 / 4 · кто упал»)."""
+    failing = [c for c in collectors if (c.get("ui_status") or "OK") != "OK"]
+    return {
+        "ok": len(collectors) - len(failing),
+        "total": len(collectors) or len(S7_SOURCE_COLLECTORS),
+        "failing_units": [c.get("unit") or c.get("name") or "?" for c in failing],
+        "failing_statuses": [c.get("ui_status") or "OK" for c in failing],
+        "failing_reasons": [c.get("active") or "unknown" for c in failing],
+    }
 
 
 def s7_timeouts() -> Dict[str, int]:

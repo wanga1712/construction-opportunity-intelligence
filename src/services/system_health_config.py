@@ -25,7 +25,7 @@ COLLECTOR_DOWN_AFTER_SEC = 120
 S7_STALE_AFTER_SEC = 90
 
 # S7 remote (collector only — never from UI)
-S7_SSH_TARGET = "wanga@10.8.0.7"
+S7_SSH_TARGET = "wanga@s7"
 S7_SSH_IDENTITY = "/home/sergey/.ssh/id_to_nyx"
 S7_CONNECT_TIMEOUT = 5
 S7_COMMAND_TIMEOUT = 25
@@ -103,9 +103,22 @@ ZERO_SMART_ACCESS_NOT_EQUAL_ZERO_DISKS = True
 
 
 def state_dir() -> Path:
+    """Resolve the snapshot directory.
+
+    Production (Linux/S13) keeps the collector's own state dir. On a Windows
+    workstation that POSIX path cannot exist, so fall back to the local mirror
+    produced by scripts/sync_system_health_snapshot.ps1; otherwise the
+    UI silently shows "no snapshot yet" for every session.
+    """
     import os
 
-    return Path(os.environ.get("CRM_SYSTEM_HEALTH_DIR", DEFAULT_STATE_DIR))
+    override = os.environ.get("CRM_SYSTEM_HEALTH_DIR")
+    if override:
+        return Path(override)
+    if os.name != "posix":
+        base = os.environ.get("LOCALAPPDATA") or os.path.expanduser("~")
+        return Path(base) / "crm-system-health"
+    return Path(DEFAULT_STATE_DIR)
 
 
 def latest_path(root: Path | None = None) -> Path:

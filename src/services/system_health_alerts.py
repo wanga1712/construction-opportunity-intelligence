@@ -37,6 +37,9 @@ def _alert(
     observed: Any,
     threshold: Any,
     first_seen: Optional[str] = None,
+    priority: str = "NORMAL",
+    device_role: Optional[str] = None,
+    non_blocking: bool = False,
 ) -> Dict[str, Any]:
     ts = _now_iso()
     assert host_id, "host_id required"
@@ -48,6 +51,9 @@ def _alert(
         "message": message,
         "observed": observed,
         "threshold": threshold,
+        "priority": priority,
+        "non_blocking": non_blocking,
+        "device_role": device_role,
         "first_seen": first_seen or ts,
         "last_seen": ts,
     }
@@ -81,6 +87,9 @@ def evaluate_host_alerts(
                 observed=kwargs.get("observed"),
                 threshold=kwargs.get("threshold"),
                 first_seen=(old or {}).get("first_seen"),
+                priority=kwargs.get("priority", (old or {}).get("priority") or "NORMAL"),
+                device_role=kwargs.get("device_role") or (old or {}).get("device_role"),
+                non_blocking=bool(kwargs.get("non_blocking", (old or {}).get("non_blocking", False))),
             )
         )
 
@@ -132,22 +141,34 @@ def evaluate_host_alerts(
                 threshold=SUSTAINED_CPU_WARN_PCT,
             )
 
+    sdb_role = host_snap.get("sdb_role") or {}
+    legacy_device = (sdb_role.get("device") or "/dev/sdb") if sdb_role.get("IS_SDB_CURRENTLY_UNUSED") else None
+    legacy_role = sdb_role.get("SDB_DATA_ROLE") if legacy_device else None
+
+    def legacy_kw(dev: str) -> Dict[str, Any]:
+        """UNUSED_LEGACY volumes: downgrade priority, keep the fact but non-blocking."""
+        is_legacy = dev in ("/dev/sdb", "sdb") or (legacy_device is not None and dev == legacy_device)
+        if not is_legacy:
+            return {}
+        return {"priority": "LOW", "device_role": legacy_role or "UNUSED_LEGACY_NTFS", "non_blocking": True}
+
     for d in host_snap.get("disk_health") or []:
         st = d.get("status") or derive_physical_status(d)
         d["status"] = st
         dev = d.get("device") or "?"
-        is_legacy = (dev == "/dev/sdb" or dev == "sdb")
+        kw = legacy_kw(dev)
+        is_legacy = bool(kw)
         if st == "CRITICAL" or d.get("overall") == "FAILED":
             lvl = "WARNING" if is_legacy else "CRITICAL"
-            add(level=lvl, source="disk", target=dev, message="disk health CRITICAL", observed=st, threshold="OK")
+            add(level=lvl, source="disk", target=dev, message="disk health CRITICAL", observed=st, threshold="OK", **kw)
         elif st == "WARNING":
-            add(level="WARNING", source="disk", target=dev, message="disk health WARNING", observed=st, threshold="OK")
+            add(level="WARNING", source="disk", target=dev, message="disk health WARNING", observed=st, threshold="OK", **kw)
         pending = d.get("pending_sectors")
         if pending and pending > 0:
-            add(level="WARNING", source="smart", target=dev, message="pending sectors > 0", observed=pending, threshold=0)
+            add(level="WARNING", source="smart", target=dev, message="pending sectors > 0", observed=pending, threshold=0, **kw)
         realloc = d.get("reallocated_sectors")
         if realloc and realloc > 0:
-            add(level="WARNING", source="smart", target=dev, message="reallocated sectors > 0", observed=realloc, threshold=0)
+            add(level="WARNING", source="smart", target=dev, message="reallocated sectors > 0", observed=realloc, threshold=0, **kw)
 
     for svc in host_snap.get("services") or []:
         if svc.get("ui_status") == "CRITICAL":

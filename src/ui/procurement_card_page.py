@@ -377,6 +377,12 @@ def _render_dossier(d: Dict[str, Any], db: Any = None) -> None:
         unsafe_allow_html=True,
     )
 
+    section_errors = [str(e) for e in (d.get("errors") or [])]
+    documents_failed = any(err.startswith("documents:") for err in section_errors)
+    if section_errors:
+        st.warning("Часть секций карточки не загрузилась — данные ниже неполные:\n\n"
+                   + "\n".join("- %s" % err for err in section_errors))
+
     st.markdown(
         f'<div class="pc-tiles">'
         + _tile("НМЦК", _money(md.get("initial_price")))
@@ -384,7 +390,8 @@ def _render_dossier(d: Dict[str, Any], db: Any = None) -> None:
         + _tile("Приём заявок до", _date(md.get("end_date")),
                 "Приём завершён" if expired else "", warn=expired)
         + _tile("Документы", f'{counts.get("documents", 0)} / {counts.get("downloaded", 0)}',
-                "всего / скачано")
+                "ошибка запроса к БД" if documents_failed else "всего / скачано",
+                warn=documents_failed)
         + _tile("Находки", str(counts.get("verified", 0)), "подтверждённых (VERIFIED)")
         + _tile("Категорийные возможности", str(counts.get("opportunities", 0)))
         + '</div>',
@@ -577,9 +584,15 @@ def _render_dossier(d: Dict[str, Any], db: Any = None) -> None:
         # и пути ссылки без query — это одна ссылка, показываем одну строку.
         _grouped = _group_documents(_docs)
         if not _grouped:
-            st.markdown('<div class="pc-muted">Документы закупки ещё не скачаны: строки в '
-                        'очереди обработки нет — закупка не отправлялась на скачивание.</div>',
-                        unsafe_allow_html=True)
+            if documents_failed:
+                st.error("Список документов не прочитался из document_intelligence — это ошибка "
+                         "запроса, а не отсутствие файлов. Текст ошибки — в предупреждении "
+                         "под шапкой карточки.")
+            else:
+                st.markdown('<div class="pc-muted">В document_intelligence нет строк '
+                            'document_files по этой закупке: файлы не ставились на скачивание '
+                            'либо записи отсутствуют.</div>',
+                            unsafe_allow_html=True)
 
         def _doc_row(_items: List[Dict[str, Any]]) -> List[str]:
             _latest = max(_items, key=lambda x: str(x.get("downloaded_at") or ""))
