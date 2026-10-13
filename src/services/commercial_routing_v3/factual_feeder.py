@@ -223,6 +223,13 @@ class FactualFeeder:
                 # Enqueue factual task with dynamic First Pass priority projection
                 source_start_date = proc.get("start_date")
                 work_tier = compute_work_tier(proc)
+                # Lane must follow the registry, not be hardcoded: awarded workers
+                # only claim awarded_recent / historical_awarded.
+                queue_lane = (
+                    "awarded_recent"
+                    if str(source_table or "").endswith("_awarded")
+                    else "open_active"
+                )
                 cur.execute(
                     """
                     INSERT INTO document_processing_queue (
@@ -233,7 +240,7 @@ class FactualFeeder:
                         source_start_date, work_tier, created_at
                     ) VALUES (
                         %s, %s, %s, %s,
-                        'FACTUAL_FEEDER_ADMITTED', 'open_active', %s, %s,
+                        'FACTUAL_FEEDER_ADMITTED', %s, %s, %s,
                         %s, %s, %s,
                         %s, %s, %s, %s, %s, NOW()
                     )
@@ -245,6 +252,7 @@ class FactualFeeder:
                         source_table,
                         source_id,
                         contract_number,
+                        queue_lane,
                         first_pass_res.priority_score,
                         first_pass_res.canonical_preliminary_medal,
                         first_pass_res.canonical_preliminary_score,
