@@ -16,11 +16,13 @@ from src.ui.components.rich_table import rich_table
 from src.services.procurement_card_dossier_service import load_procurement_dossier
 from src.services.analytics_table_workspace_service import (
     ALL_MODES,
+    AWARDED_TYPE,
     COLUMN_LABELS,
     DESIGN,
     DIRECT_SUPPLY,
     EMBEDDED_MATERIAL,
     OBJECT,
+    OPEN_TORGI,
     MODE_LABELS,
     bucket_color,
     bucket_label,
@@ -35,9 +37,14 @@ from src.services.commercial_routing_v3.submission_window_temporal import (
 
 #: Типы закупок ровно два (как договорились): прямая поставка и работа в составе
 #: объекта/проекта (встроенные материалы + проектные требования).
-_TYPE_OPTIONS = [ALL_MODES, DIRECT_SUPPLY, OBJECT]
+#: Сначала сегменты по коммерческому статусу (живые торги / разыгранные), затем
+#: типы по треку. Отдельный «Разыгранные» нужен, иначе такие строки вытесняются
+#: лимитом из-за сортировки по медали (WIP_WORKSPACE_TYPE_FILTERS_V1).
+_TYPE_OPTIONS = [ALL_MODES, OPEN_TORGI, AWARDED_TYPE, DIRECT_SUPPLY, OBJECT]
 _TYPE_LABELS = {
     ALL_MODES: "Все",
+    OPEN_TORGI: "Идут торги",
+    AWARDED_TYPE: "Разыгранные",
     DIRECT_SUPPLY: "Прямая поставка",
     OBJECT: "В составе объекта/проекта",
 }

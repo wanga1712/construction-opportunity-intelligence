@@ -29,6 +29,9 @@ EMBEDDED_MATERIAL = "EMBEDDED_MATERIAL"
 DESIGN = "DESIGN"
 OBJECT = "OBJECT"
 ALL_MODES = "ALL"
+#: Commercially-live segment filters (WIP_WORKSPACE_TYPE_FILTERS_V1).
+OPEN_TORGI = "OPEN_TORGI"
+AWARDED_TYPE = "AWARDED"
 
 MODE_LABELS = {
     DIRECT_SUPPLY: "Прямая поставка",
@@ -36,6 +39,8 @@ MODE_LABELS = {
     DESIGN: "В составе объекта/проекта",
     OBJECT: "В составе объекта/проекта",
     ALL_MODES: "Все режимы",
+    OPEN_TORGI: "Идут торги",
+    AWARDED_TYPE: "Разыгранные",
 }
 
 # Layouts are ordered column ids; single source of truth for mode-aware columns.
@@ -229,6 +234,22 @@ def build_row(raw: Dict[str, Any], *, now: datetime) -> Dict[str, Any]:
     stage = str(raw.get("crm_stage") or "").lower()
     med_cur = _clean(raw.get("current_effective_medal"))
     med_init = _clean(raw.get("candidate_initial_medal"))
+    confirmed_medal = _clean(raw.get("confirmed_base_medal"))
+    try:
+        score_float = float(raw.get("current_effective_score") or 0)
+    except (TypeError, ValueError):
+        score_float = 0.0
+    track_upper = str(raw.get("opportunity_track") or "").upper()
+    if track_upper == DIRECT_SUPPLY:
+        try:
+            supply_value = float(raw.get("initial_price") or 0)
+        except (TypeError, ValueError):
+            supply_value = 0.0
+    else:
+        try:
+            supply_value = float(raw.get("material_supply") or 0)
+        except (TypeError, ValueError):
+            supply_value = 0.0
     baseline = med_init or med_cur
     delivery_start_raw = raw.get("delivery_start_date")
     delivery_end_raw = raw.get("delivery_end_date")
@@ -338,11 +359,14 @@ def build_row(raw: Dict[str, Any], *, now: datetime) -> Dict[str, Any]:
         ),
         "medal_current": med_cur or "—",
         "medal_capped_from": capped_from,
-        # Подтверждённая медаль: временной кап её не понижает, он показывается отдельно.
-        "medal_confirmed": capped_from or med_cur or "—",
+        # Коммерческая медаль карточки: подтверждённая > предварительная > текущая.
+        # Временной кап (окно) показывается отдельно и медаль не понижает.
+        "medal_confirmed": confirmed_medal or med_init or med_cur or "—",
         "medal_initial": med_init,
-        "confirmed": bool(_clean(raw.get("confirmed_base_medal"))),
-        "confirmed_base_medal": _clean(raw.get("confirmed_base_medal")),
+        "confirmed": bool(confirmed_medal),
+        "confirmed_base_medal": confirmed_medal,
+        "current_effective_score": score_float,
+        "supply_value": supply_value,
         "medal_downgraded": bool(med_cur and med_init and med_cur != med_init),
         "purchase_title": _clean(raw.get("auction_name")) or "—",
         "purchase_meta": purchase_meta,
@@ -384,53 +408,30 @@ def build_workspace_rows(
 
 
 def _row_sort_key(row: Dict[str, Any]):
-    """Приоритет показа (WIP): сначала карточки с распарсенными документами и
-    подтверждёнными категориями, затем медаль (GOLD→…), затем свежесть окна,
-    затем статус (сначала «идут торги», потом «разыграна»)."""
-    from src.services.commercial_routing_v3.submission_window_temporal import (
-        BRONZE_CAP,
-        EXPIRED,
-        FRESH,
-        MEDAL_RANK,
-        SILVER_CAP,
-        TEMPORAL_UNKNOWN,
-        WOOD_CAP,
-    )
-    # Сначала подтверждённые (модель подтвердила медаль после вскрытия документов),
-    # внутри — медаль GOLD→…, затем документы, свежесть, статус, дата.
-    confirmed = bool(row.get("confirmed"))
-    medal = str(
-        row.get("confirmed_base_medal")
-        or row.get("medal_confirmed")
-        or row.get("medal_current")
-        or ""
-    ).upper()
+    """Взвешенный приоритет карточки (веса согласованы 2026-10-13):
+
+    priority = 0.60 * (подтверждённая медаль / 4)
+             + 0.25 * (current_effective_score / 100)   # уже включает свежесть
+             + 0.15 * (log10(сумма поставки) / 9.66)
+
+    Сумма поставки: DIRECT_SUPPLY = НМЦК, иначе — материалы внутри НМЦК по
+    категории (structured_entities.total_price_value).
+    """
+    import math
+
+    conf_medal = str(row.get("confirmed_base_medal") or "").upper()
+    medal_rank = {"GOLD": 4.0, "SILVER": 3.0, "BRONZE": 2.0, "WOOD": 1.0}.get(conf_medal, 0.0)
+    score = float(row.get("current_effective_score") or 0.0)
+    supply = float(row.get("supply_value") or 0.0)
+    supply_norm = min(1.0, math.log10(supply) / 9.66) if supply > 0 else 0.0
+    priority = 0.60 * (medal_rank / 4.0) + 0.25 * (score / 100.0) + 0.15 * supply_norm
+
     temporal = row.get("temporal") or {}
-    bucket = str(temporal.get("temporal_bucket") or TEMPORAL_UNKNOWN).upper()
-    # «Есть данные»: реально скачанные документы или найденные подтверждения,
-    # а не number of links в card_json (он у многих 0 при живых документах).
-    try:
-        files_n = int(row.get("file_count") or 0)
-    except (TypeError, ValueError):
-        files_n = 0
-    try:
-        evid_n = int(row.get("evidence_count") or 0)
-    except (TypeError, ValueError):
-        evid_n = 0
-    has_docs = files_n > 0 or evid_n > 0
-    bucket_rank = {
-        FRESH: 0, SILVER_CAP: 1, BRONZE_CAP: 2, WOOD_CAP: 3, EXPIRED: 4,
-    }.get(bucket, 5)
-    status = str(row.get("status_text") or "")
-    stage_rank = 0 if status.startswith("Идут торги") else (1 if "Разыгран" in status else 2)
     deadline = temporal.get("submission_deadline_at") or "9999"
     return (
-        0 if confirmed else 1,
-        -MEDAL_RANK.get(medal, -1),
-        0 if has_docs else 1,
-        bucket_rank,
-        stage_rank,
+        -round(priority, 6),
         str(deadline),
+        int(row.get("procurement_id") or 0),
     )
 
 
@@ -460,6 +461,7 @@ _SQL_BASE = """
         cat.category_name,
         o.candidate_initial_medal,
         o.current_effective_medal,
+        o.current_effective_score,
         o.confirmed_base_medal,
         oc.object_type,
         oc.object_context,
@@ -485,6 +487,12 @@ _SQL_BASE = """
 
 
 def _mode_sql(mode: str) -> tuple[str, tuple]:
+    # Commercially-live segment filters: same tracks, but restricted by state so
+    # awarded rows are not pushed out of the page by the medal-ordered top-N.
+    if mode == OPEN_TORGI:
+        return " AND o.commercial_state = %s", ("ACTIVE",)
+    if mode == AWARDED_TYPE:
+        return " AND o.commercial_state = %s", ("FOLLOW_UP_AWARDED",)
     if mode == DIRECT_SUPPLY:
         return " AND o.opportunity_track = %s", (DIRECT_SUPPLY,)
     if mode == EMBEDDED_MATERIAL:
@@ -494,6 +502,55 @@ def _mode_sql(mode: str) -> tuple[str, tuple]:
     if mode == DESIGN:
         return " AND o.opportunity_track IN ('DESIGN_REQUIREMENT', 'DESIGN_INFLUENCE')", ()
     return "", ()
+
+
+def _attach_material_supply(raw_rows: List[Dict[str, Any]]) -> None:
+    """Прикрепить сумму материалов (embedded) из DI к каждой строке.
+
+    Для DIRECT_SUPPLY сумма считается позже как НМЦК; здесь заполняется только
+    material_supply из structured_entities (read-only, best-effort).
+    """
+    if not raw_rows:
+        return
+    try:
+        import os
+        import psycopg2
+        from src.services.crm_db_runtime import require_crm_db_connect_kwargs
+
+        kw = dict(require_crm_db_connect_kwargs())
+        kw["dbname"] = os.getenv("S13_DOCUMENT_DB_NAME", "document_intelligence")
+        kw["connect_timeout"] = 5
+        conn = psycopg2.connect(**kw)
+        try:
+            pairs = {
+                (r.get("procurement_id"), r.get("commercial_category_code"))
+                for r in raw_rows
+                if r.get("procurement_id") and r.get("commercial_category_code")
+            }
+            if not pairs:
+                return
+            pids = sorted({int(p) for p, _ in pairs})
+            cats = sorted({str(c) for _, c in pairs})
+            supply: Dict[tuple, float] = {}
+            with conn.cursor() as cur:
+                cur.execute(
+                    """SELECT procurement_id, category_code, sum(coalesce(total_price_value, 0))
+                         FROM structured_entities
+                        WHERE procurement_id = ANY(%s) AND category_code = ANY(%s)
+                        GROUP BY 1, 2""",
+                    (pids, cats),
+                )
+                for pid, cat, s in cur.fetchall():
+                    supply[(int(pid), str(cat))] = float(s or 0)
+            for r in raw_rows:
+                r["material_supply"] = supply.get(
+                    (r.get("procurement_id"), r.get("commercial_category_code")), 0.0
+                )
+        finally:
+            conn.close()
+    except Exception:
+        for r in raw_rows:
+            r["material_supply"] = 0.0
 
 
 def load_workspace_rows(
@@ -536,9 +593,9 @@ def load_workspace_rows(
                    " o.commercial_subcategory_code, o.opportunity_track, o.id DESC")
     sql = (
         "SELECT * FROM (" + inner + ") t ORDER BY "
-        "(t.confirmed_base_medal IS NOT NULL) DESC, "
         "CASE upper(coalesce(t.confirmed_base_medal, t.current_effective_medal, '')) "
         "  WHEN 'GOLD' THEN 4 WHEN 'SILVER' THEN 3 WHEN 'BRONZE' THEN 2 WHEN 'WOOD' THEN 1 ELSE 0 END DESC, "
+        "(t.confirmed_base_medal IS NOT NULL) DESC, "
         "(COALESCE(t.file_count, 0) > 0 OR COALESCE(t.evidence_count, 0) > 0) DESC, "
         "CASE upper(coalesce(t.crm_stage, '')) WHEN 'TORGI' THEN 0 ELSE 1 END ASC, "
         "COALESCE(t.end_date, DATE '1900-01-01') DESC, "
@@ -549,6 +606,7 @@ def load_workspace_rows(
         raw_rows = crm_db.execute_query(sql, tuple(parameters)) or []
     except Exception as exc:  # defensive: never break the page on schema drift
         return {"columns": list(layout_for(selected_mode)), "rows": [], "selected_mode": selected_mode, "error": str(exc)}
+    _attach_material_supply(raw_rows)
     result = build_workspace_rows(raw_rows, selected_mode=selected_mode, now=now)
     _merge_manual_categories(crm_db, result)
     _attach_queue_status(result["rows"])
