@@ -95,6 +95,7 @@ def main() -> int:
         existing = 0
         per_proc = []
         dcur = di.cursor()
+        seen_keys = set()  # (procurement_id, physical_download_key) seen in this run
         for p in procs:
             resolved = resolve_document_links(
                 source_table=p["source_table"],
@@ -119,14 +120,19 @@ def main() -> int:
                 if not url:
                     continue
                 pkey = str(link.get("physical_download_key") or url)
+                if (int(p["id"]), pkey) in seen_keys:
+                    existing += 1
+                    continue
                 dcur.execute(
                     "SELECT 1 FROM document_files WHERE procurement_id=%s"
                     " AND physical_download_key=%s LIMIT 1",
                     (int(p["id"]), pkey),
                 )
                 if dcur.fetchone():
+                    seen_keys.add((int(p["id"]), pkey))
                     existing += 1
                     continue
+                seen_keys.add((int(p["id"]), pkey))
                 if args.write:
                     dcur.execute(
                         """INSERT INTO document_files

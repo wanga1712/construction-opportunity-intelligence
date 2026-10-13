@@ -1,0 +1,13 @@
+[Unit]
+Description=Neutralize duplicate document_files rows (same procurement + physical key)
+After=postgresql@17-main.service
+
+[Service]
+Type=oneshot
+User=sergey
+Group=sergey
+WorkingDirectory=/opt/CRM_Streamlit
+EnvironmentFile=/opt/CRM_Streamlit/.env
+ExecStart=/opt/CRM_Streamlit/.venv313/bin/python /opt/CRM_Streamlit/scripts/neutralize_duplicate_document_files.py --apply
+StandardOutput=append:/tmp/dedup_sweeper.log
+StandardError=append:/tmp/dedup_sweeper.log
