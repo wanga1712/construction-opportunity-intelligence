@@ -88,7 +88,8 @@ def main() -> int:
     di = di_conn()
     try:
         procs = active_procurements(crm)
-        link_counts = batch_count_document_links(procs)
+        # Align with the worker/materializer gate: only researchable links count.
+        link_counts = batch_count_document_links(procs, filter_unresearchable=True)
         doc_counts = document_file_counts(di, [int(p["id"]) for p in procs])
 
         total = len(procs)
