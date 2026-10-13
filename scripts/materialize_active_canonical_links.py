@@ -133,7 +133,8 @@ def main() -> int:
                              (procurement_id, source_table, source_id, url, url_hash, file_name,
                               download_status, pipeline_generation, canonical_source_document_id,
                               physical_download_key, created_at)
-                           VALUES (%s,%s,%s,%s,%s,%s,'PENDING',%s,%s,%s,NOW())""",
+                           VALUES (%s,%s,%s,%s,%s,%s,'PENDING',%s,%s,%s,NOW())
+                           ON CONFLICT DO NOTHING""",
                         (
                             int(p["id"]), p["source_table"], p.get("source_id"), url,
                             hashlib.md5(url.encode("utf-8")).hexdigest(),
@@ -143,8 +144,11 @@ def main() -> int:
                             pkey,
                         ),
                     )
-                    inserted += 1
-                    proc_inserted += 1
+                    if dcur.rowcount:
+                        inserted += 1
+                        proc_inserted += 1
+                    else:
+                        existing += 1
             di.commit()
             per_proc.append({
                 "procurement_id": int(p["id"]),
