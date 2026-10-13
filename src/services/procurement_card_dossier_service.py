@@ -356,13 +356,24 @@ def load_procurement_dossier(db: Any, procurement_id: int) -> Dict[str, Any]:
     # «Что можно поставить»: извлечённые структурированные сущности (с trust state).
     dossier["supply_candidates"] = _safe_di(
         """
-        SELECT entity_type, product_name_raw, product_name_normalized,
-               manufacturer_normalized, brand_normalized, model_article_normalized,
-               quantity_value, quantity_unit_raw, unit_price_value, total_price_value,
-               product_relation, source_quote, confidence, structured_fact_trust_state
-        FROM structured_entities
-        WHERE procurement_id = %s
-        ORDER BY structured_fact_trust_state, total_price_value DESC NULLS LAST, id
+        SELECT se.entity_type, se.product_name_raw, se.product_name_normalized,
+               se.manufacturer_normalized, se.brand_normalized, se.model_article_normalized,
+               se.quantity_value, se.quantity_unit_raw, se.unit_price_value, se.total_price_value,
+               se.product_relation, se.source_quote, se.confidence, se.structured_fact_trust_state,
+               se.measurement_family, se.extractor_version,
+               COALESCE((
+                 SELECT jsonb_agg(jsonb_build_object(
+                          'name', a.attribute_name,
+                          'name_normalized', a.attribute_name_normalized,
+                          'raw_value', a.raw_value,
+                          'normalized_value', a.normalized_value,
+                          'numeric_value', a.numeric_value,
+                          'unit', a.unit_normalized)
+                        ORDER BY a.id)
+                 FROM structured_attributes a WHERE a.entity_id = se.id), '[]'::jsonb) AS attributes
+        FROM structured_entities se
+        WHERE se.procurement_id = %s
+        ORDER BY se.structured_fact_trust_state, se.total_price_value DESC NULLS LAST, se.id
         LIMIT 100
         """,
         (int(procurement_id),),

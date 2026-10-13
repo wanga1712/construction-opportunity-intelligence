@@ -341,6 +341,8 @@ def build_row(raw: Dict[str, Any], *, now: datetime) -> Dict[str, Any]:
         # Подтверждённая медаль: временной кап её не понижает, он показывается отдельно.
         "medal_confirmed": capped_from or med_cur or "—",
         "medal_initial": med_init,
+        "confirmed": bool(_clean(raw.get("confirmed_base_medal"))),
+        "confirmed_base_medal": _clean(raw.get("confirmed_base_medal")),
         "medal_downgraded": bool(med_cur and med_init and med_cur != med_init),
         "purchase_title": _clean(raw.get("auction_name")) or "—",
         "purchase_meta": purchase_meta,
@@ -394,9 +396,15 @@ def _row_sort_key(row: Dict[str, Any]):
         TEMPORAL_UNKNOWN,
         WOOD_CAP,
     )
-    # Сортировка и заголовок группы — по подтверждённой медали: закупка GOLD с
-    # исчерпанным окном не должна проваливаться в самый низ, её «кап» показывается отдельно.
-    medal = str(row.get("medal_confirmed") or row.get("medal_current") or "").upper()
+    # Сначала подтверждённые (модель подтвердила медаль после вскрытия документов),
+    # внутри — медаль GOLD→…, затем документы, свежесть, статус, дата.
+    confirmed = bool(row.get("confirmed"))
+    medal = str(
+        row.get("confirmed_base_medal")
+        or row.get("medal_confirmed")
+        or row.get("medal_current")
+        or ""
+    ).upper()
     temporal = row.get("temporal") or {}
     bucket = str(temporal.get("temporal_bucket") or TEMPORAL_UNKNOWN).upper()
     # «Есть данные»: реально скачанные документы или найденные подтверждения,
@@ -417,6 +425,7 @@ def _row_sort_key(row: Dict[str, Any]):
     stage_rank = 0 if status.startswith("Идут торги") else (1 if "Разыгран" in status else 2)
     deadline = temporal.get("submission_deadline_at") or "9999"
     return (
+        0 if confirmed else 1,
         -MEDAL_RANK.get(medal, -1),
         0 if has_docs else 1,
         bucket_rank,
@@ -451,6 +460,7 @@ _SQL_BASE = """
         cat.category_name,
         o.candidate_initial_medal,
         o.current_effective_medal,
+        o.confirmed_base_medal,
         oc.object_type,
         oc.object_context,
         cc.card_json ->> 'submission_start_at' AS submission_start_at,
@@ -526,7 +536,8 @@ def load_workspace_rows(
                    " o.commercial_subcategory_code, o.opportunity_track, o.id DESC")
     sql = (
         "SELECT * FROM (" + inner + ") t ORDER BY "
-        "CASE upper(coalesce(t.current_effective_medal, '')) "
+        "(t.confirmed_base_medal IS NOT NULL) DESC, "
+        "CASE upper(coalesce(t.confirmed_base_medal, t.current_effective_medal, '')) "
         "  WHEN 'GOLD' THEN 4 WHEN 'SILVER' THEN 3 WHEN 'BRONZE' THEN 2 WHEN 'WOOD' THEN 1 ELSE 0 END DESC, "
         "(COALESCE(t.file_count, 0) > 0 OR COALESCE(t.evidence_count, 0) > 0) DESC, "
         "CASE upper(coalesce(t.crm_stage, '')) WHEN 'TORGI' THEN 0 ELSE 1 END ASC, "
@@ -634,6 +645,11 @@ def _attach_queue_status(rows: List[Dict[str, Any]]) -> None:
         import os
         import psycopg2
         from src.services.crm_db_runtime import require_crm_db_connect_kwargs
+        from src.services.queue_admission import (
+            CLAIMABLE_QUEUE_SQL,
+            claimable_params,
+            claim_order_key,
+        )
         kw = dict(require_crm_db_connect_kwargs())
         kw["dbname"] = os.getenv("S13_DOCUMENT_DB_NAME", "document_intelligence")
         kw["connect_timeout"] = 5
@@ -651,9 +667,32 @@ def _attach_queue_status(rows: List[Dict[str, Any]]) -> None:
                     (ids,),
                 )
                 latest = {int(pid): (st, pr) for pid, st, pr in cur.fetchall()}
+                # Живая очередь = claimable (admission + lane + generation), как в воркере.
+                cur.execute(
+                    f"""SELECT COUNT(*) FROM document_processing_queue q
+                        WHERE {CLAIMABLE_QUEUE_SQL}""",
+                    claimable_params(),
+                )
+                live_depth = int((cur.fetchone() or [0])[0] or 0)
                 cur.execute("""SELECT COUNT(*) FROM document_processing_queue
                                 WHERE status IN ('PENDING','PRE_RESEARCH_WAITING')""")
-                depth = int((cur.fetchone() or [0])[0] or 0)
+                pending_total = int((cur.fetchone() or [0])[0] or 0)
+                legacy_backlog = max(0, pending_total - live_depth)
+                cur.execute(
+                    f"""SELECT q.procurement_id, q.queue_lane, q.work_tier, q.priority_score, q.id
+                          FROM document_processing_queue q
+                         WHERE {CLAIMABLE_QUEUE_SQL}""",
+                    claimable_params(),
+                )
+                claimable_rows = cur.fetchall()
+                claimable_rows.sort(key=lambda r: claim_order_key(r[1], r[2], r[3], r[4]))
+                positions = {}
+                seen = set()
+                for idx, r in enumerate(claimable_rows, start=1):
+                    pid = int(r[0])
+                    if pid not in seen:
+                        seen.add(pid)
+                        positions[pid] = idx
                 cur.execute("""SELECT AVG(EXTRACT(EPOCH FROM (completed_at - started_at)))
                                  FROM (SELECT completed_at, started_at
                                          FROM document_processing_queue
@@ -680,16 +719,6 @@ def _attach_queue_status(rows: List[Dict[str, Any]]) -> None:
                                 WHERE m.procurement_id = ANY(%s) GROUP BY m.procurement_id""", (ids,))
                 for pid, n in cur.fetchall():
                     find_counts[int(pid)] = int(n or 0)
-                positions = {}
-                for pid, (status, prio) in latest.items():
-                    if str(status).upper() in ("PENDING", "PRE_RESEARCH_WAITING"):
-                        cur.execute("""SELECT COUNT(*) FROM document_processing_queue
-                                        WHERE status IN ('PENDING','PRE_RESEARCH_WAITING')
-                                          AND (COALESCE(priority_score,0) > COALESCE(%s,0)
-                                               OR (COALESCE(priority_score,0) = COALESCE(%s,0)
-                                                   AND procurement_id < %s))""",
-                                    (prio, prio, pid))
-                        positions[pid] = int((cur.fetchone() or [0])[0] or 0) + 1
         finally:
             conn.close()
     except Exception:
@@ -700,10 +729,14 @@ def _attach_queue_status(rows: List[Dict[str, Any]]) -> None:
         if not entry:
             continue
         status, _prio = entry
-        label = _QUEUE_LABELS.get(str(status).upper(), str(status))
+        status_upper = str(status).upper()
         pos = positions.get(pid)
+        if status_upper in ("PENDING", "PRE_RESEARCH_WAITING") and pos is None:
+            label = "не поставлена в очередь"
+        else:
+            label = _QUEUE_LABELS.get(status_upper, str(status))
         if pos:
-            label += f" · {pos}-й из {depth}"
+            label += f" · {pos}-й из {live_depth}"
             if avg_sec:
                 eta = avg_sec * pos / workers
                 label += f" · ~{format_seconds(eta)}"
@@ -712,7 +745,9 @@ def _attach_queue_status(rows: List[Dict[str, Any]]) -> None:
                     row["queue_fits"] = bool(eta <= float(rem))
         row["queue_text"] = label
         row["queue_position"] = pos
-        row["queue_depth"] = depth
+        row["queue_depth"] = live_depth
+        row["live_queue_depth"] = live_depth
+        row["legacy_backlog"] = legacy_backlog
         docs_n = doc_counts.get(pid)
         finds_n = find_counts.get(pid)
         if str(status).upper() == "COMPLETED":

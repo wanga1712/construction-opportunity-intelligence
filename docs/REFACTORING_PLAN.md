@@ -1,3 +1,113 @@
+## WIP — 2026-10-13 (CATEGORY_DISCOVERY_DYNAMIC_V1)
+
+Спека: `.codex_worktrees/category_discovery_dynamic_v1/WIP.md`. Динамическое открытие
+новых embedded-категорий из материальных кандидатов: пороги частоты
+(`min_distinct_procurements` / `min_occurrences`) в таблице
+`category_discovery_config`, `min_supply_value_rub=0` (не теряем WOOD 50 тыс.),
+дефолтная медаль `WOOD`, `DIRECT` исключён. **Фазы A/B реализованы и прогнаны
+read-only** (2026-10-13): новый `scripts/promote_discovered_categories.py`, dry-run
+`279 фраз -> 72 семейства -> 32 SYNONYM_EXISTING / 40 NEW`; фаза C (`--promote`)
+не запускалась, миграция `category_discovery_config_1.sql` не применена.
+
+## CURRENT WIP — 2026-10-12 (QUEUE_TRUTH_AND_ADMISSION_FILTER_V1)
+
+**DONE 2026-10-13 — QUEUE_LEGACY_BACKLOG_RETIRE_V1.** Ретайр 25 677 legacy-строк `PENDING` (не `FACTUAL_FEEDER_ADMITTED`) → `SKIPPED_NOT_TARGET`, `last_error=legacy_not_admitted; prev_status=…` (обратимо). Итог по `document_processing_queue`: `PENDING 235` (только admitted), `SKIPPED_NOT_TARGET 27 994`, `PRE_RESEARCH_WAITING 421`. Замечание: в переданном SQL колонка называлась `error_message`, в очереди она `last_error` — использован `last_error`.
+
+**QUEUE_TRUTH_AND_ADMISSION_FILTER_V1** — `[~]` **ВЫКАТАН НА S13, UI ПЕРЕЗАПУЩЕН**. Scope: только UI-счётчики очереди (`_attach_queue_status`). Admission/приоритеты/воркеры не менялись.
+
+- **Дефект.** Карточка показывала позицию/глубину по всем `PENDING` (26 338), а воркер берёт только admitted. Вынес admission-предикат из `queue_repository.py::_S13_CLAIM_ADMISSION_FILTER` в общий `src/services/queue_admission.py` (`CLAIMABLE_QUEUE_SQL`, `QUEUE_LANES`, `claim_order_key`).
+- **Важная поправка поколения.** В воркере фактическое поколение — `S13_V4_EXHAUSTIVE_CONTEXT` (`backends/factory.py`, `DOCUMENT_PIPELINE_GENERATION`), а не литерал `S13_V2`. Первая версия модуля давала `CLAIMABLE=0`; после исправления — **LIVE=347**, `PENDING_TOTAL=26 338`, `LEGACY=25 991`.
+- **UI.** `_attach_queue_status` теперь: `live_queue_depth` = claimable; `legacy_backlog` = остальные PENDING; позиция считается по claimable-строкам в порядке lane rank → work_tier → priority → id; PENDING-строка без admitted-строки показывает «не поставлена в очередь». `queue_depth` = live depth, ETA по живой позиции.
+- **Проверки.** `py_compile` OK; live-предикат прогнан read-only на прод-БД: `LIVE=347 / PENDING=26338 / LEGACY=25991`; топ-позиции в lane `open_active` (work_tier 0). Автотесты не запускались.
+- **Отклонения / не сделано.** (1) Воркер не переключал на общий фрагмент (out of scope) — в UI он зеркалит его. (2) Позиция упрощена до lane→tier→priority→id; у воркера в order ещё `source_start_date` и (в DWRR) `research_prior_effective_score` — при желании уточнить. (3) `QUEUE_LEGACY_BACKLOG_RETIRE_V1` (ретайр 25 991 legacy) — не выполнялся, отложен.
+- **Файлы.** `src/services/queue_admission.py` (новый), `src/services/analytics_table_workspace_service.py`.
+
+## DEPLOYED TO S13 + PRODUCTION — 2026-10-12 (EMBEDDED_NORMALIZATION_ROLLOUT)
+
+Выкачено на S13 (с бэкапами `*.bak-embocr-20261012`, SHA сверены, `py_compile`/импорты OK):
+- `tender_documents_research/document_processor/{embedded_extraction,embedded_persistence,parse_utils}.py`
+- `scripts/{run_active_production_loop,run_wave2a_http}.py`
+- `src/services/{procurement_card_dossier_service,analytics_table_workspace_service}.py`, `src/ui/procurement_card_page.py`
+
+В продакшн-цикл `tender-docs-active-production-loop` добавлен drop-in `30-ocr.conf` (`ENABLE_OCR=1`, `OCR_MAX_PAGES=60`), сервис перезапущен, `is-active=active`.
+
+Повторный разбор (read→parse→persist, embedded):
+- `460783`: 22 позиции + 5 характеристик (линолеум 34/43 + без подосновы, плинтус 22×49, дюбели/шнуры диаметры).
+- `458974`: 22 позиции.
+- `423065`: 1 позиция.
+- `451595`: 0 — смета в `.xls` (не поддерживается).
+- `425834`: 0 — смета в `.xls`/`.xlsx`, xlsx-путь фактов не дал (нужен разбор).
+
+Ранжирование карточек: исправлен порядок (документы → медаль → окно → статус) в SQL `ORDER BY` и Python `_row_sort_key`; выкачено.
+
+Отстающие (отдельные этапы): нормализатор `.xls`, разбор `.xlsx`-смет, доводка смето-OCR (кол-во=норма расхода на части строк, цена/сумма не извлекаются, шум «Растворосмесители/Устройство…»).
+
+## CURRENT WIP — 2026-10-12 (EMBEDDED_SMETA_OCR_PARSER_V1)
+
+**EMBEDDED_SMETA_OCR_PARSER_V1** — `[~]` **КОД ГОТОВ ЛОКАЛЬНО, НА S13 НЕ ВЫКАТАН**. Завершает scan-нормализатор: после поворота из OCR-строк сметы извлекаются позиции материалов.
+
+- **Что сделано.** `embedded_extraction._smeta_ocr_fact`: для OCR-строки находит первую единицу измерения (с OCR-алиасами `KP→кг`, `мз→м3`, `мs→м2`), имя — до единицы (ведущие шифры сметы отбрасываются), кол-во — первое число после единицы (приблизительно, `layout_status=OCR_SMETA_APPROX`); строки-работы (`Устройство/Разборка/Монтаж/…`) и итоги пропускаются. `parse_pdf_with_ocr` теперь отдаёт каждую OCR-строку **одной ячейкой** (не режет по пробелам), а `_row_to_fact` для одноклеточных строк вызывает `_smeta_ocr_fact`. Расширен `_MATERIAL_HINTS` (доска/фанера/плинтус/керамогранит/ковролин/стяжка/клей/подложка/шпатлёвка/цемент/песок/выравнивающая/гипсокартон/ГКЛ/армстронг/саморез/дюбель).
+- **Проверки (локально, узкие).** `py_compile` — OK. На реальных OCR-строках `460783` (страницы 3–5): `Линолеум ПВХ без подосновы, класс износостойкости 34/43` → `wear_class=34/43, backing=без подосновы, qty=102 M2`; `Грунтовка укрепляющая…` → `qty=20 KG`; `Доска обрезная…` → `qty=0.24 M3`; работа `Устройство покрытий: из линолеума…` → SKIP. Широкие прогоны не запускались.
+- **Отклонения / не сделано.** (1) На S13 не выкатывалось. (2) Кол-во берётся как первое число после единицы — на части строк это норма расхода, а не фактическое кол-во (помечено `APPROX`). (3) Цена/сумма из OCR-строк не извлекаются (в embedded-фактах цена не заполняется). (4) `мз` трактуется как `м3` (неоднозначно с `м2`). (5) На S13 нужен повторный разбор `460783` с `ENABLE_OCR=1` после выката.
+- **Файлы.** `tender_documents_research/document_processor/embedded_extraction.py`, `tender_documents_research/document_processor/parse_utils.py`.
+
+## CURRENT WIP — 2026-10-12 (EMBEDDED_SCAN_ROTATION_FIX_V1)
+
+**EMBEDDED_SCAN_ROTATION_FIX_V1** — `[~]` **КОД ГОТОВ ЛОКАЛЬНО, НА S13 НЕ ВЫКАТАН**. Продолжение EMBEDDED_SCAN_OCR_V1: root cause сканов найден.
+
+- **Причина мусора.** Сканы смет/ВОР часто **повёрнуты на 90°**. На `460783/Локальный сметный расчет.pdf` OCR без поворота даёт шум; при повороте на 270° tesseract читает строки нормально: `ГЭСНр57-01-002-01 Разборка покрытий полов: из линолеума и релина…`. OSD (`--psm 0`) нестабилен (в двух прогонах `Rotate 270` и `Rotate 90`), поэтому доверять ему нельзя.
+- **Фикс.** `parse_utils.parse_pdf_with_ocr` теперь: (1) `_ocr_rotation_probe` — дешёвый прогон 4 поворотов (0/90/180/270) по первой странице на dpi=120, скоринг «кириллические слова + ключи сметы»; (2) выбранный поворот применяется ко всем страницам; (3) каждая страница прогоняется через существующий `normalize_ocr_line` (омоглифы, границы буква↔цифра). Проверено на S13 существующими модулями: probe стабильно выбирает `270` (score 255 против 134/13/10), текст становится читаемым.
+- **Осталось (не блокер качества чтения, но блокер фактов).** После поворота текст читается, но `extract_facts` на OCR-смете даёт 0 фактов: `append_ocr_table_lines` режет строку по пробелам на фрагменты, а позиции сметы имеют структуру «№ | код | наименование… | ед.нормы (100 м2) | кол-во | коэф | итого». Нужен отдельный **смето-OCR парсер строк** (собрать наименование до первого числа+ед., отделить кол-во/цену), а не универсальный whitespace-split. Это следующий этап scan-нормализатора.
+- **Файлы.** `tender_documents_research/document_processor/parse_utils.py`.
+
+## CURRENT WIP — 2026-10-12 (CARD_NORMALIZED_POSITIONS_V1)
+
+**CARD_NORMALIZED_POSITIONS_V1** — `[~]` **КОД ГОТОВ ЛОКАЛЬНО, НА S13 НЕ ВЫКАТАН**. Scope: показ нормализованных позиций + характеристик в карточке закупки.
+
+- **Что сделано.** Вкладка «Что можно поставить» теперь показывает характеристики материала: `procurement_card_dossier_service.py` добавил в `supply_candidates` `measurement_family`, `extractor_version` и агрегированный `attributes` (jsonb из `structured_attributes` по `entity_id`); `procurement_card_page.py` добавил `_attrs()` и колонку «Характеристики» вместо «Бренд/Модель» (для embedded-позиций бренд/модель пустые). Формат: `класс износостойкости=34/43; толщина=2 ММ; подоснова=без подосновы …`.
+- **Проверки (локально, узкие).** `py_compile` двух файлов — OK. SQL `supply_candidates` проверен на живой БД (pid 458104): возвращает `attributes=[]`, `measurement_family`, `extractor_version` без ошибок. Широкие прогоны не запускались.
+- **Отклонения / не сделано.** (1) На S13 не выкатывалось. (2) Атрибуты появятся в карточке только после того, как на S13 заработает новый persist атрибутов (EMBEDDED_FLOORING_ATTRIBUTES_V1) и будет переразбор; сейчас у всех проверенных закупок `attributes=[]`. (3) Разделение «детерминированный vs ИИ» по `extractor_version` в UI не рисовал (колонка в данных есть).
+- **Файлы.** `src/services/procurement_card_dossier_service.py`, `src/ui/procurement_card_page.py`.
+
+## CURRENT WIP — 2026-10-12 (EMBEDDED_SCAN_OCR_V1)
+
+**EMBEDDED_SCAN_OCR_V1** — `[~]` **КОД ГОТОВ ЛОКАЛЬНО, НА S13 НЕ ВЫКАТАН; качество OCR на сканах НЕДОСТАТОЧНО**. Scope: сканы смет/ВОР без текстового слоя в embedded-контуре.
+
+- **Что сделано.** `parse_utils.parse_pdf_with_ocr(path)`: сначала обычный `PdfParser`, при пустом тексте и `ENABLE_OCR=1` — постраничный OCR (`pdf2image` + `pytesseract`), результат прогоняется через `PdfTableExtractor.append_ocr_page`, чтобы embedded-экстрактор получал `cells` (табличные строки). Лимит `OCR_MAX_PAGES` (default 60). `run_wave2a_http.py` вызывает этот fallback для `.pdf` с пустым текстом.
+- **Проверка на S13 (read-only).** Зависимости есть: `tesseract 5.3.4` (`rus+eng+osd`), `pytesseract`, `pdf2image`, poppler. Fallback исполняется.
+- **Найденный блокер качества.** На скане `460783/Локальный сметный расчет.pdf` OCR возвращает шум («ЕЕЕ/888», мусорные глифы); даже при `dpi=300` и `--psm 4/6` на стр. 2–3 **0** совпадений по `линолеум/пол/грунт/мастик/плитка/керамогранит/подложка`, `extract_facts` → 0. То есть «просто включить OCR» недостаточно: сметы — плотные сканированные таблицы (мелкий шрифт, возможный перекос), нужен отдельный scan-нормализатор (предобработка/deskew/удаление линий + табличный OCR или отдельная модель), а не tesseract-прогон как есть.
+- **Отклонения / не сделано.** (1) На S13 не выкатывалось. (2) Scan-нормализатор (качество) не реализован — это отдельный этап. (3) Архивы и `.doc`/`.xls` (не xlsx) остаются вне OCR-ветки; их разбор — отдельно.
+- **Файлы.** `tender_documents_research/document_processor/parse_utils.py`, `scripts/run_wave2a_http.py`.
+
+## CURRENT WIP — 2026-10-12 (EMBEDDED_DOC_FETCH_WHITELIST_V1)
+
+**EMBEDDED_DOC_FETCH_WHITELIST_V1** — `[~]` **КОД ГОТОВ ЛОКАЛЬНО, НА S13 НЕ ВЫКАТАН**. Scope: только отбор документов для embedded-контура (что скачивать). Scoring/медали/очередь/данные не менялись.
+
+- **Найденный дефект.** `scripts/run_active_production_loop.py::refresh_plan` вставлял в `needed_local_missing_v2_plan` **все** parseable-документы активных закупок; `document_class` лишь грубо ставился (`ESTIMATE`/`TECH_SPEC`/`OTHER`) и использовался только для приоритета P0/P1, но не для отсева. Поэтому `scripts/run_wave2a_http.py` скачивал и разбирал не-материальные документы: «Требования к составу/содержанию заявки», «Порядок рассмотрения и оценки заявок», «Проект контракта/договора», «Инфокарта», «Реквизиты для обеспечения», «Извещение». Подтверждено по живым данным: последние 6ч скачиваний состоят в основном из этих классов.
+- **Фикс.** Используется существующий `document_classifier_v1` (metadata-only, без HTTP):
+  - whitelist материалоносных классов: `ESTIMATE, BOQ, TECH_SPEC, PRODUCT_SPECIFICATION, MATERIAL_SPECIFICATION, NMCK_JUSTIFICATION, PROJECT_DOCUMENTATION, WORKING_DOCUMENTATION`;
+  - `refresh_plan` больше не вставляет не-whitelist классы и **самоочищает** уже спланированный бэклог (пере-классифицирует `PLANNED/DOWNLOADED` по имени файла; не-материальные помечает `FAILED/excluded_non_material`);
+  - `run_wave2a_http.py` фильтрует выборку `AND p.document_class = ANY(whitelist)` — даже если в плане остались старые строки, они не скачиваются.
+- **Проверки (локально, узкие).** `py_compile` двух скриптов — OK. Классификатор на реальных именах из свежих скачиваний: KEEP=смета/ВОР/ООЗ/НМЦК/характеристики, DROP=требования к заявке/порядок оценки/проект договора/инфокарта/реквизиты. Широкие прогоны не запускались (AGENTS).
+- **Отклонения / не сделано.** (1) На S13 не выкатывалось. (2) Сканы остаются в whitelist по имени (например `Локальный сметный расчет.pdf` → ESTIMATE), но без OCR дают пустой текст — это отдельная ветка `ENABLE_OCR`, её ещё не включал. (3) Для DIRECT-контура (требования к поставщику/поставке) классы `PARTICIPANT_REQUIREMENTS`/`CONTRACT_PROJECT`/`SECURITY_REQUIREMENTS` нужны отдельно — здесь они отсекаются намеренно, т.к. цикл сейчас работает только в режиме `EMBEDDED_MATERIAL`.
+- **Файлы.** `scripts/run_active_production_loop.py`, `scripts/run_wave2a_http.py`.
+
+## CURRENT WIP — 2026-10-12 (EMBEDDED_FLOORING_ATTRIBUTES_V1)
+
+**EMBEDDED_FLOORING_ATTRIBUTES_V1** — `[~]` **КОД ГОТОВ ЛОКАЛЬНО, НА S13 НЕ ВЫКАТАН**. Scope: только детерминированный embedded-контур (`EMBEDDED_EXTRACTOR_V1`). Скоринг, медали, очередь, DIRECT-контур и данные не менялись; пишутся только `structured_attributes` к уже существующим `structured_entities` (идемпотентно).
+
+- **Запрос.** Отдельный (от прямых поставок) нормализатор для «продукции в составе работ»: из строк сметы/ВОР вытаскивать не только материал+кол-во+ед.+цену, но и характеристики материала, привязанные к нему. Для полов характеристики похожи на другие категории (толщина, размер, вес, класс), но специфичны: класс износостойкости, класс пожарной опасности КМ, подоснова, структура покрытия.
+- **Что сделано.** В `embedded_extraction.py` добавлен детерминированный `extract_attributes(text, category_code)`:
+  - общие (для всех категорий): `thickness`, `weight`, `size`, `diameter`, `strength_class` (B7.5 и т.п.), `fire_hazard_class` (КМ0–КМ5);
+  - `flooring`-специфика: `wear_class` (34/43, 33/41 и т.п.), `backing` (без/на подоснове), `structure` (гомогенное/гетерогенное).
+  - Атрибуты строятся как `StructuredAttribute` (тот же контракт/фингерпринт, что у модельного экстрактора — второго слоя нет).
+  - `ExtractedFact.attributes` заполняется и в текстовом пути (`_row_to_fact`), и в xlsx-пути (`facts_from_table_rows`).
+- **Persist.** `embedded_persistence.persist_facts`: entity-INSERT теперь `RETURNING id`, атрибуты пишутся в `structured_attributes` с `ON CONFLICT (entity_id, attribute_fingerprint) DO UPDATE`.
+- **Фикс ловушки идемпотентности.** Причина `uq_extraction_run_detail_version (detail_id, extractor_version) already exists` → `embedded=0`: `detail_id` в этом пути общий на всю закупку (`MIN(id) FROM document_match_details`), а run уникален по `(detail_id, extractor_version)`; второй документ той же закупки падал на INSERT, исключение глотал `_persist_embedded`. В INSERT run добавлен `ON CONFLICT (detail_id, extractor_version) DO UPDATE ... RETURNING id` — повторный разбор больше не даёт `embedded=0`.
+- **Проверки (локально, узкие).** `py_compile` двух файлов — OK. `extract_attributes` на образцах: линолеум → thickness/wear_class/fire_hazard_class/weight/size/backing; ковровая плитка → size/wear_class; ГКЛ → thickness 12,5 мм; бетон → strength_class B7.5. `extract_facts` на строке сметы → факт с атрибутами. Широкие прогоны и автотесты не запускались (AGENTS).
+- **Отклонения / не сделано.** (1) На S13 не выкатывалось — нужен отдельный шаг sync/deploy и переразбор affected-документов. (2) `460783` имеет **сканы без текстового слоя** (pdftotext = пусто), поэтому для его сметы нужен OCR (`ENABLE_OCR=1`) либо другой источник; DOCX-ООЗ конкретные материалы не перечисляет, ссылается на локальный сметный расчёт. (3) Очистка `product_name` от характеристик (отдельное «чистое» имя материала) не делалась — атрибуты добавляются, имя остаётся как есть. (4) Каталог шаблонов по-прежнему не подтверждён замером N1 (`probe_document_shapes.py`).
+- **Файлы.** `tender_documents_research/document_processor/embedded_extraction.py`, `tender_documents_research/document_processor/embedded_persistence.py`.
+
 ## CURRENT WIP — 2026-10-11 (DIRECT-CARD-DOCS-ERRORS-AND-TECH-NORMALIZATION-1)
 
 **DIRECT-CARD-DOCS-ERRORS-AND-TECH-NORMALIZATION-1** — `[~]` **КОД ГОТОВ, НА S13 НЕ ПРОВЕРЕН**. Scope: карточка закупки — видимость ошибок секций и нормализация вывода техпараметров. Скоринг, медали, timing, lifecycle, extraction-контур, очередь и данные не менялись; записей в БД нет.

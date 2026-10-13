@@ -39,6 +39,7 @@ from document_processor.parse_extractors import extract_and_persist  # noqa: E40
 from document_processor.parse_utils import (  # noqa: E402
     get_rich_parser,
     parse_file_with_meta,
+    parse_pdf_with_ocr,
     supports_rich_meta,
 )
 from document_processor.parser_factory import ParserFactory  # noqa: E402
@@ -47,6 +48,18 @@ from src.services.crm_db_runtime import require_crm_db_connect_kwargs  # noqa: E
 PLAN_VERSION = "NEEDED_BUT_LOCAL_MISSING_V2"
 # WIP ACTIVE_NEED_HTTP_AND_PROMOTION_V1: only commercially-live procurements.
 ALLOWED_BUCKETS = ("A_OPEN_CURRENT", "A_AWARDED_OBJECT")
+#: Document classes that carry material/characteristic evidence; the rest of the
+#: plan (legal/participant/contract boilerplate) is never fetched.
+MATERIAL_DOC_CLASSES = (
+    "ESTIMATE",
+    "BOQ",
+    "TECH_SPEC",
+    "PRODUCT_SPECIFICATION",
+    "MATERIAL_SPECIFICATION",
+    "NMCK_JUSTIFICATION",
+    "PROJECT_DOCUMENTATION",
+    "WORKING_DOCUMENTATION",
+)
 REPORT_PATH = "/tmp/wave2a_report.json"
 PROGRESS_PATH = "/tmp/wave2a_progress.json"
 MAX_BLOCK_STREAK = 3
@@ -159,8 +172,9 @@ def main() -> int:
               WHERE p.plan_version = %s
                 AND p.status IN ('PLANNED', 'DOWNLOADED')
                 AND p.lifecycle_bucket = ANY(%s)
+                AND p.document_class = ANY(%s)
               ORDER BY CASE p.priority WHEN 'P0' THEN 0 ELSE 1 END, p.id"""
-    params = [PLAN_VERSION, list(ALLOWED_BUCKETS)]
+    params = [PLAN_VERSION, list(ALLOWED_BUCKETS), list(MATERIAL_DOC_CLASSES)]
     if limit > 0:
         sql += " LIMIT %s"
         params.append(limit)
@@ -317,6 +331,8 @@ def main() -> int:
                     counters[prio + "_PARSE_FAILED"] += 1
                     log.warning("parse failed %s: %s", path.name, exc)
                     text, meta = None, None
+                if text is not None and path.suffix.lower() == ".pdf" and not (text or "").strip():
+                    text, meta = parse_pdf_with_ocr(path)
                 if text is not None:
                     counters[prio + "_PARSED"] += 1
                     found = 0

@@ -22,7 +22,7 @@ from __future__ import annotations
 import hashlib
 import os
 import re
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any, Dict, Iterable, List, Optional, Sequence, Tuple
 
 EXTRACTOR_VERSION = "EMBEDDED_EXTRACTOR_V1"
@@ -194,6 +194,25 @@ _MATERIAL_HINTS = (
     "настил",
     "ограждени",
     "опор",
+    "доска",
+    "фанера",
+    "плинтус",
+    "керамогр",
+    "ковролин",
+    "стяжк",
+    "клей",
+    "подложк",
+    "шпатлев",
+    "шпаклев",
+    "цемент",
+    "песок",
+    "выравнива",
+    "нивелир",
+    "гипсокартон",
+    "гкл",
+    "армстронг",
+    "саморез",
+    "дюбел",
 )
 
 _BAD_NAME = re.compile(
@@ -314,6 +333,7 @@ class ExtractedFact:
     extractor_version: str = EXTRACTOR_VERSION
     normalizer_version: str = NORMALIZER_VERSION
     layout_status: Optional[str] = None
+    attributes: List[Any] = field(default_factory=list)
 
 
 def normalize_name(raw: Optional[str]) -> Optional[str]:
@@ -322,6 +342,104 @@ def normalize_name(raw: Optional[str]) -> Optional[str]:
     s = str(raw).replace("ё", "е").replace("\u00a0", " ")
     s = re.sub(r"\s+", " ", s).strip()
     return s[:400] or None
+
+
+# ------------------------------------------------------------------ attributes
+
+# Shared characteristics that make sense for many material families.
+_GENERIC_ATTRIBUTE_PATTERNS: Tuple[Tuple[str, str, str], ...] = (
+    ("thickness", "толщина", r"толщин\w*\s*(\d+(?:[.,]\d+)?)\s*(мм|см|м)?"),
+    ("fire_hazard_class", "класс пожарной опасности", r"\bКМ\s*([0-5])\b"),
+    ("strength_class", "класс прочности", r"(?:класс(?:а)?\s+прочности\s+|бетон\w*\s+)?(B\d+(?:[.,]\d+)?)"),
+    ("diameter", "диаметр", r"диаметр\w*\s*(\d+(?:[.,]\d+)?)\s*(мм|см|м)?"),
+    ("weight", "вес", r"вес\s*(\d+(?:[.,]\d+)?)"),
+    ("size", "размер", r"(\d{2,4})\s*[xх×]\s*(\d{2,4})\s*(мм|см)?"),
+)
+
+# Category-specific characteristics. Floors share "thickness/class" with other
+# families, but their "class" is wear/application class and they carry backing,
+# structure and fire-hazard marking that other categories do not.
+_CATEGORY_ATTRIBUTE_PATTERNS: Dict[str, Tuple[Tuple[str, str, str], ...]] = {
+    "flooring": (
+        ("wear_class", "класс износостойкости",
+         r"класс\s+(?:износостойкости|применения|нагрузки|использования)?\s*(\d{2})\s*/\s*(\d{2})"),
+        ("wear_class", "класс износостойкости",
+         r"(?<![\d/])(\d{2})\s*/\s*(\d{2})(?![\d/])"),
+        ("backing", "подоснова", r"(без\s+подосновы|на\s+\S+\s+подоснове|\S*подоснов\w*)"),
+        ("structure", "структура покрытия", r"(гомогенн\w+|гетерогенн\w+)"),
+    ),
+}
+
+
+def extract_attributes(
+    text: Optional[str],
+    category_code: str,
+    source_quote: Optional[str] = None,
+) -> List[Any]:
+    """Deterministic, category-aware characteristic extraction from a row/name.
+
+    Reuses the StructuredAttribute contract so results persist through the same
+    ``structured_attributes`` table as the model-backed extractor (no second
+    parallel taxonomy or scoring layer).
+    """
+    if not text:
+        return []
+    from document_processor.structured_fact_contract import StructuredAttribute
+
+    specs = list(_GENERIC_ATTRIBUTE_PATTERNS)
+    specs.extend(_CATEGORY_ATTRIBUTE_PATTERNS.get(category_code or "", ()))
+    quote = (source_quote or text)[:500]
+    out: List[Any] = []
+    seen: set = set()
+
+    numeric_codes = {
+        "thickness", "weight", "diameter", "size", "strength_class",
+        "fire_hazard_class", "wear_class",
+    }
+
+    for code, label, pattern in specs:
+        for m in re.finditer(pattern, text, flags=re.IGNORECASE):
+            raw = m.group(0).strip()
+            groups = [g for g in m.groups() if g is not None]
+            normalized = None
+            numeric = None
+            unit_raw = None
+            unit_norm = None
+            if code in numeric_codes:
+                if code == "wear_class":
+                    normalized = "/".join(g.strip() for g in groups[:2]) if len(groups) >= 2 else None
+                elif code == "size":
+                    normalized = "x".join(g.strip() for g in groups[:2]) if len(groups) >= 2 else None
+                elif code == "fire_hazard_class":
+                    normalized = ("КМ" + groups[0].strip()) if groups else None
+                else:
+                    normalized = groups[0].strip() if groups else None
+                    numeric = parse_number(normalized) if normalized is not None else None
+                for g in groups:
+                    if g and re.search(r"[а-яa-z]", g, re.IGNORECASE) and g.strip() != (normalized or ""):
+                        unit_raw = g.strip()
+                        unit_norm, _fam = normalize_unit(unit_raw)
+                        break
+            else:
+                normalized = raw
+            key = (code, (normalized or raw).lower(), unit_raw or "")
+            if key in seen:
+                continue
+            seen.add(key)
+            out.append(
+                StructuredAttribute(
+                    attribute_name=label,
+                    attribute_name_normalized=code,
+                    raw_value=raw,
+                    normalized_value=normalized,
+                    numeric_value=numeric,
+                    unit_raw=unit_raw,
+                    unit_normalized=unit_norm,
+                    confidence=0.9,
+                    source_quote=quote,
+                )
+            )
+    return out
 
 
 def fingerprint(fact: ExtractedFact, row_key: str) -> str:
@@ -395,6 +513,109 @@ def _iter_rows(text: str, line_meta: Optional[Dict[int, Any]]) -> Iterable[Tuple
             yield line_no, row_text, row_meta
 
 
+_WORK_ROW = re.compile(
+    r"^(устройств|разборк|демонтаж|монтаж|окраск|штукатурк|кладк|установк|"
+    r"сверлени|нанесени|шлифовк|кристаллизац|замен|сняти|пробивк)",
+    re.IGNORECASE,
+)
+_SMETA_UNIT = re.compile(
+    r"\b(м\s*[23]|м[зэs]|м2|м3|кг|кгр|к[рp]|k[pр]|гр|т|шт|компл|упак|рулон|лист|п\.?\s*м|пог\.?\s*м|м)\b",
+    re.IGNORECASE,
+)
+_NUMBER = re.compile(r"(\d+(?:[.,]\d+)?)")
+_CODE_PREFIX = re.compile(
+    r"^(?:[ФГТ]СБЦ|[ГФ]?[ЕЭ]СН\w*|ТЕР\w*|ФЕР\w*|[0-9][0-9.,/\-]*|[A-Za-z]+[0-9./\-]*)$",
+    re.IGNORECASE,
+)
+_CYRILLIC_HAS = re.compile(r"[а-яё]", re.IGNORECASE)
+_OCR_UNIT_ALIASES = {
+    "kp": "кг",
+    "кр": "кг",
+    "kr": "кг",
+    "кгр": "кг",
+    "мз": "м3",
+    "мэ": "м3",
+    "мs": "м2",
+    "м2": "м2",
+    "м3": "м3",
+}
+
+
+def _strip_smeta_code_prefix(name: str) -> str:
+    """Убирает ведущие позиционные номера/шифры сметы, оставляя наименование."""
+    tokens = name.split()
+    for idx, token in enumerate(tokens):
+        if not _CODE_PREFIX.match(token):
+            return " ".join(tokens[idx:]).strip(" ,.;:-")
+    return ""
+
+
+def _smeta_ocr_fact(
+    *,
+    row_text: str,
+    procurement_id: int,
+    category_code: str,
+    document_name: str,
+    source_document_id: Optional[int],
+    physical_key: Optional[str],
+    line_no: int,
+    meta: Dict[str, Any],
+    category_keywords: Sequence[str],
+) -> Optional[ExtractedFact]:
+    """Разбор одной OCR-строки сметы: имя до единицы, затем кол-во (приблизительно)."""
+    low = row_text.lower()
+    if not any(h in low for h in _MATERIAL_HINTS):
+        return None
+    if _is_header(row_text) or _is_aggregate_name(row_text):
+        return None
+    unit_match = _SMETA_UNIT.search(row_text)
+    if not unit_match:
+        return None
+    name = _strip_smeta_code_prefix(row_text[: unit_match.start()].strip())
+    if not name or _WORK_ROW.match(name):
+        return None
+    name = normalize_name(name)
+    if not name:
+        return None
+    if not _CYRILLIC_HAS.search(name):
+        return None
+
+    tail = row_text[unit_match.end():].strip()
+    qty_match = _NUMBER.search(tail)
+    quantity = parse_number(qty_match.group(1)) if qty_match else None
+    unit_raw = re.sub(r"\s+", "", unit_match.group(0)).lower()
+    unit_norm, family = normalize_unit(_OCR_UNIT_ALIASES.get(unit_raw, unit_raw))
+    if quantity is None and unit_norm is None:
+        return None
+
+    low_name = name.lower()
+    category_match = any(kw and kw in low_name for kw in category_keywords)
+    material_hint = any(h in low_name for h in _MATERIAL_HINTS)
+    fact = ExtractedFact(
+        procurement_id=procurement_id,
+        category_code=category_code,
+        document_name=document_name,
+        source_document_id=source_document_id,
+        physical_download_key=physical_key,
+        page_or_sheet=str(meta.get("page_number")) if meta.get("page_number") else None,
+        row_or_line=f"line{line_no}",
+        product_name_raw=name,
+        product_name_normalized=name,
+        quantity_raw=str(quantity) if quantity is not None else None,
+        quantity_value=quantity,
+        unit_raw=unit_raw,
+        unit_normalized=unit_norm,
+        measurement_family=family,
+        source_quote=row_text[:500],
+        confidence=0.78 if (quantity is not None and unit_norm) else 0.5,
+        category_match=category_match or material_hint,
+        layout_status="OCR_SMETA_APPROX",
+    )
+    fact.attributes = extract_attributes(name, category_code, row_text[:500])
+    fact.entity_fingerprint = fingerprint(fact, f"line{line_no}")
+    return fact
+
+
 def _row_to_fact(
     *,
     procurement_id: int,
@@ -411,6 +632,18 @@ def _row_to_fact(
     cells = _split_row_cells(row_text, meta)
     if not cells:
         return None
+    if len(cells) == 1:
+        return _smeta_ocr_fact(
+            row_text=row_text,
+            procurement_id=procurement_id,
+            category_code=category_code,
+            document_name=document_name,
+            source_document_id=source_document_id,
+            physical_key=physical_key,
+            line_no=line_no,
+            meta=meta,
+            category_keywords=category_keywords,
+        )
 
     layout_status = None
     mapped_qty = mapped_unit = mapped_price = mapped_total = None
@@ -590,6 +823,7 @@ def _row_to_fact(
         category_match=category_match,
         layout_status=layout_status,
     )
+    fact.attributes = extract_attributes(row_text, category_code, row_text[:500])
     row_key = str(fact.row_or_line)
     fact.entity_fingerprint = fingerprint(fact, row_key)
     return fact
@@ -712,6 +946,7 @@ def facts_from_table_rows(
             category_match=any(kw and kw in quote.lower() for kw in category_keywords),
             layout_status=layout_status,
         )
+        fact.attributes = extract_attributes(str(name), category_code, quote[:500])
         fact.entity_fingerprint = fingerprint(fact, str(fact.row_or_line or ""))
         if fact.entity_fingerprint in seen:
             continue

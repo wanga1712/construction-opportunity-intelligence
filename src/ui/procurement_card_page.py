@@ -161,6 +161,31 @@ def _prov_chip(status: Any) -> str:
     return f'<span class="pc-chip {cls}">{escape(s)}</span>'
 
 
+def _attrs(s: Dict[str, Any]) -> str:
+    """Форматирует характеристики материала из structured_attributes."""
+    import json
+    raw = s.get("attributes")
+    if isinstance(raw, str):
+        try:
+            raw = json.loads(raw)
+        except Exception:  # noqa: BLE001
+            raw = None
+    items = raw or []
+    parts = []
+    for a in items:
+        if not isinstance(a, dict):
+            continue
+        name = a.get("name_normalized") or a.get("name") or ""
+        value = a.get("normalized_value") or a.get("raw_value") or ""
+        unit = a.get("unit") or ""
+        seg = (f"{name}={value}" if name else value).strip("= ")
+        if unit:
+            seg = f"{seg} {unit}".strip()
+        if seg:
+            parts.append(seg)
+    return escape("; ".join(parts)) if parts else "—"
+
+
 def _medal_span(medal: Any) -> str:
     s = str(medal or "").upper()
     if not s:
@@ -656,10 +681,10 @@ def _render_dossier(d: Dict[str, Any], db: Any = None) -> None:
             supply = d.get("supply_candidates") or []
             if supply:
                 st.markdown(_table_html(
-                    ["Товар/материал", "Бренд", "Модель", "Кол-во", "Цена", "Сумма", "Отношение", "Trust"],
+                    ["Товар/материал", "Характеристики", "Кол-во", "Цена", "Сумма", "Отношение", "Trust"],
                     [
                         [escape(str(s.get("product_name_normalized") or s.get("product_name_raw") or "")),
-                         _fmt(s.get("brand_normalized")), _fmt(s.get("model_article_normalized")),
+                         _attrs(s),
                          f'{_fmt(s.get("quantity_value"))} {_fmt(s.get("quantity_unit_raw"))}',
                          _money(s.get("unit_price_value")), _money(s.get("total_price_value")),
                          _fmt(s.get("product_relation")), _fmt(s.get("structured_fact_trust_state"))]

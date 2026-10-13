@@ -109,10 +109,16 @@ def persist_facts(
                  source_validator_version, source_validation_method, extractor_name,
                  extractor_version, extraction_method, prompt_version, model_name, status,
                  created_at, completed_at, structured_fact_trust_state)
-            VALUES (%s,%s,%s,%s,'mixed',%s,%s,'PROVENANCE_CONTRACT','v1','PARSE_TIME',
-                    'EMBEDDED_EXTRACTOR',%s,'DETERMINISTIC_ROW_MAP','none','none','COMPLETED',
-                    NOW(),NOW(),'MANUAL_PROOF_QUARANTINE')
-            RETURNING id
+             VALUES (%s,%s,%s,%s,'mixed',%s,%s,'PROVENANCE_CONTRACT','v1','PARSE_TIME',
+                     'EMBEDDED_EXTRACTOR',%s,'DETERMINISTIC_ROW_MAP','none','none','COMPLETED',
+                     NOW(),NOW(),'MANUAL_PROOF_QUARANTINE')
+             ON CONFLICT (detail_id, extractor_version) DO UPDATE SET
+                 category_code = EXCLUDED.category_code,
+                 document_name = EXCLUDED.document_name,
+                 source_text_snapshot = EXCLUDED.source_text_snapshot,
+                 source_text_sha256 = EXCLUDED.source_text_sha256,
+                 completed_at = NOW()
+             RETURNING id
             """,
             (detail_id, procurement_id, str(category_code)[:100], document_name, snapshot,
              hashlib.sha256(snapshot.encode("utf-8")).hexdigest(), EXTRACTOR_VERSION),
@@ -148,8 +154,9 @@ def persist_facts(
                 total_price_raw = EXCLUDED.total_price_raw,
                 layout_status = EXCLUDED.layout_status,
                 source_quote = EXCLUDED.source_quote
-              WHERE %s
-            """,
+               WHERE %s
+             RETURNING id
+             """,
             (
                 run_id, detail_id, procurement_id, cat, f.entity_fingerprint,
                 (f.product_name_raw or "")[:400], f.product_name_normalized,
@@ -162,10 +169,19 @@ def persist_facts(
                 os.getenv("EMBEDDED_FORCE_UPDATE", "0") == "1",
             ),
         )
+        entity_row = cur.fetchone()
         if cur.rowcount == 0:
+            cur.execute(
+                "SELECT id FROM structured_entities"
+                " WHERE procurement_id=%s AND source_document_id IS NOT DISTINCT FROM %s"
+                " AND entity_fingerprint=%s AND extractor_version=%s LIMIT 1",
+                (procurement_id, f.source_document_id, f.entity_fingerprint, f.extractor_version),
+            )
+            entity_id = cur.fetchone()[0]
             reused += 1
-            continue
-        created += 1
+        else:
+            entity_id = entity_row[0]
+            created += 1
         if f.product_name_raw:
             stats["material"] += 1
         if f.quantity_value is not None:
@@ -180,4 +196,31 @@ def persist_facts(
             stats["with_category"] += 1
         if not (f.source_document_id and f.source_quote):
             stats["without_provenance"] += 1
+        if getattr(f, "attributes", None):
+            for a in f.attributes:
+                cur.execute(
+                    """
+                    INSERT INTO structured_attributes
+                        (entity_id, run_id, attribute_fingerprint, attribute_name,
+                         attribute_name_normalized, raw_value, normalized_value, numeric_value,
+                         unit_raw, unit_normalized, source_quote, confidence, created_at)
+                    VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,NOW())
+                    ON CONFLICT (entity_id, attribute_fingerprint) DO UPDATE SET
+                        attribute_name = EXCLUDED.attribute_name,
+                        attribute_name_normalized = EXCLUDED.attribute_name_normalized,
+                        raw_value = EXCLUDED.raw_value,
+                        normalized_value = EXCLUDED.normalized_value,
+                        numeric_value = EXCLUDED.numeric_value,
+                        unit_raw = EXCLUDED.unit_raw,
+                        unit_normalized = EXCLUDED.unit_normalized,
+                        source_quote = EXCLUDED.source_quote,
+                        confidence = EXCLUDED.confidence
+                    """,
+                    (
+                        entity_id, run_id, a.attribute_fingerprint, a.attribute_name,
+                        a.attribute_name_normalized, a.raw_value, a.normalized_value,
+                        a.numeric_value, a.unit_raw, a.unit_normalized, a.source_quote,
+                        a.confidence,
+                    ),
+                )
     return created, reused, stats
