@@ -1,5 +1,8 @@
 # WIP AWARDED_OBJECT_MEDAL_HOLD_V1
 
+> **ИТОГ: CLOSED — NO CHANGE NEEDED.** Затухание по сроку работает как задумано,
+> правило-исключение не нужно. См. RESULT внизу.
+
 Created: 2026-10-13. Owner: commercial routing (medal semantics).
 
 ## Goal
@@ -112,4 +115,29 @@ DIRECT_AWARDED_BEHAVIOUR_UNCHANGED = yes
 CANDIDATE_INITIAL_CHANGED = 0
 ```
 
-FOLLOW-UP: после согласования — применить floor и прогнать переоценку.
+FOLLOW-UP: закрыто. Floor НЕ применяем.
+
+## RESULT (2026-10-13) — CLOSED, NO CHANGE NEEDED
+
+STATUS: CLOSED (правило-исключение отменено пользователем)
+
+Причина закрытия: затухание медали по сроку — это **задуманное** поведение,
+зафиксировано каноном `submission_window_temporal.py`:
+
+```
+0–40% окна израсходовано → FRESH (кэпа нет)
+40–60%                   → SILVER cap
+60–80%                   → BRONZE cap
+80–100%                  → WOOD cap
+>=100%                   → EXPIRED
+```
+
+Для разыгранных объектов окно — проектное/исполнения (project_end), ветка
+«PROJECT LIFECYCLE V1»; проверено на закупке 139: осталось 9 дней из 66
+(86% израсходовано) → WOOD cap — соответствует канону, не баг.
+
+Действия:
+- временная правка `PROJECT_HOLD_TIMING` (timing-floor) **откачена**;
+- правила кэпов не менялись;
+- 1564 разыгранных объекта: у всех есть проектные даты → затухают по своему
+  проектному окну.
