@@ -34,6 +34,11 @@ from src.services.commercial_routing_v3.project_lifecycle import is_project_trac
 
 CANDIDATE_SCORING_VERSION = "v2_post_award_execution_20260814"
 
+#: Timing floor for a live (not expired) awarded project/object. While the
+#: execution/delivery window is running the medal must not decay with the
+#: remaining-days countdown (AWARDED_OBJECT_MEDAL_HOLD_V1).
+PROJECT_HOLD_TIMING = 85.0
+
 MEDAL_THRESHOLDS: Dict[CandidateMedal, float] = {
     CandidateMedal.GOLD: 75.0,
     CandidateMedal.SILVER: 50.0,
@@ -222,7 +227,15 @@ def _commercial_timing_score(
     # AWARDED branch so awarded projects use the same execution-window runway.
     if is_project_track(track) and ctx.project_active:
         if ctx.project_timing_value is not None:
-            return _clamp(float(ctx.project_timing_value)), "USED", "PROJECT_LIFECYCLE"
+            # AWARDED_OBJECT_MEDAL_HOLD_V1: while the project window is still
+            # running the timing component must not decay the medal — the
+            # procurement is already awarded and the execution runway is exactly
+            # when materials are sold. Timing decay starts at/after expiry.
+            return (
+                _clamp(max(float(ctx.project_timing_value), PROJECT_HOLD_TIMING)),
+                "USED",
+                "PROJECT_LIFECYCLE",
+            )
 
     if lc == "AWARDED":
         return _awarded_timing_score(ctx, category)
