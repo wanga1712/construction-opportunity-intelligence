@@ -11,7 +11,7 @@
 DOCUMENT_SELECTION_V3: legacy-поведение ``should_skip_file()`` сохранено
 (тот же union множеств), но каждый skip получает policy-класс:
   HARD_SKIP   — pipeline не должен исследовать никогда: технические
-                контейнеры/подписи (.xml .sig .p7s .gge .sign .gsfx),
+                контейнеры/подписи (.xml .sig .p7s .gge .sign),
                 сертификаты/ключи, control/result-control артефакты,
                 изображения и чертёжные форматы, имена без расширения,
                 невалидные имена;
@@ -113,7 +113,8 @@ SKIP_EXTENSIONS: Set[str] = {
     # Криптоконтейнеры/подписи — не документы.
     ".gge",
     ".sign",
-    ".gsfx",
+    # .gsfx НЕ подпись: это сметы SmetaWIZARD (ZIP + Data.xml/Properties.xml),
+    # их разбирает GsfxParser. Восстановлено 2026-10-13 (GSFX_RESTORE_V1).
     # Сертификаты/ключи.
     ".cer",
     ".crt",

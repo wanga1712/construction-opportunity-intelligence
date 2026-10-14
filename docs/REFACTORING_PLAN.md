@@ -1,13 +1,38 @@
+## WIP — 2026-10-13 (CARD_MEDAL_TWO_TIER_DISPLAY_V1)
+
+**2026-10-13 (весовая приоритизация карточек).** Веса утверждены
+`0.60 медаль / 0.25 score / 0.15 сумма`. Реализовано в
+`analytics_table_workspace_service.py`: SQL выбирает `current_effective_score`,
+`_attach_material_supply()` тянет сумму материалов из DI (DIRECT = НМЦК),
+`_row_sort_key` сортирует по `-priority`. Выкачено, `crm-streamlit` перезапущен.
+
+## WIP — 2026-10-13 (WORKS_VS_GOODS_CONFIRMATION_V1)
+
+Спека: `.codex_worktrees/works_vs_goods_confirmation_v1/WIP.md`. `confirmed_base`
+и «что можно поставить» считать только по товарным фактам, а не по работам;
+живой кейс 29311 — lighting подтверждён фрезерованием асфальта (ложно). Код не начат.
+
+Спека: `.codex_worktrees/card_medal_two_tier_display_v1/WIP.md`. Двухуровневые
+медали (категория/карточка), ранжирование категорий по медали+сумме, группировка
+категория→подкатегория→карточка, чин окна `LIMIT 300` (GOLD не теряется).
+Бейдж подтверждённого GOLD уже починен в `build_row`; остальное — не начато.
+
 ## WIP — 2026-10-13 (CATEGORY_DISCOVERY_DYNAMIC_V1)
+
+**2026-10-13 (медали карточек).** В `analytics_table_workspace_service.build_row`
+коммерческая медаль карточки теперь берётся как
+`confirmed_base_medal → candidate_initial_medal → current_effective_medal`
+(временной кап показывается отдельно и медаль не понижает). Бейдж подтверждённого
+GOLD больше не рисуется как BRONZE. Выкачено, `crm-streamlit` перезапущен.
 
 Спека: `.codex_worktrees/category_discovery_dynamic_v1/WIP.md`. Динамическое открытие
 новых embedded-категорий из материальных кандидатов: пороги частоты
 (`min_distinct_procurements` / `min_occurrences`) в таблице
 `category_discovery_config`, `min_supply_value_rub=0` (не теряем WOOD 50 тыс.),
 дефолтная медаль `WOOD`, `DIRECT` исключён. **Фазы A/B реализованы и прогнаны
-read-only** (2026-10-13): новый `scripts/promote_discovered_categories.py`, dry-run
-`279 фраз -> 72 семейства -> 32 SYNONYM_EXISTING / 40 NEW`; фаза C (`--promote`)
-не запускалась, миграция `category_discovery_config_1.sql` не применена.
+read-only** (2026-10-13): `scripts/promote_discovered_categories.py`; после фиксов
+A/B dry-run `279 фраз -> 44 семейства -> 25 SYNONYM_EXISTING / 19 NEW`; фаза C
+(`--promote`) не запускалась, миграция `category_discovery_config_1.sql` не применена.
 
 ## CURRENT WIP — 2026-10-12 (QUEUE_TRUTH_AND_ADMISSION_FILTER_V1)
 
@@ -136,6 +161,35 @@ read-only** (2026-10-13): новый `scripts/promote_discovered_categories.py`,
 | N6 | trust-гейт и приёмка: показываем как подтверждённое только VERIFIED/TRUSTED; потери вход=выход | не начато |
 
 Приёмка фазы N1: отчёт «форм — D, из них с колонкой товара — X, с блоками позиций — Y», примеры на закупках. До прогона N1 гипотезы T6/T7 остаются гипотезами, шаблоны не пишутся.
+
+### DIRECT-COMPUTERS-NORMALIZATION-TEMPLATES-V1 — трасса 2026-10-13
+
+Связанный WIP: `docs/wip/WIP_DIRECT_COMPUTERS_NORMALIZATION_TEMPLATES_V1.md`.
+Target: `DIRECT_GOODS / DIRECT_SUPPLY`, `computers / servers`; контроль
+449936 · № 32616434043.
+
+| Фаза | Что | Адрес правок | Статус |
+|---|---|---|---|
+| 0 | read-only замер 449936 + N≤15 current `computers/servers/DIRECT_SUPPLY` | чтение DB / parse cache | **не начата** |
+| 1 | человекочитаемое имя, brand/модель, `product_relation=PRIMARY_SUBJECT`, серверные атрибуты | `embedded_persistence.py` (relation), `structured_fact_repository.py` (identity/attributes), `direct_runtime.py` | **не начата** |
+| 2 | детерминированная колонка `item` для DIRECT + переиспользование существующего `render_product_delivery` | `direct_document_extractor.py`, `direct_requirement_classifier.py`, `procurement_card_direct.py` | **не начата** |
+| 3 | читаемый коммерческий блок, разделение CURRENT opportunity и legacy-находок | переиспользовать `direct_product_evidence.py:116`; UI-слой карточки | **не начата** |
+| 4 | аналоги только из TRUSTED `structured_entities` той же подкатегории | read-only projection | **не начата, опционально** |
+
+Важные уточнения после сверки с кодом:
+
+1. `product_relation='EMBEDDED'` у DIRECT-фактов — это жёсткий литерал в
+   `embedded_persistence.py:145`; правится общий персист, а не только
+   DIRECT-экстрактор. Доменное значение для direct — `PRIMARY_SUBJECT`,
+   для embedded — `EMBEDDED_IN_WORKS`.
+2. brand/manufacturer/model заполняет `structured_fact_repository.py:125`,
+   поэтому правило серверной identity должно быть там.
+3. `render_product_delivery` уже умеет `item`; дефект — пустая колонка `item`
+   на 449936, поэтому Phase 2 начинается с восстановления колонки товара,
+   а не с переписывания вкладки.
+4. Phase 3 привязывается к существующему
+   `commercial_routing_v3/direct_product_evidence.py`, параллельный
+   коммерческий блок не создаём.
 
 ### ШАБЛОН T8 «РОЛЬ ДОКУМЕНТА» — ВНЕДРЁН И ПРОВЕРЕН (прод, 2026-10-11)
 
