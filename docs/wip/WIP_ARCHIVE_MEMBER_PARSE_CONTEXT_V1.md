@@ -1,6 +1,6 @@
 # WIP ARCHIVE_MEMBER_PARSE_CONTEXT_V1 — члены архива получают category context
 
-Status: СПЕКА / ПРИОРИТЕТ ПЕРЕД GSFX-добивкой. Owner: document pipeline
+Status: CODE READY (`9895ce4`) / проверка на planned-кейсах. Owner: document pipeline
 (`S13V2Pipeline.process_task` + Queue V2 `selected_documents`).
 
 ## Проблема
@@ -70,11 +70,17 @@ parent id (так сейчас и задумано в provenance), `archive_memb
 
 ```text
 ARCHIVE_MEMBER_HAS_CATEGORY_CONTEXT=YES
-GSFX_460692_STRUCTURED_ENTITIES_AFTER_RERUN>0
+PLANNED_CASE_99069_STRUCTURED_ENTITIES_AFTER_RERUN>0
+PLANNED_CASE_328291_STRUCTURED_ENTITIES_AFTER_RERUN>0
+PILOT_460692=NOT_PLANNED_GAP
 NO_CATEGORY_CTX_NOT_INVENTED=YES
 PARSER_BEHAVIOR_UNCHANGED=YES
 DB_WRITES=0_DURING_PIPELINE_CHANGE
 ```
+
+460692 не планировался (`selected_documents`, `category_codes`, `plan_version`
+= NULL), поэтому он не может быть end-to-end acceptance. Plan ради WIP не
+строим.
 
 ## Out of scope
 
@@ -151,3 +157,53 @@ FOLLOW-UP / нужно решение:
 - (b) перевести сквозную проверку 1B/1C на planned-кейсы 99069 (queue 90595) и/или
   328291 (queue 148931) — там архив в плане, категория есть, `.gsfx` на диске;
   460692 при этом остаётся зафиксированным gap'ом («не планировался»).
+
+## RESULT (2026-10-14, v2) — сквозной прогон переведён на 99069/328291
+
+Решение пользователя: **(b)**. `460692 = NOT_PLANNED_GAP` (план ради acceptance не
+строим). 41714 archive-member строк → отдельный backlog- WIP
+`ARCHIVE_MEMBER_BULK_RESTORE_V1` (массово не восстанавливаем).
+
+Добавлен инструмент `scripts/force_run_document_queue.py` (force-run конкретных
+queue-id через штатный путь `DocumentProcessorDaemon._process_s13v2_task`; задеплоен
+на S13, `/opt/CRM_Streamlit/scripts/`).
+
+### BLOCKER: S13 не видит S7 — документный контур остановлен (внешняя инфраструктура)
+
+EVIDENCE (read-only, 2026-10-14 ~22:55 +03):
+
+```
+все 4 документных демона в crash-loop:
+  tender-docs-daemon-open    NRestarts=607 SubState=auto-restart
+  tender-docs-daemon-open-2  NRestarts=463 SubState=auto-restart
+  tender-docs-daemon-open-3  NRestarts=373 SubState=auto-restart
+  tender-docs-daemon-awarded NRestarts=608 SubState=auto-restart
+причина у всех одна:
+  DocumentProcessorDaemon.__init__ -> DatabaseManager(db_configs)
+  psycopg2.OperationalError: could not translate host name "s7"
+первый отказ сегодня: 2026-10-14 19:28:07 +03
+на S13: /etc/hosts без записи s7; nsswitch
+  "hosts: files mdns4_minimal [NOTFOUND=return] dns myhostname"
+  (mDNS NOTFOUND блокирует DNS-fallback); resolvectl query s7 -> SERVFAIL
+последствия: claims/results/entities после 19:28 = 0 / 0 / 0
+  очередь: PENDING 194, PROCESSING 6 (залипли), PRE_RESEARCH_WAITING 324, COMPLETED 7170
+мой force-run 99069 (unit force-run-1b-99069) упал на том же init (s7)
+```
+
+ACCEPTANCE (1B, актуально):
+
+```
+ARCHIVE_MEMBER_HAS_CATEGORY_CONTEXT       = YES (resolver + fallback, проверено на путях 150614)
+GSFX_460692_STRUCTURED_ENTITIES_AFTER_RERUN = N/A — NOT_PLANNED_GAP
+GSFX_99069/328291_STRUCTURED_ENTITIES_AFTER_RERUN = ЗАБЛОКИРОВАН внешне (S7 недоступен)
+NO_CATEGORY_CTX_NOT_INVENTED              = YES
+PARSER_BEHAVIOR_UNCHANGED                 = YES
+DB_WRITES=0_DURING_PIPELINE_CHANGE        = YES
+```
+
+BLOCKER AUTHORITY: резолв/доступ S13→S7 (hosts/DNS/туннель) — зона оператора
+(`docs/PROJECT_OPERATING_RULES.md`); сам не меняю.
+
+FOLLOW-UP: после восстановления S7 доступа выполнить
+`force_run_document_queue.py --queue-id 90595` (и/или 148931) и зафиксировать
+`document_processing_results=COMPLETED` + `structured_entities>0`.
