@@ -90,3 +90,90 @@ FOLLOW-UP:
 - Проверить, что остальные 20 закупок разберутся штатным демоном.
 - Строка 9216 — отдельное решение по admission.
 - Отдельно: битая кодировка имён `.gsfx` при скачивании (не блокер).
+
+## RESULT (2026-10-14) — дожимание по очереди DODELKI (step 1)
+
+STATUS: PARTIAL — код на S13 и в git совпадает, `.gsfx` доходят до парсера и дают
+текстовые матчи; но сквозной результат в `structured_entities` не появился, 20 закупок
+не разобраны, и всплыл блокер identity в dedup-sweeper.
+
+EVIDENCE (read-only, S13 2026-10-14 10:12 +03):
+
+```
+-- S13 == git (md5 совпадают побайтно)
+file_skip_list.py   379c6f2e1f580a063ef969d24372ddc0   (git commit a8432c1)
+gsfx_parser.py      ddc13dfc0d15d7f5bc59cdc2123bac57   (git commit a8432c1)
+.gge остаётся в SKIP_EXTENSIONS (file_skip_list.py:114)  -> ok
+
+-- пилот 460692 (queue id 150614)
+status=COMPLETED, attempt_count=0, research_action=FACTUAL_FEEDER_ADMITTED, lane=open_active
+started_at=2026-10-14 06:00:41, completed_at=2026-10-14 08:23:17
+last_error='FAILED_HEAVY_WALL_CLOCK_CAP: seconds>1800 after 12 files'
+
+-- document_processing_results, прогон 08:23
+127287 …Смета….gsfx  COMPLETED  matches_found=8
+127289 …Сводный….gsfx COMPLETED  matches_found=1
+
+-- document_match_details из .gsfx
+127287: flooring 6 | lighting 1 | waterproofing 1
+127289: lighting 1
+
+-- structured_entities по 460692
+всего 654, max(created_at)=2026-10-13 21:12  ->  created_at >= 2026-10-14 = 0
+
+-- 20 переочередённых закупок (маркер requeue:gsfx_restore_v1)
+status=PENDING у всех 20, attempt_count=0; 18 из них source_start_date IS NULL, work_tier=2
+claims за последние 3ч = 0;  за 24ч = 159
+очередь: PENDING 242 / PROCESSING 9 / PRE_RESEARCH_WAITING 273 / COMPLETED 7016
+
+-- dedup-sweeper (hourly, tender-docs-dedup-sweeper.timer, active)
+127284..127290 (в т.ч. .gsfx 127287/127289) снова:
+   download_status=SKIPPED, error_message='duplicate_of:127278'
+   physical_download_key = 52c87a43547cac0baa78d6625e1ace8301f4461b  (общий с 127278)
+   127278 = «Сметная документация.zip» (архив, canonical_source_document_id=61956479)
+```
+
+ACCEPTANCE (step 1):
+
+```
+.gsfx не HARD_SKIP и доходит до GsfxParser           = ok (policy EXECUTABLE, md5 совпал)
+.gge остаётся в skip                                  = ok
+пилот 460692: document_processing_results=COMPLETED   = ok
+пилот 460692: structured_entities > 0                 = НЕ ПОДТВЕРЖДЁН (0 новых от .gsfx-прогона)
+остальные 20 закупок разобраны daemon                 = нет (все PENDING/attempt 0), причины ниже
+строка 9216 (queue 10796)                             = отдельное решение (D3), не трогали
+битая кодировка имён .gsfx                            = отдельный follow-up, не блокер
+```
+
+DEVIATIONS:
+
+1. **Dedup-sweeper схлопывает archive-members.** `scripts/neutralize_duplicate_document_files.py`
+   партиционирует только по `(procurement_id, physical_download_key)`. Члены архива
+   (`.gsfx`, `.arp`, `.xl`, `.docx` из «Сметная документация.zip») наследуют
+   `physical_download_key` родительского архива, поэтому оцениваются как дубли
+   самого архива и получают `SKIPPED duplicate_of:<архив>`. Итог: `.gsfx` re-neutralize
+   каждый час → GSFX-restore **недолговечен** и не воспроизводится без повторной переочереди.
+2. **Нет сквозного результата в сущностях.** `.gsfx` дают текстовые матчи
+   (`document_matches` / `document_match_details`), но новых `structured_entities` по 460692
+   за 2026-10-14 нет. Ожидание из FOLLOW-UP («проверить structured_entities») не выполнено.
+3. **Очередь не разгружается.** Воркеры (`tender-docs-daemon-open/-2/-3/-awarded`) active, но
+   за последние 3ч ни одной клейма при 242 PENDING (15 idle-бэкендов висят с 06:00:30).
+   У 20 переочередённых `source_start_date IS NULL`/`work_tier=2` → claim-порядок
+   отодвигает их в хвост; кроме того, часть строк может блокироваться admission-gate.
+   `active-production-loop` — inactive (по ACTIVE_PRODUCTION_LOOP.md loop ещё не включён).
+
+FOLLOW-UP / нужны решения:
+
+- **F1 (нужно решение).** Identity dedup-sweeper для archive-members: чинить в рамках GSFX
+  (например, добавлять в ключ `file_name`/archive-member) или отдельным WIP? Затрагивает
+  identity документа, поэтому без решения кодер не меняет.
+- **F2 (нужно решение).** Почему `.gsfx` не создают `structured_entities`: какой компонент
+  персистит сущности при прогоне демона (`extract_and_persist`?) и должен ли он был сработать
+  без включённого `active-production-loop`.
+- **F3.** Разгрузка очереди (0 claims / 3ч при 242 PENDING) — отдельный WIP или часть GSFX.
+- D3 (строка 9216) и битая кодировка имён — без изменений, как и планировалось.
+
+UPDATE (2026-10-14, после 1A): `ARCHIVE_MEMBER_DEDUP_IDENTITY_V1` DONE — sweeper
+больше не гасит членов архива, 1775 `.gsfx`-строк восстановлены в `PENDING`
+(маркер `restored_from:archive_member_dedup_identity_v1`). Делать 1C (подтверждение
+сущностей) — только после 1B (`ARCHIVE_MEMBER_PARSE_CONTEXT_V1`).

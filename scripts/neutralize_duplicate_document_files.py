@@ -2,8 +2,13 @@
 """Idempotent duplicate sweeper for document_files.
 
 Neutralizes duplicate rows for the same physical document of the same procurement
-(`(procurement_id, physical_download_key)`), keeping one survivor:
-a row with `local_path` first, else the smallest `id`.
+(identity = `(procurement_id, physical_download_key, COALESCE(url_hash, file_name, ''))`),
+keeping one survivor: a row with `local_path` first, else the smallest `id`.
+
+The identity includes `url_hash` (fallback `file_name`) so that archive members
+extracted from the same archive — which inherit the parent's
+`physical_download_key` — are NOT treated as one physical file. `url_hash` is
+distinct per member and identical on true re-inserts of the same URL.
 
 Nothing is deleted: the rest get download_status='SKIPPED' and
 error_message='duplicate_of:<survivor_id>' (reversible).
@@ -23,10 +28,10 @@ SWEEP_SQL = """
 WITH ranked AS (
   SELECT id,
          row_number() OVER (
-           PARTITION BY procurement_id, physical_download_key
+           PARTITION BY procurement_id, physical_download_key, coalesce(url_hash, file_name, '')
            ORDER BY (local_path IS NOT NULL) DESC, id ASC) AS rn,
          first_value(id) OVER (
-           PARTITION BY procurement_id, physical_download_key
+           PARTITION BY procurement_id, physical_download_key, coalesce(url_hash, file_name, '')
            ORDER BY (local_path IS NOT NULL) DESC, id ASC) AS survivor
     FROM document_files
    WHERE coalesce(physical_download_key, '') <> ''
@@ -52,11 +57,11 @@ def di_conn():
 
 ACTIVE_DUP_SQL = """
 SELECT count(*) FROM (
-  SELECT procurement_id, physical_download_key
+  SELECT procurement_id, physical_download_key, coalesce(url_hash, file_name, '')
     FROM document_files
    WHERE coalesce(physical_download_key, '') <> ''
      AND download_status IN ('PENDING', 'COMPLETED')
-   GROUP BY 1, 2 HAVING count(*) > 1) t
+   GROUP BY 1, 2, 3 HAVING count(*) > 1) t
 """
 
 

@@ -1,3 +1,23 @@
+## WIP — 2026-10-14 (ARCHIVE_MEMBER_DEDUP_IDENTITY_V1) — DONE
+
+Очередь «доделок» 2026-10-14 зафиксирована в
+`docs/wip/WIP_DODELKI_SEQUENCE_2026-10-14.md`
+(`0 → 1A → 1B → 1C → 2 → 3 → 4 → 5 → 6 → B`).
+
+**1A ARCHIVE_MEMBER_DEDUP_IDENTITY_V1 — DONE (2026-10-14).** Sweeper
+`scripts/neutralize_duplicate_document_files.py` партиционировал дубликаты по
+`(procurement_id, physical_download_key)` и гасил членов архивов: извлечённые файлы
+наследуют `physical_download_key` родительского архива. Identity расширена до
+`(procurement_id, physical_download_key, coalesce(url_hash, file_name, ''))`
+(`url_hash` различает членов архива, `file_name` даёт коллизии). Обратимо
+восстановлено 1775 `.gsfx`-строк в `PENDING` (26 закупок) скриптом
+`scripts/restore_archive_member_dedup_rows.py` (маркер
+`restored_from:archive_member_dedup_identity_v1`). Проверки: old-identity would-sweep
+1775 → new 0; истинные дубли (6 групп по url_hash) детектируются; sweeper идемпотентен
+(двойной `--apply` → 0). Следствие: погашено было 41714 archive-member строк по всей
+БД — их массовое восстановление вынесено на отдельное решение. Далее — 1B
+`ARCHIVE_MEMBER_PARSE_CONTEXT_V1`.
+
 ## WIP — 2026-10-13 (CARD_MEDAL_TWO_TIER_DISPLAY_V1)
 
 **2026-10-13 (весовая приоритизация карточек).** Веса утверждены

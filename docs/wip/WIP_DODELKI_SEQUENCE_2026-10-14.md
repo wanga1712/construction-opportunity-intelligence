@@ -18,24 +18,30 @@
 | # | WIP | Текущее | Точка входа | Выход |
 |---|---|---|---|---|
 | 0 | Branch hygiene + commit GSFX code | dirty tree | закоммитить только нужные файлы | чистый точечный коммит |
-| 1 | `GSFX_RESTORE_V1` | PARTIAL | подтвердить пилот, остальные закупки | PASS + коммит |
+| 1A | `ARCHIVE_MEMBER_DEDUP_IDENTITY_V1` | СПЕКА | исправить identity sweeper | PASS |
+| 1B | `ARCHIVE_MEMBER_PARSE_CONTEXT_V1` | СПЕКА | пробросить category context членам архива | PASS |
+| 1C | `GSFX_RESTORE_V1` | PARTIAL | подтвердить пилот после 1A/1B | PASS + коммит |
 | 2 | `WORKS_VS_GOODS_CONFIRMATION_V1` | СПЕКА | исправить `confirmed_base` | PASS |
 | 3 | `CARD_MEDAL_TWO_TIER_DISPLAY_V1` | СПЕКА | реализовать двухуровневую выдачу | PASS |
 | 4 | `CATEGORY_DISCOVERY_DYNAMIC_V1` | PARTIAL (A/B done) | миграция + Phase C | PASS |
 | 5 | `DIRECT_COMPUTERS_NORMALIZATION_TEMPLATES_V1` | СПЕКА | фазы 0–4 | PASS по фазам |
+| 6 | `QUEUE_CLAIMABILITY_RESTORE_V1` | СПЕКА | разобрать unclaimable PENDING | PASS |
 | B | `PHASE_4 / LEGACY_PRIORITY_WRITES=0` | BLOCKED/BACKLOG | отдельное решение | не в этой очереди |
 
 Порядок выбран так:
 
-1. Сначала закрываем уже задеплоенный, но незакоммиченный GSFX — это устраняет
-   главный риск расхождения S13 и git.
-2. Затем `WORKS_VS_GOODS` — это коррекция authority `confirmed_base`, а не UI.
+1. Сначала branch hygiene, затем два маленьких, но блокирующих WIP
+   `ARCHIVE_MEMBER_DEDUP_IDENTITY_V1` и `ARCHIVE_MEMBER_PARSE_CONTEXT_V1`.
+   Без них GSFX-результат недолговечен и не даёт `structured_entities`.
+2. Потом добиваем `GSFX_RESTORE_V1`.
+3. Затем `WORKS_VS_GOODS` — это коррекция authority `confirmed_base`, а не UI.
    Двухуровневая выдача карточек должна тестироваться на уже исправленных данных.
-3. Потом `CARD_MEDAL_TWO_TIER` — чисто витрина, зависит от корректного
+4. Потом `CARD_MEDAL_TWO_TIER` — чисто витрина, зависит от корректного
    `confirmed_base`.
-4. `CATEGORY_DISCOVERY` — расширяет реестр после того, как витрина карточек
+5. `CATEGORY_DISCOVERY` — расширяет реестр после того, как витрина карточек
    стабилизирована; перед Phase C нужен отдельный approval.
-5. `DIRECT_COMPUTERS` — отдельный контур нормализации, не блокирует предыдущие.
+6. `DIRECT_COMPUTERS` — отдельный контур нормализации, не блокирует предыдущие.
+7. `QUEUE_CLAIMABILITY_RESTORE_V1` — отдельный WIP, не смешиваем с GSFX.
 
 ## Глобальные инварианты коммерческой логики
 
@@ -106,7 +112,29 @@ git status показывает, что GSFX-файлы и план закомм
 несвязанный мусор остаётся untracked и не попадает в коммит.
 ```
 
-### 1. GSFX_RESTORE_V1 — добить
+### 1A. ARCHIVE_MEMBER_DEDUP_IDENTITY_V1
+
+См. `docs/wip/WIP_ARCHIVE_MEMBER_DEDUP_IDENTITY_V1.md`.
+
+Правило: sweeper не должен считать parent-архив и его извлечённые члены одним
+физическим документом. Identity как минимум:
+
+```text
+(procurement_id, physical_download_key, COALESCE(file_name, ''))
+```
+
+После правки восстановить уже погашенные GSFX-строки обратимо.
+
+### 1B. ARCHIVE_MEMBER_PARSE_CONTEXT_V1
+
+См. `docs/wip/WIP_ARCHIVE_MEMBER_PARSE_CONTEXT_V1.md`.
+
+Правило: `S13V2Pipeline.process_task` должен находить `category_code`/
+`source_document_id`/`track` для члена архива по parent identity, а не только по
+`path.name`. Тогда `.gsfx` дойдёт до `_persist_embedded` и создаст
+`structured_entities`.
+
+### 1C. GSFX_RESTORE_V1 — добить
 
 См. `docs/wip/WIP_GSFX_RESTORE_V1.md`.
 
@@ -160,6 +188,14 @@ confirmed_base и «что можно поставить» считаются т
 Фазы 0–4 выполняются строго последовательно. Phase 1 может потребовать
 reparse/persist — это единственная явно разрешённая запись; до неё DB_WRITES=0.
 
+### 6. QUEUE_CLAIMABILITY_RESTORE_V1
+
+См. `docs/wip/WIP_QUEUE_CLAIMABILITY_RESTORE_V1.md`.
+
+242 PENDING без клеймов разобрать read-only по причинам unclaimable; admission
+не ослаблять. Для GSFX-переочереди использовать отдельный force-run по маркеру
+`requeue:gsfx_restore_v1`, не меняя queue authority.
+
 ### B. PHASE_4 / LEGACY_PRIORITY_WRITES=0 — отдельно
 
 Не в текущей очереди. Причина: требует решения по
@@ -193,6 +229,16 @@ reparse/persist — это единственная явно разрешённ�
 
 Если default не подтверждён, кодер останавливается перед соответствующей
 фазой и пишет вопрос в WIP, не меняя коммерческую authority.
+
+## Решения по GSFX F1–F3 (2026-10-14)
+
+- **F1 archive-member dedup** — отдельный WIP `ARCHIVE_MEMBER_DEDUP_IDENTITY_V1`,
+  выполняется перед GSFX-добивкой.
+- **F2 archive-member parse context** — отдельный WIP
+  `ARCHIVE_MEMBER_PARSE_CONTEXT_V1`, выполняется перед GSFX-добивкой.
+- **F3 242 PENDING без клеймов** — отдельный WIP
+  `QUEUE_CLAIMABILITY_RESTORE_V1`; GSFX-переочередь гонится целевым force-run,
+  admission-фильтр не трогаем.
 
 ## Handoff для кодера
 
