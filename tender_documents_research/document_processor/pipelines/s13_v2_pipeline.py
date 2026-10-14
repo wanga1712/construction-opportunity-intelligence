@@ -10,13 +10,23 @@ def _archive_parent_identity(path: Path) -> Tuple[Optional[str], Optional[str], 
     """Return (parent_file_name, parent_local_path, archive_member_path) for extracted members.
 
     S13 extraction keeps source archives durable in the task directory and extracts
-    members either directly under the task directory or under a directory named
-    after the archive stem. We anchor derived parser results to that durable
-    source archive while preserving the member relative path separately.
+    members either directly under the task directory, under a directory named
+    after the archive stem, or under the member's own internal path (an
+    extraction directory that does NOT match the archive name). We anchor derived
+    parser results to that durable source archive while preserving the member
+    relative path separately.
+
+    Resolution order while walking up from the member's directory:
+      (a) a sibling file `<dir>.zip/.rar/.r00/.7z` (archive named after the dir);
+      (b) an ancestor directory that holds exactly one source archive and the
+          member sits below it (extraction-by-internal-path layout). If an
+          ancestor holds several archives the parent is ambiguous and we return
+          None instead of guessing.
     """
-    archive_exts = (".zip", ".rar", ".r00")
+    archive_exts = (".zip", ".rar", ".r00", ".7z")
     try:
         cur = path.parent
+        level = 0
         while cur != cur.parent:
             for ext in archive_exts:
                 candidate = cur.with_suffix(ext)
@@ -26,9 +36,26 @@ def _archive_parent_identity(path: Path) -> Tuple[Optional[str], Optional[str], 
                     except ValueError:
                         member_path = path.name
                     return candidate.name, str(candidate), member_path
+            # (b) bounded to a couple of levels above the member's own directory.
+            if 0 < level <= 2:
+                try:
+                    archives = [
+                        p for p in cur.iterdir()
+                        if p.is_file() and p.suffix.lower() in archive_exts
+                    ]
+                except Exception:
+                    archives = []
+                if len(archives) == 1:
+                    parent = archives[0]
+                    try:
+                        member_path = path.relative_to(cur).as_posix()
+                    except ValueError:
+                        member_path = path.name
+                    return parent.name, str(parent), member_path
             # Stop at common task directory shape after walking a few levels.
             if cur.parent == cur:
                 break
+            level += 1
             cur = cur.parent
     except Exception:
         return None, None, None
@@ -188,7 +215,16 @@ class S13V2Pipeline:
                 try:
                     from document_processor.parse_extractors import extract_and_persist
 
-                    ctx = doc_ctx.get(str(path.name).strip().lower()) or {}
+                    # ARCHIVE_MEMBER_PARSE_CONTEXT_V1: an extracted archive member is not a
+                    # planned document by itself, so its own name is absent from
+                    # selected_doc_context. Fall back to the parent archive's context
+                    # (category / source_document_id / physical_key / track) so the member
+                    # reaches _persist_embedded with a category_code. No value is invented:
+                    # if the parent is not in the plan, ctx stays empty as before.
+                    ctx = doc_ctx.get(str(path.name).strip().lower())
+                    if not ctx and parent_name:
+                        ctx = doc_ctx.get(str(parent_name).strip().lower())
+                    ctx = ctx or {}
                     extract_and_persist(
                         path, text, procurement_id, path.name,
                         category_code=ctx.get("category"),

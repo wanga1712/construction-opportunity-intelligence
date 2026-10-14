@@ -18,6 +18,22 @@
 БД — их массовое восстановление вынесено на отдельное решение. Далее — 1B
 `ARCHIVE_MEMBER_PARSE_CONTEXT_V1`.
 
+## WIP — 2026-10-14 (ARCHIVE_MEMBER_PARSE_CONTEXT_V1) — PARTIAL
+
+**1B ARCHIVE_MEMBER_PARSE_CONTEXT_V1 — PARTIAL (2026-10-14).** Код сделан и задеплоен:
+`tender_documents_research/document_processor/pipelines/s13_v2_pipeline.py` ищет
+`selected_doc_context` не только по `path.name`, но и по parent-архиву
+(`_archive_parent_identity` расширена: sibling `<dir>.zip` + предок с ровно одним
+архивом; `+.7z`; при неоднозначности → None). md5 локально==S13
+`e8ca19d396c16bf41e339517845bd8d0`; py_compile + import smoke OK; резолвер на реальных
+`.gsfx` задачи 150614 возвращает `Сметная документация.zip`. **Блокер сквозной проверки:**
+пилот 460692 — feeder-строка без document plan (`selected_documents`/`category_codes`
+NULL), поэтому категории нет ни у члена, ни у parent, и `_persist_embedded` не
+вызывается. Категория для parse-time hook берётся только из Queue V2 plan
+(`scripts/build_queue_v2_plan.py`). Рабочие planned-кейсы: 99069 (queue 90595, 20 `.gsfx`,
+category `drainage_water_management`) и 328291 (queue 148931, 4 `.gsfx`) — claimable.
+Решение: (a) построить план для 460692 или (b) вести сквозную проверку 1B/1C на 99069/328291.
+
 ## WIP — 2026-10-13 (CARD_MEDAL_TWO_TIER_DISPLAY_V1)
 
 **2026-10-13 (весовая приоритизация карточек).** Веса утверждены
