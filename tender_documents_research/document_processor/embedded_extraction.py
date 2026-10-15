@@ -25,6 +25,8 @@ import re
 from dataclasses import dataclass, field
 from typing import Any, Dict, Iterable, List, Optional, Sequence, Tuple
 
+from .section_detector import SECTION_RESIDUE, SectionTracker
+
 EXTRACTOR_VERSION = "EMBEDDED_EXTRACTOR_V1"
 NORMALIZER_VERSION = "UNIT_NORMALIZER_V1"
 
@@ -333,6 +335,13 @@ class ExtractedFact:
     extractor_version: str = EXTRACTOR_VERSION
     normalizer_version: str = NORMALIZER_VERSION
     layout_status: Optional[str] = None
+    # SECTION_LEVEL_NORMALIZATION_V1 — section context (Phase 1: computed only,
+    # persisted in Phase 2 once the DDL migration is approved).
+    section_code: Optional[str] = None
+    section_name: Optional[str] = None
+    section_total_price_value: Optional[float] = None
+    section_total_price_raw: Optional[str] = None
+    section_total_source: Optional[str] = None
     attributes: List[Any] = field(default_factory=list)
 
 
@@ -829,6 +838,41 @@ def _row_to_fact(
     return fact
 
 
+def _sheet_of(meta: Any) -> Optional[str]:
+    """Sheet/page identity for the row (SECTION_LEVEL_NORMALIZATION_V1)."""
+    if not isinstance(meta, dict):
+        return None
+    for key in ("sheet_name", "page_or_sheet", "sheet"):
+        value = meta.get(key)
+        if value:
+            return str(value)
+    page = meta.get("page_number")
+    return str(page) if page else None
+
+
+def _attach_section(fact: ExtractedFact, tracker: SectionTracker, code: Optional[str]) -> None:
+    """Bind a fact to its deterministic section; unbound rows go to RESIDUE."""
+    if not code:
+        fact.section_code = SECTION_RESIDUE
+        return
+    fact.section_code = code
+    info = tracker.section(code)
+    if info is not None:
+        fact.section_name = info.name
+
+
+def _finalize_sections(facts: List[ExtractedFact], tracker: SectionTracker) -> None:
+    """Fill DOCUMENT_TOTAL/COMPUTED_SUM totals onto the section's facts."""
+    tracker.finalize()
+    for fact in facts:
+        info = tracker.section(fact.section_code)
+        if info is None:
+            continue
+        fact.section_total_price_value = info.total_value
+        fact.section_total_price_raw = info.total_raw
+        fact.section_total_source = info.total_source
+
+
 def extract_facts(
     *,
     procurement_id: int,
@@ -849,11 +893,15 @@ def extract_facts(
     # Header-aware column mapping per table: qty/price/total only from their own
     # columns; a headerless table yields material/quantity but NO value.
     headers: Dict[Any, Dict[str, int]] = {}
+    # SECTION_LEVEL_NORMALIZATION_V1: deterministic section state (sheet × marker).
+    tracker = SectionTracker()
     for line_no, row_text, meta in _iter_rows(text or "", line_meta):
         processed += 1
         if processed > max_rows:
             break
         cells = _split_row_cells(row_text, meta)
+        sheet = _sheet_of(meta)
+        section_code = tracker.observe(sheet, cells, row_text)
         table_key = (meta.get("table_index"), meta.get("sheet_name"), meta.get("file", ""))
         mapping = _header_mapping(cells)
         if mapping:
@@ -877,8 +925,13 @@ def extract_facts(
             continue
         if fact.entity_fingerprint in seen:
             continue
+        _attach_section(fact, tracker, section_code)
+        if not fact.page_or_sheet and sheet:
+            fact.page_or_sheet = sheet
+        tracker.add_child(section_code, fact.line_total_value)
         seen.add(fact.entity_fingerprint)
         facts.append(fact)
+    _finalize_sections(facts, tracker)
     return facts
 
 
@@ -895,7 +948,13 @@ def facts_from_table_rows(
     """Adapt pre-read table facts (xlsx reader) to the same normalized contract."""
     out: List[ExtractedFact] = []
     seen: set = set()
+    tracker = SectionTracker()
     for r in rows or []:
+        quote = getattr(r, "source_quote", "") or ""
+        cells = [p.strip() for p in quote.split("|") if p.strip()]
+        sheet = getattr(r, "sheet", None) or getattr(r, "sheet_name", None)
+        sheet = str(sheet) if sheet else None
+        section_code = tracker.observe(sheet, cells, quote)
         name = getattr(r, "product_name_raw", None)
         if not name:
             continue
@@ -921,14 +980,13 @@ def facts_from_table_rows(
             # unverifiable total (no price column) -> not a usable value
             layout_status = "UNSUPPORTED_LAYOUT"
             tot = None
-        quote = getattr(r, "source_quote", "") or ""
         fact = ExtractedFact(
             procurement_id=procurement_id,
             category_code=category_code,
             document_name=document_name,
             source_document_id=source_document_id,
             physical_download_key=physical_key,
-            page_or_sheet=None,
+            page_or_sheet=sheet,
             row_or_line=(f"row{getattr(r, 'row', '')}" if getattr(r, "row", None) else None),
             product_name_raw=name,
             product_name_normalized=normalize_name(name),
@@ -950,6 +1008,9 @@ def facts_from_table_rows(
         fact.entity_fingerprint = fingerprint(fact, str(fact.row_or_line or ""))
         if fact.entity_fingerprint in seen:
             continue
+        _attach_section(fact, tracker, section_code)
+        tracker.add_child(section_code, fact.line_total_value)
         seen.add(fact.entity_fingerprint)
         out.append(fact)
+    _finalize_sections(out, tracker)
     return out

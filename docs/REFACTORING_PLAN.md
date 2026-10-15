@@ -42,6 +42,23 @@
 БД — их массовое восстановление вынесено на отдельное решение. Далее — 1B
 `ARCHIVE_MEMBER_PARSE_CONTEXT_V1`.
 
+## 2026-10-15 (3) — 2A Phase 1: детерминированный section detector
+
+**2A SECTION_LEVEL_NORMALIZATION_V1 — Phase 1 DONE** (section-поля пока не пишутся в БД).
+Новый модуль `tender_documents_research/document_processor/section_detector.py`:
+`SectionTracker` держит состояние раздела как `sheet × метка` («Итого по главе N»,
+«Раздел N[.M]», «Глава N»); явный итог («Итого»/«Всего», ≤4 ячеек, значение — последняя
+числовая ячейка) даёт `section_total_source=DOCUMENT_TOTAL`, иначе `COMPUTED_SUM`;
+merged-строки «Итого по главе N» с материалом итогом не считаются; строки без метки —
+`SECTION_RESIDUE`. `embedded_extraction.py`: `ExtractedFact` получил `section_code`,
+`section_name`, `section_total_price_value`, `section_total_price_raw`,
+`section_total_source`; `extract_facts`/`facts_from_table_rows` привязывают факт к разделу
+и заполняют `page_or_sheet`. Read-only проверка `scripts/audit_section_detector.py` на
+148391: 72 секции, 123 остатка; `ПСК 1 стадия на торги::раздел 9` → `total=7 450 714 594`,
+`source=DOCUMENT_TOTAL` (== «Итого:» из документа); остальное `COMPUTED_SUM`. Синтетический
+смоук: факты получают `section_code`/`page_or_sheet`. DB_WRITES=0 (DDL не применялся);
+расхождение COMPUTED_SUM ×4–5.6 остаётся открытым и честно помечено источником.
+
 ## 2026-10-15 (2) — 1B PASS (99069) и 1C GSFX_RESTORE_V1 PASS
 
 **1B ARCHIVE_MEMBER_PARSE_CONTEXT_V1 — DONE/PASS.** Члены архива привязываются к плану

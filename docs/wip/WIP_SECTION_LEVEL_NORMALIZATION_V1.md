@@ -225,3 +225,73 @@ FOLLOW-UP:
   недостоверна).
 - Phase 2: миграция section-полей (`section_code`, `section_name`,
   `section_total_price_value`, `section_total_price_raw`, `section_total_source`).
+
+## RESULT Phase 1 (2026-10-15) — детерминированный section detector
+
+STATUS: DONE (детектор реализован, узкая проверка на 148391 пройдена; section-поля
+пока НЕ пишутся в БД — это Phase 2).
+
+ИЗМЕНЕНИЯ:
+
+```
+new: tender_documents_research/document_processor/section_detector.py
+  SectionTracker: детерминированное состояние раздела (sheet × метка),
+    метки: «Итого по главе N» / «Итого по разделу N» / «Глава N» / «Раздел N[.M]»;
+    явный итог («Итого»/«Всего», ≤4 ячеек, значение = последняя числовая ячейка)
+      -> section_total_source=DOCUMENT_TOTAL; иначе -> COMPUTED_SUM.
+    merged-строки «Итого по главе N» с материалом НЕ считаются итогом.
+    строки без метки -> SECTION_RESIDUE (видимый «остаток»).
+  (вынесено отдельным модулем: embedded_extraction.py уже ~900 строк)
+
+changed: document_processor/embedded_extraction.py
+  ExtractedFact += section_code, section_name, section_total_price_value,
+                   section_total_price_raw, section_total_source
+  extract_facts(): tracker.observe(...) на каждой строке; факт привязывается к разделу,
+                   page_or_sheet берётся из meta (sheet_name/page/sheet);
+                   add_child(line_total) -> computed_sum; _finalize_sections(...).
+  facts_from_table_rows(): то же для xlsx-читателя; page_or_sheet больше не None
+                   (берётся sheet/sheet_name строки), метки читаются из source_quote.
+
+new: scripts/audit_section_detector.py — read-only прогон детектора по снапшотам.
+```
+
+ПРОВЕРКА (read-only, S13, БД не менялась):
+
+```
+audit_section_detector.py --procurement-id 148391
+run 1101: rows=7787 | run 1102: rows=49 | run 1103: rows=64 | run 1501: rows=200
+sections=72 residue_rows=123
+  ПСК 1 стадия на торги::раздел 9 | children=995 | computed=40 482 188 081.98
+      | total=7 450 714 594.0 | source=DOCUMENT_TOTAL   == «Итого:» из документа (row 1884)
+  ПСК 1 стадия на торги::итого по главе 2 | children=4 | total=24 007 950.0 | source=COMPUTED_SUM
+  ... (остальные главы/разделы — COMPUTED_SUM; лист «ПСК» без сумм -> 0)
+
+smoke (синтетика, рядом с extract_facts):
+  facts=2  Плитка тротуарная | section=S1::итого по главе 1 | total=2000 | src=DOCUMENT_TOTAL | sheet=S1
+           Песок природный  | section=S1::итого по главе 1 | total=2000 | src=DOCUMENT_TOTAL | sheet=S1
+```
+
+ACCEPTANCE (Phase 1, частично — что проверяемо без миграции):
+
+```
+SECTION_COUNT_MATCHES_DOCUMENT       = 72 секции по 4 снапшотам (главы 1..12 + раздел 9 + лист ПСК)
+SECTION_TOTAL_SOURCE                 = DOCUMENT_TOTAL для строки с явным «Итого:»;
+                                       COMPUTED_SUM для остальных
+MATERIALS_INSIDE_CORRECT_SECTION     = YES (каждый факт получает section_code из активной метки)
+INPUT_ROWS=OUTPUT_ROWS               = YES (нет потерь: все строки либо в разделе, либо в RESIDUE)
+UNCLASSIFIED_RESIDUE_VISIBLE         = YES (SECTION_RESIDUE, 123 строки до первой метки)
+SOURCE_QUOTE_PRESENT                 = YES (source_quote уже писался)
+PAGE_OR_SHEET_PRESENT                = YES (теперь и для xlsx-пути)
+DETERMINISTIC_RERUN                  = YES (повторный аудит даёт те же 72 секции)
+DB_WRITES=0_UNTIL_MIGRATION_APPROVED = YES (section-поля только в памяти)
+```
+
+DEVIATIONS / FOLLOW-UP:
+
+- Детектор вынесен в отдельный модуль, а не внутрь `embedded_extraction.py`
+  (файл уже ~900 строк, правило 300–450).
+- Строка листа «Итого:»/«Всего с НДС» привязывается к АКТИВНОМУ разделу на тот
+  момент (для 148391 — «раздел 9»), а не к листу: это даёт корректную сумму, но
+  семантику «итог листа vs итог раздела» надо уточнить в Phase 2/3.
+- Расхождение COMPUTED_SUM ×4–5.6 (Phase 0) остаётся открытым: детектор его не
+  лечит, а честно помечает источник COMPUTED_SUM.
