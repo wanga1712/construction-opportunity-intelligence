@@ -49,6 +49,18 @@ section_total_price_raw   text        -- цитата строки «Итого 
 запросов. Правильный путь — отдельная миграция через approved DDL route
 (`sudo -n -u postgres psql -d document_intelligence --single-transaction`).
 
+Согласованная форма DDL:
+
+```text
+tender_documents_research/migrations/20261015_section_level_normalization.sql
+section_code               TEXT
+section_name               TEXT
+section_total_price_value  NUMERIC
+section_total_price_raw    TEXT
+section_total_source       VARCHAR(50)
+index (procurement_id, section_code) WHERE section_code IS NOT NULL
+```
+
 ## Правило определения раздела
 
 Сначала **детерминированно**, модель — только как fallback:
@@ -366,3 +378,61 @@ NOTE: у 148391 явных section-итогов не нашлось — стро
 merged-метки рядом с материалом (отсекаются guard'ом), поэтому все разделы честно
 `COMPUTED_SUM`. `SECTION_TOTAL` появится там, где в документе есть отдельная
 строка «Итого по главе N | <число>».
+
+## RESULT Phase 2 (2026-10-15) — DDL + persistence
+
+STATUS: DONE.
+
+EVIDENCE:
+
+```
+-- DDL (применено по approved-процедуре)
+structured_entities: section_code text, section_name text,
+                     section_total_price_value numeric, section_total_price_raw text,
+                     section_total_source text   (все nullable)
+index idx_r4_entities_section (procurement_id, section_code)
+      WHERE section_code IS NOT NULL
+migration: tender_documents_research/migrations/20261015_section_level_normalization.sql
+      (SET LOCAL lock_timeout='15s'; TEXT; idx_r4_entities_section)
+
+-- код (3 файла; md5 локально == S13, бэкапы *.bak-section-20261015)
+embedded_persistence.persist_facts     b82fe7809cb270a6b2b809afdd87bb28
+    + section_* в INSERT и в DO UPDATE SET (детерминированный путь)
+parse_extractors._persist_estimate     2760a8e0876ee048a6459ea330a3672e
+    + детектор над строками estimate; + section_* в INSERT;
+    ON CONFLICT ON CONSTRAINT uq_entity_run_fingerprint DO UPDATE (идемпотентный reparse)
+structured_fact_repository.save_extraction_run  fd05cdeba9bbb0b53f0e1d96ed044b2c
+    + section_* ТОЛЬКО в INSERT: UPDATE-путь не трогает section, чтобы модельный
+      прогон не затирал детерминированный контекст
+
+-- деплой/рестарт
+демоны open / open-2 / open-3 / awarded: 4/4 running, NRestarts=0
+
+-- reparse 148391 (systemd-run force-run-p2-148391, 305.5s)
+queue 135962 = COMPLETED
+structured_entities 148391 = 23577
+    с section_code = 7894   (EMBEDDED_EXTRACTOR_V1 7894; extractor NULL 30)
+    без section    = 15683  (старые строки НЕ тронуты)
+section_total_source: COMPUTED_SUM 7741; прочие — RESIDUE (источник не пишется)
+пример строки: product="Камеральная обработка полевого испытания"
+    | section_code="ПСК::итого по главе 3" | section_name="Итого по главе 3"
+    | section_total_price_value=0.0 | section_total_source=COMPUTED_SUM
+    | page_or_sheet="ПСК"
+```
+
+ACCEPTANCE (Phase 2):
+
+```
+DDL_APPLIED                  = YES (5 полей + partial index)
+SECTION_FIELDS_WRITTEN       = YES (embedded-путь и estimate-путь)
+OLD_ROWS_UNTOUCHED           = YES (15683 строки без section)
+DOCUMENT_TOTAL_NOT_WRITTEN   = YES (в section_total_source только SECTION_TOTAL|COMPUTED_SUM)
+SCORING_MEDAL_QUEUE_UNCHANGED= YES
+IDEMPOTENT_REPARSE           = YES (estimate INSERT ON CONFLICT DO UPDATE)
+```
+
+FOLLOW-UP:
+
+- Phase 3: карточка «раздел → сумма раздела → материалы внутри», «остаток» отдельно.
+- COMPUTED_SUM ×4–5.6 (Phase 0) остаётся открытым — детектор его не лечит, помечает источник.
+- `document_total` пока только в памяти (в БД не пишется).

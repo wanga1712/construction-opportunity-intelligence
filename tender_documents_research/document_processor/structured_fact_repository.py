@@ -161,7 +161,12 @@ def save_extraction_run(conn, run: ExtractionRun) -> int:
                         unit_price_raw, unit_price_value,
                         total_price_raw, total_price_value,
                         currency_raw, currency_code,
-                        source_quote, confidence
+                        source_quote, confidence,
+                        -- SECTION_LEVEL_NORMALIZATION_V1: section context is written
+                        -- on insert only; the UPDATE path above must NOT touch it so a
+                        -- model run cannot wipe deterministic section data.
+                        section_code, section_name, section_total_price_value,
+                        section_total_price_raw, section_total_source
                     ) VALUES (
                         %s, %s, %s, %s, %s,
                         %s, %s,
@@ -174,7 +179,8 @@ def save_extraction_run(conn, run: ExtractionRun) -> int:
                         %s, %s,
                         %s, %s,
                         %s, %s,
-                        %s, %s
+                        %s, %s,
+                        %s, %s, %s, %s, %s
                     )
                     RETURNING id
                 """, (
@@ -189,7 +195,12 @@ def save_extraction_run(conn, run: ExtractionRun) -> int:
                     ent.unit_price_raw, ent.unit_price_value,
                     ent.total_price_raw, ent.total_price_value,
                     ent.currency_raw, ent.currency_code,
-                    ent.source_quote, ent.confidence
+                    ent.source_quote, ent.confidence,
+                    getattr(ent, "section_code", None),
+                    getattr(ent, "section_name", None),
+                    getattr(ent, "section_total_price_value", None),
+                    getattr(ent, "section_total_price_raw", None),
+                    getattr(ent, "section_total_source", None)
                 ))
                 entity_id = cur.fetchone()["id"]
 

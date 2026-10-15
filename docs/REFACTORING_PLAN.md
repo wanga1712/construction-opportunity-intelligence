@@ -42,6 +42,22 @@
 БД — их массовое восстановление вынесено на отдельное решение. Далее — 1B
 `ARCHIVE_MEMBER_PARSE_CONTEXT_V1`.
 
+## 2026-10-15 (5) — 2A Phase 2: section-поля в БД
+
+**2A SECTION_LEVEL_NORMALIZATION_V1 — Phase 2 DONE.** DDL применён по процедуре
+(`SET LOCAL lock_timeout='15s'`, все поля nullable, `section_total_source text`,
+partial index `idx_r4_entities_section (procurement_id, section_code) WHERE section_code IS NOT NULL`).
+Код пишет section-контекст: `embedded_persistence.persist_facts` (INSERT + DO UPDATE),
+`parse_extractors._persist_estimate` (детектор над строками estimate + `ON CONFLICT
+ON CONSTRAINT uq_entity_run_fingerprint DO UPDATE` — reparse стал идемпотентным),
+`structured_fact_repository.save_extraction_run` (только INSERT: UPDATE-путь не затирает
+детерминированный section). md5 локально == S13; демоны 4/4 running, NRestarts=0.
+Reparse 148391 (305.5s): queue COMPLETED; 7894 строк получили `section_code`
+(`section_total_source=COMPUTED_SUM` у 7741, остальные — `RESIDUE`), старые 15683 строки
+не тронуты; пример `section_code="ПСК::итого по главе 3"`, `page_or_sheet="ПСК"`.
+`DOCUMENT_TOTAL` в section не пишется. Далее Phase 3 (проекция карточки); COMPUTED_SUM
+×4–5.6 из Phase 0 остаётся открытым.
+
 ## 2026-10-15 (4) — 2A Phase 1.5: document total вне section-контекста
 
 **2A SECTION_LEVEL_NORMALIZATION_V1 — Phase 1.5 DONE.** `section_detector.py`:
@@ -4039,7 +4055,7 @@ Production read-only коммерческий слой между CRM и вне�
 `100.113.185.90:9999`. Детали и снапшот: `docs/wip/WIP_COMMERCIAL_SITE_CRM_LINK_V1.md`,
 контракт для сайта: `docs/COMMERCIAL_PORTAL_API_CONTRACT.md`.
 
-Артефакты: `scripts/commercial_market_audit.sql` + `scripts/run_commercial_market_audit.sh`
+Артефакты: `scripts/commercial_market_audit.sql` + `scripts/run_commercial_market_audit.py`
 (`--di` для cross-check подтверждённых фактов), `src/services/commercial_portal_service.py`,
 `src/services/commercial_portal_facts.py`, `src/api/commercial_portal_api.py`,
 `systemd/crm-commercial-portal-api.service` (не установлен).

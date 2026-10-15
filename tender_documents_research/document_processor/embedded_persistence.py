@@ -140,9 +140,12 @@ def persist_facts(
                  total_price_value, total_price_raw, currency_code, source_quote,
                  confidence, product_relation, created_at, structured_fact_trust_state,
                  source_document_id, physical_download_key, page_or_sheet, row_or_line,
-                 extractor_version, normalizer_version, layout_status)
+                 extractor_version, normalizer_version, layout_status,
+                 section_code, section_name, section_total_price_value,
+                 section_total_price_raw, section_total_source)
             VALUES (%s,%s,%s,%s,%s,'PRODUCT',%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,'RUB',%s,
-                    %s,'EMBEDDED',NOW(),'MANUAL_PROOF_QUARANTINE',%s,%s,%s,%s,%s,%s,%s)
+                    %s,'EMBEDDED',NOW(),'MANUAL_PROOF_QUARANTINE',%s,%s,%s,%s,%s,%s,%s,
+                    %s,%s,%s,%s,%s)
             ON CONFLICT (procurement_id, source_document_id, entity_fingerprint, extractor_version)
               WHERE extractor_version IS NOT NULL AND source_document_id IS NOT NULL
             DO UPDATE SET
@@ -153,7 +156,13 @@ def persist_facts(
                 total_price_value = EXCLUDED.total_price_value,
                 total_price_raw = EXCLUDED.total_price_raw,
                 layout_status = EXCLUDED.layout_status,
-                source_quote = EXCLUDED.source_quote
+                source_quote = EXCLUDED.source_quote,
+                -- SECTION_LEVEL_NORMALIZATION_V1 (Phase 2)
+                section_code = EXCLUDED.section_code,
+                section_name = EXCLUDED.section_name,
+                section_total_price_value = EXCLUDED.section_total_price_value,
+                section_total_price_raw = EXCLUDED.section_total_price_raw,
+                section_total_source = EXCLUDED.section_total_source
                WHERE %s
              RETURNING id
              """,
@@ -166,6 +175,11 @@ def persist_facts(
                 f.source_document_id, f.physical_download_key, f.page_or_sheet,
                 f.row_or_line, f.extractor_version, f.normalizer_version,
                 getattr(f, "layout_status", None),
+                getattr(f, "section_code", None),
+                getattr(f, "section_name", None),
+                getattr(f, "section_total_price_value", None),
+                getattr(f, "section_total_price_raw", None),
+                getattr(f, "section_total_source", None),
                 os.getenv("EMBEDDED_FORCE_UPDATE", "0") == "1",
             ),
         )

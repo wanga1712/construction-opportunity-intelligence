@@ -18,6 +18,24 @@ from typing import Any, Dict, Optional
 
 logger = logging.getLogger("parse_extractors")
 
+
+def _section_cells(quote: str) -> list:
+    """Split a stored cell dump ("A=… | B=…") into bare cell texts.
+
+    SECTION_LEVEL_NORMALIZATION_V1: the section detector must see the cell text
+    without its column prefix so "Итого по главе N" / "Итого:" match.
+    """
+    out = []
+    for part in str(quote or "").split("|"):
+        part = part.strip()
+        if not part:
+            continue
+        if len(part) > 2 and part[1] == "=" and part[0].isupper():
+            part = part[2:].strip()
+        out.append(part)
+    return out
+
+
 _DDL = (
     """CREATE TABLE IF NOT EXISTS project_metadata_organizations (
          id bigserial PRIMARY KEY,
@@ -62,6 +80,7 @@ def _connect():
 def _persist_estimate(conn, path: Path, procurement_id: int, document_name: str) -> int:
     from document_processor.smeta_forma_4b import detect_forma_4b, read_estimate, xlsx_sheet_names
     from document_processor.xlsx_table_reader import read_tables
+    from document_processor.section_detector import SECTION_RESIDUE, SectionTracker
 
     if detect_forma_4b(xlsx_sheet_names(path)):
         facts = read_estimate(path)
@@ -69,6 +88,20 @@ def _persist_estimate(conn, path: Path, procurement_id: int, document_name: str)
         facts = read_tables(path)
     if not facts:
         return 0
+    # SECTION_LEVEL_NORMALIZATION_V1 (Phase 2): the xlsx estimate path is not
+    # covered by embedded_extraction, so derive the deterministic section state
+    # here over the reader rows (quote cells carry column A markers).
+    _tracker = SectionTracker()
+    _fact_section: Dict[int, Any] = {}
+    for _fact in facts:
+        _quote = str(getattr(_fact, "source_quote", "") or "")
+        _sheet = getattr(_fact, "sheet", None) or getattr(_fact, "sheet_name", None)
+        _code = _tracker.observe(
+            str(_sheet) if _sheet else None, _section_cells(_quote), _quote
+        )
+        _tracker.add_child(_code, getattr(_fact, "total_price_value", None))
+        _fact_section[id(_fact)] = _code
+    _tracker.finalize()
     cur = conn.cursor()
     cur.execute(
         "SELECT MIN(id) FROM document_match_details WHERE procurement_id=%s",
@@ -104,6 +137,8 @@ def _persist_estimate(conn, path: Path, procurement_id: int, document_name: str)
         fingerprint = hashlib.sha256(
             f"{procurement_id}|{name}|{getattr(fact, 'row', '')}".encode("utf-8")
         ).hexdigest()
+        _code = _fact_section.get(id(fact)) or SECTION_RESIDUE
+        _info = _tracker.section(_code)
         cur.execute(
             """INSERT INTO structured_entities
                  (run_id, detail_id, procurement_id, category_code, entity_fingerprint,
@@ -111,15 +146,32 @@ def _persist_estimate(conn, path: Path, procurement_id: int, document_name: str)
                   quantity_raw, quantity_unit_raw, quantity_unit_normalized,
                   unit_price_value, unit_price_raw, total_price_value, total_price_raw,
                   currency_code, source_quote, confidence, product_relation, created_at,
-                  structured_fact_trust_state)
+                  structured_fact_trust_state,
+                  section_code, section_name, section_total_price_value,
+                  section_total_price_raw, section_total_source)
                VALUES (%s,%s,%s,%s,%s,'PRODUCT',%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,'RUB',%s,0.9,
-                       'EMBEDDED',NOW(),'MANUAL_PROOF_QUARANTINE')""",
+                       'EMBEDDED',NOW(),'MANUAL_PROOF_QUARANTINE',
+                       %s,%s,%s,%s,%s)
+               ON CONFLICT ON CONSTRAINT uq_entity_run_fingerprint DO UPDATE SET
+                   quantity_value = EXCLUDED.quantity_value,
+                   unit_price_value = EXCLUDED.unit_price_value,
+                   total_price_value = EXCLUDED.total_price_value,
+                   total_price_raw = EXCLUDED.total_price_raw,
+                   source_quote = EXCLUDED.source_quote,
+                   section_code = EXCLUDED.section_code,
+                   section_name = EXCLUDED.section_name,
+                   section_total_price_value = EXCLUDED.section_total_price_value,
+                   section_total_price_raw = EXCLUDED.section_total_price_raw,
+                   section_total_source = EXCLUDED.section_total_source""",
             (run_id, detail_id, procurement_id, getattr(fact, "category_code", "unknown"),
              fingerprint, name, name, getattr(fact, "quantity_value", None),
              str(getattr(fact, "quantity_value", "")), getattr(fact, "quantity_unit", ""),
              getattr(fact, "quantity_unit", ""), getattr(fact, "unit_price_value", None),
              str(getattr(fact, "unit_price_value", "")), getattr(fact, "total_price_value", None),
-             str(getattr(fact, "total_price_value", "")), getattr(fact, "source_quote", "")),
+             str(getattr(fact, "total_price_value", "")), getattr(fact, "source_quote", ""),
+             _code, (_info.name if _info else None),
+             (_info.total_value if _info else None), (_info.total_raw if _info else None),
+             (_info.total_source if _info else None)),
         )
         saved += 1
     return saved
