@@ -226,12 +226,12 @@ def _render_editor(crm_db, columns: List[str], rows: List[Dict[str, Any]]) -> No
         item = {"Действие": ""}
         for col in columns:
             if col == "medal":
-                # Подтверждённая медаль + отдельная пометка временного капа.
-                _conf = r.get("medal_confirmed") or r.get("medal_current")
-                _cap = (f" · окно: {r.get('medal_current')}"
-                        if r.get("medal_capped_from") else "")
-                item["Медаль"] = f"{_conf}{_cap}" + (
-                    f" (initial {r.get('medal_initial')})" if r.get("medal_initial") else "")
+                # Текущая (действующая) медаль карточки; подтверждённая/исходная — пометкой.
+                _cur = r.get("medal_current") or r.get("medal_confirmed")
+                _base = r.get("medal_confirmed")
+                _note = (f" · исходная: {_base}"
+                         if _base and str(_base).upper() != str(_cur or "").upper() else "")
+                item["Медаль"] = f"{_cur}{_note}"
             elif col == "temporal":
                 t = r.get("temporal") or {}
                 pct = t.get("window_consumed_ratio")
@@ -562,7 +562,7 @@ def _render_group(crm_db, columns: List[str], rows: List[Dict[str, Any]],
     from src.services.commercial_routing_v3.submission_window_temporal import MEDAL_RANK
     head = rows[0]
     pid = head.get("procurement_id")
-    best = max((MEDAL_RANK.get(str(r.get("medal_confirmed") or r.get("medal_current") or "").upper(), -1)
+    best = max((MEDAL_RANK.get(str(r.get("medal_current") or "").upper(), -1)
                 for r in rows), default=-1)
     _RANK_TO_MEDAL = {"GOLD": 3, "SILVER": 2, "BRONZE": 1, "WOOD": 0}
     best_label = next((m for m, r in _RANK_TO_MEDAL.items() if r == best), "—")
@@ -608,7 +608,7 @@ def _render_table(columns: List[str], rows: List[Dict[str, Any]]) -> str:
         rr = groups[pid]
         head = rr[0]
         best = max(
-            (MEDAL_RANK.get(str(x.get("medal_confirmed") or x.get("medal_current") or "").upper(), -1)
+            (MEDAL_RANK.get(str(x.get("medal_current") or "").upper(), -1)
              for x in rr),
             default=-1,
         )
@@ -767,14 +767,21 @@ def _cell(column: str, row: Dict[str, Any]) -> str:
 
 
 def _medal_cell(row: Dict[str, Any]) -> str:
-    # Показываем подтверждённую медаль; если окно её ограничило — это отдельная пометка.
-    current = escape(str(row.get("medal_confirmed") or row.get("medal_current") or "—"))
-    initial = row.get("medal_initial")
+    # Показываем текущую (действующую) медаль карточки; подтверждённая/исходная — пометкой.
+    current_raw = str(row.get("medal_current") or "")
+    current = escape(current_raw or "—")
+    base = str(row.get("medal_confirmed") or "")
     parts = []
-    if initial:
+    if base and base.upper() != current_raw.upper():
+        parts.append(f"исходная: {escape(base)}")
+    initial = row.get("medal_initial")
+    if initial and str(initial).upper() not in (current_raw.upper(), base.upper()):
         parts.append(f"initial {escape(str(initial))}")
-    if row.get("medal_capped_from"):
-        parts.append(f"окно: {escape(str(row.get('medal_current')))}")
+    # CARD_MEDAL_TWO_TIER_DISPLAY_V1: временной кап показываем отдельной пометкой —
+    # он понизил ТЕКУЩУЮ медаль, а не коммерческую.
+    capped_from = row.get("medal_capped_from")
+    if capped_from:
+        parts.append(f"окно: {escape(str(capped_from))}")
     sub = f'<div class="tw-small">{" · ".join(parts)}</div>' if parts else ""
     return f'<div class="tw-medal">{current}</div>{sub}'
 

@@ -363,6 +363,9 @@ def build_row(raw: Dict[str, Any], *, now: datetime) -> Dict[str, Any]:
         # Временной кап (окно) показывается отдельно и медаль не понижает.
         "medal_confirmed": confirmed_medal or med_init or med_cur or "—",
         "medal_initial": med_init,
+        # CARD_MEDAL_TWO_TIER_DISPLAY_V1: текущая действующая (до временного капа) —
+        # тай-брейк категории «лучшая current_effective_medal».
+        "current_effective_medal": _clean(raw.get("current_effective_medal")),
         "confirmed": bool(confirmed_medal),
         "confirmed_base_medal": confirmed_medal,
         "current_effective_score": score_float,
@@ -389,6 +392,8 @@ def build_row(raw: Dict[str, Any], *, now: datetime) -> Dict[str, Any]:
         "torgi_start_text": _fmt_day(window_start) or "—",
         "delivery_text": delivery_text,
         "temporal": temporal,
+        # CARD_MEDAL_TWO_TIER_DISPLAY_V1: свежесть карточки для ранжирования категории.
+        "fresh": str(temporal.get("temporal_bucket") or "").upper() == "FRESH",
     }
 
 
@@ -403,35 +408,67 @@ def build_workspace_rows(
 ) -> Dict[str, Any]:
     now = now or datetime.now(timezone.utc)
     rows = [build_row(raw, now=now) for raw in raw_rows]
+    _attach_category_rank(rows)
     rows.sort(key=_row_sort_key)
     return {"columns": list(layout_for(selected_mode)), "rows": rows, "selected_mode": selected_mode}
 
 
-def _row_sort_key(row: Dict[str, Any]):
-    """Взвешенный приоритет карточки (веса согласованы 2026-10-13):
+_MEDAL_RANK = {"GOLD": 4, "SILVER": 3, "BRONZE": 2, "WOOD": 1, "": 0}
 
-    priority = 0.60 * (подтверждённая медаль / 4)
-             + 0.25 * (current_effective_score / 100)   # уже включает свежесть
-             + 0.15 * (log10(сумма поставки) / 9.66)
 
-    Сумма поставки: DIRECT_SUPPLY = НМЦК, иначе — материалы внутри НМЦК по
-    категории (structured_entities.total_price_value).
+def _attach_category_rank(rows: Sequence[Dict[str, Any]]) -> None:
+    """CARD_MEDAL_TWO_TIER_DISPLAY_V1 — порядок категорий.
+
+    `медаль карточек (medal_current) -> свежесть (больше FRESH) ->
+     лучшая current_effective_medal -> сумма поставки категории`.
+
+    Порядок детерминирован: тай-брейк по коду категории. Категорийный индекс
+    пишется в каждую строку (`category_order`), чтобы `_row_sort_key` не
+    пересчитывал его по одной строке.
     """
-    import math
+    stats: Dict[Any, Dict[str, Any]] = {}
+    for r in rows:
+        code = r.get("category_code")
+        st = stats.setdefault(code, {"medal": 0, "fresh": 0, "ce": 0, "sum": 0.0})
+        st["medal"] = max(st["medal"], _MEDAL_RANK.get(str(r.get("medal_current") or "").upper(), 0))
+        st["fresh"] += 1 if r.get("fresh") else 0
+        st["ce"] = max(st["ce"], _MEDAL_RANK.get(str(r.get("current_effective_medal") or "").upper(), 0))
+        try:
+            st["sum"] += float(r.get("supply_value") or 0.0)
+        except (TypeError, ValueError):
+            pass
+    ordered = sorted(
+        stats.items(),
+        key=lambda kv: (-kv[1]["medal"], -kv[1]["fresh"], -kv[1]["ce"], -kv[1]["sum"], str(kv[0] or "")),
+    )
+    order_index = {code: idx for idx, (code, _) in enumerate(ordered)}
+    for r in rows:
+        r["category_order"] = order_index.get(r.get("category_code"), 10 ** 6)
 
-    conf_medal = str(row.get("confirmed_base_medal") or "").upper()
-    medal_rank = {"GOLD": 4.0, "SILVER": 3.0, "BRONZE": 2.0, "WOOD": 1.0}.get(conf_medal, 0.0)
-    score = float(row.get("current_effective_score") or 0.0)
-    supply = float(row.get("supply_value") or 0.0)
-    supply_norm = min(1.0, math.log10(supply) / 9.66) if supply > 0 else 0.0
-    priority = 0.60 * (medal_rank / 4.0) + 0.25 * (score / 100.0) + 0.15 * supply_norm
 
-    temporal = row.get("temporal") or {}
-    deadline = temporal.get("submission_deadline_at") or "9999"
+def _row_sort_key(row: Dict[str, Any]):
+    """Порядок карточек (CARD_MEDAL_TWO_TIER_DISPLAY_V1):
+
+    категория (медаль -> свежесть -> current_effective -> сумма)
+      -> подкатегория -> медаль карточки -> сумма поставки -> id.
+
+    Медаль карточки — `medal_current` (текущая действующая, уже с временным капом);
+    `confirmed_base_medal`/`candidate_initial_medal` — только пометки.
+    """
+    medal_rank = _MEDAL_RANK.get(str(row.get("medal_current") or "").upper(), 0)
+    try:
+        supply = float(row.get("supply_value") or 0.0)
+    except (TypeError, ValueError):
+        supply = 0.0
+    sub = str(row.get("product_primary") or "")
+    _order = row.get("category_order")
     return (
-        -round(priority, 6),
-        str(deadline),
+        int(_order) if _order is not None else 10 ** 6,
+        sub,
+        -medal_rank,
+        -supply,
         int(row.get("procurement_id") or 0),
+        str(row.get("category_code") or ""),
     )
 
 
@@ -593,9 +630,11 @@ def load_workspace_rows(
                    " o.commercial_subcategory_code, o.opportunity_track, o.id DESC")
     sql = (
         "SELECT * FROM (" + inner + ") t ORDER BY "
-        "CASE upper(coalesce(t.confirmed_base_medal, t.current_effective_medal, '')) "
+        # CARD_MEDAL_TWO_TIER_DISPLAY_V1: окно набирается по ТЕКУЩЕЙ медали, а не по
+        # confirmed — иначе подтверждённые строки вытесняют current_effective_medal=GOLD
+        # из LIMIT (это и был дефект «GOLD вне окна»). Точный порядок считает Python.
+        "CASE upper(coalesce(t.current_effective_medal, '')) "
         "  WHEN 'GOLD' THEN 4 WHEN 'SILVER' THEN 3 WHEN 'BRONZE' THEN 2 WHEN 'WOOD' THEN 1 ELSE 0 END DESC, "
-        "(t.confirmed_base_medal IS NOT NULL) DESC, "
         "(COALESCE(t.file_count, 0) > 0 OR COALESCE(t.evidence_count, 0) > 0) DESC, "
         "CASE upper(coalesce(t.crm_stage, '')) WHEN 'TORGI' THEN 0 ELSE 1 END ASC, "
         "COALESCE(t.end_date, DATE '1900-01-01') DESC, "

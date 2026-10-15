@@ -42,6 +42,21 @@
 БД — их массовое восстановление вынесено на отдельное решение. Далее — 1B
 `ARCHIVE_MEMBER_PARSE_CONTEXT_V1`.
 
+## 2026-10-15 (18) — 3 CARD_MEDAL_TWO_TIER_DISPLAY_V1 DONE
+
+**CARD_MEDAL_TWO_TIER_DISPLAY_V1 — DONE** (карточная медаль = `medal_current`; подтверждённая/
+предварительная — только пометки, как предписано `CARD_MEDAL_CURRENT_AUTHORITATIVE_V1`).
+`analytics_table_workspace_service`: `build_row` += `current_effective_medal` и `fresh`;
+новый `_attach_category_rank` (порядок категорий: лучшая `medal_current` → число FRESH →
+лучшая `current_effective_medal` → сумма поставки → код); `_row_sort_key` переписан на
+(category_order, подкатегория, медаль карточки, сумма, id); SQL-окно теперь набирается по
+`current_effective_medal` (GOLD первыми), из-за confirmed-порядка GOLD выпадал из LIMIT.
+`analytics_table_workspace_page._medal_cell`: пометка «окно: <medal_capped_from>».
+Проверка: синтетика — catB(GOLD+FRESH) перед catA(SILVER), порядок детерминирован (два рендера
+совпали); SQL — 84 GOLD, все в топ-200/300 (худший ранг 84). Найден баг `0 or 10**6`.
+UI-группировка остаётся по закупке (порядок строк задаёт сервис); визуальная группировка
+«категория → подкатегория → карточка» — follow-up. Рестарт `crm-streamlit.service` нужен.
+
 ## 2026-10-15 (17) — WORKS_VS_GOODS карточный follow-up: «что можно поставить» только GOODS
 
 **Follow-up №1 закрыт.** `procurement_card_dossier_service.supply_candidates`: SQL LIMIT
