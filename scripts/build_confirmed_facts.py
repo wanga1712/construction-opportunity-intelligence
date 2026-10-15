@@ -14,6 +14,7 @@ Never uses crm_procurements.initial_price / project NMCK as a category value.
 
 from __future__ import annotations
 
+import argparse
 import hashlib
 import os
 import sys
@@ -27,6 +28,10 @@ from dotenv import load_dotenv
 
 ROOT = Path(__file__).resolve().parents[1]
 load_dotenv(ROOT / ".env")
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
+
+from src.services.works_vs_goods_service import classify_fact_kind  # noqa: E402
 
 EXTRACTOR_VERSION = os.getenv("SEMANTIC_EXTRACTOR_VERSION", "EMBEDDED_EXTRACTOR_V1")
 
@@ -64,6 +69,11 @@ def semantic_key(row: Dict[str, Any]) -> str:
 
 
 def main() -> int:
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--dry-run", action="store_true",
+                    help="только посчитать товарные/рабочие факты, без записи в БД")
+    args = ap.parse_args()
+
     di = psycopg2.connect(**di_dsn())
     try:
         trust = query(
@@ -84,7 +94,7 @@ def main() -> int:
         rows = query(
             di,
             "SELECT id, procurement_id, category_code, source_document_id, physical_download_key,"
-            " product_name_raw, product_name_normalized, quantity_value, quantity_unit_normalized,"
+            " entity_type, product_name_raw, product_name_normalized, quantity_value, quantity_unit_normalized,"
             " measurement_family, unit_price_value, total_price_value, page_or_sheet, row_or_line,"
             " source_quote, extractor_version, normalizer_version"
             " FROM structured_entities WHERE extractor_version=%s"
@@ -93,8 +103,29 @@ def main() -> int:
             " ORDER BY id",
             (EXTRACTOR_VERSION,),
         )
-        groups: Dict[str, List[Dict[str, Any]]] = {}
+        # WORKS_VS_GOODS_CONFIRMATION_V1: подтверждать категорию может только ТОВАР.
+        # Работы («Устройство…», «Фрезерование…», «Подсыпка…») выпадают из
+        # confirmed_category_facts и потому не дают confirmed_base.
+        goods_rows: List[Dict[str, Any]] = []
+        work_rows: List[Dict[str, Any]] = []
         for r in rows:
+            kind = classify_fact_kind(
+                entity_type=r.get("entity_type"),
+                name=r.get("product_name_normalized") or r.get("product_name_raw"),
+            )
+            (work_rows if kind == "WORK" else goods_rows).append(r)
+
+        work_by_target = Counter((r["procurement_id"], r["category_code"]) for r in work_rows)
+        print(f"WORK_FACTS_EXCLUDED={len(work_rows)}")
+        print(f"GOODS_FACTS_KEPT={len(goods_rows)}")
+        if (29311, "lighting") in work_by_target:
+            print(f"WORK_FACTS_29311_LIGHTING={work_by_target[(29311, 'lighting')]}")
+        if args.dry_run:
+            print("DRY_RUN=YES (no writes)")
+            return 0
+
+        groups: Dict[str, List[Dict[str, Any]]] = {}
+        for r in goods_rows:
             groups.setdefault(semantic_key(r), []).append(r)
 
         counters = Counter()

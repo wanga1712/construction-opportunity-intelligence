@@ -42,6 +42,22 @@
 БД — их массовое восстановление вынесено на отдельное решение. Далее — 1B
 `ARCHIVE_MEMBER_PARSE_CONTEXT_V1`.
 
+## 2026-10-15 (16) — 2 WORKS_VS_GOODS_CONFIRMATION_V1 DONE
+
+**WORKS_VS_GOODS_CONFIRMATION_V1 — DONE.** Новый `src/services/works_vs_goods_service.py`
+(`classify_fact_kind` → GOODS|WORK). Ключевой вывод: `entity_type` НЕ различает (embedded
+помечает всё PRODUCT), решает НАЗВАНИЕ — глаголы работ (устройств/фрезеров/подсыпк/устранени/
+планиров/уплотнен/разметк/демонта…). `scripts/build_confirmed_facts.py`: добавлен `--dry-run`,
+WORK-факты исключаются из `confirmed_category_facts`. Прогоны: dry-run WORK excluded 1863 /
+GOODS kept 14173 (29311/lighting — все 6 работ); build `CONFIRMED_FACTS=10575`;
+`write_confirmed_base --write` → 524 подтверждения (GOLD 7/SILVER 167/BRONZE 303/WOOD 47),
+`CANDIDATE_INITIAL_CHANGED=0`. Ремедиация 29311: opportunity 15592 `confirmed_base_medal`
+SILVER→NULL; снято 11 подтверждений (все EMBEDDED_MATERIAL, DIRECT_SUPPLY не тронут);
+preimage сохранён в `/opt/CRM_Streamlit/tmp_wsg_preimage_*_20261015.json`; аудит —
+`reason_codes += confirmed_base_removed:confirmed_by_works`. Проверка: work-like фактов в
+`confirmed_category_facts` = 0. Открыто: фильтр карточки «что можно поставить» по товарным
+фактам (п.3 WIP) — отдельный шаг; `fact_kind` в таблице не вводили (опционально, нужен DDL).
+
 ## 2026-10-15 (15) — 2B.6: лист в road identity, stale-suppression, road-проекция в карточке
 
 **2B ROAD_REPAIR_SECTION_TEMPLATES_V1 — 2B.6 DONE.**

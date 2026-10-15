@@ -80,3 +80,64 @@ read-only SQL: confirmed_base у 29311/lighting снят или не прост�
 - модель / scoring / приоры, кроме фильтра в confirmed;
 - двухуровневая выдача карточек (отдельный WIP);
 - очередь / извлечение.
+
+## RESULT (2026-10-15) — DONE
+
+ИЗМЕНЕНИЯ:
+
+```
+new: src/services/works_vs_goods_service.py
+  classify_fact_kind(entity_type, name) -> GOODS | WORK ; is_goods(...)
+  сигналы: entity_type=WORK -> WORK; НАЗВАНИЕ с глагола работ -> WORK
+    (устройств|фрезеров|подсыпк|устранени|планиров|уплотнен|разметк|укладк|засыпк|
+     разработк|прокладк|восстановлен|ремонт|демонта|монтаж|разборк|переустройств|
+     перевозк|погрузк|вывоз …); остальное -> GOODS.
+  ВАЖНО: `entity_type` здесь НЕ различает — embedded-экстрактор помечает ВСЁ как
+  PRODUCT; решает именно название (кейс 29311: 6 «PRODUCT», но все 6 — дорожные работы).
+
+changed: scripts/build_confirmed_facts.py
+  + --dry-run (считать без записи);
+  факты WORK исключаются из confirmed_category_facts -> не дают confirmed_base;
+  печатает WORK_FACTS_EXCLUDED / GOODS_FACTS_KEPT / WORK_FACTS_29311_LIGHTING.
+```
+
+ПРОГОНЫ:
+
+```
+dry-run:  SOURCE_ENTITIES=16036 | WORK_FACTS_EXCLUDED=1863 | GOODS_FACTS_KEPT=14173
+          WORK_FACTS_29311_LIGHTING=6
+build:    CONFIRMED_FACTS=10575 (было 12438), CATEGORY_VALUE_FROM_PROJECT_NMCK=0
+write:    CONFIRMED_BASE_TO_WRITE=524 (GOLD 7 / SILVER 167 / BRONZE 303 / WOOD 47)
+          CONFIRMED_BASE_NONNULL=524 | CONFIRMED_BASE_NULL=7442
+          CANDIDATE_INITIAL_CHANGED=0 | CONFIRMED_BASE_FROM_UNTRUSTED=0
+```
+
+РЕМЕДИАЦИЯ 29311:
+
+```
+opportunity 15592 (29311 / lighting): confirmed_base_medal SILVER -> NULL, score/at/version -> NULL
+снято 11 подтверждений (preimage 535 -> 524), все 11 — opportunity_track=EMBEDDED_MATERIAL
+  (DIRECT_SUPPLY не затронут);
+preimage (обратимость): /opt/CRM_Streamlit/tmp_wsg_preimage_confirmed_20261015.json
+                        /opt/CRM_Streamlit/tmp_wsg_preimage_all_current_20261015.json
+аудит: reason_codes += "confirmed_base_removed:confirmed_by_works" (11 строк)
+```
+
+ACCEPTANCE:
+
+```
+LIGHTING_29311_NO_LONGER_CONFIRMED_BY_WORKS = YES (15592 -> NULL)
+WORKS_GIVE_CONFIRMED_BASE                   = 0   (work-like фактов в confirmed_category_facts: 0)
+GOODS_STILL_CONFIRM_CATEGORY                = YES (524 подтверждения, 10575 товарных фактов)
+DIRECT_SUPPLY_UNCHANGED                     = YES (снятые — EMBEDDED_MATERIAL)
+REMEDIATION_REVERSIBLE                      = YES (preimage сохранён)
+REMEDIATION_AUDITED                         = YES (reason_codes)
+CANDIDATE_INITIAL_CHANGED                   = 0
+```
+
+DEVIATIONS / FOLLOW-UP:
+
+- `fact_kind` в `confirmed_category_facts` НЕ добавляли (опционально по WIP, потребовало бы
+  DDL); аудит обеспечен preimage + `reason_codes`.
+- Фильтр карточки «что можно поставить» из товарных фактов (п.3 WIP) — отдельный шаг:
+  `supply_candidates` пока отдаёт все извлечённые факты категории.
