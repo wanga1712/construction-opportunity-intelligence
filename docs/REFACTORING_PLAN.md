@@ -42,6 +42,24 @@
 БД — их массовое восстановление вынесено на отдельное решение. Далее — 1B
 `ARCHIVE_MEMBER_PARSE_CONTEXT_V1`.
 
+## 2026-10-15 (9) — 2A Phase 4: model fallback (schema-prompt, fail-closed)
+
+**2A SECTION_LEVEL_NORMALIZATION_V1 — Phase 4 DONE** (механизм; в parse-путь демона не
+подключён). Новый модуль `tender_documents_research/document_processor/section_model_fallback.py`:
+`build_section_prompt` (жёсткая JSON-схема `section_name`/`section_total_raw`/
+`section_total_value`/`children[]` с `material_name|quantity|unit|total_value|source_quote`),
+`prepare_section_text` (снятие артефактов дампа ячеек `A=`/`|`), `validate_section_payload`
+(fail-closed: verbatim-цитата обязательна, числа обязаны быть в цитате — с токенным разбором,
+т.к. контрактный парсер склеивает «200 300» в 200300; `DOCUMENT_TOTAL` в section-поля не
+принимается; нет валидных детей → `None`), `extract_sections_with_model` (один вызов
+qwen2.5:7b), `section_needs_fallback` (гейт: только при `COMPUTED_SUM_UNRELIABLE`/`unknown`).
+Read-only проверка: синтетика — валидный payload принят, выдуманные цитаты/числа → `None`,
+document total снят; happy path через инъекцию ответа → `SECTION_TOTAL 60000`, 1 child,
+trust `MANUAL_PROOF_QUARANTINE`; битый JSON → `None`. Реальная модель на 148391 уходит в
+fail-closed (`{"children": []}` на шумном разделе). Скрипт проверки —
+`scripts/audit_section_model_fallback.py`. Открыто: включать ли fallback в продакшн-разбор
+(нужно решение владельца); fine-tune — отдельно.
+
 ## 2026-10-15 (8) — 2A Phase 3: проекция карточки «раздел → сумма → материалы»
 
 **2A SECTION_LEVEL_NORMALIZATION_V1 — Phase 3 DONE.** Новый модуль

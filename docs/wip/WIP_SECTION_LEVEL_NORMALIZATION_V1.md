@@ -223,6 +223,8 @@ DB_WRITES=0_UNTIL_REPARSE_APPROVED
 
 ### Phase 3 — card projection
 
+Статус: DONE (`2de2dc6`).
+
 - карточка показывает «раздел → сумма раздела → материалы внутри»;
 - «остаток» без section остаётся видимым отдельно.
 
@@ -716,3 +718,70 @@ DEVIATIONS / FOLLOW-UP:
 - Материалы внутри раздела ограничены 25 строками (детерминированный срез по сумме);
   если нужен полный список/пагинация — отдельная задача.
 - Phase 4 (model fallback) — отдельно, по WIP.
+
+## RESULT Phase 4 (2026-10-15) — model fallback (schema-prompt)
+
+STATUS: DONE (механизм реализован и проверен read-only; в parse-путь демона НЕ подключён).
+
+ИЗМЕНЕНИЯ:
+
+```
+new: tender_documents_research/document_processor/section_model_fallback.py
+  build_section_prompt()   — жёсткая JSON-схема: section_name, section_total_raw,
+      section_total_value, children[{material_name, quantity, unit, total_value, source_quote}]
+  prepare_section_text()   — снять артефакты нашего дампа ячеек (`A=`/`B=`, `|`) до промпта
+      и до проверки цитат, чтобы verbatim-копирование было возможным
+  validate_section_payload() — fail-closed:
+      * child без source_quote, не являющейся подстрокой текста, отбрасывается;
+      * quantity/total_value обязаны присутствовать в цитате (токенный разбор чисел,
+        т.к. контрактный парсер склеивает «200 300» в 200300);
+      * section_total_value принимается только при verifiable section_total_raw;
+      * DOCUMENT_TOTAL («Итого», «Всего с НДС», «Стоимость без НДС», «НДС») в section-поля
+        НЕ принимается (guard is_document_total);
+      * нет валидных детей -> None (без догадок); trust_state = MANUAL_PROOF_QUARANTINE
+  extract_sections_with_model() — один вызов (qwen2.5:7b), любые исключения -> None
+  section_needs_fallback()  — гейт: SECTION_TOTAL -> нет; COMPUTED_SUM с числом -> нет;
+                              иначе (COMPUTED_SUM_UNRELIABLE / unknown) -> да
+new: scripts/audit_section_model_fallback.py — read-only проверка на разделе закупки
+```
+
+ПРОВЕРКА (S13, read-only, БД не менялась):
+
+```
+1) синтетика (инъекция ответа, без модели):
+   valid payload                  -> accepted (SECTION_TOTAL 73362, 1 child)
+   invented quote                 -> None
+   invented number                -> None
+   document_total как section     -> total снят (None/None), дети сохранены
+   is_document_total("A=Итого: | B=руб. | F=7450714594") = True
+   is_document_total("A=Итого по главе 1 | …")            = False
+   extract_sections_with_model(fake_caller) -> SECTION_TOTAL 60000, 1 child,
+                                               trust=MANUAL_PROOF_QUARANTINE
+   broken JSON                    -> None
+2) реальная модель qwen2.5:7b на 148391:
+   "ПСК 1 стадия на торги::глава 1"  (30 строк, COMPUTED_SUM_UNRELIABLE, gate=True)
+        -> NO_VALID_PAYLOAD (fail-closed)
+   "ПСК 1 стадия на торги::глава 12" (2 строки) -> модель вернула {"children": []}
+        -> NO_VALID_PAYLOAD (fail-closed)
+   гейт: unreliable -> True ; COMPUTED_SUM -> False ; SECTION_TOTAL -> False
+```
+
+ACCEPTANCE (Phase 4):
+
+```
+FALLBACK_ONLY_WHEN_NEEDED       = YES (section_needs_fallback)
+HARD_JSON_SCHEMA                = YES
+EVERY_CHILD_AND_TOTAL_HAS_QUOTE = YES (иначе отбрасывается)
+FAIL_CLOSED                     = YES (битый JSON / выдуманные цитаты и числа -> None)
+DOCUMENT_TOTAL_NOT_ACCEPTED     = YES
+SCORING_MEDAL_QUEUE_UNCHANGED   = YES
+DB_WRITES                       = 0 (валидация read-only)
+```
+
+DEVIATIONS / OPEN:
+
+- Модуль НЕ подключён в parse-путь демона: это добавит вызовы модели в продакшн-разбор.
+  Нужно решение владельца (включать ли и по какому триггеру/лимиту).
+- На текущем 148391 реальная модель уходит в fail-closed — данные раздела шумные
+  («(наименование организации)», OCR-мусор); это ожидаемое поведение, а не сбой механизма.
+- Fine-tune dataset — отдельным этапом (по WIP), в этом WIP не делаем.
