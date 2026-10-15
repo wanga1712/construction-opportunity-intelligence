@@ -110,6 +110,18 @@ dry-run -> замер -> приёмка -> батч следующей груп�
 
 После каждого батча обновлять каталог форм в `docs/NORMALIZATION_TEMPLATES.md`.
 
+## Решения после canary 60467
+
+1. **Stale-строки**: в плоской выдаче подавляем старые non-section дубли, когда
+   есть sectioned-замена. Ключ предпочтения:
+   `(procurement_id, source_document_id, entity_fingerprint)`; приоритет строкам
+   с `section_code IS NOT NULL` и большему `id`. Физически строки не удаляем.
+2. **Road identity с листом**: используем `road::<sheet>::razdel N` /
+   `road::<sheet>::glava N`, чтобы одноимённые разделы из разных листов не
+   сливались.
+3. **Карточка**: подключаем road-шаблон после пунктов 1–2; карточка выбирает
+   road-projection для дорожных закупок, generic — для остальных.
+
 ## Acceptance для 60467
 
 ```text
@@ -386,3 +398,68 @@ SECTION_FIELDS_WRITTEN = YES (1784 строки с section_code)
 COMPARISON_DONE        = YES (generic 53 раздела vs road 24)
 QUEUE_SCORING_UNTOUCHED= YES
 ```
+
+## RESULT 2B.6 (2026-10-15) — лист в identity, stale-suppression, road в карточке
+
+STATUS: DONE (все три пункта).
+
+2B.6.1 — ЛИСТ В ROAD IDENTITY:
+
+```
+road_repair_section_templates.RoadMarker.code(sheet) -> "road::<sheet>::razdel N"
+                                                        "road::<sheet>::glava N"
+sheet берётся из row["page_or_sheet"]; если листа нет — старый вид "road::razdel N".
+fallback-карта шифров теперь учитывает лист: (sheet, СР/ЛС/ОС) -> code.
+60467: разделов 33 (вместо 24) — одноимённые разделы «ПСК»/«Лист1»/«ВКР» больше не сливаются.
+```
+
+2B.6.2 — STALE-SUPPRESSION (выдача):
+
+```
+procurement_card_dossier_service.supply_candidates: CTE preferred —
+    row_number() OVER (PARTITION BY procurement_id, source_document_id,
+                       coalesce(row_or_line,''), coalesce(product_name_raw,'')
+                       ORDER BY (section_code IS NOT NULL) DESC, id DESC) = 1
+    -> в плоскую «Что можно поставить» попадает только предпочтительная строка.
+ВАЖНО: ключ из решения (…, entity_fingerprint) НЕ работает — по нему 0 пар; замер:
+    (source_document_id, fingerprint)                      -> 0 пар
+    (source_document_id, row_or_line, product_name_raw)    -> 1784 пары  <-- используется
+Причина: fingerprint включает page_or_sheet, который появился только у новых строк.
+Физически stale-строки не трогаем (остаются для аудита).
+60467: preferred 1780 (было 3564), все с section_code.
+148391: preferred 18186 (было 23577), 7894 с section_code (остальные — не пары, а другие строки).
+```
+
+2B.6.3 — ROAD-ПРОЕКЦИЯ В КАРТОЧКЕ:
+
+```
+procurement_card_dossier_service: read-only выборка road-строк (LIMIT 8000, с той же
+    stale-suppression) -> build_road_sections -> projection_from_road (адаптер в
+    section_projection_service: тот же контракт, что у generic-проекции).
+Признак дорожной формы: есть хотя бы один раздел уровня RAZDEL с материалами
+    («Итого по разделу N <Название>»). Одних «Глава N» недостаточно — их носят и
+    нерoad-сметы (148391), где generic-проекция полезнее.
+Результат: dossier["section_projection_source"] = "road_repair_section_templates" | "embedded_extraction".
+
+проверка:
+  60467  -> source road_repair_section_templates | 23 раздела с материалами | skipped empty 10 | residue 63
+            road::Лист1::razdel 1 «Подготовительные работы» 8 | 2 905.38 | confirmed
+            road::Лист1::razdel 7 «Переустройство ВЛ и кабельной линии» 64 | 57 966 060.82 | unreliable
+  148391 -> source embedded_extraction (razdel-маркеров нет) — generic-проекция сохранена
+import smoke: section_projection_service / procurement_card_dossier_service /
+              ui.procurement_card_page -> OK
+```
+
+ACCEPTANCE (2B.6):
+
+```
+ROAD_IDENTITY_WITH_SHEET        = YES (road::<sheet>::razdel N)
+STALE_SUPPRESSED_IN_FLAT_VIEW   = YES (60467: 3564 -> 1780)
+STALE_ROWS_PHYSICALLY_PRESERVED = YES
+ROAD_PROJECTION_FOR_ROAD_ONLY   = YES (60467 road; 148391 generic)
+MATERIALS_ONLY_IN_PROJECTION    = YES (пустые разделы не выводятся)
+QUEUE_SCORING_MEDAL_UNTOUCHED   = YES
+DB_WRITES                       = 0 (только SELECT)
+```
+
+NOTE: изменения карточки подхватятся после рестарта `crm-streamlit.service`.

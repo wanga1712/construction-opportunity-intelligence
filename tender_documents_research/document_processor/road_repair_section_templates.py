@@ -10,6 +10,8 @@
 
   * распознаёт раздел по тексту строки (`parse_road_marker`);
   * `section_name` берёт из текста после номера («Земляное полотно», «Дорожная одежда»);
+  * identity раздела — лист + номер: `road::<sheet>::razdel N` / `road::<sheet>::glava N`
+    (одноимённые разделы из «ПСК»/«Лист1»/«ВКР» не сливаются);
   * шифры `СР-*` / `ЛС-*` / `ОС-*` из колонки B использует как fallback identity;
   * в сумму включает ТОЛЬКО canonical summarizable-материалы
     (`section_detector.is_summarizable`), агрегаты не суммирует;
@@ -57,11 +59,18 @@ class RoadMarker:
     name: Optional[str]
     shifr: Optional[str] = None
 
-    @property
-    def code(self) -> str:
-        # Первичная identity — номер раздела/главы; шифр (СР/ЛС/ОС) — только
-        # fallback для строк, где маркер не повторён (см. shifr_to_code).
-        return f"{ROAD_CODE_PREFIX}::{self.kind} {self.number}"
+    def code(self, sheet: Optional[str] = None) -> str:
+        """`road::<sheet>::razdel N` (лист обязателен, когда он известен).
+
+        Первичная identity — лист + номер раздела/главы: одноимённые разделы из
+        «ПСК» / «Лист1» / «ВКР» не должны сливаться. Шифр (СР/ЛС/ОС) — только
+        fallback для строк, где маркер не повторён (см. shifr_to_code).
+        """
+        parts = [ROAD_CODE_PREFIX]
+        if sheet:
+            parts.append(str(sheet))
+        parts.append(f"{self.kind} {self.number}")
+        return "::".join(parts)
 
 
 def _cells(text: Any) -> List[str]:
@@ -157,11 +166,13 @@ def build_road_sections(
     """
     sections: Dict[str, Dict[str, Any]] = {}
     order: List[str] = []
-    shifr_to_code: Dict[str, str] = {}
+    shifr_to_code: Dict[Any, str] = {}
     current: Optional[str] = None
     residue: List[Dict[str, Any]] = []
 
     for row in rows or []:
+        sheet = row.get("page_or_sheet") or row.get("sheet")
+        sheet = str(sheet) if sheet else None
         marker = parse_road_marker(row.get("source_quote"))
         if marker is None:
             # маркер может прийти из исходных колонок строки
@@ -170,11 +181,12 @@ def build_road_sections(
                 row.get("product_name_normalized"),
             )
         if marker is not None:
-            current = marker.code
+            current = marker.code(sheet)
             if current not in sections:
                 sections[current] = {
                     "section_code": current,
                     "section_name": marker.name or marker.number,
+                    "page_or_sheet": sheet,
                     "marker_kind": marker.kind,
                     "marker_number": marker.number,
                     "shifrs": [],
@@ -193,9 +205,13 @@ def build_road_sections(
             if marker.shifr and marker.shifr not in section["shifrs"]:
                 section["shifrs"].append(marker.shifr)
                 shifr_to_code.setdefault(marker.shifr, current)
+                if sheet:
+                    shifr_to_code.setdefault((sheet, marker.shifr), current)
         else:
             shifr = parse_shifr(row.get("source_quote"))
-            if shifr and shifr in shifr_to_code:
+            if shifr and sheet and (sheet, shifr) in shifr_to_code:
+                current = shifr_to_code[(sheet, shifr)]
+            elif shifr and shifr in shifr_to_code:
                 current = shifr_to_code[shifr]
 
         if current is None:

@@ -42,6 +42,24 @@
 БД — их массовое восстановление вынесено на отдельное решение. Далее — 1B
 `ARCHIVE_MEMBER_PARSE_CONTEXT_V1`.
 
+## 2026-10-15 (15) — 2B.6: лист в road identity, stale-suppression, road-проекция в карточке
+
+**2B ROAD_REPAIR_SECTION_TEMPLATES_V1 — 2B.6 DONE.**
+(1) `road_repair_section_templates`: identity раздела теперь `road::<sheet>::razdel N` /
+`road::<sheet>::glava N`, sheet из `page_or_sheet`, fallback-карта шифров учитывает лист;
+у 60467 разделов 33 вместо 24 — «ПСК»/«Лист1»/«ВКР» больше не сливаются.
+(2) `procurement_card_dossier_service.supply_candidates`: CTE `preferred` подавляет stale-дубли
+в плоской выдаче; приоритет `section_code IS NOT NULL`, затем больший `id`.
+**Ключ из решения по `entity_fingerprint` не работает** (0 пар) — используется рабочий
+`(procurement_id, source_document_id, row_or_line, product_name_raw)` (1784 пары), т.к.
+fingerprint включает `page_or_sheet`, появившийся только у новых строк. 60467: 3564→1780
+предпочтительных, stale физически сохранены.
+(3) Карточка выбирает road-проекцию, если найден хотя бы один раздел уровня RAZDEL с
+материалами (`projection_from_road` в `section_projection_service`), иначе generic;
+`dossier["section_projection_source"]` фиксирует выбор. Проверка: 60467 → road
+(23 раздела, `road::Лист1::razdel 1 …`), 148391 → generic (razdel-маркеров нет). Пустые
+разделы не выводятся. Изменения UI подхватятся после рестарта `crm-streamlit.service`.
+
 ## 2026-10-15 (14) — 2B Phase 2b: диагностический reparse 60467 + сравнение generic/road
 
 **2B ROAD_REPAIR_SECTION_TEMPLATES_V1 — Phase 2b DONE.** Новый разовый инструмент

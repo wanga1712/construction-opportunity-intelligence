@@ -111,3 +111,47 @@ def build_section_projection(
             "count": int(residue_total) if residue_total is not None else len(residue),
         },
     }
+
+
+def projection_from_road(
+    road_result: Any, *, per_section_limit: int = SECTION_MATERIALS_PER_SECTION
+) -> Dict[str, Any]:
+    """Адаптировать результат `road_repair_section_templates.build_road_sections`
+    к форме карточки (2B.6.3): тот же контракт, что у `build_section_projection`.
+
+    Разделы без материалов не показываем (`sections_skipped_empty` — только аудит);
+    материалы внутри раздела срезаются по сумме (детерминированно).
+    """
+    sections: List[Dict[str, Any]] = []
+    skipped_empty = 0
+    for section in (road_result or {}).get("sections") or []:
+        materials = list(section.get("materials") or [])
+        if not materials:
+            skipped_empty += 1
+            continue
+        materials.sort(
+            key=lambda row: (row.get("total_price_value") is not None,
+                             row.get("total_price_value") or 0),
+            reverse=True,
+        )
+        sections.append({
+            "section_code": section.get("section_code"),
+            "section_name": section.get("section_name"),
+            "page_or_sheet": section.get("page_or_sheet"),
+            "total_value": section.get("total_value"),
+            "total_raw": None,
+            "total_source": section.get("total_source"),
+            "total_state": total_state(section.get("total_value"), section.get("total_source")),
+            "material_count": section.get("material_count") or len(materials),
+            "materials": materials[:per_section_limit],
+        })
+    residue = (road_result or {}).get("residue") or {}
+    residue_rows = list(residue.get("rows") or [])
+    return {
+        "sections": sections,
+        "sections_skipped_empty": skipped_empty,
+        "residue": {
+            "rows": residue_rows[:RESIDUE_ROWS_LIMIT],
+            "count": residue.get("count") if residue.get("count") is not None else len(residue_rows),
+        },
+    }

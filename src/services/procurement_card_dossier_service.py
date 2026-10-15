@@ -27,11 +27,14 @@ from src.services.section_projection_service import (
     RESIDUE_ROWS_LIMIT,
     SECTION_MATERIALS_PER_SECTION,
     build_section_projection,
+    projection_from_road,
 )
 
 logger = logging.getLogger("crm.procurement_card_dossier")
 
 DI = "document_intelligence"
+#: сколько строк отдаём road-шаблону для проекции карточки (2B.6.3)
+ROAD_ROWS_LIMIT = 8000
 
 _DI_CONN: Any = None
 
@@ -361,13 +364,32 @@ def load_procurement_dossier(db: Any, procurement_id: int) -> Dict[str, Any]:
     )
 
     # «Что можно поставить»: извлечённые структурированные сущности (с trust state).
+    # STALE-SUPPRESSION (2B.6.2): у одной позиции может быть старая строка без
+    # section-контекста и новая с ним. Показываем только предпочтительную:
+    # приоритет `section_code IS NOT NULL`, затем больший `id`. Пары ищутся по
+    # (procurement_id, source_document_id, row_or_line, product_name_raw): по
+    # entity_fingerprint они НЕ совпадают (fingerprint включает page_or_sheet,
+    # который появился только у новых строк). Физически строки не трогаем.
     dossier["supply_candidates"] = _safe_di(
         """
+        WITH preferred AS (
+            SELECT se.*,
+                   row_number() OVER (
+                       PARTITION BY se.procurement_id, se.source_document_id,
+                                    coalesce(se.row_or_line, ''), coalesce(se.product_name_raw, '')
+                       ORDER BY (se.section_code IS NOT NULL) DESC, se.id DESC
+                   ) AS pref_rn
+              FROM structured_entities se
+             WHERE se.procurement_id = %s
+        )
         SELECT se.entity_type, se.product_name_raw, se.product_name_normalized,
                se.manufacturer_normalized, se.brand_normalized, se.model_article_normalized,
                se.quantity_value, se.quantity_unit_raw, se.unit_price_value, se.total_price_value,
                se.product_relation, se.source_quote, se.confidence, se.structured_fact_trust_state,
                se.measurement_family, se.extractor_version,
+               se.section_code, se.section_name, se.section_total_price_value,
+               se.section_total_price_raw, se.section_total_source,
+               se.page_or_sheet, se.row_or_line,
                COALESCE((
                  SELECT jsonb_agg(jsonb_build_object(
                           'name', a.attribute_name,
@@ -378,8 +400,8 @@ def load_procurement_dossier(db: Any, procurement_id: int) -> Dict[str, Any]:
                           'unit', a.unit_normalized)
                         ORDER BY a.id)
                  FROM structured_attributes a WHERE a.entity_id = se.id), '[]'::jsonb) AS attributes
-        FROM structured_entities se
-        WHERE se.procurement_id = %s
+        FROM preferred se
+        WHERE se.pref_rn = 1
         ORDER BY se.structured_fact_trust_state, se.total_price_value DESC NULLS LAST, se.id
         LIMIT 100
         """,
@@ -445,6 +467,54 @@ def load_procurement_dossier(db: Any, procurement_id: int) -> Dict[str, Any]:
     dossier["section_projection"] = build_section_projection(
         _section_rows, _residue_rows, residue_total=_residue_total
     )
+
+    # 2B.6.3: дорожные закупки показываем через road-projection, остальные — generic.
+    # Признак дорожной формы — найденные маркеры «Итого по разделу N» / «Глава N».
+    dossier["section_projection_source"] = "embedded_extraction"
+    try:
+        _road_rows = _safe_di(
+            """
+            WITH preferred AS (
+                SELECT se.*,
+                       row_number() OVER (
+                           PARTITION BY se.procurement_id, se.source_document_id,
+                                        coalesce(se.row_or_line, ''),
+                                        coalesce(se.product_name_raw, '')
+                           ORDER BY (se.section_code IS NOT NULL) DESC, se.id DESC
+                       ) AS pref_rn
+                  FROM structured_entities se
+                 WHERE se.procurement_id = %s
+            )
+            SELECT se.product_name_raw, se.product_name_normalized, se.entity_type,
+                   se.quantity_value, se.quantity_unit_normalized, se.quantity_unit_raw,
+                   se.unit_price_value, se.total_price_value, se.source_quote, se.row_or_line,
+                   se.layout_status, se.page_or_sheet, se.section_code
+              FROM preferred se
+             WHERE se.pref_rn = 1
+             ORDER BY se.id
+             LIMIT %s
+            """,
+            (int(procurement_id), ROAD_ROWS_LIMIT),
+            errors=errors, label="road_rows",
+        )
+        if _road_rows:
+            from tender_documents_research.document_processor.road_repair_section_templates import (
+                build_road_sections,
+            )
+
+            _road = build_road_sections(_road_rows)
+            # Признак дорожной формы — маркеры уровня РАЗДЕЛА с материалами
+            # («Итого по разделу N <Название>»). Одних «Глава N» мало: их носят и
+            # нерoad-сметы (напр. 148391), для которых generic-проекция полезнее.
+            _road_confident = any(
+                int(s.get("material_count") or 0) > 0 and s.get("marker_kind") == "razdel"
+                for s in _road.get("sections") or []
+            )
+            if _road_confident:
+                dossier["section_projection"] = projection_from_road(_road)
+                dossier["section_projection_source"] = "road_repair_section_templates"
+    except Exception as _exc:  # дорожная проекция не должна ломать карточку
+        _record_error(errors, "road_projection", _exc)
 
     docs = dossier["documents"]
     finds = dossier["findings"]
