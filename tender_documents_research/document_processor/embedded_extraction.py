@@ -25,7 +25,12 @@ import re
 from dataclasses import dataclass, field
 from typing import Any, Dict, Iterable, List, Optional, Sequence, Tuple
 
-from .section_detector import SECTION_RESIDUE, SectionTracker
+from .section_detector import (
+    SECTION_RESIDUE,
+    SectionTracker,
+    is_aggregate_row,
+    is_summarizable,
+)
 
 EXTRACTOR_VERSION = "EMBEDDED_EXTRACTOR_V1"
 NORMALIZER_VERSION = "UNIT_NORMALIZER_V1"
@@ -861,6 +866,24 @@ def _attach_section(fact: ExtractedFact, tracker: SectionTracker, code: Optional
         fact.section_name = info.name
 
 
+def _fact_summarizable(fact: ExtractedFact) -> bool:
+    """Canonical summarizable predicate applied to a fact (Phase 2A.6)."""
+    return is_summarizable(
+        layout_status=fact.layout_status,
+        quantity_value=fact.quantity_value,
+        unit_normalized=fact.unit_normalized,
+        name=fact.product_name_normalized or fact.product_name_raw,
+    )
+
+
+def _fact_is_aggregate(fact: ExtractedFact) -> bool:
+    return is_aggregate_row(
+        name=fact.product_name_normalized or fact.product_name_raw,
+        unit_normalized=fact.unit_normalized,
+        quantity_value=fact.quantity_value,
+    )
+
+
 def _finalize_sections(facts: List[ExtractedFact], tracker: SectionTracker) -> None:
     """Fill DOCUMENT_TOTAL/COMPUTED_SUM totals onto the section's facts."""
     tracker.finalize()
@@ -928,7 +951,12 @@ def extract_facts(
         _attach_section(fact, tracker, section_code)
         if not fact.page_or_sheet and sheet:
             fact.page_or_sheet = sheet
-        tracker.add_child(section_code, fact.line_total_value)
+        tracker.add_child(
+            section_code,
+            fact.line_total_value,
+            summarizable=_fact_summarizable(fact),
+            aggregate=_fact_is_aggregate(fact),
+        )
         seen.add(fact.entity_fingerprint)
         facts.append(fact)
     _finalize_sections(facts, tracker)
@@ -1009,7 +1037,12 @@ def facts_from_table_rows(
         if fact.entity_fingerprint in seen:
             continue
         _attach_section(fact, tracker, section_code)
-        tracker.add_child(section_code, fact.line_total_value)
+        tracker.add_child(
+            section_code,
+            fact.line_total_value,
+            summarizable=_fact_summarizable(fact),
+            aggregate=_fact_is_aggregate(fact),
+        )
         seen.add(fact.entity_fingerprint)
         out.append(fact)
     _finalize_sections(out, tracker)

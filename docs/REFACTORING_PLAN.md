@@ -42,6 +42,22 @@
 БД — их массовое восстановление вынесено на отдельное решение. Далее — 1B
 `ARCHIVE_MEMBER_PARSE_CONTEXT_V1`.
 
+## 2026-10-15 (7) — 2A.6: canonical predicate + COMPUTED_SUM_UNRELIABLE
+
+**2A SECTION_LEVEL_NORMALIZATION_V1 — шаг 2A.6 DONE.** В `section_detector.py` добавлены
+`is_aggregate_row` (имя-маркер или `unit ~ 'руб%'` при `qty IS NULL`) и `is_summarizable`
+(PRODUCT + CONSISTENT + qty + unit + unit≠руб. + имя не агрегат); `add_child` принимает флаги,
+`finalize(coverage_min=0.9)` ставит `SECTION_TOTAL` → иначе `COMPUTED_SUM` только при
+`aggregate_rows==0` и `coverage>=0.9`, иначе `COMPUTED_SUM_UNRELIABLE` (total=None, если
+summarizable-строк нет). Предикат применён в `embedded_extraction` (оба пути) и
+`parse_extractors._persist_estimate`; аудит-скрипт считает так же. Read-only аудит 148391:
+48 разделов, `COMPUTED_SUM` 16 / `COMPUTED_SUM_UNRELIABLE` 32. Reparse 148391
+(`EMBEDDED_FORCE_UPDATE=1`, 284.2s): 7644 строки `COMPUTED_SUM_UNRELIABLE`, 97 `COMPUTED_SUM`,
+153 `RESIDUE`; напр. `ПСК 1 стадия на торги::раздел 9` → `UNRELIABLE` (3 636 251 172),
+`…::итого по главе 5` → `COMPUTED_SUM` (305 670 775). Замечание: `persist_facts` перезаписывает
+существующие строки только при `EMBEDDED_FORCE_UPDATE=1`. Далее Phase 3 — проекция карточки
+«раздел → сумма → материалы» + «остаток», без показа `*_UNRELIABLE` как подтверждённой суммы.
+
 ## 2026-10-15 (6) — 2A Phase 2.5: разбор COMPUTED_SUM (read-only)
 
 **2A SECTION_LEVEL_NORMALIZATION_V1 — Phase 2.5 DONE.** Причина расхождения ×4–5.6 найдена:

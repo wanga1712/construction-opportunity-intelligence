@@ -26,6 +26,7 @@ from typing import Any, Dict, List, Optional, Sequence
 SECTION_RESIDUE = "RESIDUE"
 TOTAL_SECTION = "SECTION_TOTAL"
 TOTAL_COMPUTED = "COMPUTED_SUM"
+TOTAL_COMPUTED_UNRELIABLE = "COMPUTED_SUM_UNRELIABLE"
 
 _CHAPTER_RE = re.compile(
     r"(?:итого\s+по\s+главе|итого\s+по\s+разделу|глава|раздел)"
@@ -34,6 +35,49 @@ _CHAPTER_RE = re.compile(
 )
 _TOTAL_RE = re.compile(r"^\s*(итого|всего)\b", re.IGNORECASE)
 _PLAIN_NUMBER_RE = re.compile(r"^-?\d+(?:[.,]\d+)?$")
+# Phase 2.5/2A.6: aggregate/summary rows must never be summed as materials.
+_AGGREGATE_NAME_RE = re.compile(
+    r"^\s*(итого|всего|стоимость|ндс|раздел|глава)\b", re.IGNORECASE
+)
+_MONEY_UNIT_RE = re.compile(r"^\s*руб", re.IGNORECASE)
+
+
+def is_aggregate_row(
+    *, name: Any = None, unit_normalized: Any = None, quantity_value: Any = None
+) -> bool:
+    """A summary/total row: a label row, or money ('руб.') without a quantity."""
+    if _AGGREGATE_NAME_RE.match(str(name or "")):
+        return True
+    if _MONEY_UNIT_RE.match(str(unit_normalized or "")) and quantity_value is None:
+        return True
+    return False
+
+
+def is_summarizable(
+    *,
+    entity_type: Any = "PRODUCT",
+    layout_status: Any = None,
+    quantity_value: Any = None,
+    unit_normalized: Any = None,
+    name: Any = None,
+) -> bool:
+    """Canonical predicate: a real position that may be summed.
+
+    Phase 2A.6 — PRODUCT only, value-provenance CONSISTENT, a unit-bound quantity,
+    no money unit, and not an aggregate/header name. Uniqueness by
+    `entity_fingerprint` is guaranteed by the writer.
+    """
+    if entity_type != "PRODUCT":
+        return False
+    if layout_status != "CONSISTENT":
+        return False
+    if quantity_value is None or not unit_normalized:
+        return False
+    if _MONEY_UNIT_RE.match(str(unit_normalized)):
+        return False
+    if _AGGREGATE_NAME_RE.match(str(name or "")):
+        return False
+    return True
 
 
 def parse_cell_number(cell: Any) -> Optional[float]:
@@ -60,6 +104,11 @@ class SectionInfo:
     total_source: Optional[str] = None
     computed_sum: float = 0.0
     children: int = 0
+    # Phase 2A.6 — reliability bookkeeping for COMPUTED_SUM
+    summarizable_rows: int = 0
+    total_rows: int = 0
+    aggregate_rows: int = 0
+    coverage: float = 0.0
 
 
 class SectionTracker:
@@ -153,14 +202,34 @@ class SectionTracker:
             })
         return self._current
 
-    def add_child(self, code: Optional[str], line_total: Optional[float]) -> None:
+    def add_child(
+        self,
+        code: Optional[str],
+        line_total: Optional[float],
+        *,
+        summarizable: bool = True,
+        aggregate: bool = False,
+    ) -> None:
+        """Account one material row of a section.
+
+        Only `summarizable` (canonical-predicate) rows contribute to the computed
+        sum; `aggregate` rows are counted so the section can be flagged
+        `COMPUTED_SUM_UNRELIABLE`.
+        """
         if not code:
             return
         info = self._sections.get(code)
         if info is None:
             return
         info.children += 1
+        if aggregate:
+            info.aggregate_rows += 1
+            return
+        if not summarizable:
+            return
+        info.summarizable_rows += 1
         if line_total is not None:
+            info.total_rows += 1
             info.computed_sum += float(line_total)
 
     def section(self, code: Optional[str]) -> Optional[SectionInfo]:
@@ -168,9 +237,25 @@ class SectionTracker:
             return None
         return self._sections.get(code)
 
-    def finalize(self) -> List[SectionInfo]:
+    def finalize(self, coverage_min: float = 0.9) -> List[SectionInfo]:
+        """Resolve each section total and its reliability.
+
+        `SECTION_TOTAL` (explicit row) always wins. Otherwise the computed sum is
+        labelled `COMPUTED_SUM` only when the section has no aggregate rows and
+        the total coverage of its summarizable rows is >= `coverage_min`;
+        otherwise `COMPUTED_SUM_UNRELIABLE` (Phase 2A.6).
+        """
         for info in self._sections.values():
-            if info.total_source is None:
-                info.total_source = TOTAL_COMPUTED
+            if info.summarizable_rows:
+                info.coverage = info.total_rows / info.summarizable_rows
+            if info.total_source == TOTAL_SECTION:
+                continue
+            if info.summarizable_rows:
                 info.total_value = round(info.computed_sum, 2)
+            else:
+                info.total_value = None
+            if info.aggregate_rows or info.coverage < coverage_min:
+                info.total_source = TOTAL_COMPUTED_UNRELIABLE
+            else:
+                info.total_source = TOTAL_COMPUTED
         return [self._sections[code] for code in self._order]

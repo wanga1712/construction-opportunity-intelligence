@@ -36,6 +36,20 @@ def _section_cells(quote: str) -> list:
     return out
 
 
+def _estimate_layout(fact) -> str:
+    """Value-provenance for an estimate row (mirrors the embedded contract)."""
+    qty = getattr(fact, "quantity_value", None)
+    price = getattr(fact, "unit_price_value", None)
+    total = getattr(fact, "total_price_value", None)
+    if qty is None or price is None or total is None:
+        return "UNSUPPORTED_LAYOUT"
+    computed = float(qty) * float(price)
+    denom = max(abs(float(total)), abs(computed), 1.0)
+    if abs(float(total) - computed) / denom > 0.05:
+        return "INCONSISTENT_LAYOUT"
+    return "CONSISTENT"
+
+
 _DDL = (
     """CREATE TABLE IF NOT EXISTS project_metadata_organizations (
          id bigserial PRIMARY KEY,
@@ -80,7 +94,12 @@ def _connect():
 def _persist_estimate(conn, path: Path, procurement_id: int, document_name: str) -> int:
     from document_processor.smeta_forma_4b import detect_forma_4b, read_estimate, xlsx_sheet_names
     from document_processor.xlsx_table_reader import read_tables
-    from document_processor.section_detector import SECTION_RESIDUE, SectionTracker
+    from document_processor.section_detector import (
+        SECTION_RESIDUE,
+        SectionTracker,
+        is_aggregate_row,
+        is_summarizable,
+    )
 
     if detect_forma_4b(xlsx_sheet_names(path)):
         facts = read_estimate(path)
@@ -99,7 +118,22 @@ def _persist_estimate(conn, path: Path, procurement_id: int, document_name: str)
         _code = _tracker.observe(
             str(_sheet) if _sheet else None, _section_cells(_quote), _quote
         )
-        _tracker.add_child(_code, getattr(_fact, "total_price_value", None))
+        _name = getattr(_fact, "product_name_raw", None)
+        _unit = getattr(_fact, "quantity_unit", None)
+        _qty = getattr(_fact, "quantity_value", None)
+        _tracker.add_child(
+            _code,
+            getattr(_fact, "total_price_value", None),
+            summarizable=is_summarizable(
+                layout_status=_estimate_layout(_fact),
+                quantity_value=_qty,
+                unit_normalized=_unit,
+                name=_name,
+            ),
+            aggregate=is_aggregate_row(
+                name=_name, unit_normalized=_unit, quantity_value=_qty
+            ),
+        )
         _fact_section[id(_fact)] = _code
     _tracker.finalize()
     cur = conn.cursor()

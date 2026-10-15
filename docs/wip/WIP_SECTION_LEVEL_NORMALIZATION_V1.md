@@ -178,6 +178,40 @@ DUPLICATE_ROW_CONTRIBUTION=0
 DB_WRITES=0
 ```
 
+### Phase 2.6 — canonical COMPUTED_SUM predicate + UNRELIABLE
+
+Перед Phase 3 ввести в код метку ненадёжности и применять canonical predicate:
+
+```text
+summarizable:
+    entity_type = 'PRODUCT'
+    layout_status = 'CONSISTENT'
+    quantity_value IS NOT NULL
+    quantity_unit_normalized IS NOT NULL
+    quantity_unit_normalized NOT LIKE 'руб%'
+    total_price_value IS NOT NULL
+    product_name_normalized !~* '^(итого|всего|стоимость|ндс|раздел|глава)'
+    entity_fingerprint уникален внутри раздела
+```
+
+Если в разделе есть агрегатные строки или покрытие `total` ниже порога:
+
+```text
+section_total_source = 'COMPUTED_SUM_UNRELIABLE'
+```
+
+Проекция карточки не показывает `*_UNRELIABLE` как подтверждённую сумму.
+
+Acceptance:
+
+```text
+CANONICAL_COMPUTED_SUM_APPLIED=YES
+LEGACY_AGGREGATE_ROWS_EXCLUDED=YES
+UNRELIABLE_MARKED=YES
+RELIABLE_COMPUTED_SUM_UNCHANGED=YES
+DB_WRITES=0_UNTIL_REPARSE_APPROVED
+```
+
 ### Phase 2 — persistence/contract
 
 - миграция на section-поля через approved DDL route;
@@ -552,3 +586,67 @@ FOLLOW-UP (код, отдельно от Phase 3):
   или покрытие total ниже порога);
 - при подсчёте COMPUTED_SUM применять canonical predicate;
 - не выводить COMPUTED_SUM как подтверждённую сумму, пока нет явного SECTION_TOTAL/DOCUMENT_TOTAL.
+
+## RESULT 2A.6 (2026-10-15) — canonical predicate + COMPUTED_SUM_UNRELIABLE
+
+STATUS: DONE.
+
+ИЗМЕНЕНИЯ:
+
+```
+section_detector.py
+  + TOTAL_COMPUTED_UNRELIABLE
+  + is_aggregate_row(name, unit_normalized, quantity_value)
+        -> имя-маркер (итого|всего|стоимость|ндс|раздел|глава) ЛИБО unit ~ 'руб%' при qty IS NULL
+  + is_summarizable(entity_type, layout_status, quantity_value, unit_normalized, name)
+        -> PRODUCT + CONSISTENT + qty + unit + unit не 'руб%' + имя не агрегат
+  SectionInfo += summarizable_rows, total_rows, aggregate_rows, coverage
+  add_child(code, line_total, *, summarizable, aggregate): в сумму идут ТОЛЬКО summarizable;
+        aggregate учитываются для флага
+  finalize(coverage_min=0.9): SECTION_TOTAL — приоритет; иначе COMPUTED_SUM при
+        aggregate_rows==0 И coverage>=coverage_min; иначе COMPUTED_SUM_UNRELIABLE
+        (и total_value=None, если summarizable_rows==0)
+
+embedded_extraction.py   — _fact_summarizable/_fact_is_aggregate + флаги в add_child (оба пути)
+parse_extractors.py      — _estimate_layout + тот же предикат для estimate-строк
+scripts/audit_section_detector.py — тот же предикат в read-only проверке
+md5 локально == S13; бэкапы *.bak-2a6-20261015
+```
+
+ПРОВЕРКА (read-only аудит по снапшотам 148391):
+
+```
+sections=48 residue_rows=169
+COMPUTED_SUM 16 | COMPUTED_SUM_UNRELIABLE 32
+"ПСК 1 стадия на торги::раздел 9" children=995 -> COMPUTED_SUM_UNRELIABLE (coverage<0.9)
+"ПСК 1 стадия на торги::глава 2"  children=27  -> COMPUTED_SUM
+разделы без summarizable-строк -> total=None | COMPUTED_SUM_UNRELIABLE
+```
+
+ПРОВЕРКА В БД (reparse 148391 с `EMBEDDED_FORCE_UPDATE=1`, 284.2s):
+
+```
+queue 135962 = COMPLETED
+section_code IS NOT NULL: COMPUTED_SUM_UNRELIABLE 7644 | COMPUTED_SUM 97
+                          RESIDUE (источник не пишется) 153
+примеры: "ПСК 1 стадия на торги::раздел 9"        | COMPUTED_SUM_UNRELIABLE | 3 636 251 172.0
+         "ПСК 1 стадия на торги::итого по главе 5" | COMPUTED_SUM            |   305 670 775.0
+```
+
+ACCEPTANCE (2A.6):
+
+```
+CANONICAL_PREDICATE_APPLIED        = YES (PRODUCT + CONSISTENT + qty + unit≠руб. + не агрегат)
+AGGREGATE_ROWS_EXCLUDED_FROM_SUM   = YES
+UNRELIABLE_LABELLED                = YES (агрегаты в разделе ИЛИ coverage < 0.9)
+SECTION_TOTAL_PRIORITY             = unchanged
+DOCUMENT_TOTAL_NOT_WRITTEN         = YES
+SCORING_MEDAL_QUEUE_UNCHANGED      = YES
+```
+
+NOTE: `persist_facts` обновляет уже существующие строки только при
+`EMBEDDED_FORCE_UPDATE=1` (by design). Обычный reparse новые метки на существующие
+строки не перезапишет — для backfill/пересчёта нужен флаг.
+
+FOLLOW-UP: Phase 3 — проекция карточки «раздел → сумма раздела → материалы» +
+«остаток» (RESIDUE); `*_UNRELIABLE` не показывать как подтверждённую сумму.

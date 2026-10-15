@@ -42,8 +42,8 @@ def di_conn():
     )
 
 
-def iter_rows(snapshot: Optional[str]) -> Iterator[Tuple[Optional[str], str, list, Optional[float]]]:
-    """Yield (sheet, row_text, cells, row_total) from a stored snapshot."""
+def iter_rows(snapshot: Optional[str]) -> Iterator[Tuple[Optional[str], str, list, dict]]:
+    """Yield (sheet, row_text, cells, item) from a stored snapshot."""
     try:
         data = json.loads(snapshot or "[]")
     except Exception:
@@ -54,15 +54,29 @@ def iter_rows(snapshot: Optional[str]) -> Iterator[Tuple[Optional[str], str, lis
         if isinstance(item, dict):
             quote = item.get("source_quote") or ""
             cells = _strip_prefix(_cells_of(str(quote)))
-            total = item.get("total_price_value")
-            try:
-                total = float(total) if total is not None else None
-            except (TypeError, ValueError):
-                total = None
-            yield item.get("sheet"), str(quote), cells, total
+            yield item.get("sheet"), str(quote), cells, item
         elif isinstance(item, str):
             cells = _strip_prefix(_cells_of(item))
-            yield None, item, cells, None
+            yield None, item, cells, {}
+
+
+def _layout(item: dict) -> str:
+    """Value provenance for a snapshot row (mirrors parse_extractors)."""
+    def _num(key):
+        value = item.get(key)
+        try:
+            return float(value) if value is not None else None
+        except (TypeError, ValueError):
+            return None
+
+    qty = _num("quantity_value")
+    price = _num("unit_price_value")
+    total = _num("total_price_value")
+    if qty is None or price is None or total is None:
+        return "UNSUPPORTED_LAYOUT"
+    computed = qty * price
+    denom = max(abs(total), abs(computed), 1.0)
+    return "INCONSISTENT_LAYOUT" if abs(total - computed) / denom > 0.05 else "CONSISTENT"
 
 
 def main() -> int:
@@ -70,7 +84,11 @@ def main() -> int:
     ap.add_argument("--procurement-id", type=int, default=148391)
     args = ap.parse_args()
 
-    from document_processor.section_detector import SectionTracker
+    from document_processor.section_detector import (
+        SectionTracker,
+        is_aggregate_row,
+        is_summarizable,
+    )
 
     conn = di_conn()
     try:
@@ -84,13 +102,32 @@ def main() -> int:
         residue_rows = 0
         for run_id, snapshot in cur.fetchall():
             rows = 0
-            for sheet, text, cells, total in iter_rows(snapshot):
+            for sheet, text, cells, item in iter_rows(snapshot):
                 rows += 1
                 code = tracker.observe(sheet, cells, text)
                 if code is None:
                     residue_rows += 1
                 else:
-                    tracker.add_child(code, total)
+                    qty = item.get("quantity_value")
+                    unit = item.get("quantity_unit")
+                    name = item.get("product_name_raw")
+                    total = item.get("total_price_value")
+                    try:
+                        total = float(total) if total is not None else None
+                    except (TypeError, ValueError):
+                        total = None
+                    tracker.add_child(
+                        code, total,
+                        summarizable=is_summarizable(
+                            layout_status=_layout(item),
+                            quantity_value=qty,
+                            unit_normalized=unit,
+                            name=name,
+                        ),
+                        aggregate=is_aggregate_row(
+                            name=name, unit_normalized=unit, quantity_value=qty
+                        ),
+                    )
             print(f"run {run_id}: rows={rows}")
         sections = tracker.finalize()
         print(f"sections={len(sections)} residue_rows={residue_rows}")
