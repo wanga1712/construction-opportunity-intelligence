@@ -414,27 +414,35 @@ def load_procurement_dossier(db: Any, procurement_id: int) -> Dict[str, Any]:
         errors=errors, label="supply_candidates",
     )
 
-    # WORKS_VS_GOODS_CONFIRMATION_V1 (follow-up): «что можно поставить» показывает
-    # только ТОВАРНЫЕ факты. Работы («Устройство…», «Фрезерование…») не являются
-    # подтверждением категории и в списке кандидатов не выводятся.
-    # DIRECT_SUPPLY не трогаем: у прямых поставок фильтр не применяется.
+    # GOOD_SUPPLY_FACTS_V1: «что можно поставить» строится из чистого сервиса
+    # (structured_entities + GOODS + qty/unit/total + цитата). Сырые
+    # document_match_details здесь не участвуют — они остаются evidence.
+    # DIRECT_SUPPLY не трогаем: у прямых поставок оставляем прежний набор кандидатов.
     _direct_track = any(
         str((o or {}).get("opportunity_track") or "").upper() == "DIRECT_SUPPLY"
         for o in (dossier.get("opportunities") or [])
     )
     dossier["supply_candidates_direct_untouched"] = bool(_direct_track)
     if not _direct_track:
-        _goods, _works = [], 0
-        for _row in dossier["supply_candidates"]:
-            if classify_fact_kind(
-                entity_type=_row.get("entity_type"),
-                name=_row.get("product_name_normalized") or _row.get("product_name_raw"),
-            ) == "GOODS":
-                _goods.append(_row)
-            else:
-                _works += 1
-        dossier["supply_candidates"] = _goods[:SUPPLY_ROWS_LIMIT]
-        dossier["supply_candidates_works_hidden"] = _works
+        try:
+            from src.services.good_supply_facts_service import build_good_supply_facts
+
+            _supply = build_good_supply_facts(int(procurement_id))
+            dossier["supply_candidates"] = _supply["facts"][:SUPPLY_ROWS_LIMIT]
+            dossier["supply_audit"] = {
+                "scanned": _supply["audit"]["scanned"],
+                "kept": _supply["audit"]["kept"],
+                "hidden_works": _supply["hidden_works"],
+                "hidden_aggregates": _supply["hidden_aggregates"],
+                "hidden_other": _supply["hidden_other"],
+                "hidden_detail": _supply["hidden_detail"],
+                "residue": _supply["residue"],
+            }
+            dossier["supply_candidates_works_hidden"] = _supply["hidden_works"]
+        except Exception as _exc:  # чистый слой не должен ломать карточку
+            _record_error(errors, "good_supply_facts", _exc)
+            dossier["supply_candidates"] = []
+            dossier["supply_audit"] = {"error": str(_exc)}
 
     # SECTION_LEVEL_NORMALIZATION_V1 (Phase 3): «раздел → сумма раздела → материалы»
     # + отдельный «остаток». Число показывается только для SECTION_TOTAL/COMPUTED_SUM;

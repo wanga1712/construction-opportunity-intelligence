@@ -42,6 +42,21 @@
 БД — их массовое восстановление вынесено на отдельное решение. Далее — 1B
 `ARCHIVE_MEMBER_PARSE_CONTEXT_V1`.
 
+## 2026-10-15 (19) — GOOD_SUPPLY_FACTS_V1 DONE
+
+**GOOD_SUPPLY_FACTS_V1 — DONE.** Новый `src/services/good_supply_facts_service.py`:
+`build_good_supply_facts(procurement_id, limit=300)` читает `structured_entities` (не
+`document_match_details`), применяет `classify_fact_kind == GOODS`, отсекает агрегаты
+(`^(итого|всего|стоимость|ндс|раздел|глава)`), требует qty+unit+total и непустой
+`source_quote`, `section_code` или `RESIDUE`; preferred-suppression как в карточке.
+Карточка («Что можно поставить») теперь строится из сервиса + `dossier["supply_audit"]`;
+DIRECT_SUPPLY — прежний путь. Проверка: 60467 — GOODS 52 / works 248; 148391 — GOODS 82 /
+works 117 / no_category 101 / residue 44; 29311 — GOODS 0 / works 6. Phase 2 (точечный
+reparse, инструмент `scripts/reparse_procurement_sections.py`): 658 закупок-кандидатов без
+section (топ 461729/37047, 17236/16321). Попутно: в `classify_fact_kind` добавлено снятие
+числового префикса («2.2.4 Устройство…» больше не GOODS). Слой подтверждений не изменился
+(10433 факта / 523 подтверждения). `document_match_details` — только evidence.
+
 ## 2026-10-15 (18) — 3 CARD_MEDAL_TWO_TIER_DISPLAY_V1 DONE
 
 **CARD_MEDAL_TWO_TIER_DISPLAY_V1 — DONE** (карточная медаль = `medal_current`; подтверждённая/

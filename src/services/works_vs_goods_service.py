@@ -40,6 +40,8 @@ _WORK_NAME_RE = re.compile(
     r")",
     re.IGNORECASE,
 )
+#: нумерация позиции в начале названия: «2.2.4 », «1.13 », «1) »
+_NUMBER_PREFIX_RE = re.compile(r"^\s*\d+(?:[.,]\d+)*(?:[.)])?\s+")
 
 
 def classify_fact_kind(*, entity_type: Optional[str] = None, name: Optional[str] = None) -> str:
@@ -47,7 +49,11 @@ def classify_fact_kind(*, entity_type: Optional[str] = None, name: Optional[str]
     kind = str(entity_type or "").strip().upper()
     if kind in WORK_ENTITY_TYPES:
         return WORK
-    if _WORK_NAME_RE.match(str(name or "")):
+    # Позиции часто пронумерованы («2.2.4 Устройство участка…»,
+    # «1.13 Рекультивация земель») — префикс номера снимаем, иначе глагол
+    # работ не в начале строки и работа проходит как товар.
+    text = _NUMBER_PREFIX_RE.sub("", str(name or ""))
+    if _WORK_NAME_RE.match(text):
         return WORK
     return GOODS
 
