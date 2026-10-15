@@ -180,6 +180,8 @@ DB_WRITES=0
 
 ### Phase 2.6 — canonical COMPUTED_SUM predicate + UNRELIABLE
 
+Статус: DONE (`bf96b53`).
+
 Перед Phase 3 ввести в код метку ненадёжности и применять canonical predicate:
 
 ```text
@@ -650,3 +652,67 @@ NOTE: `persist_facts` обновляет уже существующие стр�
 
 FOLLOW-UP: Phase 3 — проекция карточки «раздел → сумма раздела → материалы» +
 «остаток» (RESIDUE); `*_UNRELIABLE` не показывать как подтверждённую сумму.
+
+## RESULT Phase 3 (2026-10-15) — проекция карточки
+
+STATUS: DONE.
+
+ИЗМЕНЕНИЯ:
+
+```
+new: src/services/section_projection_service.py
+  TRUSTED_SOURCES = (SECTION_TOTAL, COMPUTED_SUM) ; UNRELIABLE = (COMPUTED_SUM_UNRELIABLE)
+  is_residue(), total_state() -> confirmed|unreliable|unknown
+  build_section_projection(section_rows, residue_rows, residue_total) — чистая логика, без БД
+  порядок детерминирован: sections sorted(section_code); материалы — как пришли из запроса
+  срезы: SECTION_MATERIALS_PER_SECTION=25, RESIDUE_ROWS_LIMIT=50
+
+changed: src/services/procurement_card_dossier_service.py
+  + read-only выборки: sections (window: count(*) OVER + row_number <= 25) и residue
+    (extractor_version IS NOT NULL AND upper(section_code) LIKE 'RESIDUE%', + count(*) OVER ())
+  + dossier["section_projection"] = build_section_projection(...)
+
+changed: src/ui/procurement_card_page.py
+  вкладка «Что можно поставить»: при наличии разделов рендерится
+    «Раздел <имя> · лист · материалов: N · сумма раздела: X» + таблица материалов
+    внутри раздела (товар/кол-во/цена/сумма/строка/цитата), затем отдельный блок
+    «Остаток (вне разделов)».
+  Для COMPUTED_SUM_UNRELIABLE число НЕ выводится — подпись «сумма требует проверки».
+  Если разделов нет — прежняя плоская таблица (INLINE_CARD_WORKFLOW_PRESERVED).
+```
+
+ПРОВЕРКА (read-only на S13, 148391):
+
+```
+errors: []
+sections: 48 | states: confirmed 5 | unreliable 43 | unknown 0
+residue: 153 (в UI показывается 50 строк)
+  confirmed:  "ПСК 1 стадия на торги::глава 2" -> 38 497 809 ; "…::глава 5" -> 16 232 272
+  unreliable: "ПСК 1 стадия на торги::глава 1" -> 350 910 353  (число не выводится)
+материал внутри раздела несёт product_name / количество+единицу / цену / сумму / row_or_line / source_quote
+import smoke: section_projection_service, procurement_card_dossier_service,
+              ui.procurement_card_page -> OK
+```
+
+ACCEPTANCE (Phase 3):
+
+```
+SECTION_BLOCK_RENDERED            = YES (раздел → сумма раздела → материалы)
+UNRELIABLE_NOT_SHOWN_AS_CONFIRMED = YES («сумма требует проверки»)
+MATERIALS_KEEP_PROVENANCE         = YES (source_quote, row_or_line, section_code)
+RESIDUE_BLOCK                     = YES (отдельный блок для RESIDUE)
+SCORING_MEDAL_QUEUE_UNCHANGED     = YES
+DETERMINISTIC_RENDER              = YES (сортировка по section_code; срез по total desc, id)
+```
+
+NOTE: «остаток» = только `RESIDUE`-строки текущей extraction-генерации
+(`extractor_version IS NOT NULL`); legacy-строки без section (vintage до Phase 2) в блок
+не попадают, иначе остаток раздувался бы до ~7.9k строк.
+
+DEVIATIONS / FOLLOW-UP:
+
+- Визуальная проверка в браузере не автоматизирована — проверено на уровне сервиса
+  и импорта UI-модуля.
+- Материалы внутри раздела ограничены 25 строками (детерминированный срез по сумме);
+  если нужен полный список/пагинация — отдельная задача.
+- Phase 4 (model fallback) — отдельно, по WIP.

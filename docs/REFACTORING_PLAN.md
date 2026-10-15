@@ -42,6 +42,22 @@
 БД — их массовое восстановление вынесено на отдельное решение. Далее — 1B
 `ARCHIVE_MEMBER_PARSE_CONTEXT_V1`.
 
+## 2026-10-15 (8) — 2A Phase 3: проекция карточки «раздел → сумма → материалы»
+
+**2A SECTION_LEVEL_NORMALIZATION_V1 — Phase 3 DONE.** Новый модуль
+`src/services/section_projection_service.py` (`build_section_projection`, `total_state`,
+`is_residue`; `TRUSTED_SOURCES = SECTION_TOTAL|COMPUTED_SUM`, unreliable отдельно) собирает
+разделы и «остаток» детерминированно (сортировка по `section_code`). В
+`procurement_card_dossier_service.py` добавлены две read-only выборки (sections с
+`count(*) OVER`/`row_number <= 25`, residue по `RESIDUE%`) → `dossier["section_projection"]`.
+В `src/ui/procurement_card_page.py` на вкладке «Что можно поставить» рендерится
+«Раздел · лист · материалов · сумма раздела» + материалы внутри (товар/кол-во/цена/сумма/
+строка/цитата) и отдельный блок «Остаток», а для `COMPUTED_SUM_UNRELIABLE` число не
+выводится — подпись «сумма требует проверки». Проверка на 148391 (read-only): 48 разделов
+(5 `confirmed` / 43 `unreliable`), остаток 153; примеры `…::глава 2` → 38 497 809,
+`…::глава 1` → 350 910 353 (`unreliable`). Import smoke UI/сервисов — OK. Прежняя плоская
+таблица остаётся фолбэком, если разделов нет. Далее Phase 4 (model fallback).
+
 ## 2026-10-15 (7) — 2A.6: canonical predicate + COMPUTED_SUM_UNRELIABLE
 
 **2A SECTION_LEVEL_NORMALIZATION_V1 — шаг 2A.6 DONE.** В `section_detector.py` добавлены

@@ -22,6 +22,13 @@ from typing import Any, Dict, List, Optional
 import psycopg2
 import psycopg2.extras
 
+from src.services.section_projection_service import (
+    RESIDUE_PREFIX,
+    RESIDUE_ROWS_LIMIT,
+    SECTION_MATERIALS_PER_SECTION,
+    build_section_projection,
+)
+
 logger = logging.getLogger("crm.procurement_card_dossier")
 
 DI = "document_intelligence"
@@ -378,6 +385,57 @@ def load_procurement_dossier(db: Any, procurement_id: int) -> Dict[str, Any]:
         """,
         (int(procurement_id),),
         errors=errors, label="supply_candidates",
+    )
+
+    # SECTION_LEVEL_NORMALIZATION_V1 (Phase 3): «раздел → сумма раздела → материалы»
+    # + отдельный «остаток». Число показывается только для SECTION_TOTAL/COMPUTED_SUM;
+    # COMPUTED_SUM_UNRELIABLE остаётся без подтверждённой суммы.
+    _section_rows = _safe_di(
+        """
+        WITH ranked AS (
+            SELECT se.section_code, se.section_name, se.page_or_sheet,
+                   se.section_total_price_value, se.section_total_price_raw,
+                   se.section_total_source, se.product_name_raw, se.product_name_normalized,
+                   se.quantity_value, se.quantity_unit_raw, se.unit_price_value,
+                   se.total_price_value, se.source_quote, se.row_or_line, se.layout_status,
+                   count(*) OVER (PARTITION BY se.section_code) AS material_count,
+                   row_number() OVER (
+                       PARTITION BY se.section_code
+                       ORDER BY se.total_price_value DESC NULLS LAST, se.id
+                   ) AS rn
+              FROM structured_entities se
+             WHERE se.procurement_id = %s
+               AND coalesce(se.section_code, '') <> ''
+        )
+        SELECT * FROM ranked WHERE rn <= %s ORDER BY section_code, rn
+        """,
+        (int(procurement_id), SECTION_MATERIALS_PER_SECTION),
+        errors=errors, label="sections",
+    )
+    _residue_rows = _safe_di(
+        """
+        SELECT se.section_code, se.product_name_raw, se.product_name_normalized,
+               se.quantity_value, se.quantity_unit_raw, se.unit_price_value,
+               se.total_price_value, se.source_quote, se.row_or_line, se.layout_status
+               , count(*) OVER () AS residue_total
+          FROM structured_entities se
+         WHERE se.procurement_id = %s
+           AND se.extractor_version IS NOT NULL
+           AND upper(se.section_code) LIKE %s
+         ORDER BY se.total_price_value DESC NULLS LAST, se.id
+         LIMIT %s
+        """,
+        (int(procurement_id), RESIDUE_PREFIX + "%", RESIDUE_ROWS_LIMIT),
+        errors=errors, label="section_residue",
+    )
+    _residue_total = None
+    if _residue_rows:
+        try:
+            _residue_total = int(_residue_rows[0].get("residue_total"))
+        except (TypeError, ValueError):
+            _residue_total = None
+    dossier["section_projection"] = build_section_projection(
+        _section_rows, _residue_rows, residue_total=_residue_total
     )
 
     docs = dossier["documents"]

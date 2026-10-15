@@ -24,6 +24,7 @@ from src.services.procurement_card_dossier_service import (
     load_procurement_dossier,
     queue_procurement_for_documents,
 )
+from src.services.section_projection_service import TOTAL_NEEDS_REVIEW as _SECTION_TOTAL_REVIEW
 
 _MEDAL_CSS = {
     "GOLD": "#b8860b", "SILVER": "#6b7a8c", "BRONZE": "#a2601f", "WOOD": "#7a5c40",
@@ -679,7 +680,56 @@ def _render_dossier(d: Dict[str, Any], db: Any = None) -> None:
     if tab_supply is not None:
         with tab_supply:
             supply = d.get("supply_candidates") or []
-            if supply:
+            _projection = d.get("section_projection") or {}
+            _sections = _projection.get("sections") or []
+
+            def _material_rows(items: List[Dict[str, Any]]) -> List[List[str]]:
+                return [[
+                    escape(str(m.get("product_name_normalized") or m.get("product_name_raw") or "")),
+                    f'{_fmt(m.get("quantity_value"))} {_fmt(m.get("quantity_unit_raw"))}',
+                    _money(m.get("unit_price_value")),
+                    _money(m.get("total_price_value")),
+                    _fmt(m.get("row_or_line")),
+                    '<span class="pc-mono">%s</span>' % escape(str(m.get("source_quote") or "")[:140]),
+                ] for m in items]
+
+            _mat_cols = ["Товар/материал", "Кол-во", "Цена", "Сумма", "Строка", "Цитата"]
+            if _sections:
+                # SECTION_LEVEL_NORMALIZATION_V1 (Phase 3): раздел → сумма → материалы.
+                for _sec in _sections:
+                    _state = str(_sec.get("total_state") or "unknown")
+                    if _state == "confirmed":
+                        _total_txt = _money(_sec.get("total_value"))
+                    elif _state == "unreliable":
+                        _total_txt = ('<span class="pc-chip warn">%s</span>'
+                                      % escape(_SECTION_TOTAL_REVIEW))
+                    else:
+                        _total_txt = "—"
+                    _page_txt = (" · " + escape(str(_sec.get("page_or_sheet")))
+                                 if _sec.get("page_or_sheet") else "")
+                    st.markdown(
+                        '<div class="pc-muted">Раздел <b>%s</b>%s · материалов: %s · сумма раздела: %s</div>'
+                        % (escape(str(_sec.get("section_name") or "")), _page_txt,
+                           _fmt(_sec.get("material_count")), _total_txt),
+                        unsafe_allow_html=True,
+                    )
+                    st.markdown(
+                        _table_html(_mat_cols, _material_rows(_sec.get("materials") or []), wrap=False),
+                        unsafe_allow_html=True,
+                    )
+                _residue = _projection.get("residue") or {}
+                _residue_rows = _residue.get("rows") or []
+                if _residue_rows:
+                    st.markdown(
+                        '<div class="pc-muted">Остаток (вне разделов): %s</div>'
+                        % _fmt(_residue.get("count")),
+                        unsafe_allow_html=True,
+                    )
+                    st.markdown(
+                        _table_html(_mat_cols, _material_rows(_residue_rows), wrap=False),
+                        unsafe_allow_html=True,
+                    )
+            elif supply:
                 st.markdown(_table_html(
                     ["Товар/материал", "Характеристики", "Кол-во", "Цена", "Сумма", "Отношение", "Trust"],
                     [
