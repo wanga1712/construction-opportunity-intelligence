@@ -19,10 +19,10 @@ Artifacts (in Git):
 | File | Purpose |
 |---|---|
 | `scripts/commercial_market_audit.sql` | the audit itself, SELECT-only, no hardcoded counters |
-| `scripts/run_commercial_market_audit.sh` | runner for S13 (`--di` adds the confirmed-fact cross-check) |
+| `scripts/run_commercial_market_audit.py` | runner for S13 (`--di` adds the confirmed-fact cross-check) |
 | `scripts/commercial_market_audit_di_crosscheck.sql` | `confirmed_category_facts` cross-check |
 
-Evidence (ran on S13, `bash scripts/run_commercial_market_audit.sh`):
+Evidence (ran on S13, `python3 scripts/run_commercial_market_audit.py`):
 
 ```text
 === 1. HEADLINE (DISTINCT procurement_id) ===

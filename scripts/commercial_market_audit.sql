@@ -11,7 +11,7 @@
 -- admission policy (admission_reason='AWARDED_DIRECT_GOODS'), so
 -- AWARDED_DIRECT_IN_LIVE_MARKET is 0 by construction and is asserted below.
 --
--- Run on S13:  bash scripts/run_commercial_market_audit.sh [--di]
+-- Run on S13:  python3 scripts/run_commercial_market_audit.py [--di]
 -- Whole script is SELECT-only (no DDL, no DML).
 
 \pset footer off
