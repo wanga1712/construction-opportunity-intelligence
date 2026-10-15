@@ -88,6 +88,14 @@ RESIDUE
 
 Сравнить с текущим generic-детектором. Зафиксировать разницу.
 
+Для карточки показываем **только разделы, в которых есть хотя бы один
+summarizable-материал из наших категорий**. Пустые/работные разделы в UI не
+выводим; в аудите их можно оставить как счётчики.
+
+Для category discovery/частотного слоя передаём **материалы**, а не разделы:
+`product_name_normalized`, `category_code`, `source_quote`, `quantity`, `unit`.
+Section — только контейнер для отображения, не сигнал категории.
+
 ### Phase 3 — поэтапный rollout
 
 Запустить шаблон на N похожих закупках:
@@ -241,3 +249,67 @@ SCORING_MEDAL_QUEUE_UNCHANGED = YES
 
 FOLLOW-UP: Phase 2 (canary на 60467) требует reparse — сейчас у 60467 `section_code = 0`;
 прогон шаблона на полном наборе строк и сравнение с generic-детектором.
+
+## RESULT Phase 2 (2026-10-15) — canary на 60467 (read-only)
+
+STATUS: DONE (шаблон прогнан на полном наборе строк; UI-фильтр пустых разделов внедрён).
+
+ВАЖНО про reparse: строка очереди 60467 (`id=54737`) сейчас `SKIPPED_NOT_TARGET`,
+`research_action=DEEP_RESEARCH`, `plan_version=NULL` — **claim-фильтр admission её не берёт**
+(`force-run` вернул «не удалось захватить»). Ослаблять admission нельзя (правило F3), а
+шаблону `section_code` не нужен: он работает по `source_quote`. Поэтому canary выполнен на
+существующих строках. Статус строки возвращён в `SKIPPED_NOT_TARGET` (в `last_error`
+оставлен маркер `road_template_canary_reparse` — след попытки).
+
+ЗАМЕРЫ (60467, все строки `structured_entities`, 1780 шт.):
+
+```
+SECTION_COUNT                     = 24
+SECTIONS_WITH_RELEVANT_MATERIALS  = 17
+EMPTY_SECTIONS (только аудит)     = 7
+SECTION_TOTAL / COMPUTED_SUM / UNRELIABLE (по непустым) = 0 / 5 / 12
+RESIDUE                           = 63
+generic section_code rows         = 0 (reparse не выполнялся)
+материалы по категориям           = drainage_water_management 326 | waterproofing 163 | lighting 163
+
+примеры непустых разделов:
+  road::razdel 1  | Подготовительные работы            | materials 8  | coverage 1.0    | 2 905.38     | COMPUTED_SUM
+  road::razdel 10 | Переустройство системы водоснабжения | materials 8  | coverage 1.0    | 81 808 368.21 | COMPUTED_SUM
+  road::razdel 7  | Переустройство ВЛ и кабельной линии | materials 64 | coverage 0.375  | 57 966 060.82 | COMPUTED_SUM_UNRELIABLE
+  road::razdel 2  | Земляное полотно                    | materials 1  | coverage 0.0    | 0.0          | COMPUTED_SUM_UNRELIABLE
+```
+
+UI-ФИЛЬТР (Phase 3 частично, в карточке): разделы БЕЗ релевантных материалов в проекцию не
+попадают; их счётчик возвращается в `sections_skipped_empty` (только аудит).
+
+```
+section_projection_service.build_section_projection: пропускает разделы с relevant_count == 0
+procurement_card_dossier_service: в SQL добавлен relevant_count =
+    count(*) FILTER (entity_type='PRODUCT' AND quantity_value IS NOT NULL
+                     AND quantity_unit_normalized <> '' AND NOT LIKE 'руб%'
+                     AND имя не агрегат) OVER (PARTITION BY section_code)
+проверка на 148391: sections shown 47 | skipped empty 1 («ПСК 1 стадия на торги::глава 3») | residue 153
+import smoke: section_projection_service / procurement_card_dossier_service / ui.procurement_card_page -> OK
+```
+
+ACCEPTANCE (Phase 2):
+
+```
+CANARY_EXECUTED                 = YES (60467, 1780 строк)
+SECTION_COUNT / WITH_MATERIALS  = 24 / 17
+EMPTY_SECTIONS_AUDIT_ONLY       = YES (7; в UI не выводятся)
+TOTAL_SOURCE_SPLIT              = COMPUTED_SUM 5 | COMPUTED_SUM_UNRELIABLE 12 | SECTION_TOTAL 0
+RESIDUE                         = 63
+UI_ONLY_SECTIONS_WITH_MATERIALS = YES (148391: 47 показано, 1 пустой скрыт)
+MATERIALS_FOR_CATEGORY_LAYER    = YES (product_name_normalized/category_code/source_quote/quantity/unit)
+DB_WRITES                       = 0
+SCORING_MEDAL_QUEUE_UNCHANGED   = YES
+```
+
+ОТКРЫТЫЕ РЕШЕНИЯ:
+
+- Reparse 60467 требует либо (a) ручного обхода claim для диагностики одной закупки,
+  либо (b) admission через штатный feeder/plan. Пока не делаем: шаблону `section_code`
+  не нужен, а сравнение с generic-детектором отложено.
+- Интеграция road-шаблона в карточку (проекция «дорожных» разделов) — отдельный шаг:
+  сейчас карточка показывает generic-`section_code`.

@@ -54,6 +54,11 @@ def build_section_projection(
     section identity (или с `RESIDUE*`).
     `residue_total` — полное число строк «остатка» (если известно из запроса),
     иначе берётся длина выборки.
+
+    Раздел — контейнер для найденного материала, а не самостоятельная категория:
+    разделы БЕЗ релевантных материалов (`relevant_count == 0`) в проекцию не
+    попадают. Их количество возвращается в `sections_skipped_empty` — только для
+    аудита, в UI это не выводится.
     """
     buckets: Dict[str, Dict[str, Any]] = {}
     for row in section_rows or []:
@@ -70,17 +75,25 @@ def build_section_projection(
                 "total_raw": row.get("section_total_price_raw"),
                 "total_source": row.get("section_total_source"),
                 "material_count": row.get("material_count") or 0,
+                "relevant_count": row.get("relevant_count"),
                 "materials": [],
             }
             buckets[code] = bucket
         bucket["materials"].append(row)
 
     sections: List[Dict[str, Any]] = []
+    skipped_empty = 0
     for code in sorted(buckets):
         bucket = buckets[code]
         bucket["material_count"] = max(
             int(bucket.get("material_count") or 0), len(bucket["materials"])
         )
+        relevant = bucket.get("relevant_count")
+        if relevant is None:
+            relevant = len(bucket["materials"])
+        if int(relevant) <= 0:
+            skipped_empty += 1
+            continue
         bucket["total_state"] = total_state(bucket.get("total_value"), bucket.get("total_source"))
         sections.append(bucket)
 
@@ -92,6 +105,7 @@ def build_section_projection(
 
     return {
         "sections": sections,
+        "sections_skipped_empty": skipped_empty,
         "residue": {
             "rows": residue,
             "count": int(residue_total) if residue_total is not None else len(residue),

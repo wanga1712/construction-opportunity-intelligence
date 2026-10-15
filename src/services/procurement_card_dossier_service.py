@@ -399,6 +399,14 @@ def load_procurement_dossier(db: Any, procurement_id: int) -> Dict[str, Any]:
                    se.quantity_value, se.quantity_unit_raw, se.unit_price_value,
                    se.total_price_value, se.source_quote, se.row_or_line, se.layout_status,
                    count(*) OVER (PARTITION BY se.section_code) AS material_count,
+                   count(*) FILTER (
+                       WHERE se.entity_type = 'PRODUCT'
+                         AND se.quantity_value IS NOT NULL
+                         AND coalesce(se.quantity_unit_normalized, '') <> ''
+                         AND se.quantity_unit_normalized NOT LIKE 'руб%%'
+                         AND coalesce(se.product_name_normalized, se.product_name_raw, '')
+                             !~* '^(итого|всего|стоимость|ндс|раздел|глава)'
+                   ) OVER (PARTITION BY se.section_code) AS relevant_count,
                    row_number() OVER (
                        PARTITION BY se.section_code
                        ORDER BY se.total_price_value DESC NULLS LAST, se.id

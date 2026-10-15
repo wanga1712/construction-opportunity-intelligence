@@ -42,6 +42,22 @@
 БД — их массовое восстановление вынесено на отдельное решение. Далее — 1B
 `ARCHIVE_MEMBER_PARSE_CONTEXT_V1`.
 
+## 2026-10-15 (13) — 2B Phase 2: canary 60467 + UI только разделы с материалами
+
+**2B ROAD_REPAIR_SECTION_TEMPLATES_V1 — Phase 2 DONE** (read-only; шаблон прогнан на полном
+наборе строк). Reparse 60467 **не выполнен**: строка 54737 в `SKIPPED_NOT_TARGET`
+(`DEEP_RESEARCH`, `plan_version=NULL`) не проходит claim-фильтр admission, а ослаблять его
+нельзя (F3). Шаблону `section_code` не нужен (работает по `source_quote`), поэтому canary
+сделан на существующих 1780 строках; статус строки возвращён в `SKIPPED_NOT_TARGET`.
+Замеры: `SECTION_COUNT=24`, `SECTIONS_WITH_RELEVANT_MATERIALS=17`, пустых 7 (только аудит),
+`COMPUTED_SUM 5 / COMPUTED_SUM_UNRELIABLE 12 / SECTION_TOTAL 0`, `RESIDUE=63`; материалы
+drainage 326 / waterproofing 163 / lighting 163. **UI-фильтр внедрён**: разделы без
+релевантных материалов в проекцию не попадают (`relevant_count` считается в SQL
+`procurement_card_dossier_service`, `build_section_projection` их пропускает,
+`sections_skipped_empty` — только аудит); проверка на 148391: 47 показано, 1 пустой скрыт.
+Открыто: reparse 60467 (нужен ручной обход claim или admission через feeder) и подключение
+road-шаблона к карточке (сейчас карточка показывает generic-`section_code`).
+
 ## 2026-10-15 (12) — 2B Phase 1: шаблонный слой дорожных смет
 
 **2B ROAD_REPAIR_SECTION_TEMPLATES_V1 — Phase 1 DONE.** Новый модуль
