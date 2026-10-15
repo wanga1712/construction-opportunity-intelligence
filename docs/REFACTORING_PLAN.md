@@ -42,6 +42,22 @@
 БД — их массовое восстановление вынесено на отдельное решение. Далее — 1B
 `ARCHIVE_MEMBER_PARSE_CONTEXT_V1`.
 
+## 2026-10-15 (6) — 2A Phase 2.5: разбор COMPUTED_SUM (read-only)
+
+**2A SECTION_LEVEL_NORMALIZATION_V1 — Phase 2.5 DONE.** Причина расхождения ×4–5.6 найдена:
+в сумму попадают **агрегатные строки блока итогов** (`quantity_value NULL`, `unit='руб.'`,
+`price NULL`, `total` = крупная сумма) — «Итого:» 7 450 714 594, «Всего с НДС» 8 940 857 518,
+«НДС 22%» 1 612 285 782, «1.7.2.5/1.7.2.6» 1 985 037 100 / 5 555 820 418. Это legacy-путь v1
+(`category=unknown`, без section); `raw sum = 41 722 454 252`, а сумма только по строкам с
+`qty+unit` = 4 683 662 917 (×0.63) — ошибка в обе стороны. `EMBEDDED_EXTRACTOR_V1` такие строки
+в факты не пускает (`_row_to_fact` требует qty+unit), поэтому в section-наборе (run 1501)
+агрегатов нет: 7894 строки, дублей 0, merged-строк 0, canonical-сумма 7 302 701 821.
+`SECTION_TOTAL` в источнике нет (0 строк), `DOCUMENT_TOTAL` есть только у legacy-документа и
+с section не связывается. Вердикт: legacy-`COMPUTED_SUM` → `COMPUTED_SUM_UNRELIABLE`; embedded —
+computed, но не подтверждённый. Canonical predicate зафиксирован в WIP (PRODUCT + CONSISTENT +
+qty + unit≠руб. + total + не маркер-имя + уникальный fingerprint). Далее — метка
+`COMPUTED_SUM_UNRELIABLE` в коде, затем Phase 3.
+
 ## 2026-10-15 (5) — 2A Phase 2: section-поля в БД
 
 **2A SECTION_LEVEL_NORMALIZATION_V1 — Phase 2 DONE.** DDL применён по процедуре

@@ -145,6 +145,39 @@ children[]:
 - в Phase 1 detector оставить `SECTION_TOTAL`/`COMPUTED_SUM`;
 - перепроверить 148391: `раздел 9` больше не наследует общий `Итого`.
 
+### Phase 2.5 — расхождение COMPUTED_SUM (перед Phase 3)
+
+На 148391 `COMPUTED_SUM` по некоторым разделам завышен в 4–5.6 раза
+относительно документных итогов. Пока не понятен источник расхождения,
+проекцию «раздел → сумма раздела» включать нельзя: она покажет недостоверную
+сумму.
+
+Разобрать read-only:
+
+1. Для каждого раздела/листа посчитать:
+   - количество children-фактов;
+   - количество уникальных `entity_fingerprint`;
+   - сумму `line_total_value`;
+   - сумму после исключения строк с дублями/merged-строками.
+2. Определить canonical `summarizable` predicate:
+   - `entity_type` material/PRODUCT;
+   - `product_name_raw` не aggregate/header;
+   - `layout_status` не unsupported;
+   - уникальный row identity (`row_or_line` + fingerprint).
+3. Сравнить с явными `SECTION_TOTAL`/`DOCUMENT_TOTAL`.
+4. Если `COMPUTED_SUM` остаётся ненадёжным, помечать
+   `section_total_source='COMPUTED_SUM_UNRELIABLE'` и не показывать как
+   подтверждённую сумму; иначе чинить формулу.
+
+Acceptance:
+
+```text
+COMPUTED_SUM_SOURCE_IDENTIFIED=YES
+SECTION_SUM_MATCHES_EXPLICIT_TOTAL_OR_MARKED_UNRELIABLE=YES
+DUPLICATE_ROW_CONTRIBUTION=0
+DB_WRITES=0
+```
+
 ### Phase 2 — persistence/contract
 
 - миграция на section-поля через approved DDL route;
@@ -436,3 +469,86 @@ FOLLOW-UP:
 - Phase 3: карточка «раздел → сумма раздела → материалы внутри», «остаток» отдельно.
 - COMPUTED_SUM ×4–5.6 (Phase 0) остаётся открытым — детектор его не лечит, помечает источник.
 - `document_total` пока только в памяти (в БД не пишется).
+
+## RESULT Phase 2.5 (2026-10-15) — разбор COMPUTED_SUM (read-only)
+
+STATUS: DONE. ВЫВОД: `COMPUTED_SUM` **не подтверждённая сумма**; источник расхождения найден,
+canonical-предикат зафиксирован.
+
+### 1. Метрики по разделам/листам 148391 (section-набор)
+
+```
+все section-строки пришли из одного прогона: run 1501 (EMBEDDED_EXTRACTOR_V1), 7894 строки
+по каждому разделу: children == count(distinct entity_fingerprint)  -> дублей по fingerprint нет
+группы-дубли (section_code, product_name_normalized, row_or_line): 0 групп
+строки с именем-маркером (итого|всего|раздел|глава): 5, из них с суммой: 0
+строки без единицы: 504 -> все без суммы
+layout_status: CONSISTENT 7893 | INCONSISTENT_LAYOUT 1
+пример раздела: "ПСК 1 стадия на торги::раздел 9" children=991 | uniq_fp=991 | with_total=465
+                | sum=3 636 251 172.00 | sum(CONSISTENT)=3 636 251 172.00
+лист целиком: "ПСК 1 стадия на торги" 1409 строк / 4 541 715 946.00 ; RESIDUE 153 / 2 760 985 875.00
+              лист "ПСК" 6332 строки — сумм нет вообще (COMPUTED_SUM = 0)
+```
+
+### 2. Причина расхождения (canonical-предикат)
+
+Виновник — **агрегатные строки блока итогов**, которые попадают в сумму как «материалы».
+Их подпись в данных: `quantity_value = NULL`, `quantity_unit = 'руб.'`, `unit_price = NULL`,
+`total_price_value` = крупная сумма:
+
+```
+run 1101 (legacy v1, category=unknown, БЕЗ section-контекста):
+  «Итого:»                        руб.  7 450 714 594
+  «Стоимость без учета НДС …»     руб.  7 328 571 736
+  «НДС 22%»                       руб.  1 612 285 782
+  «Всего с НДС»                   руб.  8 940 857 518
+  «1.7.2.5»                       руб.  1 985 037 100
+  «1.7.2.6»                       руб.  5 555 820 418
+  raw sum(total_price_value) = 41 722 454 251.76      <- ×5.6 от «Итого»
+  sum только по строкам с qty+unit = 4 683 662 916.78 (702 строки)  <- ×0.63 от «Итого»
+```
+
+То есть legacy-путь ошибается **в обе стороны**: агрегаты завышают, а отсутствие total
+у большинства позиций занижает. `EMBEDDED_EXTRACTOR_V1` такие строки в факты не пускает
+по построению (`_row_to_fact` требует qty+unit) — поэтому в section-наборе их нет
+(`run 1501`: строк с total и без unit = 0).
+
+### 3. Сравнение с явными итогами
+
+```
+SECTION_TOTAL           : 0 строк (в источнике нет отдельных строк «Итого по главе N | число»)
+DOCUMENT_TOTAL          : есть только у legacy-документа (run 1101, лист «ПСК 1 стадия на торги»)
+                          = 7 450 714 594 / «Всего с НДС» 8 940 857 518; с section не связывается (Phase 1.5)
+canonical COMPUTED_SUM  : run 1501, 7388 строк -> 7 302 701 821.00
+                          (совпадает с raw, т.к. дублей/merged-строк в наборе нет)
+```
+
+### 4. Вердикт и canonical `summarizable` predicate
+
+```
+COMPUTED_SUM из legacy-пути (extractor_version IS NULL / category='unknown')
+    -> COMPUTED_SUM_UNRELIABLE (агрегаты + низкое покрытие total)
+COMPUTED_SUM из EMBEDDED_EXTRACTOR_V1
+    -> арифметически чистый, но НЕ подтверждён явным итогом того же документа
+    -> показывать как COMPUTED_SUM (computed), НЕ как подтверждённую сумму
+```
+
+Canonical predicate (предлагается как правило суммирования):
+
+```sql
+entity_type = 'PRODUCT'
+and layout_status = 'CONSISTENT'
+and quantity_value is not null
+and quantity_unit_normalized is not null
+and coalesce(quantity_unit_normalized,'') not like 'руб%'   -- деньги = агрегат, не позиция
+and total_price_value is not null
+and product_name_normalized !~* '^(итого|всего|стоимость|ндс|раздел|глава)'
+-- уникальность: entity_fingerprint уникален в разделе (проверено: 0 дублей)
+```
+
+FOLLOW-UP (код, отдельно от Phase 3):
+
+- ввести метку `COMPUTED_SUM_UNRELIABLE` и правило её выставления (агрегатные строки в разделе
+  или покрытие total ниже порога);
+- при подсчёте COMPUTED_SUM применять canonical predicate;
+- не выводить COMPUTED_SUM как подтверждённую сумму, пока нет явного SECTION_TOTAL/DOCUMENT_TOTAL.
