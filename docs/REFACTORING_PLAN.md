@@ -42,6 +42,20 @@
 БД — их массовое восстановление вынесено на отдельное решение. Далее — 1B
 `ARCHIVE_MEMBER_PARSE_CONTEXT_V1`.
 
+## 2026-10-15 (17) — WORKS_VS_GOODS карточный follow-up: «что можно поставить» только GOODS
+
+**Follow-up №1 закрыт.** `procurement_card_dossier_service.supply_candidates`: SQL LIMIT
+100→300 + фильтр `classify_fact_kind → GOODS` (до 100 товарных строк; работы скрываются,
+`supply_candidates_works_hidden`). **DIRECT_SUPPLY не трогаем** — при наличии
+`opportunity_track='DIRECT_SUPPLY'` фильтр не применяется
+(`supply_candidates_direct_untouched`). Список глаголов работ расширен (обсыпк/рекультивац/
+обработк/уход/посадк и др.; md5 деплоя сверен). Проверка: 29311 — 6 работ скрыто, 0 товаров
+(opportunity 15592 = NULL); 60467 — 248 работ скрыто, 52 товара показано. Слой подтверждений
+пересобран: WORK excluded 2016 / GOODS kept 14020 → `CONFIRMED_FACTS=10433` → 523 подтверждения
+(GOLD 7/SILVER 166/BRONZE 303/WOOD 47), `CANDIDATE_INITIAL_CHANGED=0`. Остаток: список глаголов
+курируемый (пограничные/фрагментарные названия — отдельная докрутка); изменения UI требуют
+рестарта `crm-streamlit.service`.
+
 ## 2026-10-15 (16) — 2 WORKS_VS_GOODS_CONFIRMATION_V1 DONE
 
 **WORKS_VS_GOODS_CONFIRMATION_V1 — DONE.** Новый `src/services/works_vs_goods_service.py`

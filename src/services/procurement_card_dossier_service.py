@@ -29,12 +29,17 @@ from src.services.section_projection_service import (
     build_section_projection,
     projection_from_road,
 )
+from src.services.works_vs_goods_service import classify_fact_kind
 
 logger = logging.getLogger("crm.procurement_card_dossier")
 
 DI = "document_intelligence"
 #: сколько строк отдаём road-шаблону для проекции карточки (2B.6.3)
 ROAD_ROWS_LIMIT = 8000
+#: сколько кандидатов берём из БД до фильтра «только товар» (WORKS_VS_GOODS)
+SUPPLY_SQL_LIMIT = 300
+#: сколько товарных кандидатов показываем в карточке
+SUPPLY_ROWS_LIMIT = 100
 
 _DI_CONN: Any = None
 
@@ -403,11 +408,33 @@ def load_procurement_dossier(db: Any, procurement_id: int) -> Dict[str, Any]:
         FROM preferred se
         WHERE se.pref_rn = 1
         ORDER BY se.structured_fact_trust_state, se.total_price_value DESC NULLS LAST, se.id
-        LIMIT 100
+        LIMIT 300
         """,
         (int(procurement_id),),
         errors=errors, label="supply_candidates",
     )
+
+    # WORKS_VS_GOODS_CONFIRMATION_V1 (follow-up): «что можно поставить» показывает
+    # только ТОВАРНЫЕ факты. Работы («Устройство…», «Фрезерование…») не являются
+    # подтверждением категории и в списке кандидатов не выводятся.
+    # DIRECT_SUPPLY не трогаем: у прямых поставок фильтр не применяется.
+    _direct_track = any(
+        str((o or {}).get("opportunity_track") or "").upper() == "DIRECT_SUPPLY"
+        for o in (dossier.get("opportunities") or [])
+    )
+    dossier["supply_candidates_direct_untouched"] = bool(_direct_track)
+    if not _direct_track:
+        _goods, _works = [], 0
+        for _row in dossier["supply_candidates"]:
+            if classify_fact_kind(
+                entity_type=_row.get("entity_type"),
+                name=_row.get("product_name_normalized") or _row.get("product_name_raw"),
+            ) == "GOODS":
+                _goods.append(_row)
+            else:
+                _works += 1
+        dossier["supply_candidates"] = _goods[:SUPPLY_ROWS_LIMIT]
+        dossier["supply_candidates_works_hidden"] = _works
 
     # SECTION_LEVEL_NORMALIZATION_V1 (Phase 3): «раздел → сумма раздела → материалы»
     # + отдельный «остаток». Число показывается только для SECTION_TOTAL/COMPUTED_SUM;

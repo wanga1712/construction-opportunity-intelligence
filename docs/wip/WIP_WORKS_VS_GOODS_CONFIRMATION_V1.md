@@ -1,7 +1,7 @@
 # WIP WORKS_VS_GOODS_CONFIRMATION_V1 — подтверждать только товаром, а не работами
 
-Status: СПЕКА / ГОТОВ К КОДУ. Owner: подтверждение категорий и «что можно
-поставить» в карточке.
+Status: CORE DONE (`3e73b10`); перед CARD_MEDAL нужен follow-up карточки.
+Owner: подтверждение категорий и «что можно поставить» в карточке.
 
 Полная спека: `.codex_worktrees/works_vs_goods_confirmation_v1/WIP.md`.
 
@@ -81,6 +81,17 @@ read-only SQL: confirmed_base у 29311/lighting снят или не прост�
 - двухуровневая выдача карточек (отдельный WIP);
 - очередь / извлечение.
 
+## FOLLOW-UP перед CARD_MEDAL
+
+Карточка пока отдаёт все факты категории в `supply_candidates` и блок
+«подтверждено». Перед двухуровневой выдачей медалей нужно:
+
+- `supply_candidates` / «что можно поставить» строить только из `GOODS`;
+- WORK-факты не показывать как подтверждение категории;
+- DIRECT_SUPPLY не трогать.
+
+Только после этого переходим к `CARD_MEDAL_TWO_TIER_DISPLAY_V1`.
+
 ## RESULT (2026-10-15) — DONE
 
 ИЗМЕНЕНИЯ:
@@ -141,3 +152,52 @@ DEVIATIONS / FOLLOW-UP:
   DDL); аудит обеспечен preimage + `reason_codes`.
 - Фильтр карточки «что можно поставить» из товарных фактов (п.3 WIP) — отдельный шаг:
   `supply_candidates` пока отдаёт все извлечённые факты категории.
+
+## RESULT карточного follow-up (2026-10-15) — «что можно поставить» только GOODS
+
+ИЗМЕНЕНИЯ:
+
+```
+src/services/procurement_card_dossier_service.py
+  * supply_candidates: SQL LIMIT 100 -> 300, затем фильтр classify_fact_kind -> GOODS,
+    в карточку отдаём до 100 товарных строк;
+    работы скрываются: dossier["supply_candidates_works_hidden"] = N;
+  * DIRECT_SUPPLY не трогаем: если у закупки есть opportunity_track='DIRECT_SUPPLY',
+    фильтр НЕ применяется, dossier["supply_candidates_direct_untouched"] = True.
+src/services/works_vs_goods_service.py — список глаголов работ расширен:
+  + обсыпк|отсыпк|срезк|корчевк|рытье|профилиров|обеспылив|розлив|планировк|
+    рекультивац|засев|посев|посадк|уход|демаркиров|обустройств|обработк
+  (деплой сверен по md5: 6a6f5ba512207e08abe91369aa059997)
+```
+
+ПРОВЕРКА:
+
+```
+29311: supply rows 6 -> GOODS 0 | WORK hidden 6
+       (Фрезерование…, Устранение деформаций…, Устройство слоя SMA-16, Подсыпка обочин, …)
+       opportunity 15592 (lighting): confirmed_base_medal = NULL (без изменений)
+60467: supply rows 300 -> GOODS 52 | WORK hidden 248
+       (устройство/рекультивация/обработка/… больше не выглядят как «можно поставить»)
+
+слой подтверждений пересобран под расширенный фильтр:
+  WORK_FACTS_EXCLUDED=2016 | GOODS_FACTS_KEPT=14020 | CONFIRMED_FACTS=10433
+  write -> CONFIRMED_BASE_NONNULL=523 (GOLD 7 / SILVER 166 / BRONZE 303 / WOOD 47)
+           CANDIDATE_INITIAL_CHANGED=0 | CONFIRMED_BASE_FROM_UNTRUSTED=0
+```
+
+ACCEPTANCE (follow-up):
+
+```
+SUPPLY_CANDIDATES_GOODS_ONLY    = YES
+WORKS_NOT_SHOWN_AS_CONFIRMATION = YES
+DIRECT_SUPPLY_UNTOUCHED         = YES (фильтр пропускается при DIRECT_SUPPLY)
+29311_WORKS_HIDDEN              = YES (0 товаров показано)
+60467_WORKS_HIDDEN              = YES (248 скрыто, 52 товара показано)
+CANDIDATE_INITIAL_CHANGED       = 0
+```
+
+DEVIATIONS / FOLLOW-UP:
+
+- Список глаголов работ — курируемый; остаточные пограничные/фрагментарные названия
+  (напр. «верха земляного полотна») остаются в выдаче как GOODS — отдельная докрутка.
+- Изменения карточки подхватятся после рестарта `crm-streamlit.service`.
