@@ -42,6 +42,21 @@
 БД — их массовое восстановление вынесено на отдельное решение. Далее — 1B
 `ARCHIVE_MEMBER_PARSE_CONTEXT_V1`.
 
+## 2026-10-15 (21) — 3A CATEGORY_NORMALIZATION_AUDIT_ALL_V1 Phase 0 (read-only)
+
+**Phase 0 DONE** — coverage matrix по всем активным категориям:
+`docs/CATEGORY_NORMALIZATION_AUDIT_2026-10-15.md`. Ключевое: **секции есть только у 2 из 8
+активных категорий** (`composite_structures` 7894 строк, `waterproofing` 1869), у остальных
+`WITH_SECTION = 0` (section-слой не прогонялся). Там, где секции есть, качество низкое:
+`composite_structures` — 7644/7894 (96.8 %) `COMPUTED_SUM_UNRELIABLE`, `waterproofing` —
+1040/1869 (55.6 %); `SECTION_TOTAL` не встретился ни разу. Форматы однотипны
+(docx+pdf+xlsx+архивы) → шаблон по тексту маркера, как `road_repair_section_templates`.
+Термины матчей шумные: LEGACY_UNVERIFIED 957960 / VERIFIED 137034 / INVALID 3040, среди
+VERIFIED `мастика` 7834, `управлен` 5242, `жкх` 67 (`VERIFIED` ≠ товарный факт).
+Приоритет: lighting → curbstone → drainage_water_management → flooring →
+cable_support_systems (без секций, много CURRENT); composite_structures/waterproofing —
+докрутка качества; computers — DIRECT-WIP. DB_WRITES=0.
+
 ## 2026-10-15 (20) — GOOD_SUPPLY_FACTS_V1 v2: плоский материалоцентричный вывод
 
 **Приоритет вывода приведён к «материал и атрибуты».** `good_supply_facts_service.to_flat_fact`
