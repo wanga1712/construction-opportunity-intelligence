@@ -221,6 +221,13 @@ class StructuredEntity:
     field_evidence: List[StructuredFieldEvidence] = field(default_factory=list)
     attributes: List[StructuredAttribute] = field(default_factory=list)
     entity_fingerprint: str = ""
+    # SECTION_LEVEL_NORMALIZATION_V1 (Phase 4): section context for manual model
+    # fallback runs. Optional/additive — the deterministic paths set these directly.
+    section_code: Optional[str] = None
+    section_name: Optional[str] = None
+    section_total_price_value: Optional[float] = None
+    section_total_price_raw: Optional[str] = None
+    section_total_source: Optional[str] = None
 
     def __post_init__(self):
         if not self.entity_fingerprint:

@@ -230,9 +230,15 @@ DB_WRITES=0_UNTIL_REPARSE_APPROVED
 
 ### Phase 4 — model fallback
 
+Статус: CODE READY (`e2feafe`), в parse-путь демона НЕ включён.
+
 - schema-prompt для `structured_fact_extractor`;
 - валидация на 148391 + N≤15 аналогичных смет;
 - fine-tune dataset готовим отдельно, не в этом WIP.
+
+Интеграция: сначала только ручной/кнопочный запуск по конкретной закупке/разделу,
+default `dry-run`, запись только с явным `--apply`. Автоматический вызов из
+демона не включаем до отдельной canary-фазы.
 
 ## Acceptance (контроль 148391)
 
@@ -785,3 +791,69 @@ DEVIATIONS / OPEN:
 - На текущем 148391 реальная модель уходит в fail-closed — данные раздела шумные
   («(наименование организации)», OCR-мусор); это ожидаемое поведение, а не сбой механизма.
 - Fine-tune dataset — отдельным этапом (по WIP), в этом WIP не делаем.
+
+## RESULT Phase 4b (2026-10-15) — ручная интеграция; WIP закрыт
+
+STATUS: DONE. Решение владельца: **только ручной/кнопочный запуск**, автоматический вызов
+из демона НЕ включаем.
+
+ИЗМЕНЕНИЯ:
+
+```
+changed: tender_documents_research/document_processor/structured_fact_contract.py
+  StructuredEntity += section_code, section_name, section_total_price_value,
+                      section_total_price_raw, section_total_source (optional, additive)
+new: scripts/section_model_fallback_apply.py — РУЧНОЙ инструмент (демоном не вызывается):
+  * по умолчанию dry-run, DB_WRITES=0;
+  * `--apply` пишет результат ТОЛЬКО через structured_fact_repository.save_extraction_run
+    (trust_state = MANUAL_PROOF_QUARANTINE);
+  * гейт section_needs_fallback: SECTION_TOTAL / COMPUTED_SUM -> SKIP;
+  * ExtractionRun собирается по контракту и проверяется validate_extraction_run ДО записи;
+    ошибки контракта -> abort (fail-closed, записи нет);
+  * `--self-test`: сборка ExtractionRun на синтетике + проверка контракта без модели и без записи.
+```
+
+ПРОВЕРКА (S13, read-only):
+
+```
+--self-test:
+  validate_extraction_run -> True | entities: 1
+  section: S1::глава 12 | Глава 12 | total: 60000.0 | source: SECTION_TOTAL
+dry-run 148391 / "ПСК 1 стадия на торги::глава 12":
+  fallback_needed: True | apply: False
+  MODEL_RESULT: NO_VALID_PAYLOAD (fail-closed) — писать нечего
+DB после прогона: runs 4 (без изменений) | entities 23577 | model-fallback entities 0
+```
+
+ACCEPTANCE (Phase 4b):
+
+```
+MANUAL_ONLY                       = YES (демон не вызывает)
+DRY_RUN_DEFAULT                   = YES
+APPLY_VIA_REPOSITORY_ONLY         = YES (structured_fact_repository + MANUAL_PROOF_QUARANTINE)
+CONTRACT_VALIDATED_BEFORE_WRITE   = YES (validate_extraction_run)
+FAIL_CLOSED                       = YES
+DB_WRITES=0 в dry-run             = YES (runs/entities не изменились)
+```
+
+## ИТОГ ПО WIP (Phase 0 → 4b)
+
+```
+Phase 0   аудит 148391 (разделы = лист × метка из колонки A; COMPUTED_SUM ×4–5.6)      DONE
+Phase 1   детерминированный section detector                                          DONE
+Phase 1.5 document total вынесен из section-контекста                                  DONE
+Phase 2   DDL (5 полей + partial index) + запись section-полей                        DONE
+Phase 2.5 разбор COMPUTED_SUM (агрегатные строки)                                      DONE
+2A.6      canonical predicate + COMPUTED_SUM_UNRELIABLE                                DONE
+Phase 3   проекция карточки «раздел → сумма → материалы» + «остаток»                   DONE
+Phase 4   model fallback (schema-prompt, fail-closed) — ручной запуск                  DONE
+```
+
+ОТКРЫТЫЕ FOLLOW-UP:
+
+- Генерализация fallback на N≤15 аналогичных смет (по WIP) НЕ выполнялась — проверяли
+  только контрольную 148391.
+- Автоматический fallback в демоне не включаем; если понадобится — отдельная canary-фаза:
+  только `COMPUTED_SUM_UNRELIABLE`/`unknown`, лимиты N разделов на закупку и N документов
+  на прогон, model timeout, обязательный fail-closed, сначала dry-run на выборке.
+- Fine-tune dataset — отдельным этапом.

@@ -42,6 +42,24 @@
 БД — их массовое восстановление вынесено на отдельное решение. Далее — 1B
 `ARCHIVE_MEMBER_PARSE_CONTEXT_V1`.
 
+## 2026-10-15 (10) — 2A Phase 4b: ручная интеграция fallback; SECTION_LEVEL_NORMALIZATION_V1 ЗАКРЫТ
+
+**Решение владельца: только ручной/кнопочный запуск, демон fallback не вызывает.**
+`StructuredEntity` дополнен section-полями (аддитивно). Новый ручной инструмент
+`scripts/section_model_fallback_apply.py`: по умолчанию **dry-run (DB_WRITES=0)**; `--apply`
+пишет результат **только через `structured_fact_repository.save_extraction_run`** с
+`trust_state=MANUAL_PROOF_QUARANTINE`; гейт `section_needs_fallback` (SECTION_TOTAL/
+COMPUTED_SUM → SKIP); `ExtractionRun` собирается по контракту и проверяется
+`validate_extraction_run` ДО записи (ошибки → abort); `--self-test` проверяет контракт на
+синтетике без модели и без записи. Проверка: self-test `validate_extraction_run -> True`
+(1 entity, section `S1::глава 12`, `SECTION_TOTAL 60000`); dry-run 148391 «глава 12» —
+`fallback_needed=True`, модель вернула fail-closed (`NO_VALID_PAYLOAD`), запись не
+производилась (runs 4, model-fallback entities 0).
+
+**WIP SECTION_LEVEL_NORMALIZATION_V1 закрыт (Phase 0 → 4b).** Открытые follow-up:
+генерализация на N≤15 смет не делалась (проверяли только 148391); автоматический fallback —
+отдельная canary-фаза с лимитами; fine-tune — отдельно.
+
 ## 2026-10-15 (9) — 2A Phase 4: model fallback (schema-prompt, fail-closed)
 
 **2A SECTION_LEVEL_NORMALIZATION_V1 — Phase 4 DONE** (механизм; в parse-путь демона не
