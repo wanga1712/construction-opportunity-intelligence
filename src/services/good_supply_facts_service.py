@@ -100,6 +100,48 @@ def classify_supply_row(row: Dict[str, Any]) -> Optional[str]:
     return None
 
 
+def to_flat_fact(row: Dict[str, Any]) -> Dict[str, Any]:
+    """Плоский материалоцентричный факт (GOOD_SUPPLY_FACTS_V1, приоритет вывода).
+
+    Главное — материал и его атрибуты; раздел (`section_name`) идёт лёгкой пометкой
+    «найдено в разделе» и НЕ блокирует вывод (в т.ч. при отсутствии/ненадёжности
+    section total). Старые ключи сохраняются для совместимости рендера экранов.
+    """
+    section = str(row.get("section_code") or "").strip()
+    section_name = row.get("section_name")
+    if not section or section.upper().startswith(RESIDUE):
+        section, section_name = RESIDUE, None
+    material = row.get("product_name_normalized") or row.get("product_name_raw")
+    unit = row.get("quantity_unit_normalized") or row.get("quantity_unit_raw")
+    return {
+        # — плоский набор карточки —
+        "material": material,
+        "quantity": row.get("quantity_value"),
+        "unit": unit,
+        "unit_price": row.get("unit_price_value"),
+        "total": row.get("total_price_value"),
+        "attributes": row.get("attributes"),
+        "source_quote": row.get("source_quote"),
+        "section_code": section,
+        "section_name": section_name,
+        # — провенанс/аудит —
+        "row_or_line": row.get("row_or_line"),
+        "page_or_sheet": row.get("page_or_sheet"),
+        "category_code": row.get("category_code"),
+        "trust_state": row.get("structured_fact_trust_state"),
+        # — совместимость с существующим рендером —
+        "product_name_raw": row.get("product_name_raw"),
+        "product_name_normalized": row.get("product_name_normalized"),
+        "quantity_value": row.get("quantity_value"),
+        "quantity_unit_raw": row.get("quantity_unit_raw"),
+        "quantity_unit_normalized": row.get("quantity_unit_normalized"),
+        "unit_price_value": row.get("unit_price_value"),
+        "total_price_value": row.get("total_price_value"),
+        "entity_type": row.get("entity_type"),
+        "product_relation": row.get("product_relation"),
+    }
+
+
 def build_good_supply_facts(
     procurement_id: int, *, limit: int = DEFAULT_LIMIT, conn: Any = None
 ) -> Dict[str, Any]:
@@ -126,12 +168,10 @@ def build_good_supply_facts(
         if reason:
             hidden[reason] = hidden.get(reason, 0) + 1
             continue
-        section = str(row.get("section_code") or "").strip()
-        if not section or section.upper().startswith(RESIDUE):
-            section = RESIDUE
+        flat = to_flat_fact(row)
+        if flat["section_code"] == RESIDUE:
             residue += 1
-        row["section_code"] = section
-        facts.append(row)
+        facts.append(flat)
 
     return {
         "facts": facts,

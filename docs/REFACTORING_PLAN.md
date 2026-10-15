@@ -42,6 +42,18 @@
 БД — их массовое восстановление вынесено на отдельное решение. Далее — 1B
 `ARCHIVE_MEMBER_PARSE_CONTEXT_V1`.
 
+## 2026-10-15 (20) — GOOD_SUPPLY_FACTS_V1 v2: плоский материалоцентричный вывод
+
+**Приоритет вывода приведён к «материал и атрибуты».** `good_supply_facts_service.to_flat_fact`
+отдаёт факт карточки как `material | quantity | unit | unit_price | total | attributes |
+source_quote | section_name` (+ аудит `section_code`/`row_or_line`/`page_or_sheet`/`category_code`/
+`trust_state`; старые ключи сохранены для совместимости). Раздел — только лёгкая пометка
+«найдено в разделе», `section_total` больше не гейт: материал с `section_name=null` всё равно
+выводится. Карточка («Что можно поставить») показывает колонки
+`Материал | Кол-во | Ед. | Цена | Сумма | Характеристики | Цитата | Раздел`.
+Проверка: 60467 — kept 52/works 248; 148391 — kept 82/works 117/residue 44 (факт с пустым
+разделом в выдаче); 29311 — kept 0/works 6. md5 локально == S13. DB_WRITES=0.
+
 ## 2026-10-15 (19) — GOOD_SUPPLY_FACTS_V1 DONE
 
 **GOOD_SUPPLY_FACTS_V1 — DONE.** Новый `src/services/good_supply_facts_service.py`:

@@ -165,3 +165,49 @@ DEVIATIONS / FOLLOW-UP:
   подтверждения) — нумерованные работы в него не попадали.
 - Остаточные пограничные/фрагментарные названия («верха земляного полотна») остаются GOODS.
 - 658 закупок-кандидатов на reparse не прогонялись (Phase 2 — по запросу).
+
+## RESULT (2026-10-15, v2) — плоский материалоцентричный набор
+
+STATUS: DONE (схема вывода приведена к приоритету «материал и атрибуты»).
+
+ИЗМЕНЕНИЯ:
+
+```
+src/services/good_supply_facts_service.py — to_flat_fact(): факт карточки
+    material | quantity | unit | unit_price | total | attributes | source_quote | section_name
+  + аудит: section_code (RESIDUE), row_or_line, page_or_sheet, category_code, trust_state;
+  + старые ключи (product_name_*, quantity_*, unit_price_value, total_price_value,
+    quantity_unit_raw/normalized, entity_type, product_relation) — для совместимости рендера.
+  Раздел — ЛЁГКАЯ ПОМЕТКА: если section_code неизвестен/ненадёжен, материал всё равно
+  выводится; section_total НЕ является гейтом.
+src/ui/procurement_card_page.py — «Что можно поставить»: колонки
+  Материал | Кол-во | Ед. | Цена | Сумма | Характеристики | Цитата | Раздел.
+md5 локально == S13: good_supply_facts_service 17121c15090b3dab61a497562b1d2528,
+                     procurement_card_page c2a69bcec7c3217379b8567fc1d547d2
+```
+
+ПРОВЕРКА:
+
+```
+60467 : kept 52 | works 248 | residue 0
+        flat: {"material":"верха земляного полотна","quantity":7396.0,"unit":"M2",
+               "unit_price":5.0865…,"total":37620.18…,"attributes":[],"source_quote":"A=…",
+               "section_name":"Глава 4"}
+148391: kept 82 | works 117 | residue 44
+        flat: {"material":"Изготовление и доставка …","quantity":1948.4,"unit":"M",
+               "unit_price":124494.834,"total":242565735.0,"attributes":[…],
+               "source_quote":"A=…","section_name":null}   <- раздел не известен, материал всё равно в выдаче
+29311 : kept 0 | works 6
+```
+
+ACCEPTANCE (v2):
+
+```
+FLAT_MATERIAL_SCHEMA      = YES (material|quantity|unit|unit_price|total|attributes|source_quote|section_name)
+SECTION_IS_CONTEXT_ONLY   = YES (не блокирует вывод материала)
+SECTION_TOTAL_NOT_REQUIRED= YES
+WORKS_HIDDEN              = YES
+AGGREGATES_HIDDEN         = YES
+SOURCE_QUOTE_PRESENT      = YES
+DB_WRITES                 = 0
+```

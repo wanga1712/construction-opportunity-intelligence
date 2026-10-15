@@ -684,16 +684,29 @@ def _render_dossier(d: Dict[str, Any], db: Any = None) -> None:
             _sections = _projection.get("sections") or []
 
             def _material_rows(items: List[Dict[str, Any]]) -> List[List[str]]:
-                return [[
-                    escape(str(m.get("product_name_normalized") or m.get("product_name_raw") or "")),
-                    f'{_fmt(m.get("quantity_value"))} {_fmt(m.get("quantity_unit_raw"))}',
-                    _money(m.get("unit_price_value")),
-                    _money(m.get("total_price_value")),
-                    _fmt(m.get("row_or_line")),
-                    '<span class="pc-mono">%s</span>' % escape(str(m.get("source_quote") or "")[:140]),
-                ] for m in items]
+                # GOOD_SUPPLY_FACTS_V1: плоский материалоцентричный набор —
+                # материал, кол-во, ед., цена, сумма, характеристики, цитата, раздел.
+                out = []
+                for m in items:
+                    qty = m.get("quantity") if m.get("quantity") is not None else m.get("quantity_value")
+                    unit = m.get("unit") or m.get("quantity_unit_raw")
+                    price = m.get("unit_price") if m.get("unit_price") is not None else m.get("unit_price_value")
+                    total = m.get("total") if m.get("total") is not None else m.get("total_price_value")
+                    out.append([
+                        escape(str(m.get("material") or m.get("product_name_normalized")
+                                   or m.get("product_name_raw") or "")),
+                        _fmt(qty),
+                        escape(str(unit or "—")),
+                        _money(price),
+                        _money(total),
+                        _attrs(m) if m.get("attributes") else "—",
+                        '<span class="pc-mono">%s</span>' % escape(str(m.get("source_quote") or "")[:140]),
+                        escape(str(m.get("section_name") or "—")),
+                    ])
+                return out
 
-            _mat_cols = ["Товар/материал", "Кол-во", "Цена", "Сумма", "Строка", "Цитата"]
+            _mat_cols = ["Материал", "Кол-во", "Ед.", "Цена", "Сумма", "Характеристики",
+                         "Цитата", "Раздел"]
             if _sections:
                 # SECTION_LEVEL_NORMALIZATION_V1 (Phase 3): раздел → сумма → материалы.
                 for _sec in _sections:
