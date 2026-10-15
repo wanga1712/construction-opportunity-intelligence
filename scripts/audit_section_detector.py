@@ -94,6 +94,8 @@ def main() -> int:
             print(f"run {run_id}: rows={rows}")
         sections = tracker.finalize()
         print(f"sections={len(sections)} residue_rows={residue_rows}")
+        for sheet, total in (tracker.document_totals or {}).items():
+            print(f"  document_total[{sheet}] = {total['value']} ({total['raw']})")
         for info in sections:
             print(
                 f"  {info.code} | name={info.name} | sheet={info.sheet}"

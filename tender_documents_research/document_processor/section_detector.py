@@ -9,9 +9,10 @@ This module derives a deterministic section state, no model involved:
 
   * `section_code` / `section_name` from explicit markers
     ("Итого по главе N", "Раздел N[.M]", "Глава N");
-  * `section_total_source = DOCUMENT_TOTAL` when an explicit "Итого"/"Всего"
-    row carries the value, otherwise `COMPUTED_SUM` from the sum of child line
-    totals;
+  * `section_total_source` is ONLY `SECTION_TOTAL` (an explicit total row that
+    itself carries a section marker) or `COMPUTED_SUM` (sum of the section's
+    child line totals). Phase 1.5: a document/sheet-level total ("Итого:",
+    "Всего с НДС") is a *document_total* and is NEVER assigned to a section;
   * facts with no marker fall into the visible `RESIDUE` section (nothing is
     dropped: input rows are all accounted for);
   * the sheet is tracked so "section" is `sheet × marker`.
@@ -23,7 +24,7 @@ from dataclasses import dataclass
 from typing import Any, Dict, List, Optional, Sequence
 
 SECTION_RESIDUE = "RESIDUE"
-TOTAL_DOCUMENT = "DOCUMENT_TOTAL"
+TOTAL_SECTION = "SECTION_TOTAL"
 TOTAL_COMPUTED = "COMPUTED_SUM"
 
 _CHAPTER_RE = re.compile(
@@ -69,7 +70,8 @@ class SectionTracker:
         self._order: List[str] = []
         self._sheet: Optional[str] = None
         self._current: Optional[str] = None
-        self.sheet_totals: Dict[str, Dict[str, Any]] = {}
+        # Phase 1.5: document/sheet-level totals live OUTSIDE the section context.
+        self.document_totals: Dict[str, Dict[str, Any]] = {}
 
     # ------------------------------------------------------------- helpers
     @staticmethod
@@ -136,25 +138,17 @@ class SectionTracker:
             info = self._section(code, marker, sheet)
             total = self._explicit_total(cells)
             if total is not None:
+                # An explicit section/chapter total row ("Итого по главе N": value).
                 info.total_value = total["value"]
                 info.total_raw = total["raw"]
-                info.total_source = TOTAL_DOCUMENT
+                info.total_source = TOTAL_SECTION
             return code
 
         total = self._explicit_total(cells)
         if total is not None:
-            # Document/sheet-level total carries the value for the active section
-            # (or for the sheet when no section is open yet).
-            key = self._current or f"{sheet or '-'}::<sheet>"
-            if self._current is None:
-                info = self._section(key, sheet or "sheet", sheet)
-            else:
-                info = self._sections[self._current]
-            if info.total_source is None:
-                info.total_value = total["value"]
-                info.total_raw = total["raw"]
-                info.total_source = TOTAL_DOCUMENT
-            self.sheet_totals.setdefault(sheet or "-", {
+            # Phase 1.5: document/sheet-level total ("Итого:", "Всего с НДС").
+            # It is NOT a section total and must not leak into section_total_value.
+            self.document_totals.setdefault(sheet or "-", {
                 "value": total["value"], "raw": total["raw"],
             })
         return self._current

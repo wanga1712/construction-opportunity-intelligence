@@ -58,15 +58,31 @@ section_total_price_raw   text        -- цитата строки «Итого 
    - «Локальная смета …», «Ведомость объёмов работ …», «Итого по разделу …»;
    - изменение `sheet_name`/`table_index`/`page_number`.
 2. Каждой найденной строке материала приписать текущий `section_code`.
-3. Сумму раздела брать из явной строки «Итого по разделу», если она есть;
-   иначе считать как сумму `line_total_value`/`total_price_value` материалов
-   раздела. Способ фиксировать в `section_total_source`:
-   `DOCUMENT_TOTAL` или `COMPUTED_SUM`.
+3. Сумму **раздела** брать из явной строки «Итого по разделу/главе», если она
+   есть; иначе считать как сумму `line_total_value`/`total_price_value`
+   материалов раздела. Способ фиксировать в `section_total_source`:
+   `DOCUMENT_TOTAL` **не используем для section_total**; источники —
+   `SECTION_TOTAL` или `COMPUTED_SUM`.
 4. Материал внутри раздела остаётся `structured_entities`-фактом с
    `source_quote` и `row_or_line`; section поля — только контекст, не подмена
    факта.
 5. Сомнительное/непривязанное показывать как «остаток», потерь `input = output`
    не допускаем.
+
+### Уточнение семантики «итог листа vs итог раздела» (2026-10-15)
+
+Документный итог (`Итого:`, `Всего с НДС`) относится ко всему листу/документу,
+а не к активному разделу. Поэтому:
+
+```text
+document_total_value/raw — отдельный контекст листа/документа;
+section_total_value/raw   — только SECTION_TOTAL или COMPUTED_SUM;
+document total нельзя записывать в section_total_value.
+```
+
+Для 148391 «раздел 9» не должен получать `7 450 714 594` как свою сумму только
+потому, что в конце листа стоит общий «Итого». Его сумма — либо явный итог
+раздела 9, либо `COMPUTED_SUM`.
 
 ## Модельный fallback
 
@@ -110,6 +126,12 @@ children[]:
 - добавить детерминированный section-state в `embedded_extraction.py`;
 - писать `section_code`/`section_name`/`section_total_*`;
 - сохранить `source_quote` и `row_or_line`.
+
+### Phase 1.5 — уточнить document total vs section total
+
+- вынести документный итог из section-контекста;
+- в Phase 1 detector оставить `SECTION_TOTAL`/`COMPUTED_SUM`;
+- перепроверить 148391: `раздел 9` больше не наследует общий `Итого`.
 
 ### Phase 2 — persistence/contract
 
@@ -295,3 +317,52 @@ DEVIATIONS / FOLLOW-UP:
   семантику «итог листа vs итог раздела» надо уточнить в Phase 2/3.
 - Расхождение COMPUTED_SUM ×4–5.6 (Phase 0) остаётся открытым: детектор его не
   лечит, а честно помечает источник COMPUTED_SUM.
+
+## RESULT Phase 1.5 (2026-10-15) — document total вынесен из section-контекста
+
+STATUS: DONE.
+
+ИЗМЕНЕНИЯ:
+
+```
+document_processor/section_detector.py
+  - константы: SECTION_TOTAL | COMPUTED_SUM. DOCUMENT_TOTAL больше НЕ пишется
+    в section_total_source.
+  - document/sheet-итог («Итого:», «Всего с НДС») -> tracker.document_totals[sheet]
+    = {value, raw}; в section-контекст не попадает.
+  - явный итог раздела (метка раздела + значение в той же строке) -> SECTION_TOTAL.
+  - все прочие разделы -> COMPUTED_SUM (сумма материалов раздела).
+scripts/audit_section_detector.py — печатает document_total[...] отдельной строкой.
+```
+
+ПРОВЕРКА 148391 (read-only, БД не менялась):
+
+```
+sections=72 residue_rows=123
+document_total[ПСК 1 стадия на торги] = 7 450 714 594 (Итого:)
+ПСК 1 стадия на торги::раздел 9 | children=995
+    | total=40 482 188 081.98 | source=COMPUTED_SUM     <- больше НЕ 7 450 714 594
+(остальные разделы/главы — COMPUTED_SUM)
+```
+
+Смоук (синтетика рядом с `extract_facts`):
+
+```
+Плитка тротуарная | section=S1::итого по главе 1 | total=0.0 | src=COMPUTED_SUM
+Песок природный   | section=S1::итого по главе 1 | total=0.0 | src=COMPUTED_SUM
+(строка «Итого: 2000» ушла в document_total, а не в раздел)
+```
+
+ACCEPTANCE (Phase 1.5):
+
+```
+DOCUMENT_TOTAL_NOT_IN_SECTION_TOTAL = YES
+SECTION_TOTAL_SOURCE ∈ {SECTION_TOTAL, COMPUTED_SUM} = YES
+DETERMINISTIC_RERUN = YES (повторный аудит даёт те же 72 секции)
+DB_WRITES=0_UNTIL_MIGRATION_APPROVED = YES
+```
+
+NOTE: у 148391 явных section-итогов не нашлось — строки «Итого по главе N» это
+merged-метки рядом с материалом (отсекаются guard'ом), поэтому все разделы честно
+`COMPUTED_SUM`. `SECTION_TOTAL` появится там, где в документе есть отдельная
+строка «Итого по главе N | <число>».

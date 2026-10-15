@@ -1,0 +1,28 @@
+[Unit]
+Description=CRM commercial portal read-only JSON API (external site link)
+Documentation=file:/opt/CRM_Streamlit/docs/wip/WIP_COMMERCIAL_SITE_CRM_LINK_V1.md
+After=network-online.target postgresql@17-main.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=sergey
+Group=sergey
+WorkingDirectory=/opt/CRM_Streamlit
+EnvironmentFile=/opt/CRM_Streamlit/.env
+Environment=PYTHONUNBUFFERED=1
+Environment=PYTHONPATH=/opt/CRM_Streamlit
+# Loopback only: the external site backend proxies; the frontend never receives
+# database credentials. Set COMMERCIAL_PORTAL_API_TOKEN in the environment file
+# to require a bearer token from that proxy.
+Environment=COMMERCIAL_PORTAL_HOST=127.0.0.1
+Environment=COMMERCIAL_PORTAL_PORT=8787
+ExecStart=/opt/CRM_Streamlit/.venv313/bin/python -m src.api.commercial_portal_api
+Restart=on-failure
+RestartSec=5
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=full
+
+[Install]
+WantedBy=multi-user.target

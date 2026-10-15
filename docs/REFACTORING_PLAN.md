@@ -42,6 +42,19 @@
 БД — их массовое восстановление вынесено на отдельное решение. Далее — 1B
 `ARCHIVE_MEMBER_PARSE_CONTEXT_V1`.
 
+## 2026-10-15 (4) — 2A Phase 1.5: document total вне section-контекста
+
+**2A SECTION_LEVEL_NORMALIZATION_V1 — Phase 1.5 DONE.** `section_detector.py`:
+документный/листовой итог («Итого:», «Всего с НДС») теперь пишется в
+`tracker.document_totals[sheet]` и НЕ попадает в `section_total_value`;
+`section_total_source` принимает только `SECTION_TOTAL` (явный итог раздела) или
+`COMPUTED_SUM`. Проверка 148391: `document_total[ПСК 1 стадия на торги] = 7 450 714 594`;
+раздел 9 больше его не наследует — `total=40 482 188 081.98`, `source=COMPUTED_SUM`.
+Остальные разделы — `COMPUTED_SUM` (у 148391 явных section-итогов нет: строки
+«Итого по главе N» — merged-метки рядом с материалом). Смоук подтверждает: строка
+«Итого: 2000» уходит в `document_total`, факты остаются на `COMPUTED_SUM`.
+DB_WRITES=0; далее Phase 2 (DDL + persistence).
+
 ## 2026-10-15 (3) — 2A Phase 1: детерминированный section detector
 
 **2A SECTION_LEVEL_NORMALIZATION_V1 — Phase 1 DONE** (section-поля пока не пишутся в БД).
@@ -4019,3 +4032,31 @@ worker-консолидация не выполнены).
   `QueuePopulateCoordinator`/`MorningPriorityBoost`/`soft_reclassify_pending`, и в queue есть
   `research_prior_model='okpd_research_hit_v2'` (562 строки). Нужно подтвердить/загейтить этот
   путь при `PROCESSING_BACKEND=S13_V4`. Итог: `PHASE_4=FAIL` (один критерий не закрыт).
+
+## 2026-10-15 — WIP COMMERCIAL_SITE_CRM_LINK_V1 (фазы 1–4 DONE, фаза 5 BLOCKED)
+
+Production read-only коммерческий слой между CRM и внешним сайтом
+`100.113.185.90:9999`. Детали и снапшот: `docs/wip/WIP_COMMERCIAL_SITE_CRM_LINK_V1.md`,
+контракт для сайта: `docs/COMMERCIAL_PORTAL_API_CONTRACT.md`.
+
+Артефакты: `scripts/commercial_market_audit.sql` + `scripts/run_commercial_market_audit.sh`
+(`--di` для cross-check подтверждённых фактов), `src/services/commercial_portal_service.py`,
+`src/services/commercial_portal_facts.py`, `src/api/commercial_portal_api.py`,
+`systemd/crm-commercial-portal-api.service` (не установлен).
+
+Снапшот прода (DISTINCT `procurement_id`, admission-eligible OPEN/AWARDED):
+`COMMERCIAL_UNIVERSE_DISTINCT=46340`, `OPEN=25235`, `AWARDED_FOLLOWUP=21105`,
+`WITH_COMMERCE=2779`, `WITHOUT_COMMERCE=43561`, `DIRECT_SUPPLY=1073`,
+`PROJECT_EMBEDDED=1706`, `CONFIRMED=524`, `PRELIMINARY_ONLY=45816`,
+`AWARDED_DIRECT_IN_LIVE_MARKET=0`; все инварианты acceptance = true.
+
+API поднимался транзиентно на S13 `127.0.0.1:8787` (venv `.venv313`), метрики
+совпали с аудитом 1:1, процесс остановлен; CRM не рестартовался, портов не оставлено.
+`CRM_WRITES=0`, `DI_WRITES=0`.
+
+Отклонения/долги: `section_value` = `null` — у `crm_app` нет `SELECT` на
+`document_intelligence.confirmed_category_facts` (ACL: postgres, doc_worker), и
+только 121 из 12394 фактов имеют `line_total_value`; фаза 5 (правка
+`/home/vitaliy/nodar-site-preview/auth.html`) остановлена как
+`IDENTITY_AUTHORITY_MISSING` — владелец сайта не описан в
+`docs/PROJECT_OPERATING_RULES.md`. Commit/push/deploy НЕ выполнялись.
