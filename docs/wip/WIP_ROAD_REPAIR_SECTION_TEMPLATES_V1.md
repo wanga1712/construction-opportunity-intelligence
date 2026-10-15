@@ -36,6 +36,8 @@ Status: СПЕКА / ДО ЗАПУСКА. Owner: document normalization / sectio
 
 ### Phase 0 — inventory дорожных форм
 
+Статус: DONE (`14f9eb6`). Контроль 60467 + 12 CURRENT дорожных закупок.
+
 Выбрать репрезентативные текущие `CURRENT` дорожные закупки, включая 60467:
 
 - ОКПД 42.11.*;
@@ -50,6 +52,13 @@ Status: СПЕКА / ДО ЗАПУСКА. Owner: document normalization / sectio
 маркеры разделов/глав
 наличие «Итого по главе», «Ведомость объёмов работ»
 ```
+
+Выводы Phase 0:
+
+- устойчив текст `Итого по разделу N <Название>`, а не номер колонки;
+- section_name берём из текста после номера;
+- шифры СР/ЛС/ОС в колонке B — fallback-identity;
+- прямых `.gsfx` в выборке нет, сметы внутри архивов/PDF/DOCX.
 
 ### Phase 1 — шаблон дорожной сметы
 
@@ -172,3 +181,63 @@ FILE_FORMS_RECORDED         = YES (типы файлов, шапки, марке
                                     наличие «Ведомость объёмов работ»)
 DB_WRITES                   = 0 (только SELECT)
 ```
+
+## RESULT Phase 1 (2026-10-15) — шаблонный слой дорожных смет
+
+STATUS: DONE (read-only проверка на 60467; в parse-путь демона НЕ подключён).
+
+ИЗМЕНЕНИЯ:
+
+```
+new: tender_documents_research/document_processor/road_repair_section_templates.py
+  parse_road_marker() — маркер ищется по ТЕКСТУ строки в ЛЮБОЙ колонке:
+      «Итого по разделу N <Название>» -> kind=razdel, number=N, name=<Название>
+      «Глава N[.] <Название>»         -> kind=glava
+      (шум в имени чистится: «Поз.: 33-35», «работ и затрат»)
+  parse_shifr()       — шифры СР-*/ЛС-*/ОС-* как fallback identity
+  section_code = "road::razdel N" | "road::glava N"; номер раздела ПЕРВИЧЕН,
+      шифр только привязывает строки без маркера (shifr_to_code)
+  build_road_sections(rows) — детерминированный разбор:
+      * суммируются ТОЛЬКО is_summarizable-строки (canonical predicate из section_detector);
+      * агрегатные строки (имя-маркер или unit=руб. без qty) не суммируются, но явный итог
+        такой строки даёт SECTION_TOTAL;
+      * coverage = total_rows/summarizable_rows; < 0.9 или наличие агрегатов ->
+        COMPUTED_SUM_UNRELIABLE;
+      * непривязанное -> RESIDUE (честный остаток);
+      * работает по source_quote — не по номеру колонки и не по .gsfx.
+  БД не трогает; scoring / medal / queue не трогает.
+```
+
+ПРОВЕРКА (read-only на S13, 60467, первые 400 строк сущностей):
+
+```
+маркеры:
+  "AE=Итого по разделу 13 Подготовка территории строительства"
+        -> (razdel, 13, "Подготовка территории строительства")
+  "F=Итого по разделу 18 Светофорный объект"      [другая колонка]
+        -> (razdel, 18, "Светофорный объект")
+  "J=Глава 1. Подготовка территории строительства"
+        -> (glava, 1, "Подготовка территории строительства")
+шифры: ЛС-01-01-01, СР-01-01
+разбор: rows 400 -> sections 24 | residue 63
+  road::razdel 1 | Подготовительные работы           | materials 2 | coverage 1.0 | 726.34  | COMPUTED_SUM
+  road::razdel 2 | Земляное полотно                  | materials 1 | coverage 0.0 | 0.0     | COMPUTED_SUM_UNRELIABLE
+  road::razdel 3 | Дорожная одежда                   | materials 0 | —            | None    | COMPUTED_SUM_UNRELIABLE
+  road::glava 4  | Объекты энергетического хозяйства | materials 4 | coverage 0.5 | 5913.88 | COMPUTED_SUM_UNRELIABLE
+```
+
+ACCEPTANCE (Phase 1):
+
+```
+MARKER_BY_TEXT_NOT_COLUMN     = YES (AE / F / J — разные колонки, один маркер)
+SECTION_NAME_FROM_NUMBER      = YES («Земляное полотно», «Дорожная одежда», «Светофорный объект»)
+SHIFR_FALLBACK_IDENTITY       = YES (СР-/ЛС-/ОС- привязывают строки без маркера)
+SUMMARIZABLE_ONLY             = YES (canonical predicate)
+RESIDUE_HONEST                = YES (63 строки)
+NO_GSFX_DEPENDENCY            = YES (работа по source_quote)
+DB_WRITES                     = 0
+SCORING_MEDAL_QUEUE_UNCHANGED = YES
+```
+
+FOLLOW-UP: Phase 2 (canary на 60467) требует reparse — сейчас у 60467 `section_code = 0`;
+прогон шаблона на полном наборе строк и сравнение с generic-детектором.

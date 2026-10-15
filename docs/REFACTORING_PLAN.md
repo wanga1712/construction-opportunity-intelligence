@@ -42,6 +42,21 @@
 БД — их массовое восстановление вынесено на отдельное решение. Далее — 1B
 `ARCHIVE_MEMBER_PARSE_CONTEXT_V1`.
 
+## 2026-10-15 (12) — 2B Phase 1: шаблонный слой дорожных смет
+
+**2B ROAD_REPAIR_SECTION_TEMPLATES_V1 — Phase 1 DONE.** Новый модуль
+`tender_documents_research/document_processor/road_repair_section_templates.py`:
+`parse_road_marker` (маркер по ТЕКСТУ строки в любой колонке — «Итого по разделу N
+<Название>» / «Глава N <Название>»), `parse_shifr` (СР-/ЛС-/ОС- как fallback identity),
+`build_road_sections` (суммирует только canonical summarizable-строки; агрегаты не
+суммируются, но явный итог даёт `SECTION_TOTAL`; coverage < 0.9 или агрегаты →
+`COMPUTED_SUM_UNRELIABLE`; непривязанное → `RESIDUE`). `section_code` = `road::razdel N`
+(номер первичен, шифр — fallback для строк без маркера). Работает по `source_quote`, а не по
+колонке/`.gsfx`. Read-only проверка на 60467 (400 строк): маркеры из колонок AE/F/J
+парсятся одинаково, 24 раздела + 63 остатка; `road::razdel 1 … 726.34 COMPUTED_SUM`,
+`road::razdel 2 … COMPUTED_SUM_UNRELIABLE`. DB_WRITES=0. Далее Phase 2 — canary на 60467
+(нужен reparse: `section_code=0`).
+
 ## 2026-10-15 (11) — 2B Phase 0: inventory дорожных форм (ROAD_REPAIR_SECTION_TEMPLATES_V1)
 
 **2B ROAD_REPAIR_SECTION_TEMPLATES_V1 — Phase 0 DONE** (read-only, DB_WRITES=0). Контроль
