@@ -78,6 +78,10 @@ tender_documents_research/document_processor/road_repair_section_templates.py
 
 ### Phase 2 — canary на 60467
 
+Статус: DONE (`91afde1`, canary read-only на 1780 существующих строках).
+Reparse 60467 не выполнен: queue `SKIPPED_NOT_TARGET`/unadmitted. Для
+диагностики выбираем разовый ручной обход claim, admission не ослабляем.
+
 Прогнать шаблон на 60467 read-only:
 
 ```text
@@ -313,3 +317,72 @@ SCORING_MEDAL_QUEUE_UNCHANGED   = YES
   не нужен, а сравнение с generic-детектором отложено.
 - Интеграция road-шаблона в карточку (проекция «дорожных» разделов) — отдельный шаг:
   сейчас карточка показывает generic-`section_code`.
+
+## RESULT Phase 2b (2026-10-15) — диагностический reparse 60467 + сравнение
+
+ИНСТРУМЕНТ (разовый, без claim/admission):
+
+```
+new: scripts/reparse_procurement_sections.py
+    --procurement-id 60467 --local-only --apply
+  * берёт существующие document_files.local_path (ничего не скачивает, claim-фильтр
+    admission НЕ используется);
+  * parse_file_with_meta + extract_and_persist с EMBEDDED_FORCE_UPDATE=1;
+  * по умолчанию dry-run; queue/admission/scoring/medal не меняет.
+  запуск: воркерный venv + воркерные EnvironmentFile (systemd-run reparse-60467).
+```
+
+ПРОГОН:
+
+```
+procurement 60467 | document_files rows with local_path 4 | distinct paths 1
+   (4 строки — дубли одной и той же ссылки wave2a)
+on disk: 1 -> «10.НМЦК_КР_Петрово УстьТаркском рне.xlsx»
+PARSED ×4 (df_id 125105/125116/125127/125138, category waterproofing)
+  result каждого: embedded 446 ; TOTALS {'facts': 0, 'metadata': 28, 'embedded': 1784}
+APPLIED: section-поля пересчитаны (EMBEDDED_FORCE_UPDATE=1)
+```
+
+СРАВНЕНИЕ (на строках с заполненным `section_code`, 1784):
+
+```
+GENERIC (embedded_extraction):
+    разделов 53 | RESIDUE 156 | COMPUTED_SUM 588 строк | COMPUTED_SUM_UNRELIABLE 1040 строк
+    примеры кодов: «ВКР::итого по главе 12» 136 | «ПСК::глава 1» 188 | «Лист1::итого по разделу 2» 92
+ROAD (road_repair_section_templates):
+    разделов 24 (17 с материалами / 7 пустых) | RESIDUE 64
+    непустые: COMPUTED_SUM 5 | COMPUTED_SUM_UNRELIABLE 12 | SECTION_TOTAL 0
+    road::razdel 1  «Подготовительные работы»             m 8  | cov 1.0   | 2 905.38      | CS
+    road::razdel 7  «Переустройство ВЛ и кабельной линии» m 64 | cov 0.375 | 57 966 060.82 | CSU
+```
+
+ВЫВОДЫ:
+
+1. Road-шаблон консолидирует 53 generic-секции в 24 маркерных раздела — целевое поведение
+   («разделы и главы дорожной сметы»).
+2. Road НЕ учитывает лист: метки из «ПСК»/«Лист1»/«ВКР» с одинаковым номером сливаются,
+   тогда как generic ключует по `sheet::marker`. Решить: добавлять лист в road-код
+   (`road::<sheet>::razdel N`) или нет.
+3. У обеих схем высокий `UNRELIABLE` (generic 1040/1784 строк; road 12/17 разделов) —
+   покрытие `total` низкое: много позиций без сумм. Это следующий кандидат на докрутку.
+
+SIDE EFFECT (важно, требуется решение):
+
+```
+reparse ВСТАВИЛ новые 1784 строки вместо обновления старых: fingerprint изменился (в него
+входит page_or_sheet, который теперь заполнен) -> ON CONFLICT не сработал.
+итог: 60467 = 3564 строки (1780 старых без section + 1784 новых с section);
+дублей по entity_fingerprint нет, но контент старых повторяет новые.
+section-блок карточки показывает только новые (старые отфильтрованы), однако плоская
+таблица «Что можно поставить» покажет оба набора.
+```
+
+ACCEPTANCE (Phase 2b):
+
+```
+REPARSE_WITHOUT_CLAIM  = YES
+ADMISSION_UNCHANGED    = YES (очередь 54737 осталась SKIPPED_NOT_TARGET)
+SECTION_FIELDS_WRITTEN = YES (1784 строки с section_code)
+COMPARISON_DONE        = YES (generic 53 раздела vs road 24)
+QUEUE_SCORING_UNTOUCHED= YES
+```

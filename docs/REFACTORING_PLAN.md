@@ -42,6 +42,23 @@
 БД — их массовое восстановление вынесено на отдельное решение. Далее — 1B
 `ARCHIVE_MEMBER_PARSE_CONTEXT_V1`.
 
+## 2026-10-15 (14) — 2B Phase 2b: диагностический reparse 60467 + сравнение generic/road
+
+**2B ROAD_REPAIR_SECTION_TEMPLATES_V1 — Phase 2b DONE.** Новый разовый инструмент
+`scripts/reparse_procurement_sections.py` (`--procurement-id`, `--local-only`, `--apply`;
+dry-run по умолчанию): берёт существующие `document_files.local_path`, парсит и вызывает
+`extract_and_persist` с `EMBEDDED_FORCE_UPDATE=1`, **claim/admission не использует** и очередь
+не трогает; запускается воркерным venv + воркерными EnvironmentFile. Прогон 60467:
+1 файл на диске (`10.НМЦК_КР_Петрово УстьТаркском рне.xlsx`, 4 дублирующих df-строки),
+`embedded 1784`. Сравнение на строках с `section_code`: **generic — 53 раздела, RESIDUE 156,
+CS 588 / CSU 1040 строк; road — 24 раздела (17 с материалами, 7 пустых), RESIDUE 64,
+CS 5 / CSU 12 / SECTION_TOTAL 0**. Выводы: road консолидирует разделы (цель), но не учитывает
+лист (метки «ПСК»/«Лист1»/«ВКР» с тем же номером сливаются) — решить, добавлять ли лист в
+код; у обеих схем высокий UNRELIABLE из-за низкого покрытия total. **Side effect:** reparse
+вставил новые 1784 строки (fingerprint изменился — в него входит `page_or_sheet`), старые 1780
+остались stale → у 60467 3564 строки; требуется решение по чистке. Очередь 54737 не менялась
+(`SKIPPED_NOT_TARGET`).
+
 ## 2026-10-15 (13) — 2B Phase 2: canary 60467 + UI только разделы с материалами
 
 **2B ROAD_REPAIR_SECTION_TEMPLATES_V1 — Phase 2 DONE** (read-only; шаблон прогнан на полном
