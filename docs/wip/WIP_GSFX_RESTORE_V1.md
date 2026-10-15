@@ -177,3 +177,46 @@ UPDATE (2026-10-14, после 1A): `ARCHIVE_MEMBER_DEDUP_IDENTITY_V1` DONE — 
 больше не гасит членов архива, 1775 `.gsfx`-строк восстановлены в `PENDING`
 (маркер `restored_from:archive_member_dedup_identity_v1`). Делать 1C (подтверждение
 сущностей) — только после 1B (`ARCHIVE_MEMBER_PARSE_CONTEXT_V1`).
+
+## RESULT (2026-10-15) — 1C закрыт на planned-кейсе 99069
+
+STATUS: DONE (`WIP_RESULT=PASS`).
+
+EVIDENCE:
+
+```
+-- предпосылки
+1A ARCHIVE_MEMBER_DEDUP_IDENTITY_V1  = DONE (identity по url_hash; 1775 .gsfx -> PENDING)
+1B ARCHIVE_MEMBER_PARSE_CONTEXT_V1   = DONE (члены архива привязаны к плану по physical_download_key)
+
+-- .gsfx доходят до парсера
+журнал прогона 90595: GsfxParser отработал все 20 .gsfx (fragments 17..70)
+document_processing_results .gsfx    = 20 / 20 COMPLETED
+.gge остаётся в SKIP_EXTENSIONS        = YES (file_skip_list.py:114)
+
+-- canonical end-to-end (planned-кейс 99069 / queue 90595)
+document_processing_queue 90595        = COMPLETED (last_error пуст)
+document_processing_results (99069)    = 54 COMPLETED
+structured_entities (99069)            = drainage_water_management 438 ; unknown 89
+
+-- остальные закупки GSFX-переочереди (маркер requeue:gsfx_restore_v1)
+2 c Queue V2 plan : 90595 COMPLETED ; 148931 COMPLETED (его план не покрывает .gsfx)
+18 без плана      : 17 PENDING + 1 COMPLETED  -> NOT_PLANNED_GAP (без plan сущностей быть не может)
+460692            : NOT_PLANNED_GAP (зафиксировано, план ради acceptance не строим)
+строка 9216 (queue 10796): PENDING, research_action=DEEP_RESEARCH -> отдельное решение (D3)
+битая кодировка имён .gsfx: отдельный follow-up, не блокер
+```
+
+ACCEPTANCE:
+
+```
+.gsfx не HARD_SKIP и доходит до GsfxParser                      = YES
+.gge остаётся skip                                              = YES
+planned-кейс 99069: document_processing_results=COMPLETED,
+                    structured_entities > 0                      = YES (54 COMPLETED; 438 entities)
+460692                                                          = NOT_PLANNED_GAP
+остальные закупки: причины зафиксированы                        = YES (18 без плана; 148931 план вне .gsfx)
+строка 9216                                                     = отдельное решение (не смешано с GSFX)
+битая кодировка имён .gsfx                                      = отдельный follow-up
+WIP_RESULT                                                      = PASS
+```

@@ -42,6 +42,26 @@
 БД — их массовое восстановление вынесено на отдельное решение. Далее — 1B
 `ARCHIVE_MEMBER_PARSE_CONTEXT_V1`.
 
+## 2026-10-15 (2) — 1B PASS (99069) и 1C GSFX_RESTORE_V1 PASS
+
+**1B ARCHIVE_MEMBER_PARSE_CONTEXT_V1 — DONE/PASS.** Члены архива привязываются к плану
+по identity `physical_download_key`: в `daemon.py` `selected_doc_context` дополняется
+именами строк `document_files`, у которых `physical_download_key` равен `physical_key`
+плана. `_archive_parent_identity` возвращён к исходному виду — расширение (предок с одним
+архивом / `+.7z`) давало parent вида «Приложение2.7z», у которого нет строки в
+`document_files`, и персист падал на `Missing document_files row`. Прогон canonical-кейса
+99069 (queue 90595): распаковано 54 файла, `document_processing_results` = 54 COMPLETED,
+`.gsfx` = 20/20 COMPLETED, `structured_entities` `drainage_water_management` = 438.
+`460692 = NOT_PLANNED_GAP`. 328291 (148931) — его план покрывает другой документ (`.docx`),
+а `.gsfx` имеют иной `physical_key`, поэтому это не `.gsfx`-кейс.
+
+**1C GSFX_RESTORE_V1 — PASS.** `.gsfx` не HARD_SKIP и доходят до `GsfxParser`; `.gge`
+остаётся в skip; canonical planned-кейс 99069 даёт `document_processing_results=COMPLETED`
+и `structured_entities>0`; 460692 — `NOT_PLANNED_GAP`; 18 из 20 неразобранных закупок — без
+Queue V2 plan (`NOT_PLANNED_GAP`), 148931 — план вне `.gsfx`; строка 9216 и битая кодировка
+имён — отдельные follow-up. Инструмент проверки: `scripts/force_run_document_queue.py`
+(+ cleanup как у демона, иначе повторный прогон распаковывает 0 файлов).
+
 ## 2026-10-15 — 2A Phase 0 (SECTION_LEVEL_NORMALIZATION_V1) + статус S13-сети
 
 **2A SECTION_LEVEL_NORMALIZATION_V1 — Phase 0 DONE** (read-only, DB_WRITES=0).

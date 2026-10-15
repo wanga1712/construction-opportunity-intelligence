@@ -613,6 +613,49 @@ class DocumentProcessorDaemon:
                     selected_doc_context[str(_sanitize(_name)).strip().lower()] = _ctx
                 except Exception:
                     pass
+        # ARCHIVE_MEMBER_PARSE_CONTEXT_V1: archive members inherit the parent
+        # archive's physical_download_key (see downloader.extract_recursive ->
+        # ensure_download_file). Bind them to the plan by that identity so nested
+        # archives — whose on-disk layout hides the planned ancestor — still
+        # resolve their category/track. No category is invented: only members
+        # already bound to a planned physical_key are added.
+        _planned_by_key = {}
+        for _ctx in selected_doc_context.values():
+            _pk = _ctx.get("physical_key")
+            if _pk:
+                _planned_by_key.setdefault(_pk, _ctx)
+        if _planned_by_key:
+            try:
+                _conn = backend.queue._get_conn()  # noqa: SLF001 - own document DB
+                try:
+                    with _conn.cursor() as _cur:
+                        _cur.execute(
+                            """SELECT DISTINCT file_name, physical_download_key
+                                 FROM document_files
+                                WHERE procurement_id = %s
+                                  AND physical_download_key = ANY(%s)
+                                  AND coalesce(file_name, '') <> ''""",
+                            (procurement_id, list(_planned_by_key.keys())),
+                        )
+                        _members_added = 0
+                        for _fn, _pk in _cur.fetchall():
+                            _ctx = _planned_by_key.get(_pk)
+                            if not _ctx:
+                                continue
+                            _key = str(_fn).strip().lower()
+                            if _key and _key not in selected_doc_context:
+                                selected_doc_context[_key] = _ctx
+                                _members_added += 1
+                finally:
+                    _conn.close()
+                if _members_added:
+                    self.logger.info(
+                        f"[{task_id}] archive-member ctx bound by physical_key: {_members_added}"
+                    )
+            except Exception as _exc:  # never block the task
+                self.logger.warning(
+                    f"[{task_id}] archive-member ctx enrichment skipped: {_exc}"
+                )
         try:
             try:
                 batch = self.pipeline.prefetch_task(

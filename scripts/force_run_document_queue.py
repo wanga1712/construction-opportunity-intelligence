@@ -87,6 +87,14 @@ def main() -> int:
             except Exception as exc:  # noqa: BLE001
                 fail += 1
                 print("FAIL queue_id=%s: %s" % (qid, exc), flush=True)
+            finally:
+                # Mirror the daemon: clear the task working dir so a later re-run
+                # extracts from scratch (the archive extractor only reports newly
+                # created files, so a dirty dir yields "no files extracted").
+                try:
+                    daemon.downloader.cleanup(qid)
+                except Exception as exc:  # noqa: BLE001
+                    print("CLEANUP_FAIL queue_id=%s: %s" % (qid, exc), flush=True)
     print("force_run done: ok=%d fail=%d" % (ok, fail), flush=True)
     return 0 if fail == 0 else 1
 

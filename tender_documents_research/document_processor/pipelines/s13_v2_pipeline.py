@@ -10,23 +10,20 @@ def _archive_parent_identity(path: Path) -> Tuple[Optional[str], Optional[str], 
     """Return (parent_file_name, parent_local_path, archive_member_path) for extracted members.
 
     S13 extraction keeps source archives durable in the task directory and extracts
-    members either directly under the task directory, under a directory named
-    after the archive stem, or under the member's own internal path (an
-    extraction directory that does NOT match the archive name). We anchor derived
-    parser results to that durable source archive while preserving the member
-    relative path separately.
+    members either directly under the task directory or under a directory named
+    after the archive stem. We anchor derived parser results to that durable
+    source archive while preserving the member relative path separately.
 
-    Resolution order while walking up from the member's directory:
-      (a) a sibling file `<dir>.zip/.rar/.r00/.7z` (archive named after the dir);
-      (b) an ancestor directory that holds exactly one source archive and the
-          member sits below it (extraction-by-internal-path layout). If an
-          ancestor holds several archives the parent is ambiguous and we return
-          None instead of guessing.
+    NOTE (ARCHIVE_MEMBER_PARSE_CONTEXT_V1): this resolved-by-name rule only holds
+    when the extracted directory is named after the archive. For nested/chained
+    archives (e.g. an archive whose members live under `<member-stem>/…`) the real
+    source archive cannot be recovered from the path, and returning a name that
+    has no `document_files` row breaks persistence anchoring. Member→plan binding
+    is therefore established by `physical_download_key` in the daemon, not here.
     """
-    archive_exts = (".zip", ".rar", ".r00", ".7z")
+    archive_exts = (".zip", ".rar", ".r00")
     try:
         cur = path.parent
-        level = 0
         while cur != cur.parent:
             for ext in archive_exts:
                 candidate = cur.with_suffix(ext)
@@ -36,26 +33,9 @@ def _archive_parent_identity(path: Path) -> Tuple[Optional[str], Optional[str], 
                     except ValueError:
                         member_path = path.name
                     return candidate.name, str(candidate), member_path
-            # (b) bounded to a couple of levels above the member's own directory.
-            if 0 < level <= 2:
-                try:
-                    archives = [
-                        p for p in cur.iterdir()
-                        if p.is_file() and p.suffix.lower() in archive_exts
-                    ]
-                except Exception:
-                    archives = []
-                if len(archives) == 1:
-                    parent = archives[0]
-                    try:
-                        member_path = path.relative_to(cur).as_posix()
-                    except ValueError:
-                        member_path = path.name
-                    return parent.name, str(parent), member_path
             # Stop at common task directory shape after walking a few levels.
             if cur.parent == cur:
                 break
-            level += 1
             cur = cur.parent
     except Exception:
         return None, None, None

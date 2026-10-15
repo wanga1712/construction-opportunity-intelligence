@@ -207,3 +207,83 @@ BLOCKER AUTHORITY: резолв/доступ S13→S7 (hosts/DNS/туннель)
 FOLLOW-UP: после восстановления S7 доступа выполнить
 `force_run_document_queue.py --queue-id 90595` (и/или 148931) и зафиксировать
 `document_processing_results=COMPLETED` + `structured_entities>0`.
+
+## RESULT (2026-10-15, v3) — end-to-end PASS на planned-кейсе 99069
+
+STATUS: DONE (сквозная проверка выполнена на 99069 / queue 90595).
+
+EVIDENCE:
+
+```
+-- правки (2 файла)
+1) document_processor/daemon.py — selected_doc_context дополняется членами архивов
+   по identity physical_download_key: document_files(procurement_id, physical_key=plan)
+   -> file_name -> тот же ctx. Лог: "[90595] archive-member ctx bound by physical_key: 54"
+2) pipelines/s13_v2_pipeline.py — оставлен fallback ctx по parent_name; резолвер
+   _archive_parent_identity ВОЗВРАЩЁН к исходному виду, потому что расширение
+   (предок с одним архивом / +.7z) давало parent="Приложение2.7z", у которого нет
+   строки в document_files, и персист падал:
+     "Missing document_files row for queue=90595 file=17. разборка аб покрытия.gsfx"
+md5 (локально == S13):
+  daemon.py            a03d026a4f5fbcaa4f6d94094b5eb6eb
+  s13_v2_pipeline.py   d472e81eeb48705091233c0119953d05
+backup: daemon.py.bak-memberctx-20261015, s13_v2_pipeline.py.bak-archivectx-20261014
+
+-- почему identity по physical_download_key, а не по имени каталога
+в задаче 90595 четыре архива; .gsfx лежат в .../90595/Приложение2/2026/ (архив
+Приложение2.7z), а плановый документ — Конк_докум_ВК_062_26_кор.7z (вложенная
+цепочка). Файловая раскладка вложенность не отражает; зато в document_files все
+20 строк .gsfx имеют physical_download_key == physical_key плана (9dac6fb2…).
+
+-- прогон (systemd-run force-run-1b-99069, штатный путь демона)
+Распаковано из Конк_докум_ВК_062_26_кор.7z: 54 файлов
+OK queue_id=90595 (147.5s)
+
+-- acceptance-счётчики
+document_processing_queue 90595            = COMPLETED (last_error пуст)
+document_processing_results 99069 (сегодня)= 54 COMPLETED
+document_processing_results .gsfx          = 20 / 20 COMPLETED
+structured_entities 99069 (сегодня)        = drainage_water_management 438 ; unknown 89
+```
+
+ACCEPTANCE:
+
+```
+ARCHIVE_MEMBER_HAS_CATEGORY_CONTEXT = YES
+GSFX_99069_STRUCTURED_ENTITIES_AFTER_RERUN > 0 = YES (438, category=drainage_water_management)
+NO_CATEGORY_CTX_NOT_INVENTED = YES (добавляются только члены с physical_key плана)
+PARSER_BEHAVIOR_UNCHANGED = YES (текстовый парсинг не тронут)
+DB_WRITES=0_DURING_PIPELINE_CHANGE = YES
+```
+
+DEVIATIONS:
+
+- Основная правка сделана в `daemon.py` (обогащение `selected_doc_context`), а не
+  только в `s13_v2_pipeline.py`: файловый резолвер не восстанавливает плановый
+  архив при вложенных архивах, а неверный parent ломает персист.
+- `scripts/force_run_document_queue.py` дополнен `downloader.cleanup()` как у
+  демона: без очистки повторный прогон распаковывает 0 файлов (extractor
+  сообщает только о новых файлах) и падает в DOWNLOAD_FAILED.
+
+FOLLOW-UP:
+
+- Второй planned-кейс 328291 (queue 148931) — прогон запущен (`force-run-1b-328291`).
+- 460692 = `NOT_PLANNED_GAP` (без Queue V2 plan).
+
+## RESULT (2026-10-15, v4) — 328291 не является .gsfx-кейсом
+
+STATUS: INFO (не меняет PASS по 99069).
+
+```
+328291 / queue 148931: прогон ok (1.9s), 1 файл
+  queue 148931                      = COMPLETED
+  document_processing_results       = 1 COMPLETED
+  document_processing_results  .gsfx = 0
+  structured_entities (сегодня)      = 0
+причина: план 328291 покрывает ОДИН документ «Приложения №6 к Контракту.docx»
+  (category=composite_structures, physical_key=722c0a4a…), а 4 строки .gsfx имеют
+  другой physical_key 575c6228… -> они не привязаны к плану и категории не получают.
+```
+
+Вывод: canonical end-to-end кейс для `.gsfx` — **99069**; 328291 годится только
+как контроль «член архива вне плана не получает выдуманный контекст».
