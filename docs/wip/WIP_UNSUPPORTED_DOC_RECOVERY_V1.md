@@ -1,6 +1,6 @@
 # WIP UNSUPPORTED_DOC_RECOVERY_V1 — догоняем FAILED по unsupported-документам
 
-Status: ПРИОРИТЕТ / ГОТОВ К РАБОТЕ. Owner: document pipeline.
+Status: 7/8 закрыто (`9ab28e6`); остаток 18103/21717. Owner: document pipeline.
 
 ## Цель
 
@@ -23,6 +23,14 @@ procurement_id / queue_id:
   408543 / 149431
   449940 / 149975
   459096 / 150144
+```
+
+После прогона:
+
+```text
+7/8 COMPLETED через авто-конвертацию .xls -> .xlsx.
+Остаток: queue 18103 / procurement 21717.
+Причина: план выбрал Контракт .rtf, а не смету/ТЗ.
 ```
 
 ## Правила
@@ -78,6 +86,20 @@ DB_WRITES ограничены пересчётом фактов
 queue переходит в claimable/planned состояние;
 сервис обрабатывает её штатно;
 FAILED-метка остаётся в истории ошибок, но не блокирует.
+
+### Phase 3.1 — добить остаток 18103
+
+Контракт не исключаем полностью: в нём может быть смета подрядчика. Он
+допустим как fallback/model-requested документ, но:
+
+```text
+не является primary researchable документом;
+если файл не скачался или внутри нет таблиц/текста — не FAILED, а NO_FACTS;
+scanned-таблицы внутри контракта — не ошибка.
+```
+
+Для 21717 повторяем out-of-order с такой политикой. Конвертация `.rtf`
+разбирается только если после этого действительно остаётся unsupported.
 ```
 
 ## Acceptance
@@ -256,3 +278,125 @@ FOLLOW-UP:
 - 18103: (a) план выбрал контракт, а не researchable-документ — пересмотреть selection;
   (b) выяснить, почему soffice не отдал .docx для этого .rtf (отдельная проверка конвертера
   на «сложном» rtf).
+
+## RESULT Phase 3.1 (2026-10-16) — политика статусов + добит 18103/21717
+
+РЕШЕНИЕ ВЛАДЕЛЬЦА (политика по контрактам):
+
+```text
+Контракт/приложения подрядчика НЕ исключаем полностью — внутри может быть смета.
+Он может скачиваться как fallback/model-requested документ.
+Если такой файл не скачался            -> не ошибка, а NO_FACTS.
+Если внутри только скан-таблицы/нет текста -> не ошибка, просто нет фактов.
+```
+
+ЧТО ИЗМЕНЕНО В КОДЕ (status/selection policy):
+
+```text
+1. persist_task_result (backends/s13_persistence.py):
+   - убран жёсткий raise «completion requires at least one successfully
+     processed document» для fallback-документов;
+   - задача завершается как NO_FACTS, когда все файлы — fallback
+     (selection_type=FALLBACK/SOFT_FALLBACK) и/или SKIPPED и ни один
+     researchable (NORMAL) документ не упал;
+   - fail-closed сохранён: пустой result.files или упавший NORMAL-документ
+     по-прежнему валит строку в FAILED.
+2. dto.FileProcessResult: добавлено поле selection_type; значение
+   проставляется в pipelines/s13_v2_pipeline.process_task из selected_doc_context.
+3. daemon._process_s13v2_task:
+   - selected_doc_context теперь несёт selection_type;
+   - если ВСЕ запланированные документы — fallback, то «all downloads failed»
+     и «DOWNLOAD_FAILED» завершают строку как COMPLETED + last_error='NO_FACTS: ...',
+     а не FAILED;
+   - mark_completed(reason=...) пишет NO_FACTS-причину в last_error (аудит).
+4. queue_repository (S13V2/Legacy) и s13_queue: mark_completed(task_id, reason=None).
+5. archive_extractor: ZIP определяется по СОДЕРЖИМОМУ (zipfile.is_zipfile), а не
+   только по расширению. Файл, названный .rtf/.doc/.xls, но являющийся ZIP,
+   теперь распаковывается в членов. Исключения: .xlsx/.docx/.odt/... (наши
+   контейнеры) и пакеты с [Content_Types].xml — их не рвём.
+6. format_converter: sniff_ooxml_kind — если под чужим расширением лежит
+   OOXML-пакет (xl/word), файл переназывается в .xlsx/.docx без soffice.
+```
+
+ПРИЧИНА 18103 (диагноз): сервер EIS отдал «Контракт … .rtf» (142410 B), который
+по содержимому — ZIP. soffice не может конвертировать ZIP → .docx, поэтому
+раньше файл оставался UNSUPPORTED. Внутри архива лежат:
+
+```text
+Контракт №0157600002226000022.rtf   (реальный RTF, 1.22 MB)
+Приложение №7 … ЛСР.xlsx            (смета подрядчика, 55 KB)
+```
+
+ПРОГОН 18103 (out-of-order, тот же claim/DownloadCoordinator, admission НЕ ослаблен):
+
+```text
+preimage: /tmp/p11_preimage_18103.json, /tmp/p11_preimage_files_18103.json
+1. строка FAILED -> PENDING (маркер requeue:unsupported_doc_recovery_v1:18103)
+2. unit p11-recovery-18103 -> ok=1 fail=0 (15.8s)
+   - перескачал .rtf (142410 B), «Распаковано из Контракт … .rtf: 2 файлов»
+   - WordParser: 537 параграфов / 249 строк таблиц
+3. queue 18103 -> COMPLETED (last_error пуст: был реальный COMPLETED-файл)
+```
+
+ПОСТ-ПРОВЕРКА (DB):
+
+```text
+document_processing_results (2026-10-16 10:02):
+  83069 Контракт … .rtf                              COMPLETED matches=149
+  83070 Приложение №7 … ЛСР.xlsx                     COMPLETED matches=2
+structured_entities по procurement 21717 за 2026-10-16: 101
+document_files 83069/83070: download_status=COMPLETED
+```
+
+ИТОГ P1:
+
+```text
+все 8 строк inventory -> COMPLETED
+остаток FAILED + LOCAL_CLASSIFIED:*:UNSUPPORTED = 0
+  11534/10187  COMPLETED
+  12707/12111  COMPLETED
+  18103/21717  COMPLETED (с фактами: контракт как fallback-контейнер)
+  36096/40634  COMPLETED
+  149350/379681 COMPLETED
+  149431/408543 COMPLETED
+  149975/449940 COMPLETED
+  150144/459096 COMPLETED
+```
+
+ACCEPTANCE (Phase 3.1):
+
+```text
+UNSUPPORTED_FAILED_INVENTORY   = 8 -> 0
+EVERY_ROW_HAS_DIAGNOSIS        = YES
+OUT_OF_ORDER_DOWNLOADS_BOUNDED = YES (штатный DownloadCoordinator, 1 файл)
+REPARSE_SUCCEEDED_FOR_CANARY   = YES (8/8)
+FALLBACK_NO_FACTS_IS_NOT_ERROR = YES (код; на 18103 факты нашлись, branch не сработал)
+CONTRACT_AS_FALLBACK_CONTAINER = YES (ZIP-by-content -> внутренний ЛСР извлечён)
+ADMISSION_UNCHANGED            = YES
+SCORING_MEDAL_QUEUE_UNCHANGED  = YES
+```
+
+ДЕПЛОЙ И ЗАВИСИМОСТИ:
+
+```text
+Задеплоено на S13 (md5 локально == S13, py_compile OK в worker venv):
+  document_processor/dto.py
+  document_processor/pipelines/s13_v2_pipeline.py
+  document_processor/backends/s13_persistence.py
+  document_processor/backends/s13_queue.py
+  document_processor/backends/queue_repository.py
+  document_processor/daemon.py
+  document_processor/archive_extractor.py
+  document_processor/format_converter.py
+бэкап прежних версий: /home/sergey/_bak-policy-20261016-095930/
+
+ТРЕБУЕТСЯ ДЕЙСТВИЕ: рестарт document-демонов — они подхватят новую
+status-политику и ZIP-by-content только после перезапуска.
+```
+
+FOLLOW-UP:
+
+- ветка NO_FACTS в проде ещё не срабатывала (18103 дал факты); первый реальный
+  fallback-без-фактов подтвердит запись `last_error='NO_FACTS: ...'`;
+- паттерн «ZIP под расширением .rtf/.doc/.xls» распространяется на весь парк:
+  после рестарта демонов такие файлы будут распаковываться штатно.

@@ -104,9 +104,40 @@ class S13V2TaskPersistenceService:
         """
         Persist the full object graph of a TaskProcessResult atomically.
         """
-        completed_files = [file_result for file_result in result.files if file_result.status == "COMPLETED"]
+        # UNSUPPORTED_DOC_RECOVERY_V1 status policy.
+        #
+        # A task whose planned inputs are fallback documents (contracts /
+        # contractor appendices) that produced no extractable facts is a
+        # terminal NO_FACTS outcome, not a technical failure: the contract may
+        # be a scan without text, or the download may legitimately be absent.
+        # We stay fail-closed only when a document that was expected to be
+        # researchable (selection_type=NORMAL) failed, or when there is no
+        # persistable file result at all.
+        _FALLBACK_SELECTION = ("FALLBACK", "SOFT_FALLBACK")
+        completed_files = [f for f in result.files if f.status == "COMPLETED"]
+
+        def _tolerable_no_facts(file_result) -> bool:
+            if file_result.status == "SKIPPED":
+                return True
+            if str(getattr(file_result, "selection_type", "") or "").upper() in _FALLBACK_SELECTION:
+                return getattr(file_result, "status", "") in ("UNSUPPORTED", "FAILED", "COMPLETED")
+            return False
+
         if not completed_files:
-            raise ValueError(f"[{self.pipeline_generation}] completion requires at least one successfully processed document")
+            if not result.files or not all(_tolerable_no_facts(f) for f in result.files):
+                raise ValueError(
+                    f"[{self.pipeline_generation}] completion requires at least "
+                    f"one successfully processed document"
+                )
+            if not result.error_message:
+                result.error_message = (
+                    "NO_FACTS: no extractable facts in fallback document(s) "
+                    f"(statuses={[f.status for f in result.files]})"
+                )
+            logger.info(
+                f"[{self.pipeline_generation}] queue={result.queue_id} "
+                f"NO_FACTS completion: {result.error_message}"
+            )
 
         try:
             with self.db.get_cursor('document_intelligence') as cursor:

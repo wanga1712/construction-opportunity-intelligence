@@ -146,6 +146,9 @@ class S13V2Pipeline:
                 continue
 
             parent_name, parent_path, member_path = _archive_parent_identity(path)
+            _file_ctx = doc_ctx.get(str(path.name).strip().lower())
+            if not _file_ctx and parent_name:
+                _file_ctx = doc_ctx.get(str(parent_name).strip().lower())
             file_res = FileProcessResult(
                 file_name=path.name,
                 status="PROCESSING",
@@ -153,6 +156,7 @@ class S13V2Pipeline:
                 parent_file_name=parent_name,
                 parent_local_path=parent_path,
                 archive_member_path=member_path,
+                selection_type=(_file_ctx or {}).get("selection_type"),
             )
             try:
                 text = ""

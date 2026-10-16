@@ -44,7 +44,7 @@ class QueueRepository(abc.ABC):
         pass
 
     @abc.abstractmethod
-    def mark_completed(self, task_id: int) -> None:
+    def mark_completed(self, task_id: int, reason: Optional[str] = None) -> None:
         pass
 
     @abc.abstractmethod
@@ -325,14 +325,24 @@ class S13V2QueueRepository(QueueRepository):
             res.append(d)
         return res
 
-    def mark_completed(self, task_id: int) -> None:
+    def mark_completed(self, task_id: int, reason: Optional[str] = None) -> None:
         conn = self._get_conn()
         with conn.cursor() as cur:
-            cur.execute(
-                "UPDATE document_processing_queue"
-                " SET status='COMPLETED', completed_at=NOW() WHERE id=%s",
-                (task_id,),
-            )
+            if reason:
+                # UNSUPPORTED_DOC_RECOVERY_V1: NO_FACTS / terminal-without-facts
+                # completion stays auditable on the row itself.
+                cur.execute(
+                    "UPDATE document_processing_queue"
+                    " SET status='COMPLETED', completed_at=NOW(),"
+                    " worker_id=NULL, last_error=%s WHERE id=%s",
+                    (reason[:2000], task_id),
+                )
+            else:
+                cur.execute(
+                    "UPDATE document_processing_queue"
+                    " SET status='COMPLETED', completed_at=NOW() WHERE id=%s",
+                    (task_id,),
+                )
         conn.commit()
 
     def mark_failed(self, task_id: int, error: str) -> None:
@@ -482,7 +492,12 @@ class LegacyQueueRepository(QueueRepository):
             })
         return result
 
-    def mark_completed(self, task_id: int) -> None:
+    def mark_completed(self, task_id: int, reason: Optional[str] = None) -> None:
+        if reason:
+            sql = ("UPDATE document_processing_queue SET status = 'completed',"
+                   " completed_at = NOW(), error_message = %s WHERE id = %s")
+            self.db.execute_query(self.db_alias, sql, (reason[:2000], task_id))
+            return
         sql = "UPDATE document_processing_queue SET status = 'completed', completed_at = NOW() WHERE id = %s"
         self.db.execute_query(self.db_alias, sql, (task_id,))
 

@@ -593,6 +593,20 @@ class DocumentProcessorDaemon:
                     soft_fallback_file_names.add(str(_sanitize(_name)).strip().lower())
                 except Exception:
                     pass
+        # UNSUPPORTED_DOC_RECOVERY_V1 status policy: when every planned document
+        # is a fallback (contract / contractor appendix), a failed or absent
+        # download is a terminal NO_FACTS outcome, not a technical failure.
+        def _all_planned_fallback() -> bool:
+            _docs = [
+                d for d in (task.get("selected_documents") or [])
+                if isinstance(d, dict) and d.get("file_name")
+            ]
+            if not _docs:
+                return False
+            return all(
+                str(d.get("selection_type") or "").upper() in ("FALLBACK", "SOFT_FALLBACK")
+                for d in _docs
+            )
         # PARSE_TIME_EXTRACTION_WIRING_V1: category context per planned document.
         selected_doc_context = {}
         for _entry in task.get("selected_documents") or []:
@@ -606,6 +620,7 @@ class DocumentProcessorDaemon:
                 "source_document_id": _entry.get("source_document_id"),
                 "physical_key": _entry.get("physical_key"),
                 "track": _entry.get("track"),
+                "selection_type": _entry.get("selection_type"),
             }
             selected_doc_context[str(_name).strip().lower()] = _ctx
             if _sanitize is not None:
@@ -682,8 +697,16 @@ class DocumentProcessorDaemon:
                         return
                     elif len(files) == 0:
                         msg = f"All downloads failed permanently."
-                        self.logger.error(f"[S13_V2][{task_id}] {msg}")
-                        backend.queue.mark_failed(task_id, msg)
+                        if _all_planned_fallback():
+                            reason = (
+                                "NO_FACTS: fallback document(s) unavailable "
+                                f"(failed={batch.failed_count})"
+                            )
+                            self.logger.warning(f"[S13_V2][{task_id}] {msg} -> NO_FACTS")
+                            backend.queue.mark_completed(task_id, reason=reason)
+                        else:
+                            self.logger.error(f"[S13_V2][{task_id}] {msg}")
+                            backend.queue.mark_failed(task_id, msg)
                         return
             except (EisRateLimited, EisRateLimitBlocked):
                 self.logger.warning(
@@ -713,8 +736,16 @@ class DocumentProcessorDaemon:
                         f"DOWNLOAD_FAILED: resolved_links={attempted} "
                         f"downloaded=0 failed={fail_n}"
                     )
-                    self.logger.error(f"[S13_V2][{task_id}] {msg}")
-                    backend.queue.mark_failed(task_id, msg)
+                    if _all_planned_fallback():
+                        reason = (
+                            "NO_FACTS: fallback document(s) not downloaded "
+                            f"(resolved_links={attempted} failed={fail_n})"
+                        )
+                        self.logger.warning(f"[S13_V2][{task_id}] {msg} -> NO_FACTS")
+                        backend.queue.mark_completed(task_id, reason=reason)
+                    else:
+                        self.logger.error(f"[S13_V2][{task_id}] {msg}")
+                        backend.queue.mark_failed(task_id, msg)
                     return
                 backend.queue.mark_no_links(task_id, "No researchable document links")
                 return
@@ -747,7 +778,10 @@ class DocumentProcessorDaemon:
                 backend.queue.mark_no_links(task_id, "NO_RESEARCHABLE_DOCUMENT_LINKS")
                 return
             self.s13_persistence.persist_task_result(proc_result)
-            backend.queue.mark_completed(task_id)
+            _reason = proc_result.error_message
+            if _reason and not str(_reason).startswith("NO_FACTS"):
+                _reason = None
+            backend.queue.mark_completed(task_id, reason=_reason)
             print(f"[S13_V2][{task_id}] COMPLETED", flush=True)
         except Exception as exc:
             msg = str(exc)[:1000]

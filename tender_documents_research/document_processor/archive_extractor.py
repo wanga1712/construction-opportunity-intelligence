@@ -12,6 +12,13 @@ class ArchiveExtractor:
     def __init__(self, logger):
         self.logger = logger
 
+    #: Extensions whose payload is itself a ZIP container that our parsers read
+    #: natively (OOXML/ODF/GSFX). They must never be treated as archives even
+    #: though `zipfile.is_zipfile` returns True for them.
+    _NATIVE_ZIP_CONTAINERS = frozenset(
+        {".xlsx", ".xlsm", ".xltx", ".docx", ".pptx", ".odt", ".ods", ".gsfx"}
+    )
+
     def _sanitize_name(self, name: str) -> str:
         """
         Очистка имени файла (копия логики из http_client).
@@ -55,8 +62,28 @@ class ArchiveExtractor:
     def _is_zip(self, path: Path) -> bool:
         # Recognize by extension so corrupt ZIPs reach extraction diagnostics
         # instead of being silently treated as unsupported ordinary files.
+        #
+        # UNSUPPORTED_DOC_RECOVERY_V1: EIS sometimes serves a ZIP archive under a
+        # non-archive name (e.g. a "contract.rtf" that is really a ZIP holding
+        # the contractor's estimate). Detect those by content, but never shred
+        # OOXML/ODF/GSFX containers that our parsers read directly.
         try:
-            return path.suffix.lower() == ".zip"
+            suffix = path.suffix.lower()
+        except Exception:
+            return False
+        if suffix == ".zip":
+            return True
+        if suffix in self._NATIVE_ZIP_CONTAINERS:
+            return False
+        try:
+            if not zipfile.is_zipfile(str(path)):
+                return False
+            # An OOXML package ([Content_Types].xml) is a document, not a plain
+            # archive: never shred it into raw XML members.
+            with zipfile.ZipFile(str(path)) as zf:
+                if "[Content_Types].xml" in set(zf.namelist()):
+                    return False
+            return True
         except Exception:
             return False
 
@@ -201,7 +228,7 @@ class ArchiveExtractor:
             self.logger.warning(f"Достигнут лимит глубины вложенности архивов ({MAX_DEPTH}): {archive_path.name}")
             return []
 
-        if archive_path.suffix.lower() == ".zip":
+        if self._is_zip(archive_path):
             raw = self._extract_zip_and_collect(archive_path, dest_dir)
         elif self._is_rar_entry_point(archive_path):
             raw = self._extract_rar_and_collect(archive_path, dest_dir)
@@ -212,7 +239,7 @@ class ArchiveExtractor:
 
         result: List[Path] = []
         for p in raw:
-            if p.suffix.lower() == ".zip" and zipfile.is_zipfile(p):
+            if self._is_zip(p):
                 result.extend(self.extract_recursive(p, dest_dir, depth + 1))
             elif self._is_rar_entry_point(p):
                 result.extend(self.extract_recursive(p, dest_dir, depth + 1))

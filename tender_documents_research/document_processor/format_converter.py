@@ -19,6 +19,7 @@ import hashlib
 import os
 import shutil
 import subprocess
+import zipfile
 from pathlib import Path
 from typing import Optional
 
@@ -29,6 +30,9 @@ CONVERTIBLE = {
 }
 _SOFFICE_CANDIDATES = ("soffice", "libreoffice")
 DEFAULT_CACHE_DIR = "/tmp/tender-doc-converted"
+
+#: Suffixes our parsers read directly; content sniffing is skipped for them.
+_NATIVE_SUFFIXES = frozenset({".xlsx", ".xlsm", ".docx", ".pdf"})
 
 
 def soffice_binary() -> Optional[str]:
@@ -41,6 +45,42 @@ def soffice_binary() -> Optional[str]:
 
 def is_convertible(path: Path) -> bool:
     return Path(path).suffix.lower() in CONVERTIBLE
+
+
+def sniff_ooxml_kind(path: Path) -> Optional[str]:
+    """UNSUPPORTED_DOC_RECOVERY_V1: detect a mislabeled OOXML package.
+
+    EIS occasionally serves a ZIP-based OOXML document (.xlsx/.docx) under a
+    foreign name (e.g. `.rtf`). Returns the real extension without the dot
+    ("xlsx"/"docx") when the payload is an OOXML package, else None.
+    """
+    try:
+        if not zipfile.is_zipfile(str(path)):
+            return None
+        with zipfile.ZipFile(str(path)) as zf:
+            names = set(zf.namelist())
+    except Exception:
+        return None
+    if "[Content_Types].xml" not in names:
+        return None
+    if any(n.startswith("xl/") for n in names):
+        return "xlsx"
+    if any(n.startswith("word/") for n in names):
+        return "docx"
+    return None
+
+
+def _materialize_as(path: Path, target_ext: str, cache_dir: str) -> Optional[Path]:
+    """Cache a re-labelled copy of `path` with `target_ext` (content unchanged)."""
+    try:
+        cached = _cache_path(path, target_ext, cache_dir)
+        if cached.is_file() and cached.stat().st_size > 0:
+            return cached
+        os.makedirs(cache_dir, exist_ok=True)
+        shutil.copyfile(str(path), str(cached))
+        return cached if cached.stat().st_size > 0 else None
+    except Exception:
+        return None
 
 
 def _cache_path(path: Path, target_ext: str, cache_dir: str) -> Path:
@@ -65,7 +105,16 @@ def convert_if_needed(path: Path, *, cache_dir: str = DEFAULT_CACHE_DIR,
     """
     src = Path(path)
     target_ext = CONVERTIBLE.get(src.suffix.lower())
-    if not target_ext or not src.is_file():
+    if not src.is_file():
+        return src
+    # A mislabeled OOXML package needs no soffice round-trip: re-label it.
+    if src.suffix.lower() not in _NATIVE_SUFFIXES:
+        kind = sniff_ooxml_kind(src)
+        if kind:
+            materialized = _materialize_as(src, kind, cache_dir)
+            if materialized is not None:
+                return materialized
+    if not target_ext:
         return src
     binary = soffice_binary()
     if not binary:

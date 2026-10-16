@@ -93,14 +93,24 @@ class S13V2QueueBackend:
         conn.commit()
         return [dict(r) for r in rows]
 
-    def mark_completed(self, task_id: int) -> None:
+    def mark_completed(self, task_id: int, reason: Optional[str] = None) -> None:
         conn = self._get_conn()
         with conn.cursor() as cur:
-            cur.execute(
-                "UPDATE document_processing_queue"
-                " SET status='COMPLETED', completed_at=NOW() WHERE id=%s",
-                (task_id,),
-            )
+            if reason:
+                # NO_FACTS / terminal-without-facts completion stays auditable:
+                # the row is COMPLETED but carries the reason it produced nothing.
+                cur.execute(
+                    "UPDATE document_processing_queue"
+                    " SET status='COMPLETED', completed_at=NOW(),"
+                    " worker_id=NULL, last_error=%s WHERE id=%s",
+                    (reason[:2000], task_id),
+                )
+            else:
+                cur.execute(
+                    "UPDATE document_processing_queue"
+                    " SET status='COMPLETED', completed_at=NOW() WHERE id=%s",
+                    (task_id,),
+                )
         conn.commit()
 
     def mark_failed(self, task_id: int, error: str) -> None:

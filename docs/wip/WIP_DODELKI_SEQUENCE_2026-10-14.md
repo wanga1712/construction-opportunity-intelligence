@@ -18,14 +18,23 @@
 | # | WIP | Текущее | Точка входа | Выход |
 |---|---|---|---|---|
 | 0 | Branch hygiene + commit GSFX code | dirty tree | закоммитить только нужные файлы | чистый точечный коммит |
-| 1A | `ARCHIVE_MEMBER_DEDUP_IDENTITY_V1` | СПЕКА | исправить identity sweeper | PASS |
-| 1B | `ARCHIVE_MEMBER_PARSE_CONTEXT_V1` | СПЕКА | пробросить category context членам архива | PASS |
-| 1C | `GSFX_RESTORE_V1` | PARTIAL | подтвердить пилот после 1A/1B | PASS + коммит |
-| 2 | `WORKS_VS_GOODS_CONFIRMATION_V1` | СПЕКА | исправить `confirmed_base` | PASS |
-| 3 | `CARD_MEDAL_TWO_TIER_DISPLAY_V1` | СПЕКА | реализовать двухуровневую выдачу | PASS |
+| P1 | `UNSUPPORTED_DOC_RECOVERY_V1` | ПРИОРИТЕТ | 8 FAILED unsupported догнать | PASS |
+| P2 | `MATCH_TERM_HYGIENE_V1` | ПРИОРИТЕТ | чистка ложных терминов | PASS |
+| P3 | `OBJECT_QUEUE_MODEL_NORMALIZATION_V1` | ПРИОРИТЕТ | объектные исполнения + модель | PASS |
+| P4 | `PROCUREMENT_CARD_CATEGORY_PIPELINE_V1` | ПРИОРИТЕТ | вкладка «Категории» вместо «Находки» | PASS |
+| 1A | `ARCHIVE_MEMBER_DEDUP_IDENTITY_V1` | DONE (`c66f96b`) | identity sweeper исправлена | PASS |
+| 1B | `ARCHIVE_MEMBER_PARSE_CONTEXT_V1` | PASS (`24062c2`) | 99069 end-to-end подтверждён | PASS |
+| 1C | `GSFX_RESTORE_V1` | PASS (`24062c2`) | 99069 end-to-end подтверждён | PASS + коммит |
+| 2A | `SECTION_LEVEL_NORMALIZATION_V1` | Phase 4 code ready | ручная интеграция fallback, не демон | PASS |
+| 2B | `ROAD_REPAIR_SECTION_TEMPLATES_V1` | 2B.6 done / UI restarted | road-projection активна | PASS |
+| 2 | `WORKS_VS_GOODS_CONFIRMATION_V1` | DONE (`1b79397`) | goods-only в карточке | PASS |
+| 3 | `CARD_MEDAL_TWO_TIER_DISPLAY_V1` | СПЕКА | двухуровневая выдача на goods-слое | PASS |
+| 3A | `CATEGORY_NORMALIZATION_AUDIT_ALL_V1` | СПЕКА | проход по всем категориям | PASS |
+| 3B | `GOOD_SUPPLY_FACTS_V1` | DONE (`6d33c95`) | плоский материалоцентричный вывод | PASS |
 | 4 | `CATEGORY_DISCOVERY_DYNAMIC_V1` | PARTIAL (A/B done) | миграция + Phase C | PASS |
 | 5 | `DIRECT_COMPUTERS_NORMALIZATION_TEMPLATES_V1` | СПЕКА | фазы 0–4 | PASS по фазам |
 | 6 | `QUEUE_CLAIMABILITY_RESTORE_V1` | СПЕКА | разобрать unclaimable PENDING | PASS |
+| B1 | `ARCHIVE_MEMBER_BULK_RESTORE_V1` | BACKLOG | отдельное решение по 41714 строкам | не в текущей очереди |
 | B | `PHASE_4 / LEGACY_PRIORITY_WRITES=0` | BLOCKED/BACKLOG | отдельное решение | не в этой очереди |
 
 Порядок выбран так:
@@ -34,14 +43,19 @@
    `ARCHIVE_MEMBER_DEDUP_IDENTITY_V1` и `ARCHIVE_MEMBER_PARSE_CONTEXT_V1`.
    Без них GSFX-результат недолговечен и не даёт `structured_entities`.
 2. Потом добиваем `GSFX_RESTORE_V1`.
-3. Затем `WORKS_VS_GOODS` — это коррекция authority `confirmed_base`, а не UI.
+3. Затем `SECTION_LEVEL_NORMALIZATION_V1` — сначала нормализуем по разделам на
+   контрольной закупке 148391, потом карточка сможет показать «раздел → сумма →
+   материалы».
+4. Затем `WORKS_VS_GOODS` — это коррекция authority `confirmed_base`, а не UI.
    Двухуровневая выдача карточек должна тестироваться на уже исправленных данных.
-4. Потом `CARD_MEDAL_TWO_TIER` — чисто витрина, зависит от корректного
+5. Перед `WORKS_VS_GOODS` идёт `ROAD_REPAIR_SECTION_TEMPLATES_V1` — доводим
+   вывод нормализатора на 60467 и похожих дорожных сметах.
+6. Потом `CARD_MEDAL_TWO_TIER` — чисто витрина, зависит от корректного
    `confirmed_base`.
-5. `CATEGORY_DISCOVERY` — расширяет реестр после того, как витрина карточек
+7. `CATEGORY_DISCOVERY` — расширяет реестр после того, как витрина карточек
    стабилизирована; перед Phase C нужен отдельный approval.
-6. `DIRECT_COMPUTERS` — отдельный контур нормализации, не блокирует предыдущие.
-7. `QUEUE_CLAIMABILITY_RESTORE_V1` — отдельный WIP, не смешиваем с GSFX.
+8. `DIRECT_COMPUTERS` — отдельный контур нормализации, не блокирует предыдущие.
+9. `QUEUE_CLAIMABILITY_RESTORE_V1` — отдельный WIP, не смешиваем с GSFX.
 
 ## Глобальные инварианты коммерческой логики
 
@@ -112,6 +126,48 @@ git status показывает, что GSFX-файлы и план закомм
 несвязанный мусор остаётся untracked и не попадает в коммит.
 ```
 
+### P1. UNSUPPORTED_DOC_RECOVERY_V1
+
+См. `docs/wip/WIP_UNSUPPORTED_DOC_RECOVERY_V1.md`.
+
+Правило: найти все актуальные FAILED с `LOCAL_CLASSIFIED:*:UNSUPPORTED`,
+скачать документы вне очереди, перезапустить проверку; после canary — в
+продакшн. Admission/scoring/medal/queue не ослабляем.
+
+СТАТУС: PASS (`9ab28e6` + Phase 3.1). Все 8 строк inventory -> COMPLETED,
+остаток `FAILED + LOCAL_CLASSIFIED:*:UNSUPPORTED` = 0.
+
+Phase 3.1 (политика по контрактам): контракт/приложение подрядчика не исключаем —
+он может скачиваться как fallback и содержать смету. Если fallback-файл не
+скачался или внутри нет извлекаемого текста — это NO_FACTS, а не FAILED.
+Технически: `selection_type` в `FileProcessResult`, NO_FACTS-ветка в
+`persist_task_result`, NO_FACTS-причина в `mark_completed`,
+ZIP-определение по содержимому в `archive_extractor` (+ OOXML-sniff).
+18103/21717 добит: `.rtf` оказался ZIP, внутри — ЛСР-смета, извлечена
+(101 сущность). Нужен рестарт document-демонов, чтобы политика стала активна.
+
+### P2. MATCH_TERM_HYGIENE_V1
+
+См. `docs/wip/WIP_MATCH_TERM_HYGIENE_V1.md`.
+
+Правило: в находках не показываем общие/участнические термины из заявок.
+«Что можно поставить» — только нормализованные товарные факты из
+`structured_entities`.
+
+### P3. OBJECT_QUEUE_MODEL_NORMALIZATION_V1
+
+См. `docs/wip/WIP_OBJECT_QUEUE_MODEL_NORMALIZATION_V1.md`.
+
+Правило: object-execution идёт вперёд, DIRECT/TORGI не трогаем; сначала
+скачиваем Excel/сметы; после находки — model normalization и medal revalidation.
+
+### P4. PROCUREMENT_CARD_CATEGORY_PIPELINE_V1
+
+См. `docs/wip/WIP_PROCUREMENT_CARD_CATEGORY_PIPELINE_V1.md`.
+
+Правило: вкладку «Находки» заменяем на «Категории»; raw findings — только в
+технической истории. Плитку «Находки 14» убираем.
+
 ### 1A. ARCHIVE_MEMBER_DEDUP_IDENTITY_V1
 
 См. `docs/wip/WIP_ARCHIVE_MEMBER_DEDUP_IDENTITY_V1.md`.
@@ -125,6 +181,12 @@ git status показывает, что GSFX-файлы и план закомм
 
 После правки восстановить уже погашенные GSFX-строки обратимо.
 
+Статус: DONE (`c66f96b`). Восстановлено 1775 `.gsfx`-строк по 26 закупкам.
+Остальные 41714 archive-member строк, погашенных старой identity, в текущую
+очередь не включаем — это отдельный backlog WIP `ARCHIVE_MEMBER_BULK_RESTORE_V1`
+(см. B1). Массовый restore не делаем без отдельного approval и батчированного
+замера.
+
 ### 1B. ARCHIVE_MEMBER_PARSE_CONTEXT_V1
 
 См. `docs/wip/WIP_ARCHIVE_MEMBER_PARSE_CONTEXT_V1.md`.
@@ -133,6 +195,21 @@ git status показывает, что GSFX-файлы и план закомм
 `source_document_id`/`track` для члена архива по parent identity, а не только по
 `path.name`. Тогда `.gsfx` дойдёт до `_persist_embedded` и создаст
 `structured_entities`.
+
+Статус: PASS (`24062c2`). Сквозная проверка выполнена на **planned-кейсе 99069**,
+потому что пилот 460692 не имел Queue V2 plan (`selected_documents`,
+`category_codes`, `plan_version` = NULL) и не является валидным end-to-end
+кандидатом.
+
+Canonical end-to-end:
+
+```text
+99069  / queue 90595   -> category=drainage_water_management, planned-архив,
+                          20 .gsfx с тем же physical_key
+328291 / queue 148931  -> 4 категории, 4 .gsfx
+```
+
+460692 фиксируем как `NOT_PLANNED_GAP`, план ради WIP не строим.
 
 ### 1C. GSFX_RESTORE_V1 — добить
 
@@ -143,13 +220,32 @@ git status показывает, что GSFX-файлы и план закомм
 ```text
 .gsfx не HARD_SKIP и доходит до GsfxParser = YES
 .gge остаётся skip = YES
-пилот 460692: document_processing_results=COMPLETED, structured_entities > 0
+end-to-end planned-кейс 99069 и/или 328291:
+    document_processing_results=COMPLETED, structured_entities > 0
+460692: NOT_PLANNED_GAP (Queue V2 plan отсутствовал; не строим ради acceptance)
 остальные 20 закупок разобраны штатным daemon ИЛИ явно зафиксированы причины
 строка 9216: отдельное решение admission, не смешивать с GSFX-парсером
 битая кодировка имён .gsfx — отдельный follow-up, не блокер
 ```
 
 Выход: `WIP_RESULT=PASS`, код закоммичен, S13 и git совпадают.
+
+### 2A. SECTION_LEVEL_NORMALIZATION_V1
+
+См. `docs/wip/WIP_SECTION_LEVEL_NORMALIZATION_V1.md`.
+
+Правило: не все строки, а разделы. Определяем раздел, считаем сумму раздела,
+внутри показываем найденный материал. Сначала детерминированный section-state,
+модель — только fallback с жёсткой JSON-схемой и source_quote.
+
+Контроль: `148391 · № 0318100051226000084`.
+
+### 2B. ROAD_REPAIR_SECTION_TEMPLATES_V1
+
+См. `docs/wip/WIP_ROAD_REPAIR_SECTION_TEMPLATES_V1.md`.
+
+Правило: для дорожных смет/ВОР делаем детерминированный шаблонизатор поверх
+`section_detector.py`. Сначала 60467, затем поэтапно похожие закупки.
 
 ### 2. WORKS_VS_GOODS_CONFIRMATION_V1
 
@@ -173,6 +269,20 @@ confirmed_base и «что можно поставить» считаются т
 медаль -> сумма; внутри категории — подкатегория -> карточка; GOLD не пропадает
 из-за `LIMIT 300`; порядок детерминирован.
 
+### 3A. CATEGORY_NORMALIZATION_AUDIT_ALL_V1
+
+См. `docs/wip/WIP_CATEGORY_NORMALIZATION_AUDIT_ALL_V1.md`.
+
+Правило: проходим по всем активным категориям, строим coverage matrix, для
+повторяющихся форм делаем шаблоны, AI-fallback — только для неоднозначного.
+
+### 3B. GOOD_SUPPLY_FACTS_V1
+
+См. `docs/wip/WIP_GOOD_SUPPLY_FACTS_V1.md`.
+
+Правило: карточка показывает только чистые товарные факты из
+`structured_entities`, а не сырые `document_match_details`.
+
 ### 4. CATEGORY_DISCOVERY_DYNAMIC_V1 — Phase C
 
 См. `docs/wip/WIP_CATEGORY_DISCOVERY_DYNAMIC_V1.md`.
@@ -195,6 +305,21 @@ reparse/persist — это единственная явно разрешённ�
 242 PENDING без клеймов разобрать read-only по причинам unclaimable; admission
 не ослаблять. Для GSFX-переочереди использовать отдельный force-run по маркеру
 `requeue:gsfx_restore_v1`, не меняя queue authority.
+
+### B1. ARCHIVE_MEMBER_BULK_RESTORE_V1 — BACKLOG
+
+41714 строк archive members, погашенных старой identity, массово **не
+восстанавливаем** сейчас. Причины:
+
+```text
+массовый restore = повторный разбор ~44k файлов;
+для текущей GSFX-очереди нужны только 1775 .gsfx-строк, они уже восстановлены;
+нужен отдельный батчированный WIP с dry-run, лимитами и восстановлением только
+реально нужных категорий/документов.
+```
+
+Отдельный WIP создадим, когда появится задача/authority на повторный разбор
+этого backlog.
 
 ### B. PHASE_4 / LEGACY_PRIORITY_WRITES=0 — отдельно
 
@@ -239,6 +364,11 @@ reparse/persist — это единственная явно разрешённ�
 - **F3 242 PENDING без клеймов** — отдельный WIP
   `QUEUE_CLAIMABILITY_RESTORE_V1`; GSFX-переочередь гонится целевым force-run,
   admission-фильтр не трогаем.
+- **41714 archive-member backlog** — НЕ восстанавливаем массово сейчас;
+  отдельный `ARCHIVE_MEMBER_BULK_RESTORE_V1` в backlog. Текущие 1775 `.gsfx`
+  уже восстановлены.
+- **460692 end-to-end** — используем planned-кейсы 99069/328291;
+  460692 фиксируем как `NOT_PLANNED_GAP`.
 
 ## Handoff для кодера
 

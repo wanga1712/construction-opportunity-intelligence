@@ -64,6 +64,11 @@ class FileProcessResult:
     parent_file_name: Optional[str] = None
     parent_local_path: Optional[str] = None
     archive_member_path: Optional[str] = None
+    #: Queue V2 plan selection type of the owning planned document
+    #: ("NORMAL" primary vs "FALLBACK"/"SOFT_FALLBACK"). Fallback documents
+    #: (contracts, contractor appendices) that yield no facts are NO_FACTS,
+    #: not technical failures (UNSUPPORTED_DOC_RECOVERY_V1 policy).
+    selection_type: Optional[str] = None
 
 @dataclass
 class TaskProcessResult:
