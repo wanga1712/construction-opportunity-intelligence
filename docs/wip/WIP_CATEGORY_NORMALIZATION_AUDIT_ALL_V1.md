@@ -147,3 +147,53 @@ AI_FALLBACK_NOT_PRIMARY         = YES (не запускался)
 DB_WRITES                       = 0
 SCORING_MEDAL_QUEUE_UNCHANGED   = YES
 ```
+
+## RESULT Phase 2 canary — `lighting` (2026-10-15/16, read-only замер + диагностический reparse)
+
+Взяли 2 закупки с локальными файлами и прогнали точечный reparse существующим
+детектором (`scripts/reparse_procurement_sections.py --local-only --apply`), чтобы
+понять, хватает ли generic-слоя без нового шаблона.
+
+```
+45848  (12 PDF, проектная документация) — после reparse: 954 факта
+   WITH_SECTION 954 | SECTION_TOTAL 0 | COMPUTED_SUM 0
+   COMPUTED_SUM_UNRELIABLE 69 | RESIDUE 885 (92.8 %) | разделов 39
+   примеры кодов: "page_154_table_1::раздел 5", "page_55_table_1::глава 4"
+
+1157   (1 xlsx «Сметная документация») — 1079 фактов
+   WITH_SECTION 1079 (все RESIDUE) | разделов 0
+   маркеров в тексте нет: «раздел» 0, «глава» 0, «итого» 0
+   строки — ресурсная ведомость (B=ФСБЦ-…, эмульсия/битум/керосин), структуры разделов нет
+```
+
+ВЫВОДЫ по lighting:
+
+1. **Generic-детектор не даёт usable-разделов на PDF-проектах**: маркеры `раздел N`
+   есть, но разбросаны по страницам/таблицам, покрытие `total` нулевое → 92.8 % в
+   RESIDUE и 69 строк `COMPUTED_SUM_UNRELIABLE`. Нужен **lighting-шаблон**: группировка
+   по тексту маркера (`Раздел N <Название>` / `Глава N <Название>`), раздел как
+   контейнер без обязательного section-total.
+2. **XLSX-ресурсные сметы без разделов** — RESIDUE честный и ожидаемый; ценность там
+   даёт материальный список (goods-факты), а не раздел.
+3. Побочно: у 1157 строки записались в `composite_structures` (категория взята из
+   прежнего прогона), хотя CURRENT-категория закупки — `lighting`. Для шаблона нужно
+   брать категорию из opportunity, а не из старой run-записи.
+
+СЛЕДУЮЩИЙ ШАГ (Phase 2, предложение):
+
+```
+1. шаблон lighting: маркеры «Раздел N <Название>» / «Глава N <Название>» (по тексту,
+   в любой колонке/странице), раздел — контейнер; total не обязателен;
+2. canary на 45848 + 1157 (сравнить с 92.8 % RESIDUE);
+3. затем расширение на выборку lighting-закупок.
+```
+
+ACCEPTANCE (canary):
+
+```
+CANARY_EXECUTED          = YES (45848, 1157)
+GENERIC_DETECTOR_ENOUGH  = NO (для PDF-проектов lighting)
+TEMPLATE_JUSTIFIED       = YES (lighting)
+DB_WRITES                = только section-поля через диагностический reparse (approved)
+SCORING_MEDAL_QUEUE_UNCHANGED = YES
+```
