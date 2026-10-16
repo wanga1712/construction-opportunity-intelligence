@@ -42,6 +42,20 @@
 БД — их массовое восстановление вынесено на отдельное решение. Далее — 1B
 `ARCHIVE_MEMBER_PARSE_CONTEXT_V1`.
 
+## 2026-10-16 (2) — P1 UNSUPPORTED_DOC_RECOVERY_V1 Phase 0: inventory + диагноз
+
+**Phase 0 DONE (read-only).** Все 8 строк `FAILED` с `LOCAL_CLASSIFIED:*:UNSUPPORTED`
+разобраны: 7 файлов — **`.xls`**, 1 — **`.rtf`**. Это **не проблема скачивания**: файлы были
+скачаны (`download_status=COMPLETED`), но удалены retention'ом 2026-10-15 06:00 → для
+переразбора нужен повторный download. Дополнительно: парсеров нет по коду
+(`parse_utils.supports_rich_meta` = `{.xlsx,.xlsm,.docx,.pdf}`; `parser_factory` без `.xls`),
+в воркерном venv нет `xlrd`/`pandas`/`olefile`/`unrtf`, но **есть `soffice`/`libreoffice`** —
+ими можно конвертировать `.xls → .xlsx` и `.rtf → .docx` без новых зависимостей. Все 8
+закупок актуальны (1–4 CURRENT opportunities). Итог: `REPARSE_SUCCEEDED_FOR_CANARY` **не
+достижимо** без шага конвертации — WIP объявляет парсер `.xls` вне скоупа, поэтому ждём
+решения владельца: (a) отдельный мини-WIP на конвертацию через `soffice` либо (b) принять
+8 как задокументированный форматный gap. `DB_WRITES=0`, admission/scoring не затрагивались.
+
 ## 2026-10-16 (1) — 3A Phase 2 canary: lighting (45848, 1157)
 
 **Canary выполнен.** Точечный reparse (`reparse_procurement_sections.py --local-only --apply`)
