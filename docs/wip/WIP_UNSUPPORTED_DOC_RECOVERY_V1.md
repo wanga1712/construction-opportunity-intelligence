@@ -196,3 +196,63 @@ FOLLOW-UP: сами 8 строк пока `FAILED` и их локальные ф
 закрытия P1 нужен прогон по штатному пути: скачивание вне очереди (штатный
 `DownloadCoordinator`) → конвертация (теперь автоматическая) → разбор вне очереди по
 категории закупки → перевод строк в штатное состояние.
+
+## RESULT P1 (2026-10-16) — прогон восстановления 8 строк
+
+ЧТО СДЕЛАНО:
+
+```
+1. Проверили admission: все 8 строк УЖЕ проходят claim-предикат
+   (plan_version='queue_v2' AND research_action_v2 IN
+    ('DOCUMENT_RESEARCH_REQUIRED','DOCUMENT_CONFIRMATION_REQUIRED')) —
+   их держал только status='FAILED'. Admission НЕ ослабляли.
+2. Preimage сохранён: /opt/CRM_Streamlit/tmp_p1_preimage_20261016.json
+3. 8 строк переведены FAILED -> PENDING (причина сохранена в last_error +
+   маркер requeue:unsupported_doc_recovery_v1).
+4. Прогон out-of-order штатным путём демона (force_run_document_queue.py, тот же
+   claim с admission-фильтром, тот же DownloadCoordinator):
+   unit p1-recovery-20261016 -> ok=8 fail=0.
+```
+
+РЕЗУЛЬТАТ:
+
+```
+ЗАКРЫТО 7 из 8 (status=COMPLETED, документы разобраны):
+  11534/10187  Расчет НМЦК 674-688 пр и обр.xls     -> COMPLETED (matches 1)
+  12707/12111  Расчет НМЦК_17187437 _2_.xls         -> COMPLETED
+  36096/40634  Расчет НМЦК кап.ремонт Украина-Бобрик.xls -> COMPLETED
+  149350/379681 НМЦД.xls                            -> COMPLETED
+  149431/408543 Расчет НМЦК.xls                     -> COMPLETED
+  149975/449940 НМЦД.xls                            -> COMPLETED
+  150144/459096 НМЦК Приложение № 1 к извещению.xls -> COMPLETED
+  доказательство конвертации: в /tmp/tender-doc-converted/ лежат 7 сконвертированных
+  .xlsx (раньше эти файлы давали UNSUPPORTED); document_processing_results по ним
+  теперь status=COMPLETED (было UNSUPPORTED).
+  новые сущности (сегодня): 408543->13, 10187->2, 40634->2, 12111/449940/459096->1.
+
+НЕ ЗАКРЫТО 1 из 8: 18103/21717
+  plan выбрал «Контракт №0157600002226000022.rtf» (скачан, 142410 байт);
+  конвертация .rtf -> .docx НЕ дала результата (в кэше .docx нет) -> документ остался
+  неподдержанным, задача упала: «completion requires at least one successfully
+  processed document». Строка снова FAILED.
+  Смысл: это КОНТРАКТ (не смета/ТЗ), т.е. в плане выбран не researchable-документ;
+  плюс требует отдельного разбора, почему soffice не сконвертировал именно этот .rtf.
+```
+
+ACCEPTANCE:
+
+```
+UNSUPPORTED_FAILED_INVENTORY   = 8
+EVERY_ROW_HAS_DIAGNOSIS        = YES
+OUT_OF_ORDER_DOWNLOADS_BOUNDED = YES (штатный DownloadCoordinator; 1 файл на закупку по плану)
+REPARSE_SUCCEEDED_FOR_CANARY   = YES для 7 из 8 (xls -> xlsx -> COMPLETED)
+PRODUCTION_ROLLOUT_AFTER_PASS  = YES (строки переведены в PENDING и обработаны штатным путём)
+ADMISSION_UNCHANGED            = YES
+SCORING_MEDAL_QUEUE_UNCHANGED  = YES
+```
+
+FOLLOW-UP:
+
+- 18103: (a) план выбрал контракт, а не researchable-документ — пересмотреть selection;
+  (b) выяснить, почему soffice не отдал .docx для этого .rtf (отдельная проверка конвертера
+  на «сложном» rtf).

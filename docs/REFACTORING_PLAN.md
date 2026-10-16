@@ -42,6 +42,23 @@
 БД — их массовое восстановление вынесено на отдельное решение. Далее — 1B
 `ARCHIVE_MEMBER_PARSE_CONTEXT_V1`.
 
+## 2026-10-16 (4) — P1 UNSUPPORTED_DOC_RECOVERY_V1: прогон восстановления 8 строк
+
+**7 из 8 закрыто.** Проверка admission: все 8 строк уже проходили claim-предикат
+(`plan_version='queue_v2'` + `research_action_v2 IN (DOCUMENT_RESEARCH_REQUIRED/
+DOCUMENT_CONFIRMATION_REQUIRED)`) — держал только `status='FAILED'`; admission не ослабляли.
+Preimage: `/opt/CRM_Streamlit/tmp_p1_preimage_20261016.json`. 8 строк переведены
+`FAILED → PENDING` (причина + маркер `requeue:unsupported_doc_recovery_v1`), затем прогон
+out-of-order штатным путём демона (`force_run_document_queue.py`, тот же claim и тот же
+DownloadCoordinator): `ok=8 fail=0`. Итог: 7× `.xls` сконвертированы в `.xlsx` (в кэше
+`/tmp/tender-doc-converted/` 7 файлов) и разобраны — `document_processing_results` теперь
+`COMPLETED` (было `UNSUPPORTED`), новые сущности: 408543→13, 10187→2, 40634→2, 12111/449940/
+459096→1. **Не закрыт 1: 18103/21717** — план выбрал «Контракт №…0022.rtf» (контракт, не
+смета), конвертация `.rtf→.docx` не дала результата, задача упала
+«completion requires at least one successfully processed document»; строка снова `FAILED`.
+Follow-up: (a) пересмотреть selection (контракт вместо researchable-документа), (b) разобрать,
+почему `soffice` не отдал `.docx` для этого `.rtf`.
+
 ## 2026-10-16 (3) — P1 UNSUPPORTED_DOC_RECOVERY_V1 Phase 0b: путь через конвертацию принят
 
 **Решение владельца:** принять как задокументированный формат обработки —
