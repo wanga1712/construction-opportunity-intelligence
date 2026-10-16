@@ -176,10 +176,16 @@ class S13V2Pipeline:
                     if text is None:
                         raise RuntimeError("Ошибка при открытии/чтении PDF (возможно файл поврежден или зашифрован)")
                 else:
+                    # UNSUPPORTED_DOC_RECOVERY_V1: `.xls`/`.rtf` (и подобные) парсеров не
+                    # имеют — конвертируем через soffice в `.xlsx`/`.docx` и разбираем
+                    # результат; provenance остаётся по исходному `path.name`.
+                    from document_processor.format_converter import convert_if_needed
+
+                    parse_path = convert_if_needed(path)
                     parser = (
-                        get_rich_parser(self.parser_factory, path)
-                        if supports_rich_meta(path)
-                        else self.parser_factory.get_parser(path)
+                        get_rich_parser(self.parser_factory, parse_path)
+                        if supports_rich_meta(parse_path)
+                        else self.parser_factory.get_parser(parse_path)
                     )
                     if parser is None:
                         file_res.status = "UNSUPPORTED"
@@ -187,7 +193,7 @@ class S13V2Pipeline:
                         result.files.append(file_res)
                         continue
 
-                    text, line_meta = parse_file_with_meta(parser, path)
+                    text, line_meta = parse_file_with_meta(parser, parse_path)
 
                 # Parse-time extraction (estimate tables + project metadata).
                 # Retention removes raw files after 3 days, so anything we may
@@ -206,7 +212,7 @@ class S13V2Pipeline:
                         ctx = doc_ctx.get(str(parent_name).strip().lower())
                     ctx = ctx or {}
                     extract_and_persist(
-                        path, text, procurement_id, path.name,
+                        parse_path, text, procurement_id, path.name,
                         category_code=ctx.get("category"),
                         source_document_id=ctx.get("source_document_id"),
                         physical_key=ctx.get("physical_key"),

@@ -42,6 +42,20 @@
 БД — их массовое восстановление вынесено на отдельное решение. Далее — 1B
 `ARCHIVE_MEMBER_PARSE_CONTEXT_V1`.
 
+## 2026-10-16 (3) — P1 UNSUPPORTED_DOC_RECOVERY_V1 Phase 0b: путь через конвертацию принят
+
+**Решение владельца:** принять как задокументированный формат обработки —
+конвертирование + скачивание вне очереди + запуск вне очереди на разбор по категориям.
+Реализовано: новый `format_converter.py` (`convert_if_needed`: `.xls → .xlsx`,
+`.rtf → .docx` через headless `soffice`, кэш по (path,size,mtime), fail-soft, без новых
+зависимостей), подключён в `s13_v2_pipeline.process_task` (провенанс остаётся по исходному
+имени) и в `scripts/reparse_procurement_sections.py`. Проверка на S13: синтетические
+`.xls`/`.rtf` конвертируются и читаются существующими парсерами (ExcelParser — «Светильник
+LED | 10 | шт», WordParser — текст прочитан); py_compile OK, задеплоено (бэкап
+`s13_v2_pipeline.py.bak-conv-20261016`). Остаток: 8 строк пока `FAILED`, локальные файлы
+удалены retention'ом → нужен прогон по штатному пути (download вне очереди → авто-конвертация
+→ разбор вне очереди по категории → перевод строк в штатное состояние).
+
 ## 2026-10-16 (2) — P1 UNSUPPORTED_DOC_RECOVERY_V1 Phase 0: inventory + диагноз
 
 **Phase 0 DONE (read-only).** Все 8 строк `FAILED` с `LOCAL_CLASSIFIED:*:UNSUPPORTED`

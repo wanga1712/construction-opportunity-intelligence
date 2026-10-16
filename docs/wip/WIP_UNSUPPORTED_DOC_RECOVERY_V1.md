@@ -149,3 +149,50 @@ BLOCKER / РЕШЕНИЕ: сам по себе P1 (download + reparse) не да
 
 WIP сам объявляет «добавление парсера `.xls`» вне скоупа, поэтому дальше без решения
 владельца не иду.
+
+## RESULT Phase 0b (2026-10-16) — принят штатный путь через конвертацию
+
+РЕШЕНИЕ ВЛАДЕЛЬЦА: **принять как задокументированный формат обработки** —
+конвертирование + скачивание вне очереди + запуск вне очереди на разбор по категориям.
+
+РЕАЛИЗОВАНО:
+
+```
+new: tender_documents_research/document_processor/format_converter.py
+  convert_if_needed(path, cache_dir=/tmp/tender-doc-converted) -> Path
+    * CONVERTIBLE = {".xls": "xlsx", ".rtf": "docx"}
+    * через headless soffice --convert-to, результат кэшируется по (path, size, mtime);
+    * fail-soft: нет soffice / ошибка -> исходный путь (поведение как раньше, UNSUPPORTED).
+    * новых зависимостей не требуется (soffice/libreoffice уже стоят на S13).
+
+подключено:
+  * pipelines/s13_v2_pipeline.process_task: перед выбором парсера
+      parse_path = convert_if_needed(path); парсер и parse_file_with_meta — по parse_path;
+      provenance (file_name/extract_and_persist document_name) остаётся по исходному path.name;
+  * scripts/reparse_procurement_sections.py: то же для диагностического разбора.
+
+проверка (S13):
+  soffice: /usr/bin/soffice
+  src.xls  -> /tmp/tender-doc-converted/src.<hash>.xlsx  (5668 B)
+  src.rtf  -> /tmp/tender-doc-converted/src.<hash>.docx  (5086 B)
+  парсинг: .xls -> ExcelParser, текст «Параметр | Кол-во | Ед.изм / Светильник LED | 10 | шт»;
+           .rtf -> WordParser, текст прочитан.
+  py_compile всех трёх файлов = OK; деплой на S13 (бэкап s13_v2_pipeline.py.bak-conv-20261016).
+```
+
+ACCEPTANCE (Phase 0b):
+
+```
+CONVERSION_PATH_DOCUMENTED = YES (этот WIP)
+CONVERTER_IMPLEMENTED      = YES (.xls -> .xlsx, .rtf -> .docx, кэш, fail-soft)
+WIRED_INTO_PIPELINE        = YES (daemon parse path + диагностический reparse)
+NEW_DEPENDENCIES           = 0 (используется soffice)
+CONVERTER_VERIFIED         = YES (синтетика .xls/.rtf -> парсеры читают текст)
+ADMISSION_UNCHANGED        = YES
+SCORING_MEDAL_QUEUE_UNCHANGED = YES
+```
+
+FOLLOW-UP: сами 8 строк пока `FAILED` и их локальные файлы удалены retention'ом — для
+закрытия P1 нужен прогон по штатному пути: скачивание вне очереди (штатный
+`DownloadCoordinator`) → конвертация (теперь автоматическая) → разбор вне очереди по
+категории закупки → перевод строк в штатное состояние.

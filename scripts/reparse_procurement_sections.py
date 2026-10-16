@@ -117,6 +117,7 @@ def main() -> int:
     from document_processor.parse_utils import (
         get_rich_parser, parse_file_with_meta, supports_rich_meta,
     )
+    from document_processor.format_converter import convert_if_needed
     from document_processor.parser_factory import ParserFactory
 
     factory = ParserFactory()
@@ -125,15 +126,17 @@ def main() -> int:
         file_path = Path(path)
         name = file_path.name
         category = by_doc.get(name, default_cat)
-        parser = (get_rich_parser(factory, file_path) if supports_rich_meta(file_path)
-                  else factory.get_parser(file_path))
+        # UNSUPPORTED_DOC_RECOVERY_V1: `.xls`/`.rtf` конвертируем перед разбором.
+        parse_path = convert_if_needed(file_path)
+        parser = (get_rich_parser(factory, parse_path) if supports_rich_meta(parse_path)
+                  else factory.get_parser(parse_path))
         if parser is None:
             print("   SKIP (no parser):", name)
             continue
-        text, line_meta = parse_file_with_meta(parser, file_path)
+        text, line_meta = parse_file_with_meta(parser, parse_path)
         for item in items:
             result = extract_and_persist(
-                file_path, text, args.procurement_id, name,
+                parse_path, text, args.procurement_id, name,
                 category_code=category,
                 source_document_id=item["id"],
                 physical_key=item["physical_download_key"],
