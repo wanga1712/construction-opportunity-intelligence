@@ -110,6 +110,20 @@ source_quote проверен
 3. `build_confirmed_facts` начинает принимать `SECTION_CONFIRMED`.
 4. Apply только после approval и повторного dry-run.
 
+### Phase 1.2 — fix provenance snapshot
+
+`source_text_snapshot` сейчас хранит только первые 200 JSON-цитат и не подходит
+для literal-проверки. Нужно:
+
+```text
+persist_facts принимает source_text_snapshot из parse pipeline;
+хранить полный/bounded сырой текст, а не list of quotes;
+verify_source_quote проверяет source_quote как substring snapshot;
+старые строки перегнать через reparse с новым snapshot.
+```
+
+`SECTION_CONFIRMED` не применяем, пока strict-проверка не заработает.
+
 ### Phase 1.1 — total/unit mapping
 
 Извлекать `total_price_value` из правильных колонок смет, подтягивать unit из
@@ -432,3 +446,73 @@ c) принять relaxed-проверку (source_quote непустой) — �
 
 Apply SECTION_CONFIRMED не выполнялся. После выбора (a)/(b) — повторный
 strict dry-run и только затем approval на apply.
+
+## RESULT Phase 1 — provenance snapshot fix (2026-10-19)
+
+РЕАЛИЗОВАНО:
+
+```text
+embedded_persistence.persist_facts(..., source_text=None):
+  для EMBEDDED хранит bounded raw text документа в source_text_snapshot
+  (PROVENANCE_SNAPSHOT_MAX_CHARS, default 10 000 000), а не JSON-цитаты.
+  Fallback на прежний JSON-список сохранён для DIRECT/старых вызовов.
+
+parse_extractors._persist_embedded:
+  non-xlsx -> source_text=text (source_quote — подстрока текста);
+  xlsx      -> snapshot = "\n".join(r.source_quote for r in rows),
+               т.к. ExcelParser.parse даёт плоский текст без A=/B= колонок.
+
+ON CONFLICT DO UPDATE:
+  добавлен run_id = EXCLUDED.run_id (и detail_id) — при reparse сущность
+  ссылается на run того документа, из которого реально извлечена.
+```
+
+REPARSE (approved, EMBEDDED_FORCE_UPDATE=1):
+
+```text
+60467  -> snapshot 133 391 chars; entity 633557 source_quote найден
+          в snapshot на позиции 53 223.
+148391 -> snapshot 1 405 275 chars (Прил. №7); НО сущности
+          composite_structures с source_document_id=24567
+          (Прил. №4 Проект контракта.zip, файл отсутствует на диске)
+          остались привязаны к run Прил. №7 -> strict 0 для composite.
+```
+
+STRICT DRY-RUN ПОСЛЕ ФИКСА:
+
+```text
+EMBEDDED_CATEGORIES=['waterproofing']
+QUOTE_SNAPSHOT_CHECK=LITERAL_REQUIRED
+QUARANTINE_WITH_SECTION_TOTAL_SOURCE=588
+CANONICAL_GOODS=52
+SEMANTIC_DEDUP_FACTS=52
+DISTINCT_PROCUREMENT_CATEGORY_UNITS=1
+OPPORTUNITIES_PROJECTED_WITH_FACTS=1
+CONFIRMED_BASE_NEW_OR_CHANGED=1
+PROJECTED_CONFIRMED_BASE_DISTRIBUTION={'GOLD': 1}
+DB_WRITES=0
+APPLY_NOT_RUN=YES
+```
+
+ОСТАВШИЙСЯ БЛОКЕР:
+
+```text
+148391 / composite_structures: source_document_id=24567 указывает на
+«Прил. №4 Проект контракта.zip», которого нет на диске
+(local_deleted_at NULL, но файл MISSING). Старые сущности привязаны
+к run другого документа, поэтому strict provenance не проходит.
+Нужно: re-download этого файла + reparse, затем повторный strict dry-run.
+```
+
+ACCEPTANCE (provenance):
+
+```text
+RAW_TEXT_SNAPSHOT=YES (bounded 10M)
+XLSX_SNAPSHOT_USES_ROW_QUOTES=YES
+RUN_ID_UPDATED_ON_REEXTRACT=YES
+60467_STRICT_VERIFIED=YES (52 canonical goods)
+148391_STRICT_VERIFIED=NO (missing contract zip; pending re-download)
+SECTION_CONFIRMED_APPLIED=NO
+DB_WRITES=reparse 60467/148391 only (approved)
+SCORING_MEDAL_QUEUE_UNCHANGED=YES
+```

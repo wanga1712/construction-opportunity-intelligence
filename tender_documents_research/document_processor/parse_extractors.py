@@ -361,6 +361,7 @@ def _persist_embedded(
                 "embedded extraction skipped (xlsx over %d bytes): %s", max_xlsx_bytes, document_name
             )
             return 0
+        snapshot_text = text or ""
         if path.suffix.lower() in (".xlsx", ".xlsm"):
             try:
                 from document_processor.smeta_forma_4b import (
@@ -378,6 +379,12 @@ def _persist_embedded(
                 document_name=document_name, rows=rows,
                 source_document_id=source_document_id, physical_key=physical_key,
             )
+            # source_quote для xlsx строится из table rows ("A=… | B=…"),
+            # а ExcelParser.parse даёт плоский текст без имён колонок.
+            # Snapshot должен содержать ровно ту форму, что и source_quote.
+            snapshot_text = "\n".join(
+                str(getattr(r, "source_quote", "") or "") for r in rows
+            )
         else:
             facts = extract_facts(
                 procurement_id=procurement_id, category_code=category_code,
@@ -388,7 +395,7 @@ def _persist_embedded(
             return 0
         created, _reused, _stats = persist_facts(
             conn, procurement_id=procurement_id, document_name=document_name,
-            category_code=category_code, facts=facts,
+            category_code=category_code, facts=facts, source_text=snapshot_text,
         )
         return created
     except Exception as exc:  # never break parsing

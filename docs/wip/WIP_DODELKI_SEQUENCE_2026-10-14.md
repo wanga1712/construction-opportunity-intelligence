@@ -398,6 +398,15 @@ dedup -> 2 opportunity (GOLD). `build_confirmed_facts` уже принимает
 по provenance — хранить все цитаты/per-entity snapshot или embedded-specific
 верификация. Apply не делаем.
 
+PROVENANCE FIX (2026-10-19): `persist_facts` теперь хранит bounded raw text
+(10M) для EMBEDDED; xlsx snapshot = row-quote dump; при ON CONFLICT
+обновляется run_id. Перепарсены 60467 и 148391. Strict dry-run:
+588 -> 52 canonical goods -> 1 opportunity GOLD (waterproofing 60467).
+148391 composite остаётся strict-0: source_document_id=24567 указывает на
+отсутствующий «Прил. №4 Проект контракта.zip», старые сущности привязаны
+к run другого документа. Нужен re-download этого файла + reparse.
+SECTION_CONFIRMED не применялся.
+
 ### 4. CATEGORY_DISCOVERY_DYNAMIC_V1 — Phase C
 
 См. `docs/wip/WIP_CATEGORY_DISCOVERY_DYNAMIC_V1.md`.

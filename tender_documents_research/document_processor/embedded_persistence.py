@@ -5,7 +5,7 @@ from __future__ import annotations
 import hashlib
 import json
 import os
-from typing import Any, Dict, Iterable, Tuple
+from typing import Any, Dict, Iterable, Optional, Tuple
 
 from document_processor.embedded_extraction import EXTRACTOR_VERSION
 from document_processor.embedded_extraction import NORMALIZER_VERSION
@@ -74,6 +74,7 @@ def persist_facts(
     category_code: str,
     facts: Iterable[Any],
     detail_id=None,
+    source_text: Optional[str] = None,
 ) -> Tuple[int, int, Dict[str, int]]:
     """Insert facts for one document; re-runs reuse entities (idempotent)."""
     facts = list(facts)
@@ -85,7 +86,17 @@ def persist_facts(
     if detail_id is None:
         cur.execute("SELECT MIN(id) FROM document_match_details WHERE procurement_id=%s", (procurement_id,))
         detail_id = cur.fetchone()[0]
-    snapshot = json.dumps([f.source_quote for f in facts][:200], ensure_ascii=False)
+    # GOOD_SUPPLY_FACTS_V1 Phase 1: для EMBEDDED храним bounded raw text
+    # документа (source_quote — его подстрока), а не первые 200 JSON-цитат.
+    # Fallback на прежний JSON-список сохранён для DIRECT и старых вызовов.
+    if source_text and source_text.strip():
+        # Крупные сметы (148391: 22k+ строк) не помещаются в 1M символов;
+        # 10M покрывает такие документы, оставаясь bounded. PostgreSQL TOAST
+        # сжимает snapshot, поэтому это приемлемо для canary/точечных reparse.
+        max_chars = int(os.getenv("PROVENANCE_SNAPSHOT_MAX_CHARS", "10000000"))
+        snapshot = source_text[:max_chars]
+    else:
+        snapshot = json.dumps([f.source_quote for f in facts][:200], ensure_ascii=False)
     cur.execute(
         "SELECT id FROM structured_extraction_runs"
         " WHERE procurement_id=%s AND document_name=%s AND extractor_version=%s LIMIT 1",
@@ -149,6 +160,10 @@ def persist_facts(
             ON CONFLICT (procurement_id, source_document_id, entity_fingerprint, extractor_version)
               WHERE extractor_version IS NOT NULL AND source_document_id IS NOT NULL
             DO UPDATE SET
+                -- Provenance: сущность должна ссылаться на run того документа,
+                -- из которого она реально извлечена при reparse.
+                run_id = EXCLUDED.run_id,
+                detail_id = EXCLUDED.detail_id,
                 quantity_value = EXCLUDED.quantity_value,
                 quantity_unit_normalized = EXCLUDED.quantity_unit_normalized,
                 measurement_family = EXCLUDED.measurement_family,
