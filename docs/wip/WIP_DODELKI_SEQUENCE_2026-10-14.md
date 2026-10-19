@@ -424,6 +424,15 @@ source_document_id. Reparse 148391 (37 файлов, embedded 23 052).
 opportunities -> GOLD 2 (waterproofing 60467 + composite_structures 148391).
 SECTION_CONFIRMED не применялся; apply — только отдельным approval.
 
+SECTION_CONFIRMED APPLY (2026-10-19, approved):
+65 фактов промоутированы; build_confirmed_facts -> 10 498 facts;
+write_confirmed_base -> 525 confirmed_base (было 523), +2 GOLD
+(60467 waterproofing, 148391 composite_structures). CANDIDATE_INITIAL_CHANGED=0,
+CONFIRMED_BASE_FROM_UNTRUSTED=0, пороги/scoring не менялись.
+ПОБОЧНО: полный rebuild изменил ещё 114 существующих score/medal
+(80 SILVER->BRONZE и др.) из-за percentile-когорты. Preimage/postimage в /tmp.
+Нужно решение: принять rebuild или откатить collateral и оставить только 2 GOLD.
+
 ### 4. CATEGORY_DISCOVERY_DYNAMIC_V1 — Phase C
 
 См. `docs/wip/WIP_CATEGORY_DISCOVERY_DYNAMIC_V1.md`.

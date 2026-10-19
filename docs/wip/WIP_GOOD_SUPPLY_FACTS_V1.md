@@ -532,6 +532,92 @@ entity 673920: source_document_id=24550, run_id=4464,
 provenance. `SECTION_CONFIRMED` применять можно только отдельным approval;
 apply НЕ выполнялся.
 
+## RESULT — SECTION_CONFIRMED apply (2026-10-19, approved)
+
+PREIMAGE (сохранён до apply):
+
+```text
+/tmp/section_confirmed_preimage_crm_20261019.json   (CURRENT confirmed_base_*)
+/tmp/section_confirmed_preimage_trust_20261019.json (685 section/total кандидатов)
+/tmp/section_confirmed_preimage_ccf_20261019.json   (confirmed_category_facts)
+POSTIMAGE:
+/tmp/section_confirmed_postimage_crm_20261019.json
+```
+
+ШАГИ:
+
+```text
+1. promote_section_confirmed_embedded.py --apply
+   SECTION_CONFIRMED_PROMOTED=65
+2. build_confirmed_facts.py
+   SOURCE_ENTITIES=16101
+   CONFIRMED_FACTS=10498
+   SEMANTIC_DUPLICATES_COLLAPSED=3587
+   CATEGORY_VALUE_FROM_PROJECT_NMCK=0
+3. write_confirmed_base.py --write
+   CURRENT_OPPORTUNITIES=7983
+   CONFIRMED_BASE_TO_WRITE=525   (было 523)
+   CONFIRMED_BASE_WITHOUT_DOCUMENT_FACTS=0
+   CANDIDATE_INITIAL_CHANGED=0
+   CONFIRMED_BASE_FROM_UNTRUSTED=0
+   DISTRIBUTION={'GOLD':9,'SILVER':90,'BRONZE':377,'WOOD':49}
+```
+
+TRUST ПОСЛЕ APPLY:
+
+```text
+MANUAL_PROOF_QUARANTINE=318974  (было 319039; -65)
+TRUSTED_PRODUCTION=16043
+SECTION_CONFIRMED=65
+```
+
+ОЖИДАЕМЫЕ 2 ДОБАВЛЕНИЯ (confirmed_base):
+
+```text
+11802  60467  waterproofing        NULL -> GOLD/90.0  (52 факта, vsum 254667.28)
+13666  148391 composite_structures  NULL -> GOLD/90.0  (13 фактов после dedup, vsum 183001618)
+current_effective_medal у обоих = SILVER (временной кап)
+```
+
+ИТОГ ПО confirmed_base:
+
+```text
+ADDED=2
+REMOVED=0
+CHANGED_TOTAL=116 (2 added + 114 existing score/medal changes)
+
+CHANGED_BY_CATEGORY:
+  computers 79, lighting 29, cable_support_systems 6,
+  waterproofing 1, composite_structures 1
+
+MEDAL_TRANSITIONS:
+  SILVER->BRONZE 80, BRONZE->SILVER 4, BRONZE->WOOD 2,
+  BRONZE->BRONZE 23, WOOD->WOOD 2, SILVER->SILVER 3, NULL->GOLD 2
+  score-only changes: 28
+```
+
+ПРИЧИНА 114 ПОБОЧНЫХ ИЗМЕНЕНИЙ: `build_confirmed_facts.py` — полный rebuild.
+Он пересчитывает `confirmed_category_facts` из всех TRUSTED + SECTION_CONFIRMED,
+а `write_confirmed_base` использует percentile-когорту по `vsum`; новые
+reparse-сущности и 65 новых фактов сдвинули когорту, изменив score у части
+существующих DIRECT/lighting карточек. Пороги и scoring-код не менялись.
+
+ACCEPTANCE:
+
+```text
+CANDIDATE_INITIAL_CHANGED=0
+CONFIRMED_BASE_FROM_UNTRUSTED=0
+SCORING_CHANGED=NO (код/пороги не менялись)
+MEDAL_THRESHOLDS_CHANGED=NO
+SECTION_CONFIRMED_APPLIED=YES (65)
+PROJECTED_OPPORTUNITIES=2 -> ADDED=2
+PROJECTED_GOLD=2 -> GOLD 2
+```
+
+ОТКРЫТОЕ РЕШЕНИЕ: принять полный rebuild (114 существующих score/medal
+изменились) или откатить CRM `confirmed_base_*` из preimage и оставить только
+2 новых GOLD. `confirmed_category_facts` при откате останутся новыми.
+
 ## RESULT Phase 1 — SECTION_CONFIRMED dry-run (2026-10-19)
 
 Скрипт: `scripts/promote_section_confirmed_embedded.py` (dry-run по умолчанию).
