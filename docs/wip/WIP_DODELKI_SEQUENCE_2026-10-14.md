@@ -389,6 +389,15 @@ DIRECT_CATS (computers/lighting/cable_support_systems). У EMBEDDED вообще
 отсекаются корректно. Следующий шаг — Phase 1: trust-разбор + total/unit
 mapping; persistence/reparse — после роста goods.
 
+SECTION_CONFIRMED dry-run (2026-10-19): strict = 0 кандидатов, потому что
+`structured_extraction_runs.source_text_snapshot` хранит только первые 200
+JSON-экранированных цитат и перезаписывается per-document. Диагностический
+режим без snapshot-проверки: 685 строк -> 66 canonical goods -> 65 после
+dedup -> 2 opportunity (GOLD). `build_confirmed_facts` уже принимает
+`SECTION_CONFIRMED` (без apply, строк в БД пока нет). Блокер: нужно решение
+по provenance — хранить все цитаты/per-entity snapshot или embedded-specific
+верификация. Apply не делаем.
+
 ### 4. CATEGORY_DISCOVERY_DYNAMIC_V1 — Phase C
 
 См. `docs/wip/WIP_CATEGORY_DISCOVERY_DYNAMIC_V1.md`.

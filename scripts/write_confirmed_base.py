@@ -156,7 +156,8 @@ def main() -> int:
             di,
             "SELECT count(*) AS c FROM confirmed_category_facts cf"
             " JOIN structured_entities se ON se.id = cf.entity_id"
-            " WHERE se.structured_fact_trust_state IS DISTINCT FROM 'TRUSTED_PRODUCTION'",
+            " WHERE se.structured_fact_trust_state NOT IN"
+            " ('TRUSTED_PRODUCTION','SECTION_CONFIRMED')",
         )[0]["c"]
         print(f"CONFIRMED_BASE_FROM_UNTRUSTED={from_untrusted}")
         after = query(crm, "SELECT count(*) AS nonnull FROM crm_procurement_category_opportunities"

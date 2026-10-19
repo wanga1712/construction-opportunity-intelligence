@@ -86,10 +86,12 @@ def main() -> int:
         )
         trust_by_state = {r["state"]: int(r["n"]) for r in trust}
         print(f"CONFIRMED_FACTS_TRUSTED_PRODUCTION={trust_by_state.get('TRUSTED_PRODUCTION', 0)}")
+        print(f"CONFIRMED_FACTS_SECTION_CONFIRMED={trust_by_state.get('SECTION_CONFIRMED', 0)}")
         print(f"CONFIRMED_FACTS_MANUAL_PROOF_QUARANTINE={trust_by_state.get('MANUAL_PROOF_QUARANTINE', 0)}")
         print(f"CONFIRMED_FACTS_DEV_EXPOSED={trust_by_state.get('DEV_EXPOSED', 0)}")
         other = sum(v for k, v in trust_by_state.items()
-                    if k not in ('TRUSTED_PRODUCTION', 'MANUAL_PROOF_QUARANTINE', 'DEV_EXPOSED'))
+                    if k not in ('TRUSTED_PRODUCTION', 'SECTION_CONFIRMED',
+                                 'MANUAL_PROOF_QUARANTINE', 'DEV_EXPOSED'))
         print(f"CONFIRMED_FACTS_OTHER={other}")
         rows = query(
             di,
@@ -99,7 +101,7 @@ def main() -> int:
             " source_quote, extractor_version, normalizer_version"
             " FROM structured_entities WHERE extractor_version=%s"
             " AND category_code IS NOT NULL AND category_code <> 'unknown'"
-            " AND structured_fact_trust_state = 'TRUSTED_PRODUCTION'"
+            " AND structured_fact_trust_state IN ('TRUSTED_PRODUCTION','SECTION_CONFIRMED')"
             " ORDER BY id",
             (EXTRACTOR_VERSION,),
         )

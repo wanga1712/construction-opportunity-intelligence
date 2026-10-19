@@ -91,6 +91,30 @@ flooring: 175 разделов, goods=5
 Без этого persistence `section_code` не поможет: разделы есть, а подтверждать
 в них нечего.
 
+### Phase 1 — trust path для EMBEDDED
+
+Не расширяем `verify_direct_supply_facts` слепо. Вводим отдельный
+`SECTION_CONFIRMED` trust path:
+
+```text
+section_code IS NOT NULL
+section_total_source IN ('SECTION_TOTAL', 'COMPUTED_SUM')
+canonical goods predicate пройден
+source_quote проверен
+```
+
+Порядок:
+
+1. Скрипт `promote_section_confirmed_embedded.py --dry-run`.
+2. Показывает, сколько EMBEDDED-фактов станет `SECTION_CONFIRMED`.
+3. `build_confirmed_facts` начинает принимать `SECTION_CONFIRMED`.
+4. Apply только после approval и повторного dry-run.
+
+### Phase 1.1 — total/unit mapping
+
+Извлекать `total_price_value` из правильных колонок смет, подтягивать unit из
+соседней колонки. Это снимет `no_total` и `no_unit`.
+
 ### Phase 1 — подключение к карточке
 
 «Что можно поставить» строится из `good_supply_facts_service`.
@@ -341,3 +365,70 @@ WORKS_EXCLUDED=YES
 DB_WRITES=0
 SCORING_MEDAL_QUEUE_UNCHANGED=YES
 ```
+
+## RESULT Phase 1 — SECTION_CONFIRMED dry-run (2026-10-19)
+
+Скрипт: `scripts/promote_section_confirmed_embedded.py` (dry-run по умолчанию).
+Критерии: section_code не RESIDUE, `section_total_source IN
+('SECTION_TOTAL','COMPUTED_SUM')`, canonical goods, source_quote verified,
+EMBEDDED only, текущий `MANUAL_PROOF_QUARANTINE`.
+
+### Строгий dry-run (literal source_quote в run snapshot)
+
+```text
+QUARANTINE_WITH_SECTION_TOTAL_SOURCE=0
+SECTION_CONFIRMED_CANDIDATES=0
+DB_WRITES=0
+```
+
+ПРИЧИНА: `structured_extraction_runs.source_text_snapshot` строится как
+`json.dumps([f.source_quote for f in facts][:200])` и перезаписывается на
+каждый parse документа. Из 685 подходящих по section/total/trust строк
+literal-проверку не прошла НИ ОДНА (0/685): snapshot содержит только первые
+200 JSON-экранированных цитат последнего прогона, а не все строки.
+
+### Диагностический режим без snapshot-проверки
+
+`--diagnostic-skip-snapshot-check` (source_quote всё равно обязан быть непустым):
+
+```text
+QUARANTINE_WITH_SECTION_TOTAL_SOURCE=685
+CANONICAL_GOODS=66   (waterproofing 52, composite_structures 14)
+SEMANTIC_DEDUP_FACTS=65
+DISTINCT_PROCUREMENT_CATEGORY_UNITS=2
+OPPORTUNITIES_PROJECTED_WITH_FACTS=2
+CONFIRMED_BASE_NEW_OR_CHANGED=2
+PROJECTED_CONFIRMED_BASE_DISTRIBUTION={'GOLD': 2}
+DB_WRITES=0
+```
+
+### Подготовлено (без apply)
+
+```text
+build_confirmed_facts:
+  принимает structured_fact_trust_state IN
+  ('TRUSTED_PRODUCTION','SECTION_CONFIRMED');
+  печатает CONFIRMED_FACTS_SECTION_CONFIRMED.
+write_confirmed_base:
+  CONFIRMED_BASE_FROM_UNTRUSTED исключает оба состояния.
+procurement_card_category_service:
+  TRUST_GROUPS['SECTION_CONFIRMED'] = 'ПОДТВЕРЖДЕНО РАЗДЕЛОМ'.
+```
+
+Сейчас в БД нет ни одной строки `SECTION_CONFIRMED`, поэтому поведение
+`build_confirmed_facts` не меняется.
+
+### БЛОКЕР / РЕШЕНИЕ
+
+Строгий критерий «source_quote проверен» сейчас невыполним из-за устройства
+snapshot. Варианты (нужен выбор):
+
+```text
+a) починить provenance: хранить все цитаты (или per-entity snapshot)
+   при parse/reparse — тогда strict-проверка работает;
+b) определить embedded-specific верификацию (row_or_line + cell map),
+c) принять relaxed-проверку (source_quote непустой) — но это ослабляет trust.
+```
+
+Apply SECTION_CONFIRMED не выполнялся. После выбора (a)/(b) — повторный
+strict dry-run и только затем approval на apply.

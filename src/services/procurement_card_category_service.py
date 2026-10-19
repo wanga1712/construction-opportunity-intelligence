@@ -15,6 +15,7 @@ from typing import Any, Dict, Iterable, List, Optional, Tuple
 
 TRUST_GROUPS = {
     "TRUSTED_PRODUCTION": "ПОДТВЕРЖДЕНО",
+    "SECTION_CONFIRMED": "ПОДТВЕРЖДЕНО РАЗДЕЛОМ",
     "MANUAL_PROOF_QUARANTINE": "ОЖИДАЕТ ПРОВЕРКИ",
     "DEV_EXPOSED": "ТЕХНИЧЕСКИЙ КАНДИДАТ",
     "QUALITY_REJECTED": "ОТКЛОНЕНО КАЧЕСТВОМ",
@@ -281,7 +282,10 @@ def group_products_by_trust(products: Iterable[Dict[str, Any]]) -> List[Tuple[st
     for p in products or []:
         state = str(p.get("trust_state") or "").upper() or "UNKNOWN"
         buckets.setdefault(state, []).append(p)
-    order = ["TRUSTED_PRODUCTION", "MANUAL_PROOF_QUARANTINE", "DEV_EXPOSED", "QUALITY_REJECTED"]
+    order = [
+        "TRUSTED_PRODUCTION", "SECTION_CONFIRMED", "MANUAL_PROOF_QUARANTINE",
+        "DEV_EXPOSED", "QUALITY_REJECTED",
+    ]
     ordered = [(s, buckets.pop(s)) for s in order if s in buckets]
     ordered += [(s, buckets[s]) for s in sorted(buckets)]
     return ordered
