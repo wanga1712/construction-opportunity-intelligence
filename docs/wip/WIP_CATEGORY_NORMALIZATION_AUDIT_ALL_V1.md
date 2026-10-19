@@ -315,3 +315,68 @@ SCORING_MEDAL_QUEUE_UNCHANGED=YES
 ```
 
 СЛЕДУЮЩАЯ КАТЕГОРИЯ: `drainage_water_management`.
+
+## RESULT Phase 2 — drainage template (2026-10-19)
+
+РЕФАКТОРИНГ + ШАБЛОН:
+
+```text
+new: tender_documents_research/document_processor/sheet_section_templates.py
+  общий движок: маркеры Раздел/Глава/Секция/Участок/Лот, identity с листом
+  или docN, page_or_sheet fallback, numeric names отбрасываются,
+  RESIDUE, canonical summarizable predicate.
+curbstone_section_templates / drainage_section_templates — тонкие обёртки
+  (префиксы curbstone:: / drainage::), публичный API сохранён.
+
+Исправлены две ошибки наследования:
+  1. смена source_document_id обрывает раздел — строки другого файла больше
+     не попадают в «Раздел N» предыдущего;
+  2. смена page_or_sheet переключает page-контейнер, а не тянет все
+     последующие страницы в первый лист.
+```
+
+CANARY DRAINAGE (read-only):
+
+```text
+26386:  3725 строк -> 27 контейнеров, 4 с материалами; RESIDUE 1652
+        doc117584::razdel 1 — 34 материала, COMPUTED_SUM 26 299 430.14
+        doc117584::razdel 2 — 590 материалов, COMPUTED_SUM 339 430 018.22
+26403:  1920 -> 1 контейнер, 0 материалов; RESIDUE 561
+178620: 1843 -> 25 контейнеров, 1 материал; RESIDUE 733
+45844:  1590 -> 256 page-контейнеров, 4 с материалами; RESIDUE 0
+51652:  1586 -> 0 контейнеров; RESIDUE 1586 (нет маркеров/страниц)
+212585: 1292 -> 0 контейнеров; RESIDUE 1292
+```
+
+CANARY CURBSTONE (regression после рефакторинга):
+
+```text
+187738:  razdel 4 — 112 материалов, COMPUTED_SUM 739 778 892.64
+61577:   18 разделов, все с материалами
+167137:  2 раздела (doc116137/doc116140), 107 материалов
+```
+
+ЗАМЕЧАНИЯ:
+
+- 26403 до фикса показывал 37 «материалов» в table_3 — на деле это были
+  строки другого документа без страницы, унаследовавшие чужой контейнер.
+  После фикса table_3 = 0 материалов, RESIDUE 561 — честный результат.
+- Карточка 26386 (27 разделов) и 45844 (256 page-контейнеров) использует
+  `drainage_section_templates`. `section_confirmed` пока False: разделы
+  проецируются на чтении, а `structured_entities.section_code` для drainage
+  не персистится — нужен reparse, чтобы флаг подтвердился.
+
+ACCEPTANCE (drainage):
+
+```text
+TEMPLATE_IMPLEMENTED=YES
+SHARED_ENGINE_EXTRACTED=YES (curbstone+drainage без дублирования)
+DOCUMENT_BOUNDARY_ENFORCED=YES
+PAGE_CONTAINER_SWITCHES_ON_SHEET_CHANGE=YES
+CANARY_EXECUTED=YES (6 закупок)
+RESIDUE_HONEST=YES
+DB_WRITES=0
+SCORING_MEDAL_QUEUE_UNCHANGED=YES
+```
+
+СЛЕДУЮЩАЯ КАТЕГОРИЯ: `flooring`.

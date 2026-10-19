@@ -714,6 +714,64 @@ def load_procurement_dossier(db: Any, procurement_id: int) -> Dict[str, Any]:
         except Exception as _exc:  # noqa: BLE001
             _record_error(errors, "curbstone_projection", _exc)
 
+    # DRAINAGE_SECTION_TEMPLATES_V1 (3A Phase 2): маркеры (если появятся) +
+    # page_or_sheet fallback для OCR/xlsx-оценок; честный RESIDUE.
+    _has_drainage = any(
+        str((o or {}).get("commercial_category_code") or "") == "drainage_water_management"
+        for o in (dossier.get("opportunities") or [])
+    )
+    if _has_drainage and dossier.get("section_projection_source") not in (
+        "road_repair_section_templates", "lighting_section_templates",
+        "curbstone_section_templates",
+    ):
+        try:
+            from tender_documents_research.document_processor.drainage_section_templates import (
+                build_drainage_sections,
+            )
+
+            _dr_rows = _safe_di(
+                """
+                WITH preferred AS (
+                    SELECT se.*,
+                           row_number() OVER (
+                               PARTITION BY se.procurement_id, se.source_document_id,
+                                            coalesce(se.row_or_line, ''),
+                                            coalesce(se.product_name_raw, '')
+                               ORDER BY (se.section_code IS NOT NULL) DESC, se.id DESC
+                           ) AS pref_rn
+                      FROM structured_entities se
+                     WHERE se.procurement_id = %s
+                       AND se.category_code = 'drainage_water_management'
+                )
+                SELECT se.product_name_raw, se.product_name_normalized, se.entity_type,
+                       se.quantity_value, se.quantity_unit_normalized, se.quantity_unit_raw,
+                       se.unit_price_value, se.total_price_value, se.source_quote,
+                       se.row_or_line, se.layout_status, se.page_or_sheet, se.section_code,
+                       se.source_document_id
+                  FROM preferred se
+                 WHERE se.pref_rn = 1
+                 ORDER BY se.id
+                 LIMIT %s
+                """,
+                (int(procurement_id), ROAD_ROWS_LIMIT),
+                errors=errors, label="drainage_rows",
+            )
+            if _dr_rows:
+                _dr = build_drainage_sections(_dr_rows)
+                _dr_confident = any(
+                    int(s.get("material_count") or 0) > 0
+                    for s in _dr.get("sections") or []
+                )
+                if _dr_confident:
+                    dossier["section_projection"] = projection_from_road(_dr)
+                    dossier["section_projection_source"] = "drainage_section_templates"
+                    dossier["drainage_template"] = {
+                        "sections": len(_dr.get("sections") or []),
+                        "residue": (_dr.get("residue") or {}).get("count"),
+                    }
+        except Exception as _exc:  # noqa: BLE001
+            _record_error(errors, "drainage_projection", _exc)
+
     # PROCUREMENT_CARD_CATEGORY_PIPELINE_V1: read-model вкладки «Категории».
     # Одна opportunity = один блок; медали — существующие authority-поля.
     dossier["categories"] = []
