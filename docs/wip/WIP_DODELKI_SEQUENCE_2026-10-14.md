@@ -381,6 +381,10 @@ CABLE_SUPPORT_SYSTEMS DONE (2026-10-19): обёртка над общим дви
 PHASE 0.1 (2026-10-19): диагностика 0–5 goods для curbstone/drainage/flooring.
 Главный блокер — trust state, не section-шаблоны: curbstone и drainage на 100%
 в MANUAL_PROOF_QUARANTINE (TRUSTED=0), flooring — 5 TRUSTED из 25 953.
+В коде это подтверждено: embedded-факты всегда пишутся как
+MANUAL_PROOF_QUARANTINE, а `verify_direct_supply_facts.py` промоутит только
+DIRECT_CATS (computers/lighting/cable_support_systems). У EMBEDDED вообще нет
+пути в TRUSTED_PRODUCTION — это требует отдельного approval.
 Второй блокер — total_price_value есть у 0.7–4.8% строк. Works/resource-строки
 отсекаются корректно. Следующий шаг — Phase 1: trust-разбор + total/unit
 mapping; persistence/reparse — после роста goods.

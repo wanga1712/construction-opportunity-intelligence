@@ -297,12 +297,32 @@ flooring 15502: "Покрытие грунтовкой…", qty/unit отсут�
    cable 333, lighting 4 720) влияет на `is_summarizable` (секции), но НЕ на
    `classify_supply_row` (он layout не проверяет). Это отдельная ось.
 
+### РЕШАЮЩАЯ ПРИЧИНА В КОДЕ (trust)
+
+```text
+embedded_persistence.py / parse_extractors.py:
+  любые embedded-факты пишутся как 'MANUAL_PROOF_QUARANTINE'.
+
+scripts/verify_direct_supply_facts.py:
+  промоушен QUARANTINE -> TRUSTED_PRODUCTION есть ТОЛЬКО для DIRECT_CATS
+  (computers, lighting, cable_support_systems); проверка — literal source_quote
+  в structured_extraction_runs.source_text_snapshot.
+
+=> у EMBEDDED-категорий (curbstone, drainage, flooring, waterproofing, ...)
+   вообще нет пути в TRUSTED_PRODUCTION. Поэтому curbstone/drainage = 0,
+   flooring = 5 — независимо от качества section-шаблонов.
+```
+
+Это не порог медали и не scoring: это отсутствующий trust-promotion route.
+Решение по нему (распространить documentary verification на EMBEDDED или
+ввести отдельный section-confirmed trust path) требует отдельного approval.
+
 ### ПЛАН Phase 1 (по приоритету)
 
 ```text
-1. TRUST: разобрать, почему curbstone/drainage/flooring целиком в
-   MANUAL_PROOF_QUARANTINE (layout? quality gate?). Это даёт x25-x100
-   к числу подтверждаемых goods ещё до правок парсера.
+1. TRUST: решить/утвердить promotion route для EMBEDDED: тот же literal
+   source_quote check, что в verify_direct_supply_facts, либо отдельный
+   section-confirmed путь. Без этого goods не могут подтверждаться.
 2. TOTAL MAPPING: извлекать total_price_value из правильных колонок
    смет (J/K/L и аналоги) — снимет no_total 4k-11k.
 3. UNIT NORMALIZATION: подтягивать unit из соседней колонки, где он есть,
