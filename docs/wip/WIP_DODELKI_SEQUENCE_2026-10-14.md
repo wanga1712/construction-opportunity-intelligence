@@ -324,6 +324,13 @@ confirmed_base и «что можно поставить» считаются т
 (маркеров нет, RESIDUE ожидаемый). Следующие: curbstone, drainage,
 flooring, cable_support_systems.
 
+CURBSTONE DONE (2026-10-19): `curbstone_section_templates` — маркеры
+Раздел/Глава/Секция/Участок/Лот + page/table fallback, identity с документом.
+Canary: 187738 -> 113 материалов в razdel 4; 1290 -> 114 в table_2;
+61577 -> 18 разделов (карточка использует шаблон); 453859 -> 12;
+167137 -> 2; 24998 -> 0 материалов (агрегаты). Следующая:
+`drainage_water_management`.
+
 ### 3B. GOOD_SUPPLY_FACTS_V1
 
 См. `docs/wip/WIP_GOOD_SUPPLY_FACTS_V1.md`.

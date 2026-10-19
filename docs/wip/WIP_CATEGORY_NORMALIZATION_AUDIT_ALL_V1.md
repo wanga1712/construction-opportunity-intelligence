@@ -258,3 +258,60 @@ SCORING_MEDAL_QUEUE_UNCHANGED       = YES
 
 СЛЕДУЮЩИЕ КАТЕГОРИИ: `curbstone`, далее `drainage_water_management`, `flooring`,
 `cable_support_systems` — тем же шаблонным подходом.
+
+## RESULT Phase 2 — curbstone template (2026-10-19)
+
+РЕАЛИЗОВАНО:
+
+```text
+new: tender_documents_research/document_processor/curbstone_section_templates.py
+  маркеры: «Раздел/Глава/Секция/Участок/Лот N <Название>» по тексту;
+  identity: curbstone::<sheet|docN>::razdel N (документ в identity, чтобы
+            одноимённые разделы из разных файлов не сливались);
+  fallback: page_or_sheet как контейнер (`curbstone::table_2::sheet`,
+            `curbstone::page_19_table_1::sheet`) для OCR-оценок без маркеров;
+  числовые «названия» (839.37) отбрасываются — остаётся номер;
+  только canonical summarizable-материалы; total не обязателен;
+  без маркера и без страницы — честный RESIDUE.
+карточка: curbstone-проекция применяется, если CURRENT curbstone и дорожный/
+          светотехнический шаблон не дали уверенных разделов.
+```
+
+CANARY (read-only, реальные строки):
+
+```text
+187738: 929 строк -> 3 раздела, с материалами 1
+        doc123559::razdel 4 «Демонтажные работы» — 113 материалов,
+        COMPUTED_SUM 739 778 892.64; RESIDUE 338
+1290:   1064 -> 1 контейнер table_2, 114 материалов; RESIDUE 511
+61577:  1406 -> 18 разделов (по документам), все с материалами; RESIDUE 444
+        карточка использует curbstone_section_templates (18 разделов)
+453859: 1312 -> 12 разделов, все с материалами; RESIDUE 601
+167137: 867 -> 2 раздела (doc116137/doc116140), 294 материала; RESIDUE 314
+24998:  319 -> 1 раздел, 0 материалов (только агрегаты); RESIDUE 316
+```
+
+ЗАМЕЧАНИЯ:
+
+- 187738/453859 в карточке остаются на road-проекции: дорожный шаблон дал
+  уверенные разделы, он приоритетнее. Curbstone-модуль на них проверен
+  напрямую.
+- у 61577 18 разделов, но `categories[].product_count=0`: goods-predicate
+  не пропустил ни одной строки (работы/нет total). Это ограничение goods-слоя,
+  не шаблона.
+- `section_projection` пока одна на закупку. Per-category projections
+  (`categories[].section_projection`) — отдельный follow-up.
+
+ACCEPTANCE (curbstone):
+
+```text
+TEMPLATE_IMPLEMENTED=YES
+CANARY_EXECUTED=YES (6 закупок)
+DOCUMENT_SCOPED_IDENTITY=YES
+NUMERIC_FAKE_NAMES_REJECTED=YES
+RESIDUE_HONEST=YES
+DB_WRITES=0
+SCORING_MEDAL_QUEUE_UNCHANGED=YES
+```
+
+СЛЕДУЮЩАЯ КАТЕГОРИЯ: `drainage_water_management`.
