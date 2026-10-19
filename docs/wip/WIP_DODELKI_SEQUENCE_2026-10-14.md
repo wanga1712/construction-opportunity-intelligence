@@ -339,6 +339,12 @@ page-контейнеров (карточка использует drainage-ша
 51652/212585 -> 0 (нет маркеров/страниц, RESIDUE честный). Следующая:
 `flooring`.
 
+FLOORING DONE (2026-10-19): обёртка `flooring_section_templates` над общим
+движком; `SHEET_ROWS_LIMIT=20000` для sheet-шаблонов. Canary: 17236 -> 51
+раздел / 9 с материалами (RESIDUE 6390, карточка использует flooring-шаблон);
+44209 -> 40 разделов; 177590/47104/448836 -> 0 (нет маркеров/страниц);
+130467 -> 1/0. Следующая: `cable_support_systems`.
+
 ### 3B. GOOD_SUPPLY_FACTS_V1
 
 См. `docs/wip/WIP_GOOD_SUPPLY_FACTS_V1.md`.

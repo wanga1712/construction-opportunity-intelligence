@@ -380,3 +380,63 @@ SCORING_MEDAL_QUEUE_UNCHANGED=YES
 ```
 
 СЛЕДУЮЩАЯ КАТЕГОРИЯ: `flooring`.
+
+## RESULT Phase 2 — flooring template (2026-10-19)
+
+РЕАЛИЗОВАНО:
+
+```text
+new: tender_documents_research/document_processor/flooring_section_templates.py
+  тонкая обёртка общего sheet_section_templates (префикс flooring::);
+  маркеры Раздел/Глава/Секция/Участок/Лот + page_or_sheet fallback;
+  document boundary и page-switch — из общего движка.
+
+dossier:
+  flooring-проекция применяется, если flooring CURRENT и road/lighting/
+  curbstone/drainage не дали уверенных разделов;
+  SHEET_ROWS_LIMIT=20000 для sheet-шаблонов (ROAD_ROWS_LIMIT=8000 остаётся
+  для дорожного): крупные flooring-оценки (16k+ позиций) больше не обрезаются.
+```
+
+CANARY (read-only):
+
+```text
+17236:  15975 строк -> 51 раздел, 9 с материалами; RESIDUE 6390
+        doc111790::razdel 1 — 306 материалов; doc111789::razdel 3 — 51;
+        doc111789::razdel 8 — 25
+44209:  2725 -> 40 разделов, 1 с материалами (page_1_table_1, 34); RESIDUE 1587
+177590: 679 -> 0 разделов; RESIDUE 679 (нет маркеров/страниц)
+47104:  565 -> 0; RESIDUE 565
+448836: 316 -> 0; RESIDUE 316
+130467: 308 -> 1 раздел, 0 материалов; RESIDUE 280
+```
+
+КАРТОЧКА:
+
+```text
+17236: projection=flooring_section_templates, 51 раздел, RESIDUE 6390
+44209: projection=flooring_section_templates, 40 разделов, RESIDUE 1587
+177590: projection=embedded_extraction (нет уверенных разделов)
+```
+
+ЗАМЕЧАНИЯ:
+
+- до фикса `SHEET_ROWS_LIMIT` карточка 17236 видела только 1 раздел из 51
+  (cap 8000 строк); после — полный набор.
+- `categories[].product_count=0` для flooring: goods-predicate не пропускает
+  строки (нет canonical qty/unit/total). Это ограничение goods-слоя, не шаблона.
+
+ACCEPTANCE (flooring):
+
+```text
+TEMPLATE_IMPLEMENTED=YES
+USES_SHARED_ENGINE=YES
+CANARY_EXECUTED=YES (6 закупок)
+DOCUMENT_BOUNDARY=YES / PAGE_SWITCH=YES
+SHEET_ROWS_LIMIT_APPLIED=YES
+RESIDUE_HONEST=YES
+DB_WRITES=0
+SCORING_MEDAL_QUEUE_UNCHANGED=YES
+```
+
+СЛЕДУЮЩАЯ КАТЕГОРИЯ: `cable_support_systems`.
