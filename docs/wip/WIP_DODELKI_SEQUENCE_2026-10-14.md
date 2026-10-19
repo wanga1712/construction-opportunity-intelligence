@@ -345,6 +345,15 @@ FLOORING DONE (2026-10-19): обёртка `flooring_section_templates` над �
 44209 -> 40 разделов; 177590/47104/448836 -> 0 (нет маркеров/страниц);
 130467 -> 1/0. Следующая: `cable_support_systems`.
 
+CABLE_SUPPORT_SYSTEMS DONE (2026-10-19): обёртка над общим движком,
+префикс `cable_support_systems::`. Canary: контейнеры 409646 -> 1/0,
+460905 -> 21 page-контейнер/0, 457893 -> 17/0, 21372/339633 -> 0
+(RESIDUE честный); с summarizable-материалами 448082 -> 10,
+458489 -> 7, 458010 -> 6, 448702 -> 3, 14504 -> 3, 459254 -> 3.
+Карточка использует шаблон для 448082/458489. Rollout section-шаблонов
+закрыт; следующий шаг — повторный dry-run
+`scripts/audit_estimate_first_confirmation.py`.
+
 ### 3B. GOOD_SUPPLY_FACTS_V1
 
 См. `docs/wip/WIP_GOOD_SUPPLY_FACTS_V1.md`.

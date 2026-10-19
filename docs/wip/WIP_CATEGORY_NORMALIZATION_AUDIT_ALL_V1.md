@@ -440,3 +440,73 @@ SCORING_MEDAL_QUEUE_UNCHANGED=YES
 ```
 
 СЛЕДУЮЩАЯ КАТЕГОРИЯ: `cable_support_systems`.
+
+## RESULT Phase 2 — cable_support_systems template (2026-10-19)
+
+РЕАЛИЗОВАНО:
+
+```text
+new: tender_documents_research/document_processor/
+     cable_support_systems_section_templates.py
+  тонкая обёртка общего sheet_section_templates с префиксом
+  cable_support_systems::; маркеры + page_or_sheet fallback,
+  document boundary и page-switch — из общего движка.
+dossier: шаблон применяется, если cable_support_systems CURRENT и
+         road/lighting/curbstone/drainage/flooring не дали разделов.
+```
+
+CANARY — контейнеры (read-only):
+
+```text
+409646: 169 строк -> 1 раздел, 0 материалов; RESIDUE 4
+        (165 строк привязаны к разделу, но не summarizable)
+21372:  89 -> 0 разделов; RESIDUE 89 (нет маркеров/страниц)
+339633: 74 -> 0; RESIDUE 74
+460905: 50 -> 21 page-контейнер; 0 материалов; RESIDUE 28
+6985:   38 -> 1 контейнер; 0 материалов; RESIDUE 0
+457893: 18 -> 17 page-контейнеров; 0 материалов; RESIDUE 0
+```
+
+CANARY — закупки с summarizable-материалами (read-only):
+
+```text
+448082: 10 -> table_2, 10 материалов
+458489: 21 -> table_1, 7 материалов
+458010: 6  -> table_1, 6 материалов
+448702: 4  -> table_1, 3 материала
+14504:  15 -> table_1, 3 материала; RESIDUE 12
+459254: 3  -> table_7, 3 материала
+все total = COMPUTED_SUM_UNRELIABLE (строк total в данных нет)
+```
+
+КАРТОЧКА:
+
+```text
+448082 / 458489: projection=cable_support_systems_section_templates
+409646: projection=embedded_extraction (нет summarizable-материалов)
+```
+
+ЗАМЕЧАНИЯ:
+
+- данные кабеленесущих малы (717 строк) и на 46% состоят из
+  UNSUPPORTED_LAYOUT (333), поэтому часть контейнеров остаётся без материалов.
+- `categories[].product_count=0` — goods-predicate не пропускает строки;
+  это ограничение goods-слоя, не шаблона.
+- `section_confirmed` пока False: разделы проецируются на чтении, а
+  `structured_entities.section_code` для категории не персистится.
+
+ACCEPTANCE (cable_support_systems):
+
+```text
+TEMPLATE_IMPLEMENTED=YES
+USES_SHARED_ENGINE=YES
+CANARY_EXECUTED=YES (12 закупок)
+DOCUMENT_BOUNDARY=YES / PAGE_SWITCH=YES
+RESIDUE_HONEST=YES
+DB_WRITES=0
+SCORING_MEDAL_QUEUE_UNCHANGED=YES
+```
+
+ИТОГ ROLLOUT: curbstone, drainage_water_management, flooring,
+cable_support_systems закрыты. Дальше — повторный dry-run
+`scripts/audit_estimate_first_confirmation.py`.
