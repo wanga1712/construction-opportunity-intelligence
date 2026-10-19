@@ -329,7 +329,10 @@ def _group_documents(documents: List[Dict[str, Any]]) -> List[List[Dict[str, Any
     return list(groups.values())
 
 
-def _render_history_tab(pid: int, db: Any, findings: Optional[List[Dict[str, Any]]] = None) -> None:
+def _render_history_tab(
+    pid: int, db: Any, findings: Optional[List[Dict[str, Any]]] = None,
+    hidden_non_researchable: int = 0,
+) -> None:
     """Вкладка «История / Модель»: таймлайн закупки и точный model_input/промпт."""
     try:
         from src.services.crm_procurement_history_service import (
@@ -361,6 +364,11 @@ def _render_history_tab(pid: int, db: Any, findings: Optional[List[Dict[str, Any
 
     # Raw findings: техническая история, не пользовательский слой.
     _finds = findings or []
+    if hidden_non_researchable:
+        st.caption(
+            f"Скрыто матчей из требований/оценки/протоколов: {hidden_non_researchable} "
+            "(не коммерческие факты)"
+        )
     if _finds:
         with st.expander(f"Технические данные → Raw findings ({len(_finds)})"):
             mode = st.radio(
@@ -848,7 +856,10 @@ def _render_dossier(d: Dict[str, Any], db: Any = None) -> None:
                 _render_additional(_direct_state)
 
     with tab_history:
-        _render_history_tab(pid, db, d.get("findings") or [])
+        _render_history_tab(
+            pid, db, d.get("findings") or [],
+            int(counts.get("findings_hidden_non_researchable") or 0),
+        )
 
     if tab_spec is not None:
         with tab_spec:

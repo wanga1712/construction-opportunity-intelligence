@@ -19,10 +19,11 @@
 |---|---|---|---|---|
 | 0 | Branch hygiene + commit GSFX code | dirty tree | закоммитить только нужные файлы | чистый точечный коммит |
 | P1 | `UNSUPPORTED_DOC_RECOVERY_V1` | ПРИОРИТЕТ | 8 FAILED unsupported догнать | PASS |
-| P2 | `MATCH_TERM_HYGIENE_V1` | ПРИОРИТЕТ | чистка ложных терминов | PASS |
+| P2 | `MATCH_TERM_HYGIENE_V1` | DONE 2026-10-19 | чистка ложных терминов | PASS |
 | P3 | `OBJECT_QUEUE_MODEL_NORMALIZATION_V1` | ПРИОРИТЕТ | объектные исполнения + модель | PASS |
 | P4 | `PROCUREMENT_CARD_CATEGORY_PIPELINE_V1` | DONE 2026-10-19 | вкладка «Категории» вместо «Находки» | PASS |
 | P5 | `PHYSICAL_KISOK_DASHBOARD_UPGRADE_V1` | DONE 2026-10-19 | CPU temp + per-core + аналитика киоска | PASS |
+| P6 | `EMBEDDED_ESTIMATE_PARSE_FIRST_V1` | ПРИОРИТЕТ | сначала смета, затем остальное | PASS |
 | 1A | `ARCHIVE_MEMBER_DEDUP_IDENTITY_V1` | DONE (`c66f96b`) | identity sweeper исправлена | PASS |
 | 1B | `ARCHIVE_MEMBER_PARSE_CONTEXT_V1` | PASS (`24062c2`) | 99069 end-to-end подтверждён | PASS |
 | 1C | `GSFX_RESTORE_V1` | PASS (`24062c2`) | 99069 end-to-end подтверждён | PASS + коммит |
@@ -30,7 +31,7 @@
 | 2B | `ROAD_REPAIR_SECTION_TEMPLATES_V1` | 2B.6 done / UI restarted | road-projection активна | PASS |
 | 2 | `WORKS_VS_GOODS_CONFIRMATION_V1` | DONE (`1b79397`) | goods-only в карточке | PASS |
 | 3 | `CARD_MEDAL_TWO_TIER_DISPLAY_V1` | СПЕКА | двухуровневая выдача на goods-слое | PASS |
-| 3A | `CATEGORY_NORMALIZATION_AUDIT_ALL_V1` | СПЕКА | проход по всем категориям | PASS |
+| 3A | `CATEGORY_NORMALIZATION_AUDIT_ALL_V1` | Phase 2 lighting DONE 2026-10-19 | проход по всем категориям | PASS |
 | 3B | `GOOD_SUPPLY_FACTS_V1` | DONE (`6d33c95`) | плоский материалоцентричный вывод | PASS |
 | 4 | `CATEGORY_DISCOVERY_DYNAMIC_V1` | PARTIAL (A/B done) | миграция + Phase C | PASS |
 | 5 | `DIRECT_COMPUTERS_NORMALIZATION_TEMPLATES_V1` | СПЕКА | фазы 0–4 | PASS по фазам |
@@ -155,6 +156,12 @@ ZIP-определение по содержимому в `archive_extractor` (+
 «Что можно поставить» — только нормализованные товарные факты из
 `structured_entities`.
 
+СТАТУС: DONE (2026-10-19). Source-filter `match_source_filter`:
+требования к заявке / порядок и критерии оценки / протоколы / жалобы не дают
+находок. 678: 14 ложных VERIFIED → 0 (14 скрыто), включая прожектор,
+проспект, управлен, солидтех. Таблица закупок использует тот же фильтр.
+Строки в БД не удалялись.
+
 ### P3. OBJECT_QUEUE_MODEL_NORMALIZATION_V1
 
 См. `docs/wip/WIP_OBJECT_QUEUE_MODEL_NORMALIZATION_V1.md`.
@@ -185,6 +192,14 @@ ZIP-определение по содержимому в `archive_extractor` (+
 СТАТУС: DONE (2026-10-19). CPU total/per-core/min-max, temp + source + WARN/CRIT,
 документы/модель/validator/recovery/ошибки/категории. Kiosk canary на X :0
 подтверждён скриншотом; `s13-dashboard3` и `s13-kiosk` active.
+
+### P6. EMBEDDED_ESTIMATE_PARSE_FIRST_V1
+
+См. `docs/wip/WIP_EMBEDDED_ESTIMATE_PARSE_FIRST_V1.md`.
+
+Правило: для OBJECT/EMBEDDED сначала парсим смету, находим разделы и
+подтверждаем категорию в разделе. Только потом решаем, нужны ли другие
+документы. Предварительную медаль уточняем по section-подтверждению.
 
 ### 1A. ARCHIVE_MEMBER_DEDUP_IDENTITY_V1
 
@@ -293,6 +308,13 @@ confirmed_base и «что можно поставить» считаются т
 
 Правило: проходим по всем активным категориям, строим coverage matrix, для
 повторяющихся форм делаем шаблоны, AI-fallback — только для неоднозначного.
+
+СТАТУС: Phase 2 lighting DONE (2026-10-19). `lighting_section_templates`:
+маркеры «Раздел/Глава/Секция N» по тексту, identity с листом, total не
+обязателен, RESIDUE честный. Canary: 60467 -> 9 разделов / RESIDUE 63;
+45848 -> 5 разделов / RESIDUE 261 (было 92.8%); 1157 -> 0 разделов
+(маркеров нет, RESIDUE ожидаемый). Следующие: curbstone, drainage,
+flooring, cable_support_systems.
 
 ### 3B. GOOD_SUPPLY_FACTS_V1
 

@@ -374,6 +374,31 @@ def load_procurement_dossier(db: Any, procurement_id: int) -> Dict[str, Any]:
         errors=errors, label="findings",
     )
 
+    # MATCH_TERM_HYGIENE_V1 / 3A source-filter: матчи из требований к заявке,
+    # порядка/критериев оценки, протоколов и жалоб не являются коммерческими
+    # фактами. Строки в БД не удаляем — скрываем только в карточке.
+    try:
+        from src.services.match_source_filter import (
+            NON_RESEARCHABLE,
+            classify_match_source,
+        )
+
+        _kept_findings = []
+        _hidden_non_researchable = 0
+        for _f in dossier["findings"]:
+            _src = classify_match_source(_f.get("file_name"))
+            _f["source_class"] = _src
+            if _src == NON_RESEARCHABLE:
+                _hidden_non_researchable += 1
+                continue
+            _kept_findings.append(_f)
+        dossier["findings"] = _kept_findings
+        dossier["findings_source_filter"] = {
+            "hidden_non_researchable": _hidden_non_researchable,
+        }
+    except Exception as _exc:  # noqa: BLE001
+        _record_error(errors, "findings_source_filter", _exc)
+
     # «Что можно поставить»: извлечённые структурированные сущности (с trust state).
     # STALE-SUPPRESSION (2B.6.2): у одной позиции может быть старая строка без
     # section-контекста и новая с ним. Показываем только предпочтительную:
@@ -557,6 +582,62 @@ def load_procurement_dossier(db: Any, procurement_id: int) -> Dict[str, Any]:
     except Exception as _exc:  # дорожная проекция не должна ломать карточку
         _record_error(errors, "road_projection", _exc)
 
+    # LIGHTING_SECTION_TEMPLATES_V1 (3A Phase 2): если CURRENT-возможность
+    # lighting и дорожный шаблон не дал уверенных разделов — пробуем
+    # светотехнический маркер «Раздел/Глава/Секция N <Название>».
+    # Раздел — контейнер материалов; total не обязателен.
+    _has_lighting = any(
+        str((o or {}).get("commercial_category_code") or "") == "lighting"
+        for o in (dossier.get("opportunities") or [])
+    )
+    if _has_lighting and dossier.get("section_projection_source") != "road_repair_section_templates":
+        try:
+            from tender_documents_research.document_processor.lighting_section_templates import (
+                build_lighting_sections,
+            )
+
+            _lighting_rows = _safe_di(
+                """
+                WITH preferred AS (
+                    SELECT se.*,
+                           row_number() OVER (
+                               PARTITION BY se.procurement_id, se.source_document_id,
+                                            coalesce(se.row_or_line, ''),
+                                            coalesce(se.product_name_raw, '')
+                               ORDER BY (se.section_code IS NOT NULL) DESC, se.id DESC
+                           ) AS pref_rn
+                      FROM structured_entities se
+                     WHERE se.procurement_id = %s
+                       AND se.category_code = 'lighting'
+                )
+                SELECT se.product_name_raw, se.product_name_normalized, se.entity_type,
+                       se.quantity_value, se.quantity_unit_normalized, se.quantity_unit_raw,
+                       se.unit_price_value, se.total_price_value, se.source_quote,
+                       se.row_or_line, se.layout_status, se.page_or_sheet, se.section_code
+                  FROM preferred se
+                 WHERE se.pref_rn = 1
+                 ORDER BY se.id
+                 LIMIT %s
+                """,
+                (int(procurement_id), ROAD_ROWS_LIMIT),
+                errors=errors, label="lighting_rows",
+            )
+            if _lighting_rows:
+                _lighting = build_lighting_sections(_lighting_rows)
+                _lighting_confident = any(
+                    int(s.get("material_count") or 0) > 0
+                    for s in _lighting.get("sections") or []
+                )
+                if _lighting_confident:
+                    dossier["section_projection"] = projection_from_road(_lighting)
+                    dossier["section_projection_source"] = "lighting_section_templates"
+                    dossier["lighting_template"] = {
+                        "sections": len(_lighting.get("sections") or []),
+                        "residue": (_lighting.get("residue") or {}).get("count"),
+                    }
+        except Exception as _exc:  # noqa: BLE001
+            _record_error(errors, "lighting_projection", _exc)
+
     # PROCUREMENT_CARD_CATEGORY_PIPELINE_V1: read-model вкладки «Категории».
     # Одна opportunity = один блок; медали — существующие authority-поля.
     dossier["categories"] = []
@@ -612,6 +693,9 @@ def load_procurement_dossier(db: Any, procurement_id: int) -> Dict[str, Any]:
             1 for c in (dossier.get("categories") or [])
             if c.get("confirmed_base_medal")
         ),
+        "findings_hidden_non_researchable": (
+            dossier.get("findings_source_filter") or {}
+        ).get("hidden_non_researchable", 0),
     }
     return dossier
 

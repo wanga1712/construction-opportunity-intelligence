@@ -197,3 +197,64 @@ TEMPLATE_JUSTIFIED       = YES (lighting)
 DB_WRITES                = только section-поля через диагностический reparse (approved)
 SCORING_MEDAL_QUEUE_UNCHANGED = YES
 ```
+
+## RESULT Phase 2 — lighting template (2026-10-19)
+
+РЕАЛИЗОВАНО:
+
+```text
+new: tender_documents_research/document_processor/lighting_section_templates.py
+  parse_lighting_marker: «Раздел N <Название>» / «Глава N <Название>» /
+                         «Секция N <Название>» по тексту ячейки source_quote;
+  identity: lighting::<sheet>::razdel N | glava N | sekcia N;
+  шифры СР-/ЛС-/ОС- — fallback identity;
+  в сумму только canonical summarizable (section_detector.is_summarizable);
+  total не обязателен: SECTION_TOTAL, иначе COMPUTED_SUM /
+  COMPUTED_SUM_UNRELIABLE; непривязанное — RESIDUE;
+  карточка использует шаблон, если CURRENT-категория lighting и дорожный
+  шаблон не дал уверенных разделов.
+```
+
+CANARY (read-only, реальные строки из structured_entities):
+
+```text
+60467 lighting: 445 строк -> 9 разделов, RESIDUE 63
+  glava 1  «Подготовка территории…»                 27 материалов
+  glava 4  «Объекты энергетического хозяйства»      32 материала
+  glava 2  «Основные объекты строительства…»         6 материалов
+  glava 6  «Наружные сети и сооружения…»             1 материал
+  glava 7  «Благоустройство и озеленение»           17 материалов
+  8 из 9 разделов — COMPUTED_SUM_UNRELIABLE (низкое покрытие total),
+  1 — COMPUTED_SUM.
+
+45848 lighting: 930 строк -> 5 разделов, RESIDUE 261 (было 92.8% RESIDUE)
+  разделы распознаны по тексту, но большинство строк — WORKS/агрегаты,
+  поэтому привязка материалов частичная (12 в одном разделе).
+
+1157 lighting: 1079 строк -> 0 разделов, RESIDUE 1079
+  маркеров в тексте нет — RESIDUE честный и ожидаемый.
+```
+
+ДОПОЛНИТЕЛЬНО (source-filter, см. MATCH_TERM_HYGIENE_V1):
+
+```text
+678: false-находки прожектор/проспект/управлен/солидтех -> 0 (14 скрыто),
+     карточка RENDER_OK, categories=5.
+```
+
+ACCEPTANCE (lighting Phase 2):
+
+```text
+TEMPLATE_IMPLEMENTED_BY_TEXT_MARKER = YES
+SECTION_TOTAL_NOT_REQUIRED          = YES
+MATERIALS_ONLY_CANONICAL            = YES
+RESIDUE_HONEST                      = YES
+CANARY_60467_SECTIONS               = 9
+CANARY_45848_SECTIONS               = 5
+CANARY_1157_SECTIONS                = 0 (нет маркеров)
+DB_WRITES                           = 0
+SCORING_MEDAL_QUEUE_UNCHANGED       = YES
+```
+
+СЛЕДУЮЩИЕ КАТЕГОРИИ: `curbstone`, далее `drainage_water_management`, `flooring`,
+`cable_support_systems` — тем же шаблонным подходом.
