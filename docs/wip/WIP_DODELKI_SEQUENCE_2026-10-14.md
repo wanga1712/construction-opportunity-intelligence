@@ -433,6 +433,15 @@ CONFIRMED_BASE_FROM_UNTRUSTED=0, пороги/scoring не менялись.
 (80 SILVER->BRONZE и др.) из-за percentile-когорты. Preimage/postimage в /tmp.
 Нужно решение: принять rebuild или откатить collateral и оставить только 2 GOLD.
 
+FULL REBUILD ACCEPTED + COHORT STABILITY (2026-10-19): postimage зафиксирован
+как baseline (/home/sergey/section_confirmed_20261019 + SHA256SUMS).
+CONFIRMED_BASE_COHORT_STABILITY_V1: таблица crm_confirmed_base_fingerprint,
+write_confirmed_base обновляет только opportunities с изменённым fingerprint
+(--seed-fingerprints для baseline). Seed=525. Stability dry-run:
+SKIPPED_UNCHANGED=525, RECOMPUTED_CHANGED=0, WOULD_CLEAR=0,
+distribution GOLD 9/SILVER 90/BRONZE 377/WOOD 49 без изменений.
+Будущие SECTION_CONFIRMED батчи не двигают соседние карточки.
+
 ### 4. CATEGORY_DISCOVERY_DYNAMIC_V1 — Phase C
 
 См. `docs/wip/WIP_CATEGORY_DISCOVERY_DYNAMIC_V1.md`.

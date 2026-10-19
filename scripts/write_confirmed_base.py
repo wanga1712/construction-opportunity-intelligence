@@ -60,6 +60,11 @@ def _pct_rank(values: List[float], v: float) -> Optional[float]:
 def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--write", action="store_true")
+    ap.add_argument(
+        "--seed-fingerprints",
+        action="store_true",
+        help="только заполнить crm_confirmed_base_fingerprint текущими фактами, не трогая confirmed_base",
+    )
     args = ap.parse_args()
 
     crm = psycopg2.connect(**crm_dsn())
@@ -68,6 +73,7 @@ def main() -> int:
         opps = query(crm, """
             SELECT o.id, o.procurement_id, o.commercial_category_code AS category_code,
                    o.opportunity_track, o.commercial_state, o.candidate_initial_medal,
+                   o.confirmed_base_medal,
                    p.execution_end_at, p.delivery_end_date, p.end_date
               FROM crm_procurement_category_opportunities o
               JOIN crm_procurements p ON p.id = o.procurement_id
@@ -77,10 +83,15 @@ def main() -> int:
             SELECT procurement_id, category_code, count(*) AS facts,
                    count(*) FILTER (WHERE quantity_value IS NOT NULL AND unit_normalized IS NOT NULL) AS qty,
                    count(*) FILTER (WHERE line_total_value IS NOT NULL) AS vrows,
-                   coalesce(sum(line_total_value),0) AS vsum
+                   coalesce(sum(line_total_value),0) AS vsum,
+                   md5(string_agg(entity_id::text, ',' ORDER BY entity_id)) AS fingerprint
               FROM confirmed_category_facts GROUP BY 1,2
         """)
         idx = {(int(f["procurement_id"]), f["category_code"]): f for f in facts}
+        stored_fp = {
+            int(r["opportunity_id"]): r["facts_fingerprint"]
+            for r in query(crm, "SELECT opportunity_id, facts_fingerprint FROM crm_confirmed_base_fingerprint")
+        }
         cohort: Dict[str, List[float]] = defaultdict(list)
         for f in facts:
             if f["vrows"]:
@@ -89,9 +100,27 @@ def main() -> int:
         cand_before = {int(o["id"]): o["candidate_initial_medal"] for o in opps}
         today = datetime.now(timezone.utc).date()
         targets = []
+        to_clear: List[int] = []
+        fingerprints: List[tuple] = []
+        skipped_unchanged = 0
         for o in opps:
             f = idx.get((int(o["procurement_id"]), o["category_code"]))
             if not f or not f["facts"]:
+                if o.get("confirmed_base_medal"):
+                    to_clear.append(int(o["id"]))
+                continue
+            fingerprints.append((
+                int(o["id"]), f["fingerprint"], int(f["facts"]),
+                int(f["vrows"]), float(f["vsum"]),
+            ))
+            # CONFIRMED_BASE_COHORT_STABILITY_V1: unchanged facts keep their
+            # existing score/medal. Only new/changed/de-novo opportunities are
+            # recomputed, so a SECTION_CONFIRMED addition cannot move neighbours.
+            if (
+                stored_fp.get(int(o["id"])) == f["fingerprint"]
+                and o.get("confirmed_base_medal") is not None
+            ):
+                skipped_unchanged += 1
                 continue
             track = "DIRECT" if o["category_code"] in DIRECT_CATS else "EMBEDDED"
             comps: Dict[str, Optional[float]] = {}
@@ -120,15 +149,50 @@ def main() -> int:
             medal = "GOLD" if score >= 85 else "SILVER" if score >= 70 else "BRONZE" if score >= 50 else "WOOD"
             targets.append((int(o["id"]), round(score, 2), medal))
 
+        final_dist = Counter()
+        for o in opps:
+            f = idx.get((int(o["procurement_id"]), o["category_code"]))
+            if not f or not f["facts"]:
+                continue
+            if stored_fp.get(int(o["id"])) == f["fingerprint"] and o.get("confirmed_base_medal") is not None:
+                final_dist[o["confirmed_base_medal"]] += 1
+        for _, _, medal in targets:
+            final_dist[medal] += 1
+
         print(f"CURRENT_OPPORTUNITIES={len(opps)}")
-        print(f"WITH_CONFIRMED_FACTS={len(targets)}")
-        print(f"CONFIRMED_BASE_TO_WRITE={len(targets)}")
+        print(f"WITH_CONFIRMED_FACTS={skipped_unchanged + len(targets)}")
+        print(f"CONFIRMED_BASE_TO_WRITE={len(targets) if not args.seed_fingerprints else 0}")
+        print(f"SKIPPED_UNCHANGED={skipped_unchanged}")
+        print(f"RECOMPUTED_CHANGED={len(targets)}")
+        print(f"WOULD_CLEAR={len(to_clear)}")
+        print(f"FINGERPRINTS={len(fingerprints)}")
         print(f"CONFIRMED_BASE_WITHOUT_DOCUMENT_FACTS=0")
         print(f"CANDIDATE_INITIAL_CHANGED=0")
         print(f"PROJECT_NMCK_LEAK=0")
-        dist = Counter(t[2] for t in targets)
-        print(f"CONFIRMED_100_DISTRIBUTION={{'GOLD':{dist['GOLD']},'SILVER':{dist['SILVER']},"
-              f"'BRONZE':{dist['BRONZE']},'WOOD':{dist['WOOD']}}}")
+        print(f"CONFIRMED_100_DISTRIBUTION={{'GOLD':{final_dist['GOLD']},'SILVER':{final_dist['SILVER']},"
+              f"'BRONZE':{final_dist['BRONZE']},'WOOD':{final_dist['WOOD']}}}")
+
+        if args.seed_fingerprints:
+            if not args.write:
+                print("SEED_FINGERPRINTS_DRY_RUN=YES")
+                return 0
+            with crm.cursor() as cur:
+                for oid, fp, facts_n, vrows, vsum in fingerprints:
+                    cur.execute(
+                        """INSERT INTO crm_confirmed_base_fingerprint
+                               (opportunity_id, facts_fingerprint, facts_count, value_rows, value_sum, updated_at)
+                           VALUES (%s,%s,%s,%s,%s,NOW())
+                           ON CONFLICT (opportunity_id) DO UPDATE SET
+                               facts_fingerprint=EXCLUDED.facts_fingerprint,
+                               facts_count=EXCLUDED.facts_count,
+                               value_rows=EXCLUDED.value_rows,
+                               value_sum=EXCLUDED.value_sum,
+                               updated_at=NOW()""",
+                        (oid, fp, facts_n, vrows, vsum),
+                    )
+            crm.commit()
+            print(f"FINGERPRINTS_SEEDED={len(fingerprints)}")
+            return 0
 
         if not args.write:
             print("DRY_RUN=YES (no writes)")
@@ -142,15 +206,32 @@ def main() -> int:
                     "     confirmed_scoring_version=%s WHERE id=%s",
                     (score, medal, SCORING_VERSION, oid),
                 )
-            # Fail-closed: an opportunity without documentary-confirmed facts keeps
-            # confirmed_base = NULL (never WOOD/0, never a stale value).
-            cur.execute(
-                "UPDATE crm_procurement_category_opportunities"
-                " SET confirmed_base_score=NULL, confirmed_base_medal=NULL, confirmed_at=NULL,"
-                "     confirmed_scoring_version=NULL"
-                " WHERE status='CURRENT' AND NOT (id = ANY(%s))",
-                ([t[0] for t in targets],),
-            )
+            # Fail-closed only where facts disappeared; untouched opportunities
+            # are preserved (cohort stability).
+            if to_clear:
+                cur.execute(
+                    "UPDATE crm_procurement_category_opportunities"
+                    " SET confirmed_base_score=NULL, confirmed_base_medal=NULL, confirmed_at=NULL,"
+                    "     confirmed_scoring_version=NULL WHERE id = ANY(%s)",
+                    (to_clear,),
+                )
+                cur.execute(
+                    "DELETE FROM crm_confirmed_base_fingerprint WHERE opportunity_id = ANY(%s)",
+                    (to_clear,),
+                )
+            for oid, fp, facts_n, vrows, vsum in fingerprints:
+                cur.execute(
+                    """INSERT INTO crm_confirmed_base_fingerprint
+                           (opportunity_id, facts_fingerprint, facts_count, value_rows, value_sum, updated_at)
+                       VALUES (%s,%s,%s,%s,%s,NOW())
+                       ON CONFLICT (opportunity_id) DO UPDATE SET
+                           facts_fingerprint=EXCLUDED.facts_fingerprint,
+                           facts_count=EXCLUDED.facts_count,
+                           value_rows=EXCLUDED.value_rows,
+                           value_sum=EXCLUDED.value_sum,
+                           updated_at=NOW()""",
+                    (oid, fp, facts_n, vrows, vsum),
+                )
         crm.commit()
         from_untrusted = query(
             di,
