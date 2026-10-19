@@ -253,6 +253,16 @@ def normalize_unit(raw: Optional[str]) -> Tuple[Optional[str], Optional[str]]:
     key2 = key.replace(" ", "")
     if key2 in _UNIT_MAP:
         return _UNIT_MAP[key2]
+    # OCR/estimate cells often carry a scale prefix: "100 шт", "1000м3",
+    # "100 м2". The unit itself is the tail after the leading number.
+    m = re.match(r"^[\d\s.,]+\s*([^\d].*)$", key)
+    if m:
+        tail = m.group(1).strip(" .,;:")
+        if tail in _UNIT_MAP:
+            return _UNIT_MAP[tail]
+        tail2 = tail.replace(" ", "")
+        if tail2 in _UNIT_MAP:
+            return _UNIT_MAP[tail2]
     return None, None
 
 
@@ -726,8 +736,9 @@ def _row_to_fact(
     # quantity + unit: combined cell first, then bare-unit + bare-number pairing
     qty = unit_raw = unit_norm = family = None
     used_idx: set = set()
+    name_idx = next((i for i, c in enumerate(cells) if c is name), None)
     for idx, cell in enumerate(cells):
-        if cell is name:
+        if idx == name_idx:
             continue
         parsed = split_quantity_unit(cell)
         if parsed and parsed[2]:
@@ -735,16 +746,33 @@ def _row_to_fact(
             used_idx.add(idx)
             break
     if qty is None:
-        unit_idx = number_idx = None
+        unit_idx = None
         for idx, cell in enumerate(cells):
-            if cell is name:
+            if idx == name_idx:
                 continue
             un, _fam = normalize_unit(cell)
             is_unit = bool(un) and len(_canon_unit_key(cell)) <= 12
             if is_unit:
-                unit_idx = idx if unit_idx is None else unit_idx
-            elif number_idx is None and not is_unit and parse_number(cell) is not None:
-                number_idx = idx
+                unit_idx = idx
+                break
+        number_idx = None
+        # Quantity is the first number AFTER the unit, never the row number in
+        # the leading cell. This is the common estimate layout:
+        # № | name | unit | qty | price | total.
+        if unit_idx is not None:
+            for idx in range(unit_idx + 1, len(cells)):
+                if idx == name_idx:
+                    continue
+                if parse_number(cells[idx]) is not None:
+                    number_idx = idx
+                    break
+        if number_idx is None:
+            for idx, cell in enumerate(cells):
+                if idx == name_idx:
+                    continue
+                if parse_number(cell) is not None and not normalize_unit(cell)[0]:
+                    number_idx = idx
+                    break
         if number_idx is not None:
             qty = parse_number(cells[number_idx])
             used_idx.add(number_idx)
@@ -760,7 +788,10 @@ def _row_to_fact(
     # money cells: remaining numeric cells
     money: List[Tuple[int, float, str]] = []
     for idx, cell in enumerate(cells):
-        if idx in used_idx or cell is name:
+        if idx in used_idx or idx == name_idx:
+            continue
+        # Leading cell is the position/row number (№), not money.
+        if idx == 0 and name_idx not in (None, 0):
             continue
         val = parse_number(cell)
         if val is None:
@@ -781,9 +812,27 @@ def _row_to_fact(
             line_total_value = line_total_raw = None
             layout_status = "UNSUPPORTED_LAYOUT"
     else:
-        # No recognisable header: material/quantity may be kept, but a value is
-        # NEVER guessed from neighbouring numbers.
+        # No recognisable header: accept money only when arithmetic proves a
+        # real position: total ≈ qty * price (<=5%). Otherwise fail-closed.
         layout_status = "UNSUPPORTED_LAYOUT"
+        if qty is not None and len(money) >= 2:
+            for a_pos, (_, price, price_cell) in enumerate(money):
+                if price is None:
+                    continue
+                for _, total, total_cell in money[a_pos + 1:]:
+                    if total is None:
+                        continue
+                    computed = float(qty) * float(price)
+                    denom = max(abs(float(total)), abs(computed), 1.0)
+                    if abs(float(total) - computed) / denom <= 0.05:
+                        unit_price_value = price
+                        unit_price_raw = price_cell
+                        line_total_value = total
+                        line_total_raw = total_cell
+                        layout_status = "CONSISTENT"
+                        break
+                if layout_status == "CONSISTENT":
+                    break
 
     # An evidence fact requires a unit-bound quantity (no unit -> not a fact).
     if qty is None or unit_norm is None:

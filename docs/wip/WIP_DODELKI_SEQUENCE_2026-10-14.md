@@ -442,6 +442,19 @@ SKIPPED_UNCHANGED=525, RECOMPUTED_CHANGED=0, WOULD_CLEAR=0,
 distribution GOLD 9/SILVER 90/BRONZE 377/WOOD 49 без изменений.
 Будущие SECTION_CONFIRMED батчи не двигают соседние карточки.
 
+PHASE 1.1 (2026-10-19): total/unit mapping.
+  * unit «100 шт»/«1000м3»/«100 м2» нормализуется;
+  * qty = первое число после unit, не номер строки;
+  * без header_map total принимается только при total ≈ qty*price (<=5%);
+  * reparse обрабатывает ВСЕ категории документа (раньше одну).
+Canary: 60467 (3122), 17236 (17139), 26386 (drainage), 448082 (10).
+Coverage: drainage has_total 1360->2400 / OK 387->895;
+flooring has_total 171->200 / has_unit 13388->19461 / qty 15783->23003;
+curbstone/cable без изменений.
+Projected: 180 in-section / WOULD_LOSE 213 (trust-гейт, без изменений).
+Strict SECTION_CONFIRMED: 1330 rows -> 111 canonical -> 108 dedup
+(drainage 110 + composite 1); apply не запускался.
+
 ### 4. CATEGORY_DISCOVERY_DYNAMIC_V1 — Phase C
 
 См. `docs/wip/WIP_CATEGORY_DISCOVERY_DYNAMIC_V1.md`.

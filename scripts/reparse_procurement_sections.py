@@ -57,7 +57,22 @@ def _category_maps(conn, procurement_id: int):
         " WHERE procurement_id = %s AND category_code IS NOT NULL",
         (procurement_id,),
     )
-    by_doc = {str(r["document_name"]): r["category_code"] for r in cur.fetchall()}
+    by_doc = defaultdict(set)
+    for r in cur.fetchall():
+        by_doc[str(r["document_name"])].add(r["category_code"])
+    # One file can carry several categories (e.g. a road estimate with
+    # curbstone/drainage/lighting rows). Reparse every category that already
+    # has entities for this document, otherwise only the last run category
+    # would be refreshed.
+    cur.execute(
+        "SELECT DISTINCT source_document_id, category_code FROM structured_entities"
+        " WHERE procurement_id = %s AND source_document_id IS NOT NULL"
+        "   AND category_code IS NOT NULL",
+        (procurement_id,),
+    )
+    by_df = defaultdict(set)
+    for r in cur.fetchall():
+        by_df[int(r["source_document_id"])].add(r["category_code"])
     cur.execute(
         "SELECT category_code, count(*) c FROM structured_entities"
         " WHERE procurement_id = %s AND category_code IS NOT NULL"
@@ -65,7 +80,7 @@ def _category_maps(conn, procurement_id: int):
         (procurement_id,),
     )
     row = cur.fetchone()
-    return by_doc, (row["category_code"] if row else None)
+    return by_doc, by_df, (row["category_code"] if row else None)
 
 
 def main() -> int:
@@ -81,7 +96,7 @@ def main() -> int:
     conn = _doc_conn()
     try:
         rows = _targets(conn, args.procurement_id)
-        by_doc, default_cat = _category_maps(conn, args.procurement_id)
+        by_doc, by_df, default_cat = _category_maps(conn, args.procurement_id)
     finally:
         conn.close()
 
@@ -107,8 +122,10 @@ def main() -> int:
         for path, items in present.items():
             name = Path(path).name
             print("   WOULD_PARSE:", name, "| document_files ids:",
-                  [i["id"] for i in items], "| category:",
-                  by_doc.get(name, default_cat))
+                  [i["id"] for i in items], "| categories:",
+                  sorted({c for i in items
+                          for c in (by_df.get(int(i["id"])) or by_doc.get(name)
+                                    or ({default_cat} if default_cat else set()))}))
         print("DRY_RUN OK: DB_WRITES=0")
         return 0
 
@@ -125,7 +142,6 @@ def main() -> int:
     for path, items in present.items():
         file_path = Path(path)
         name = file_path.name
-        category = by_doc.get(name, default_cat)
         # UNSUPPORTED_DOC_RECOVERY_V1: `.xls`/`.rtf` конвертируем перед разбором.
         parse_path = convert_if_needed(file_path)
         parser = (get_rich_parser(factory, parse_path) if supports_rich_meta(parse_path)
@@ -135,17 +151,20 @@ def main() -> int:
             continue
         text, line_meta = parse_file_with_meta(parser, parse_path)
         for item in items:
-            result = extract_and_persist(
-                parse_path, text, args.procurement_id, name,
-                category_code=category,
-                source_document_id=item["id"],
-                physical_key=item["physical_download_key"],
-                line_meta=line_meta,
-            )
-            for key, value in (result or {}).items():
-                totals[key] += int(value or 0)
-            print("   PARSED:", name, "| df_id:", item["id"], "| cat:", category,
-                  "| result:", result)
+            categories = (by_df.get(int(item["id"])) or by_doc.get(name)
+                          or ({default_cat} if default_cat else set()))
+            for category in sorted(categories):
+                result = extract_and_persist(
+                    parse_path, text, args.procurement_id, name,
+                    category_code=category,
+                    source_document_id=item["id"],
+                    physical_key=item["physical_download_key"],
+                    line_meta=line_meta,
+                )
+                for key, value in (result or {}).items():
+                    totals[key] += int(value or 0)
+                print("   PARSED:", name, "| df_id:", item["id"], "| cat:", category,
+                      "| result:", result)
     print("TOTALS:", dict(totals))
     print("APPLIED: section-поля пересчитаны (EMBEDDED_FORCE_UPDATE=1)")
     return 0

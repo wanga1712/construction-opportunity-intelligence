@@ -141,6 +141,8 @@ run identity:
 
 ### Phase 1.1 — total/unit mapping
 
+Статус: NEXT.
+
 Извлекать `total_price_value` из правильных колонок смет, подтягивать unit из
 соседней колонки. Это снимет `no_total` и `no_unit`.
 
@@ -394,6 +396,88 @@ WORKS_EXCLUDED=YES
 DB_WRITES=0
 SCORING_MEDAL_QUEUE_UNCHANGED=YES
 ```
+
+## RESULT Phase 1.1 — total/unit mapping (2026-10-19)
+
+РЕАЛИЗОВАНО:
+
+```text
+embedded_extraction.normalize_unit:
+  понимает scale-prefix «100 шт», «1000м3», «100 м2» (unit — хвост после числа).
+
+embedded_extraction._row_to_fact:
+  quantity = первое число ПОСЛЕ unit, а не номер строки в первой колонке;
+  без header_map деньги принимаются только при арифметическом доказательстве:
+  total ≈ qty * price (<=5%), иначе UNSUPPORTED_LAYOUT/fail-closed;
+  ведущая колонка № исключается из money-кандидатов.
+
+scripts/reparse_procurement_sections.py:
+  один документ теперь переразбирается по ВСЕМ категориям, которые уже есть
+  у его source_document_id (раньше — только последняя категория run).
+```
+
+CANARY REPARSE:
+
+```text
+60467  (drainage/lighting/waterproofing): embedded 3122
+17236  (flooring + др.):                  embedded 17139
+26386  (drainage):                        estimates/ВОР пересобраны
+448082 (cable_support_systems):           embedded 10
+```
+
+COVERAGE AUDIT ДО -> ПОСЛЕ:
+
+```text
+curbstone:  has_total 569 -> 569      OK 233 -> 233
+drainage:   has_total 1360 -> 2400    OK 387 -> 895   (total rows 28081 -> 31689)
+flooring:   has_total 171 -> 200      OK 171 -> 200
+            has_unit 13388 -> 19461   has_qty 15783 -> 23003
+cable:      has_total 32 -> 32        OK 28 -> 28
+lighting:   без изменений
+```
+
+PROJECTED DRY-RUN (после Phase 1.1):
+
+```text
+GOODS_FACTS_TOTAL_PROJECTED=11066
+GOODS_FACTS_IN_SECTION_PROJECTED=180
+CONFIRMED_BASE_WOULD_LOSE_PROJECTED=213
+```
+
+Не изменился: projected считает только TRUSTED_PRODUCTION, а новые
+curbstone/drainage/flooring факты остаются MANUAL_PROOF_QUARANTINE.
+
+STRICT SECTION_CONFIRMED DRY-RUN (после Phase 1.1):
+
+```text
+QUARANTINE_WITH_SECTION_TOTAL_SOURCE=1330   (было 685)
+CANONICAL_GOODS=111                         (было 66)
+SEMANTIC_DEDUP_FACTS=108                    (было 65)
+BY_CATEGORY: drainage_water_management 110, composite_structures 1
+OPPORTUNITIES_PROJECTED_WITH_FACTS=2
+CONFIRMED_BASE_NEW_OR_CHANGED=1
+PROJECTED_CONFIRMED_BASE_DISTRIBUTION={'GOLD': 2}
+DB_WRITES=0 / APPLY_NOT_RUN=YES
+```
+
+Waterproofing 52 уже промоутированы ранее; drainage 110 — новый пул
+кандидатов SECTION_CONFIRMED (после dedup 108).
+
+ACCEPTANCE (Phase 1.1):
+
+```text
+TOTAL_MAPPING_ARITHMETIC_PROOF=YES
+UNIT_SCALE_PREFIX_NORMALIZED=YES
+QTY_AFTER_UNIT_NOT_ROW_NUMBER=YES
+REPARSE_ALL_CATEGORIES_PER_DOCUMENT=YES
+WORKS_RESOURCE_ROWS_STILL_EXCLUDED=YES
+CANARY_EXECUTED=YES (60467/17236/26386/448082)
+DB_WRITES=reparse only (approved), SECTION_CONFIRMED apply NOT run
+```
+
+СЛЕДУЮЩИЙ ШАГ: если принимаем drainage-пул — отдельный approval на
+`promote_section_confirmed_embedded.py --apply` + `build_confirmed_facts` +
+`write_confirmed_base` (cohort stability ограничит изменения affected cards).
 
 ## RESULT — out-of-order download + reparse 148391 (2026-10-19)
 
