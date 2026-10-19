@@ -202,3 +202,62 @@ PRELIMINARY_MEDAL_REVALIDATED=DRY_RUN_ONLY
 SCORING_THRESHOLDS_UNCHANGED=YES
 DB_WRITES=0
 ```
+
+## RESULT Phase 4 — повторный dry-run после rollout шаблонов (2026-10-19)
+
+### 1. Основной audit (как есть, читает `structured_entities.section_code`)
+
+```text
+GOODS_FACTS_TOTAL=14027
+GOODS_FACTS_IN_SECTION=22
+GOODS_FACTS_RESIDUE=14005
+OPPORTUNITIES_WITH_SECTION_FACTS=1
+CONFIRMED_BASE_WOULD_LOSE=522
+CONFIRMED_BASE_DISTRIBUTION={'BRONZE': 1}
+DB_WRITES=0
+```
+
+НЕ ИЗМЕНИЛОСЬ, и это ожидаемо: шаблоны curbstone/drainage/flooring/
+cable_support работают **на чтении** и не пишут `section_code` в БД.
+
+### 2. Projection-aware dry-run (шаблоны применены в памяти)
+
+`scripts/audit_estimate_first_confirmation_projected.py`, read-only:
+
+```text
+GOODS_FACTS_TOTAL_PROJECTED=11066   (только 5 категорий с шаблонами)
+GOODS_FACTS_IN_SECTION_PROJECTED=180 (1.6%)
+GOODS_FACTS_RESIDUE_PROJECTED=10886
+OPPORTUNITIES_WITH_SECTION_FACTS_PROJECTED=16
+CONFIRMED_BASE_WOULD_LOSE_PROJECTED=213
+CONFIRMED_BASE_BASELINE_SAME_CATEGORIES_KEEP=1
+CONFIRMED_BASE_BASELINE_SAME_CATEGORIES_LOSE=228
+CONFIRMED_BASE_DISTRIBUTION_PROJECTED={'SILVER':5,'BRONZE':8,'GOLD':2,'WOOD':1}
+
+BY_CATEGORY:
+  lighting:                  goods=10392  in_section=144 (1.4%)  sections=55
+  cable_support_systems:     goods=669    in_section=36  (5.4%)  sections=64
+  curbstone:                 goods=0      in_section=0           sections=209
+  drainage_water_management: goods=0      in_section=0           sections=970
+  flooring:                  goods=5      in_section=0           sections=175
+```
+
+ВЫВОДЫ:
+
+1. Шаблоны реально находят разделы: 1 473 контейнера на 5 категорий.
+2. Но goods-фактов в разделах всё ещё мало: 180 из 11 066 (1.6%).
+3. `CONFIRMED_BASE_WOULD_LOSE` для тех же 5 категорий: 228 -> 213
+   (шаблоны спасают 15 подтверждений, не 300+).
+4. Главный блокер теперь не section detection, а **goods-слой**:
+   у curbstone/drainage 0 goods-фактов, у flooring 5.
+   Секции есть (209 / 970 / 175), но в них нечего подтверждать.
+
+РЕШЕНИЕ: `CATEGORY_ONLY_FROM_CONFIRMED_SECTION` НЕ включаем. Следующие шаги:
+
+```text
+a) persistence: reparse/backfill section_code для rolled-out категорий
+   (DB writes — отдельный approval);
+b) goods extraction: почему curbstone/drainage/flooring дают 0-5 goods
+   (layout_status UNSUPPORTED_LAYOUT / нет qty-unit-total);
+c) после a+b — повторный projected и DB dry-run.
+```

@@ -209,6 +209,23 @@ fallback). Теперь первым выбирается ESTIMATE/NMCK/BOQ, о�
 Phase 4 dry-run: section-only confirmed_base обнулил бы 522 из 523 категорий
 (в разделах только 0.2% goods-фактов) — apply НЕ делаем до rollout секций.
 
+ПОВТОРНЫЙ DRY-RUN (2026-10-19, после rollout curbstone/drainage/flooring/
+cable_support_systems):
+
+```text
+DB audit (как есть): GOODS_FACTS_IN_SECTION=22, WOULD_LOSE=522
+  — не изменился: шаблоны работают на чтении, section_code в БД не пишется.
+Projected audit (в памяти): GOODS_FACTS_IN_SECTION=180 (1.6%),
+  WOULD_LOSE=213; baseline тех же 5 категорий: 228 -> 213.
+  lighting 144/10392, cable_support 36/669, curbstone 0, drainage 0,
+  flooring 0-5 goods.
+```
+
+ВЫВОД: главный блокер теперь goods-слой (curbstone/drainage/flooring дают
+0-5 goods-фактов), а не поиск разделов. `CATEGORY_ONLY_FROM_CONFIRMED_SECTION`
+НЕ включаем. Дальше: (a) persistence section_code через reparse/backfill
+(отдельный approval), (b) разбор goods extraction для этих категорий.
+
 ### 1A. ARCHIVE_MEMBER_DEDUP_IDENTITY_V1
 
 См. `docs/wip/WIP_ARCHIVE_MEMBER_DEDUP_IDENTITY_V1.md`.
