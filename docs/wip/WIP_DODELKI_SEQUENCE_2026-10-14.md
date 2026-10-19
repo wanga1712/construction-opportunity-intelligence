@@ -21,7 +21,8 @@
 | P1 | `UNSUPPORTED_DOC_RECOVERY_V1` | ПРИОРИТЕТ | 8 FAILED unsupported догнать | PASS |
 | P2 | `MATCH_TERM_HYGIENE_V1` | ПРИОРИТЕТ | чистка ложных терминов | PASS |
 | P3 | `OBJECT_QUEUE_MODEL_NORMALIZATION_V1` | ПРИОРИТЕТ | объектные исполнения + модель | PASS |
-| P4 | `PROCUREMENT_CARD_CATEGORY_PIPELINE_V1` | ПРИОРИТЕТ | вкладка «Категории» вместо «Находки» | PASS |
+| P4 | `PROCUREMENT_CARD_CATEGORY_PIPELINE_V1` | DONE 2026-10-19 | вкладка «Категории» вместо «Находки» | PASS |
+| P5 | `PHYSICAL_KISOK_DASHBOARD_UPGRADE_V1` | DONE 2026-10-19 | CPU temp + per-core + аналитика киоска | PASS |
 | 1A | `ARCHIVE_MEMBER_DEDUP_IDENTITY_V1` | DONE (`c66f96b`) | identity sweeper исправлена | PASS |
 | 1B | `ARCHIVE_MEMBER_PARSE_CONTEXT_V1` | PASS (`24062c2`) | 99069 end-to-end подтверждён | PASS |
 | 1C | `GSFX_RESTORE_V1` | PASS (`24062c2`) | 99069 end-to-end подтверждён | PASS + коммит |
@@ -167,6 +168,23 @@ ZIP-определение по содержимому в `archive_extractor` (+
 
 Правило: вкладку «Находки» заменяем на «Категории»; raw findings — только в
 технической истории. Плитку «Находки 14» убираем.
+
+СТАТУС: DONE (2026-10-19). Read-model `dossier["categories"]`, вкладка
+«Категории», товары по trust внутри категории, raw findings в технической
+истории. Единый authority очереди/ETA — `document_queue_progress_service`.
+Честные пробелы: model_document_requests_count и model_eta = null (нет
+источника). Нужен рестарт `crm-streamlit.service`.
+
+### P5. PHYSICAL_KISOK_DASHBOARD_UPGRADE_V1
+
+См. `docs/wip/WIP_PHYSICAL_KISOK_DASHBOARD_UPGRADE_V1.md`.
+
+Правило: физический экран показывает CPU temp, per-core нагрузку и компактную
+аналитику из существующих snapshot-данных; без выдуманных значений.
+
+СТАТУС: DONE (2026-10-19). CPU total/per-core/min-max, temp + source + WARN/CRIT,
+документы/модель/validator/recovery/ошибки/категории. Kiosk canary на X :0
+подтверждён скриншотом; `s13-dashboard3` и `s13-kiosk` active.
 
 ### 1A. ARCHIVE_MEMBER_DEDUP_IDENTITY_V1
 

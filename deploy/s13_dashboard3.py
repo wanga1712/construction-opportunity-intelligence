@@ -1,6 +1,12 @@
 #!/usr/bin/env python3
-import json, re, socket, subprocess, threading, time
+# PHYSICAL_KISOK_DASHBOARD_UPGRADE_V1
+import json, re, socket, subprocess, sys, threading, time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+
+# System health probes — единый источник CPU/temp (read-only, без выдуманных нулей).
+CRM_ROOT = "/opt/CRM_Streamlit"
+if CRM_ROOT not in sys.path:
+    sys.path.insert(0, CRM_ROOT)
 
 def sh(c,t=10):
     try: return subprocess.run(c,shell=True,capture_output=True,text=True,timeout=t).stdout.strip()
@@ -17,14 +23,6 @@ def i(x):
     try: return int(str(x).strip())
     except Exception: return None
 
-_lock=threading.Lock(); _prev={"t":None,"idle":0,"total":0}
-def cpu_busy():
-    p=[int(x) for x in open("/proc/stat").readline().split()[1:]]
-    idle=p[3]+p[4]; tot=sum(p)
-    with _lock: t0,i0,t0t=_prev["t"],_prev["idle"],_prev["total"]; _prev.update(t=time.time(),idle=idle,total=tot)
-    if t0 is None: return 0
-    dt=tot-t0t; di=idle-i0
-    return int(100*(dt-di)/dt) if dt>0 else 0
 def mem():
     d={}
     for l in open("/proc/meminfo"):
@@ -38,8 +36,42 @@ def gpu():
         u,mu,mt,pw,pl,gt,fn=[x.strip() for x in o.split(",")]
         return {"util":int(float(u)),"vram_used":int(float(mu)),"vram_total":int(float(mt)),"pct":int(float(mu)/float(mt)*100),"power":round(float(pw)),"temp":int(float(gt)),"fan":int(float(fn))}
     except Exception: return None
-def temp_c():
-    m=re.search(r"Package id 0:\s*\+([0-9.]+)",sh("sensors 2>/dev/null")); return int(float(m.group(1))) if m else 0
+def cpu_metrics():
+    """CPU total + per-core из system_health_probes; без валидного сэмпла — None."""
+    try:
+        from src.services.system_health_probes import collect_cpu
+        c = collect_cpu()
+        per = c.get("per_core_pct") or []
+        total = c.get("usage_pct")
+        return {
+            "total": total,
+            "status": c.get("usage_pct_status"),
+            "cores": c.get("cores"),
+            "per": per,
+            "min": min(per) if per else None,
+            "max": max(per) if per else None,
+            "model": c.get("model"),
+            "freq_mhz": c.get("freq_mhz"),
+        }
+    except Exception:
+        return {"total": None, "status": "NOT_AVAILABLE", "cores": None,
+                "per": [], "min": None, "max": None, "model": None, "freq_mhz": None}
+
+def temperatures():
+    """Package/max-core temp + источник + WARN/CRIT статус. Нет датчика -> None."""
+    try:
+        from src.services.system_health_temps import collect_local_temperature_bundle
+        b = collect_local_temperature_bundle()
+        return {
+            "package": b.get("cpu_package_temp_c"),
+            "core_max": b.get("cpu_core_max_temp_c"),
+            "display": b.get("display_cpu_temp_c"),
+            "status": b.get("display_cpu_temp_status") or "UNKNOWN",
+            "source": b.get("cpu_temp_source"),
+        }
+    except Exception:
+        return {"package": None, "core_max": None, "display": None,
+                "status": "UNKNOWN", "source": None}
 def cooling():
     o=sh("sensors 2>/dev/null"); f=[]
     for fid,rpm in re.findall(r"fan(\d+):\s+(\d+) RPM",o):
@@ -87,10 +119,33 @@ def heavy():
     medal_new=pq("crm","SELECT count(DISTINCT procurement_id) FROM crm_category_opportunity_medal_history WHERE evaluated_at >= current_date AND previous_effective_medal IS NULL AND new_effective_medal IS NOT NULL",30)
     queued=pq("document_intelligence","SELECT count(DISTINCT procurement_id) FROM document_processing_queue WHERE created_at >= current_date",30)
     model=pq("crm","SELECT count(DISTINCT id) FROM crm_procurements WHERE id > (SELECT max(id)-20000 FROM crm_procurements) AND ai_assessed_at >= current_date",30)
+    # PHYSICAL_KISOK_DASHBOARD_UPGRADE_V1: компактная read-only аналитика.
+    # Тяжёлые all-time COUNT не делаем: validator — только за сегодня (29ms),
+    # очередь/ошибки — по ограниченным выборкам.
+    docstats={}
+    for r in rows(pq("document_intelligence","SELECT status, count(*) FROM document_processing_queue WHERE status IN ('PENDING','PRE_RESEARCH_WAITING','PROCESSING') GROUP BY 1")):
+        docstats[r[0]]=i(r[1])
+    for r in rows(pq("document_intelligence","SELECT status, count(*) FROM document_processing_queue WHERE status IN ('COMPLETED','FAILED') AND completed_at >= current_date GROUP BY 1")):
+        docstats['TODAY_'+r[0]]=i(r[1])
+    validator={}
+    for r in rows(pq("document_intelligence","SELECT CASE WHEN upper(coalesce(d.validation_status,'')) IN ('UNKNOWN','RAW','PENDING') AND d.validated_at IS NULL THEN 'PENDING' ELSE upper(coalesce(d.validation_status,'UNKNOWN')) END AS st, count(*) FROM document_match_details d JOIN document_matches m ON m.id=d.match_id WHERE m.created_at >= current_date GROUP BY 1")):
+        validator[r[0]]=i(r[1])
+    recovery={}
+    for r in rows(pq("document_intelligence","SELECT COALESCE(outcome,'?'), count(*) FROM document_extraction_outcomes WHERE updated_at >= current_date GROUP BY 1")):
+        recovery[r[0]]=i(r[1])
+    for r in rows(pq("document_intelligence","SELECT CASE WHEN file_name ILIKE '%.rtf' THEN 'RTF' WHEN file_name ILIKE '%.xls' THEN 'XLS' WHEN file_name ILIKE '%.doc' THEN 'DOC' ELSE 'OTHER' END, count(*) FROM document_files WHERE error_message ILIKE 'Unsupported format%' GROUP BY 1")):
+        recovery['UNSUPPORTED_'+r[0]]=i(r[1])
+    errors=[]
+    for r in rows(pq("document_intelligence","SELECT id, procurement_id, coalesce(last_error,'') FROM document_processing_queue WHERE status='FAILED' ORDER BY id DESC LIMIT 5")):
+        errors.append({"id":i(r[0]),"pid":i(r[1]),"err":(r[2] or "")[:160]})
+    cc=pq("crm","SELECT count(*), count(*) FILTER (WHERE confirmed_base_medal IS NOT NULL) FROM crm_procurement_category_opportunities WHERE status='CURRENT'")
+    cat_conf=[i(x.strip()) for x in cc.split("|")] if "|" in cc else [None,None]
     flow={"received":rec,"category_today":i(cat),"category_total":i(cat_all),"medal_new":i(medal_new),"medal_changed":i(medal_ch),"queued_today":i(queued),"model_processed":i(model),
           "production":svc("crm-ai-assessment-runner.service"),"shadow":svc("crm-v3-shadow-predictor.service")}
     CACHE["data"]={"scope":scope,"medals":med,"queue":q,"admission":adm,"claimable":cl,"claimable_total":sum(x['count'] for x in cl),
-                   "flow":flow,"heavy_ms":int((time.time()-t0)*1000),"ts":time.strftime('%H:%M:%S')}
+                   "flow":flow,"docstats":docstats,"validator":validator,"recovery":recovery,
+                   "errors":errors,"cat_conf":cat_conf,
+                   "heavy_ms":int((time.time()-t0)*1000),"ts":time.strftime('%H:%M:%S')}
     CACHE["ts"]=time.time()
 def loop():
     while True:
@@ -169,37 +224,54 @@ def contour():
 
 def snapshot():
     d=json.loads(json.dumps(CACHE["data"]))
-    d.update({"cpu":cpu_busy(),"mem":mem(),"gpu":gpu(),"temp":temp_c(),"disks":disks(),"cooling":cooling(),
+    cpu=cpu_metrics()
+    temps=temperatures()
+    pr=problems()
+    if temps.get("status")=="CRITICAL":
+        pr.append(["CRITICAL","Перегрев CPU: %sC" % temps.get("display"),temps.get("source") or "source unknown"])
+    elif temps.get("status")=="WARNING":
+        pr.append(["WARNING","Высокая температура CPU: %sC" % temps.get("display"),temps.get("source") or "source unknown"])
+    # cpu/temp оставлены числовыми для обратной совместимости старых клиентов;
+    # расширенный контракт — cpu_detail / temperatures.
+    d.update({"cpu":cpu.get("total"),"cpu_detail":cpu,"mem":mem(),"gpu":gpu(),
+              "temp":temps.get("display"),"temperatures":temps,"disks":disks(),"cooling":cooling(),
               "host":socket.gethostname(),"time":time.strftime("%Y-%m-%d %H:%M:%S"),"load":open("/proc/loadavg").read().split()[:3],
-              "problems":problems(),"cache_ts":d.get("ts"),"contour":contour()})
+              "problems":pr,"cache_ts":d.get("ts"),"contour":contour()})
     return d
 
 PAGE=r"""<!doctype html><html><head><meta charset="utf-8"><title>S13 procurement</title><style>
-*{box-sizing:border-box}body{margin:0;background:#0d1117;color:#e6edf3;font-family:system-ui,Segoe UI,Arial;font-size:20px}
-header{padding:10px 20px;background:#161b22;border-bottom:2px solid #30363d;display:flex;gap:24px;align-items:baseline}
-h1{margin:0;font-size:24px;color:#58a6ff}
-.grid{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;padding:14px}
-.card{background:#161b22;border:1px solid #30363d;border-radius:12px;padding:12px 14px}
-.card h2{margin:0 0 8px;font-size:16px;color:#8b949e;text-transform:uppercase;letter-spacing:1px}
+*{box-sizing:border-box}body{margin:0;background:#0d1117;color:#e6edf3;font-family:system-ui,Segoe UI,Arial;font-size:17px}
+header{padding:8px 18px;background:#161b22;border-bottom:2px solid #30363d;display:flex;gap:24px;align-items:baseline}
+h1{margin:0;font-size:22px;color:#58a6ff}
+.grid{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;padding:8px}
+.card{background:#161b22;border:1px solid #30363d;border-radius:12px;padding:6px 10px}
+.card h2{margin:0 0 4px;font-size:14px;color:#8b949e;text-transform:uppercase;letter-spacing:1px}
 .bar{height:20px;background:#21262d;border-radius:5px;overflow:hidden}.bar>span{display:block;height:100%}
 .g{background:#2ea043}.y{background:#d29922}.r{background:#da3633}
-.big{font-size:28px;font-weight:700}
+.big{font-size:23px;font-weight:700}
 .row{display:flex;justify-content:space-between;gap:10px;margin:3px 0}
-.small{color:#8b949e;font-size:15px}
+.small{color:#8b949e;font-size:13px}
 .chip{border:1px solid #30363d;border-radius:20px;padding:1px 8px;font-size:14px;margin:0 6px 6px 0;display:inline-block}
 .dot{width:12px;height:12px;border-radius:50%;display:inline-block;margin-right:6px}
 .ok{background:#2ea043}.bad{background:#da3633}.warn{background:#d29922}
 .flow div{padding:4px 0;border-bottom:1px solid #21262d;display:flex;justify-content:space-between}
 .fans{display:flex;gap:20px;align-items:center;flex-wrap:wrap}
+.cores{display:grid;grid-template-columns:repeat(8,1fr);gap:3px;margin-top:6px}
+.core{height:14px;background:#21262d;border-radius:3px;overflow:hidden;position:relative}
+.core>span{display:block;position:absolute;bottom:0;width:100%}
+.core>i{position:absolute;top:0;left:2px;font-style:normal;font-size:10px;color:#8b949e}
+.temp{padding:2px 8px;border-radius:6px;display:inline-block}
 @keyframes spin{from{transform:rotate(0)}to{transform:rotate(360deg)}}.blades{width:48px;height:48px;animation:spin linear infinite}
 </style></head><body>
 <header><h1 id="host">S13</h1><div class="small" id="clock"></div><div class="small" id="cache"></div><div class="small" id="warn"></div></header>
 <div class="grid">
  <div class="card" style="grid-column:span 4"><h2>АНАЛИТИЧЕСКИЙ КОНТУР <span id="cage" class="small"></span></h2><div id="contour"></div></div>
- <div class="card"><h2>CPU</h2><div class="big" id="cpu">-</div><div class="bar"><span id="cpub"></span></div><div class="small">нагрузка <span id="load"></span></div></div>
+ <div class="card" style="grid-column:span 2"><h2>CPU <span id="cput" class="small"></span></h2><div class="big" id="cpu">-</div><div class="bar"><span id="cpub"></span></div><div class="small">нагрузка <span id="load"></span> · ядра <span id="coresum"></span></div><div class="cores" id="cores"></div></div>
+ <div class="card"><h2>ТЕМПЕРАТУРА CPU</h2><div class="big" id="temp">-</div><div class="small" id="tempsrc"></div><div class="small" id="tempcore"></div></div>
  <div class="card"><h2>ОЗУ</h2><div class="big" id="ram">-</div><div class="bar"><span id="ramb"></span></div><div class="small" id="ramt"></div></div>
  <div class="card"><h2>GPU</h2><div class="big" id="gpu">-</div><div class="bar"><span id="gpub"></span></div><div class="small" id="gput"></div></div>
  <div class="card"><h2>Диски</h2><div id="disks"></div></div>
+ <div class="card" style="grid-column:span 2"><h2>ДОКУМЕНТЫ / МОДЕЛЬ</h2><div id="docmodel"></div></div>
  <div class="card" style="grid-column:span 2"><h2>ПОТОК ЗА СЕГОДНЯ (закупки)</h2><div id="flow" class="flow"></div></div>
  <div class="card" style="grid-column:span 2"><h2>ТЕКУЩЕЕ СОСТОЯНИЕ</h2><div id="current"></div></div>
  <div class="card" style="grid-column:span 2"><h2>ОЧЕРЕДЬ СЕЙЧАС</h2><div id="queue"></div></div>
@@ -214,7 +286,17 @@ const fanSvg=(d,c)=>`<svg class="blades" style="animation-duration:${d}s" viewBo
 const chips=o=>Object.entries(o||{}).sort().map(([k,v])=>`<span class="chip"><b style="color:${bc[k]||'#8b949e'}">${k}</b> ${v}</span>`).join('');
 async function tick(){try{const m=await (await fetch('/api/metrics')).json();
  $('host').textContent='S13: '+m.host;$('clock').textContent=m.time;$('cache').textContent='данные '+m.cache_ts;
- $('cpu').textContent=m.cpu+'%';setb($('cpub'),m.cpu);$('load').textContent=m.load.join(' ');
+ const cv=m.cpu_detail||{},cp=cv.total,per=cv.per||[];
+ $('cpu').textContent=cp==null?'н/д':cp+'%';
+ if(cp==null){$('cpub').className='';$('cpub').style.width='0';}else{setb($('cpub'),cp);}
+ $('cput').textContent=(cv.status&&cv.status!=='OK')?'('+cv.status+')':'';
+ $('load').textContent=(m.load||[]).join(' ');
+ $('coresum').textContent=per.length?(Math.min(...per).toFixed(1)+'…'+Math.max(...per).toFixed(1)+'% · '+per.length+' ядер'):'н/д';
+ $('cores').innerHTML=per.map((v,n)=>`<div class="core" title="core ${n}: ${v}%"><span class="${cls(v)}" style="height:${Math.min(100,v)}%"></span><i>${n}</i></div>`).join('');
+ const tp=m.temperatures||{},td=tp.display;
+ $('temp').innerHTML=td==null?'<span class="small">н/д</span>':`<span class="temp" style="background:${tp.status==='CRITICAL'?'#3d1418':tp.status==='WARNING'?'#3d2f0f':'#12233d'}">${td}°C</span>`;
+ $('tempsrc').textContent='источник: '+(tp.source||'н/д')+' · '+(tp.status||'UNKNOWN');
+ $('tempcore').textContent='max core: '+(tp.core_max==null?'н/д':tp.core_max+'°C');
  $('ram').textContent=m.mem.pct+'%';setb($('ramb'),m.mem.pct);$('ramt').textContent=m.mem.used+'/'+m.mem.total+'G подкачка '+m.mem.swap+'G';
  if(m.gpu){$('gpu').textContent=m.gpu.util+'%';setb($('gpub'),m.gpu.util);$('gput').textContent=m.gpu.vram_used+'/'+m.gpu.vram_total+'MB '+m.gpu.power+'W '+m.gpu.temp+'C';}
  $('disks').innerHTML=(m.disks||[]).map(d=>`<div class="small"><b>${d.dev}</b> ${d.mount} ${d.pct!=null?d.pct+'%':''} ${d.temp?d.temp+'C':''} ${d.health}</div>`).join('');
@@ -230,7 +312,7 @@ async function tick(){try{const m=await (await fetch('/api/metrics')).json();
   h+=`<div class="small">в работе ${nn(L.in_progress)} · перезапуск/ошибка ${nn(L.failed)} · заблок. ${nn(L.blocked)} · очередь drain ${nn(L.backlog_drain_remaining)}</div>`;
   h+=`<div style="display:flex;gap:24px;flex-wrap:wrap;margin-top:6px">${st('ДЕТЕРМИН.',nn(L.deterministic_accept),'<div class="small">'+dd('deterministic_accept')+'</div>')}${st('НЕТ КОММЕРЦИИ',nn(L.no_commercial_entry),'<div class="small">'+dd('no_commercial_entry')+'</div>')}${st('QWEN',nn(L.qwen_processed),'<div class="small">'+dd('qwen_processed')+'</div>')}</div>`;
   h+=`<div class="small" style="margin-top:6px">МЕДАЛИ · GOLD ${nn(L.gold)}${dd('gold')} · SILVER ${nn(L.silver)}${dd('silver')} · BRONZE ${nn(L.bronze)}${dd('bronze')} · WOOD ${nn(L.wood)}${dd('wood')}</div>`;
-  const cats=ct.categories||[];if(cats.length){h+='<div class="small" style="margin-top:6px">КАТЕГОРИИ · покрытие</div>'+cats.map(c=>`<div class="row small"><span>${c.category_code}</span><span>${nn(c.classified)}/${nn(c.total)} · ${c.coverage_pct==null?'-':c.coverage_pct+'%'}${c.coverage_delta_pp!=null?' <b style="color:#2ea043">'+c.coverage_delta_pp+'pp</b>':''}</span></div>`).join('');}
+  const cats=ct.categories||[];if(cats.length){h+='<div class="small" style="margin-top:4px">КАТЕГОРИИ · '+cats.slice(0,8).map(c=>`${c.category_code} ${c.coverage_pct==null?'-':c.coverage_pct+'%'}`).join(' · ')+'</div>';}
   h+=`<div class="small" style="margin-top:6px">ДОКУМЕНТЫ · в очереди ${nn(L.document_pending)} · в работе ${nn(L.document_processing)} · готово ${nn(L.document_completed_total)}${dd('document_completed_total')} · без связей ${nn(L.document_no_links)} · ошибок ${nn(L.document_failed)}</div>`;
   $('contour').innerHTML=h;$('cage').textContent='срез: '+fresh+(ct.delta_source==='24h'?' · Δ24ч':(ct.delta_source==='baseline'?' · с baseline':' · накопление'));
  }else{$('contour').innerHTML='<div class="small">нет снимков</div>';}
@@ -241,8 +323,14 @@ async function tick(){try{const m=await (await fetch('/api/metrics')).json();
  $('current').innerHTML='<div class="row"><b>ОТКРЫТО (торги)</b></div>'+part('OPEN')+'<div class="row" style="margin-top:8px"><b>РОЗЫГРАНО</b></div>'+part('AWARDED');
  const q=m.queue||{},a=m.admission||{};
  $('queue').innerHTML=`<div class="row"><span>В РАБОТЕ</span><b>${q.PROCESSING||0}</b></div><div class="row"><span>ОЖИДАЮТ: PENDING / PRE_RESEARCH</span><b>${q.PENDING||0} / ${q['PRE_RESEARCH_WAITING']||0}</b></div><div class="row"><span>НЕ ГОТОВЫ: HOLD / EXCLUDED</span><b>${a.HOLD||0} / ${a.EXCLUDED||0}</b></div><div class="row"><b>ДОСТУПНЫ СЕЙЧАС: ${m.claimable_total||0}</b></div>`+chips(Object.fromEntries((m.claimable||[]).map(c=>[c.band,c.count])));
+ const qs=m.docstats||{},vs=m.validator||{},rs=m.recovery||{},er=m.errors||[];
+ $('docmodel').innerHTML=`<div class="row"><span>ОЧЕРЕДЬ / СЕГОДНЯ</span><b>P ${qs.PENDING||0} · PR ${qs['PRE_RESEARCH_WAITING']||0} · В РАБОТЕ ${qs.PROCESSING||0} · готово ${qs.TODAY_COMPLETED||0} · ошибок ${qs.TODAY_FAILED||0}</b></div>`+
+  `<div class="row"><span>MODEL/VALIDATOR сегодня</span><b>P ${vs.PENDING||0} · C ${vs.CONFIRMED||0} · R ${vs.REJECTED||0} · U ${vs.UNKNOWN||0}</b></div>`+
+  `<div class="row"><span>RECOVERY / backlog</span><b>факты ${rs.FACTS_FOUND||0} · без ${rs.NO_FACTS||0} · unsupported xls ${rs.UNSUPPORTED_XLS||0}/rtf ${rs.UNSUPPORTED_RTF||0}/doc ${rs.UNSUPPORTED_DOC||0}</b></div>`+
+  `<div class="row"><span>КАТЕГОРИИ подтверждено</span><b>${(m.cat_conf||[])[1]||0} / ${(m.cat_conf||[])[0]||0}</b></div>`+
+  (er.length?`<div class="small" style="margin-top:4px">ОШИБКИ</div>`+er.slice(0,2).map(e=>`<div class="small">#${e.id} · ${e.pid} · ${e.err}</div>`).join(''):'');
  const fans=(m.cooling.fans||[]).map(x=>`<div style="text-align:center">${fanSvg(dur(x.rpm/3500).toFixed(2),'#58a6ff')}<div class="small">${x.rpm} RPM</div></div>`).join('');
- $('cool').innerHTML='<div class="fans">'+fans+(m.gpu&&m.gpu.fan!=null?`<div style="text-align:center">${fanSvg(dur(m.gpu.fan/100).toFixed(2),'#3fb950')}<div class="small">GPU ${m.gpu.fan}%</div></div>`:'')+`<span class="chip" style="color:#e6edf3">${m.temp}C CPU</span></div>`;
+ $('cool').innerHTML='<div class="fans">'+fans+(m.gpu&&m.gpu.fan!=null?`<div style="text-align:center">${fanSvg(dur(m.gpu.fan/100).toFixed(2),'#3fb950')}<div class="small">GPU ${m.gpu.fan}%</div></div>`:'')+`<span class="chip" style="color:#e6edf3">${td==null?'CPU н/д':td+'°C CPU'}</span></div>`;
  $('problems').innerHTML=(m.problems||[]).map(p=>`<div style="padding:5px 10px;border-radius:8px;margin:3px 0;background:${p[0]=='CRITICAL'?'#3d1418':p[0]=='WARNING'?'#3d2f0f':'#12233d'}"><b style="color:${p[0]=='CRITICAL'?'#ff7b72':p[0]=='WARNING'?'#d29922':'#58a6ff'}">${p[0]}:</b> ${p[1]} <span class="small">${p[2]||''}</span></div>`).join('');
 }catch(e){$('clock').textContent='ошибка '+e;}}
 tick();setInterval(tick,3000);
