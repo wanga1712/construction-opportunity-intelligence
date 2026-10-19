@@ -84,7 +84,14 @@ def main() -> int:
                    count(*) FILTER (WHERE quantity_value IS NOT NULL AND unit_normalized IS NOT NULL) AS qty,
                    count(*) FILTER (WHERE line_total_value IS NOT NULL) AS vrows,
                    coalesce(sum(line_total_value),0) AS vsum,
-                   md5(string_agg(entity_id::text, ',' ORDER BY entity_id)) AS fingerprint
+                   md5(string_agg(
+                       entity_id::text || '|' ||
+                       coalesce(quantity_value::text, '') || '|' ||
+                       coalesce(unit_normalized, '') || '|' ||
+                       coalesce(line_total_value::text, '') || '|' ||
+                       md5(coalesce(source_quote, '')),
+                       ',' ORDER BY entity_id
+                   )) AS fingerprint
               FROM confirmed_category_facts GROUP BY 1,2
         """)
         idx = {(int(f["procurement_id"]), f["category_code"]): f for f in facts}
