@@ -380,6 +380,73 @@ DB_WRITES=0
 SCORING_MEDAL_QUEUE_UNCHANGED=YES
 ```
 
+## RESULT — out-of-order download + reparse 148391 (2026-10-19)
+
+СКАЧИВАНИЕ:
+
+```text
+new: scripts/download_document_out_of_order.py
+  --document-file-id 24567 --apply
+  штатный Downloader/DownloadCoordinator, без claim/admission;
+  cleanup по умолчанию НЕ выполняется (файлы нужны для reparse).
+
+Прил. №4 Проект контракта.zip:
+  downloaded, parent local_path exists=True;
+  распакованы члены (14 docx, 10 doc, 8 xlsx, 2 pdf, 7z parts);
+  local_deleted_at очищен у 104 перекачанных строк.
+```
+
+REPARSE 148391:
+
+```text
+document_files rows: 108 (37 на диске, 71 missing — 7z-части другого архива)
+PARSED: Прил. №5 (7783), Прил. №7 (7375), contract appendix docs,
+        extracted contract members (включая Проект контракта.docx 711 абзацев)
+TOTALS: embedded 23052
+```
+
+STRICT DRY-RUN ПОСЛЕ ВСЕГО:
+
+```text
+EMBEDDED_CATEGORIES=['waterproofing']
+QUARANTINE_WITH_SECTION_TOTAL_SOURCE=588
+CANONICAL_GOODS=52
+SEMANTIC_DEDUP_FACTS=52
+OPPORTUNITIES_PROJECTED_WITH_FACTS=1
+PROJECTED_CONFIRMED_BASE_DISTRIBUTION={'GOLD': 1}
+DB_WRITES=0
+APPLY_NOT_RUN=YES
+```
+
+### НОВЫЙ БЛОКЕР: run identity collides по document_name
+
+```text
+148391, composite_structures, entity 609458:
+  source_document_id=24567 (Прил. №4 Проект контракта.zip)
+  run_id=1501, document_name='Прил. №7 Ведомость конструктивных решений.xlsx'
+  snapshot run 1501 = 11 141 chars, начинается с «ГРАФИК ОПЛАТЫ...»
+  source_quote = «Погрузка мусора...» -> position 0
+```
+
+Внутри zip есть файл с тем же именем, что и top-level `Прил. №7 ...xlsx`.
+`persist_facts` ищет run по `(procurement_id, document_name, extractor_version)`,
+поэтому документы с одинаковым именем перезаписывают snapshot друг друга.
+Raw-text фикс сам по себе этого не решает.
+
+НУЖНО (варианты):
+
+```text
+a) добавить source_document_id в structured_extraction_runs и искать run по
+   (procurement_id, source_document_id, extractor_version) — DDL + reparse;
+b) scoped run key: 'document_name::df<source_document_id>' без DDL, но меняет
+   отображаемое document_name в runs (нужно проверить потребителей);
+```
+
+Рекомендую (a) — это чинит идентичность навсегда. После DDL:
+reparse 148391 -> strict dry-run; ожидаем composite_structures в кандидатах.
+
+`SECTION_CONFIRMED` не применялся: 60467 проходит strict, 148391 — нет.
+
 ## RESULT Phase 1 — SECTION_CONFIRMED dry-run (2026-10-19)
 
 Скрипт: `scripts/promote_section_confirmed_embedded.py` (dry-run по умолчанию).

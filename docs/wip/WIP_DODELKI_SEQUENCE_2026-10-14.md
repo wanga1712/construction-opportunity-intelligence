@@ -407,6 +407,14 @@ PROVENANCE FIX (2026-10-19): `persist_facts` теперь хранит bounded r
 к run другого документа. Нужен re-download этого файла + reparse.
 SECTION_CONFIRMED не применялся.
 
+DOWNLOAD+REPARSE 148391 (2026-10-19): Прил. №4 скачан штатным Downloader
+(out-of-order, без claim), 104 child-строки восстановлены, reparse обработал
+37 файлов (embedded 23 052). Strict dry-run всё ещё 588 -> 52 -> 1 GOLD
+(только waterproofing 60467). Новый блокер: run identity коллизирует по
+document_name — вложенный и top-level «Прил. №7» перезаписывают snapshot
+одного run. Нужно добавить source_document_id в идентичность run (DDL) или
+scoped run key. SECTION_CONFIRMED не применяем.
+
 ### 4. CATEGORY_DISCOVERY_DYNAMIC_V1 — Phase C
 
 См. `docs/wip/WIP_CATEGORY_DISCOVERY_DYNAMIC_V1.md`.
