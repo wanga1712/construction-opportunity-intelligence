@@ -12,6 +12,7 @@ from typing import Any, Dict, Iterable, List, Optional, Sequence
 
 from .document_classifier_v1 import classify_document_metadata
 from .document_needs_plan_v2 import (
+    DEFERRED_UNTIL_SECTION_CONFIRMATION,
     DOCUMENT_NEEDS_POLICY_VERSION,
     DOCUMENT_SELECTION_POLICY_VERSION,
     SELECTED,
@@ -88,7 +89,11 @@ def build_queue_plan_v2(
         category = opp.get("commercial_category_code") or opp.get("category_code")
         if not category:
             continue
-        units.setdefault(category, set()).add(opp.get("opportunity_track"))
+        # Normalize the raw opportunity_track ("EMBEDDED_MATERIAL",
+        # "DIRECT_SUPPLY", ...) to the policy group ("EMBEDDED"/"DIRECT"/...).
+        # Passing the raw value made CATEGORY_ACCEPTED_CLASSES / ACCEPTED_FALLBACK
+        # lookups miss and silently disabled the category-aware document policy.
+        units.setdefault(category, set()).add(track_group(opp.get("opportunity_track")))
 
     docs = _dedupe_by_identity(documents)
     by_id = {int(d["id"]): d for d in docs if d.get("id") is not None}
@@ -103,6 +108,7 @@ def build_queue_plan_v2(
     ]
 
     selected: Dict[int, Dict[str, Any]] = {}
+    deferred: Dict[int, Dict[str, Any]] = {}
     required_facts: List[str] = []
     required_classes: List[str] = []
     no_executable_fallback_units = 0
@@ -123,6 +129,25 @@ def build_queue_plan_v2(
         if not any(s.selection_decision in SELECTED_DECISIONS for s in selections):
             no_executable_fallback_units += 1
         for selection in selections:
+            if selection.selection_decision == DEFERRED_UNTIL_SECTION_CONFIRMATION:
+                doc_id = selection.source_document_id
+                if doc_id is None:
+                    continue
+                doc = by_id.get(int(doc_id))
+                deferred.setdefault(
+                    int(doc_id),
+                    {
+                        "source_document_id": int(doc_id),
+                        "file_name": selection.file_name,
+                        "physical_key": physical_key(doc) if doc else None,
+                        "document_class": selection.document_class.value,
+                        "selection_type": "DEFERRED",
+                        "selection_reason": selection.selection_reason,
+                        "category": category,
+                        "required_facts": list(selection.required_facts),
+                    },
+                )
+                continue
             if selection.selection_decision not in SELECTED_DECISIONS:
                 continue
             doc_id = selection.source_document_id
@@ -142,7 +167,7 @@ def build_queue_plan_v2(
                     "selection_type": sel_type,
                     "selection_reason": selection.selection_reason,
                     "category": category,
-                    "track": track_group(sorted(units[category])[0]) if units.get(category) else "UNKNOWN",
+                    "track": sorted(units[category])[0] if units.get(category) else "UNKNOWN",
                     "required_by_category": [],
                     "required_facts": list(selection.required_facts),
                 },
@@ -224,6 +249,8 @@ def build_queue_plan_v2(
         "fallback_source_document_ids": fallback_ids,
         "soft_fallback_source_document_ids": soft_fallback_ids,
         "selected_documents": [selected[i] for i in all_ids],
+        "deferred_documents": [deferred[i] for i in sorted(deferred)],
+        "deferred_source_document_ids": sorted(deferred),
         "no_executable_fallback_units": no_executable_fallback_units,
         "sort_key": priority.sort_key,
     }

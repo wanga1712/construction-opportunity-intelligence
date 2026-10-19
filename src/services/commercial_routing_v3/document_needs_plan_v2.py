@@ -310,12 +310,35 @@ class FileSelection:
 SELECTED = "SELECTED"
 SELECTED_FALLBACK = "SELECTED_FALLBACK"
 SELECTED_SOFT_FALLBACK = "SELECTED_SOFT_FALLBACK"
+#: EMBEDDED_ESTIMATE_PARSE_FIRST_V1: accepted, but deliberately NOT downloaded
+#: until the estimate confirms the category in a section (or a model requests it).
+DEFERRED_UNTIL_SECTION_CONFIRMATION = "DEFERRED_UNTIL_SECTION_CONFIRMATION"
 SKIPPED_NOT_RELEVANT = "SKIPPED_NOT_RELEVANT"
 UNKNOWN_NEEDS_REVIEW = "UNKNOWN_NEEDS_REVIEW"
 NO_EXECUTABLE_FALLBACK = "NO_EXECUTABLE_FALLBACK"
 
 #: Selection decisions that end up in the queue plan (targeted download/parse).
 SELECTED_DECISIONS: tuple[str, ...] = (SELECTED, SELECTED_FALLBACK, SELECTED_SOFT_FALLBACK)
+
+#: EMBEDDED_ESTIMATE_PARSE_FIRST_V1 — estimate classes are requested first, in
+#: this order. Lower rank wins; only the best available class is downloaded.
+EMBEDDED_ESTIMATE_CLASS_PRIORITY: tuple[DocumentClass, ...] = (
+    DocumentClass.ESTIMATE,
+    DocumentClass.NMCK_JUSTIFICATION,
+    DocumentClass.BOQ,
+    DocumentClass.MATERIAL_SPECIFICATION,
+    DocumentClass.PROJECT_DOCUMENTATION,
+    DocumentClass.WORKING_DOCUMENTATION,
+    DocumentClass.TECH_SPEC,
+    DocumentClass.PRODUCT_SPECIFICATION,
+)
+
+
+def _embedded_rank(doc_class: DocumentClass) -> int:
+    try:
+        return EMBEDDED_ESTIMATE_CLASS_PRIORITY.index(doc_class)
+    except ValueError:
+        return len(EMBEDDED_ESTIMATE_CLASS_PRIORITY)
 
 #: Fallback classes that are normally NOT requested, ordered by their measured
 #: contribution to historical positive recall (document_matches audit 2026-10-10).
@@ -329,6 +352,18 @@ FALLBACK_CLASS_PRIORITY: tuple[DocumentClass, ...] = (
     DocumentClass.OTHER,
 )
 FALLBACK_MAX_PER_UNIT = 1
+
+#: EMBEDDED_ESTIMATE_PARSE_FIRST_V1: for OBJECT/EMBEDDED the fallback order is
+#: estimate-aware. NMCK justification is usually the estimate/cost calculation;
+#: participant requirements are a known false-term source and go last.
+EMBEDDED_FALLBACK_CLASS_PRIORITY: tuple[DocumentClass, ...] = (
+    DocumentClass.NMCK_JUSTIFICATION,
+    DocumentClass.CONTRACT_PROJECT,
+    DocumentClass.LEGAL_GENERAL,
+    DocumentClass.SECURITY_REQUIREMENTS,
+    DocumentClass.OTHER,
+    DocumentClass.PARTICIPANT_REQUIREMENTS,
+)
 
 #: SOFT fallback candidate order (Phase 4) - derived from the Phase 2 CURRENT
 #: evidence audit (2026-10-11, 163 audited units): ELECTRONIC_AUCTION 100%,
@@ -371,6 +406,14 @@ def _fallback_rank(classification: DocumentClassification) -> int:
     return len(FALLBACK_CLASS_PRIORITY)
 
 
+def _embedded_fallback_rank(classification: DocumentClassification) -> int:
+    if not classification.is_document:
+        return NON_DOCUMENT_FALLBACK_RANK
+    if classification.document_class in EMBEDDED_FALLBACK_CLASS_PRIORITY:
+        return EMBEDDED_FALLBACK_CLASS_PRIORITY.index(classification.document_class)
+    return len(EMBEDDED_FALLBACK_CLASS_PRIORITY)
+
+
 #: Non-documents (skip-list extensions) are never promoted: they carry no
 #: parseable evidence (verified against document_matches: zero known positives).
 NON_DOCUMENT_FALLBACK_RANK = 10_000
@@ -392,6 +435,8 @@ ACCEPTED_DIRECT: tuple[DocumentClass, ...] = (
 )
 ACCEPTED_EMBEDDED: tuple[DocumentClass, ...] = (
     C.ESTIMATE,
+    # «Обоснование НМЦК» на практике часто и есть расчёт стоимости/смета.
+    C.NMCK_JUSTIFICATION,
     C.BOQ,
     C.MATERIAL_SPECIFICATION,
     C.PROJECT_DOCUMENTATION,
@@ -407,14 +452,16 @@ CATEGORY_ACCEPTED_CLASSES: dict[tuple[str, str], tuple[DocumentClass, ...]] = {
     ("lighting", GROUP_DIRECT): (C.TECH_SPEC, C.PRODUCT_SPECIFICATION),
     ("cable_support_systems", GROUP_DIRECT): (C.TECH_SPEC, C.PRODUCT_SPECIFICATION),
     ("lighting", GROUP_EMBEDDED): (
-        C.TECH_SPEC, C.PRODUCT_SPECIFICATION, C.ESTIMATE, C.BOQ, C.MATERIAL_SPECIFICATION,
-        C.PROJECT_DOCUMENTATION,
+        C.TECH_SPEC, C.PRODUCT_SPECIFICATION, C.ESTIMATE, C.NMCK_JUSTIFICATION, C.BOQ,
+        C.MATERIAL_SPECIFICATION, C.PROJECT_DOCUMENTATION,
     ),
     ("waterproofing", GROUP_EMBEDDED): (
-        C.ESTIMATE, C.BOQ, C.MATERIAL_SPECIFICATION, C.PROJECT_DOCUMENTATION, C.WORKING_DOCUMENTATION,
+        C.ESTIMATE, C.NMCK_JUSTIFICATION, C.BOQ, C.MATERIAL_SPECIFICATION,
+        C.PROJECT_DOCUMENTATION, C.WORKING_DOCUMENTATION,
     ),
     ("flooring", GROUP_EMBEDDED): (
-        C.ESTIMATE, C.BOQ, C.MATERIAL_SPECIFICATION, C.PROJECT_DOCUMENTATION, C.WORKING_DOCUMENTATION,
+        C.ESTIMATE, C.NMCK_JUSTIFICATION, C.BOQ, C.MATERIAL_SPECIFICATION,
+        C.PROJECT_DOCUMENTATION, C.WORKING_DOCUMENTATION,
     ),
 }
 ACCEPTED_OPTIONAL: dict[str, tuple[DocumentClass, ...]] = {
@@ -499,6 +546,14 @@ def decide_file_selection(
 ) -> FileSelection:
     """Pre-HTTP decision. SELECTED is only reachable for a provable fact."""
     doc_class = classification.document_class
+    group = next(
+        (
+            p.track_group
+            for p in plan.category_plans
+            if item_category is None or p.category_code == item_category
+        ),
+        GROUP_UNKNOWN,
+    )
     required_by = tuple(
         p.category_code
         for p in plan.category_plans
@@ -522,6 +577,17 @@ def decide_file_selection(
         decision, reason = UNKNOWN_NEEDS_REVIEW, f"UNCLASSIFIED_DOCUMENT:{classification.reason}"
     elif doc_class in plan.required_classes and required_by:
         decision, reason = SELECTED, f"PROVES_REQUIRED_FACTS:{','.join(facts) or 'NONE'}"
+    elif (
+        group == GROUP_EMBEDDED
+        and doc_class in (C.ESTIMATE, C.NMCK_JUSTIFICATION, C.BOQ)
+        and classification.is_document
+    ):
+        # EMBEDDED_ESTIMATE_PARSE_FIRST_V1: the estimate/calculation is always
+        # accepted for an OBJECT/EMBEDDED unit, even when the generic fact map
+        # does not list it for this category. It is the primary evidence.
+        decision, reason = SELECTED, f"ESTIMATE_FIRST:{doc_class.value}"
+        if not required_by and item_category:
+            required_by = (item_category,)
     elif doc_class in plan.optional_classes:
         decision, reason = SKIPPED_NOT_RELEVANT, "OPTIONAL_CLASS_NOT_REQUIRED"
     elif doc_class in plan.provable_classes:
@@ -579,8 +645,49 @@ def select_unit_documents(
         )
         for source_document_id, file_name, classification in documents
     ]
+    group = next(
+        (
+            p.track_group
+            for p in plan.category_plans
+            if p.category_code == category_code
+        ),
+        GROUP_UNKNOWN,
+    )
     # STEP 1 - accepted executable document.
-    if any(selection.selection_decision == SELECTED for _, selection in pairs):
+    accepted = [
+        (i, classification, selection)
+        for i, (classification, selection) in enumerate(pairs)
+        if selection.selection_decision == SELECTED
+    ]
+    if accepted:
+        # EMBEDDED_ESTIMATE_PARSE_FIRST_V1: for OBJECT/EMBEDDED download and
+        # parse the estimate-class document(s) first. Other accepted classes
+        # (project docs, TZ, specifications) are recorded as deferred and are
+        # NOT requested until the estimate confirms the category in a section
+        # or the model explicitly requests them.
+        if group == GROUP_EMBEDDED and len(accepted) > 1:
+            best_rank = min(_embedded_rank(c.document_class) for _, c, _ in accepted)
+            for i, classification, selection in accepted:
+                if _embedded_rank(classification.document_class) == best_rank:
+                    continue
+                pairs[i] = (
+                    classification,
+                    FileSelection(
+                        procurement_id=selection.procurement_id,
+                        source_document_id=selection.source_document_id,
+                        file_name=selection.file_name,
+                        document_class=selection.document_class,
+                        classification_confidence=selection.classification_confidence,
+                        classification_reason=selection.classification_reason,
+                        required_by_categories=selection.required_by_categories,
+                        required_facts=selection.required_facts,
+                        selection_decision=DEFERRED_UNTIL_SECTION_CONFIRMATION,
+                        selection_reason=(
+                            "DEFERRED_ESTIMATE_FIRST:"
+                            f"{selection.document_class.value}"
+                        ),
+                    ),
+                )
         return [selection for _, selection in pairs], None
 
     # STEP 2 - ordinary executable fallback.
@@ -591,10 +698,11 @@ def select_unit_documents(
         and classify_skip_policy(selection.file_name) == EXECUTABLE
     ]
     if exec_candidates:
+        rank_fn = _embedded_fallback_rank if group == GROUP_EMBEDDED else _fallback_rank
         order = sorted(
             exec_candidates,
             key=lambda i: (
-                _fallback_rank(pairs[i][0]),
+                rank_fn(pairs[i][0]),
                 pairs[i][1].source_document_id if pairs[i][1].source_document_id is not None else 1 << 62,
                 pairs[i][1].file_name.lower(),
             ),

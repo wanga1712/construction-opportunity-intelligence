@@ -23,7 +23,7 @@
 | P3 | `OBJECT_QUEUE_MODEL_NORMALIZATION_V1` | ПРИОРИТЕТ | объектные исполнения + модель | PASS |
 | P4 | `PROCUREMENT_CARD_CATEGORY_PIPELINE_V1` | DONE 2026-10-19 | вкладка «Категории» вместо «Находки» | PASS |
 | P5 | `PHYSICAL_KISOK_DASHBOARD_UPGRADE_V1` | DONE 2026-10-19 | CPU temp + per-core + аналитика киоска | PASS |
-| P6 | `EMBEDDED_ESTIMATE_PARSE_FIRST_V1` | ПРИОРИТЕТ | сначала смета, затем остальное | PASS |
+| P6 | `EMBEDDED_ESTIMATE_PARSE_FIRST_V1` | Phase 1/3 DONE · Phase 4 dry-run | сначала смета, затем остальное | PASS |
 | 1A | `ARCHIVE_MEMBER_DEDUP_IDENTITY_V1` | DONE (`c66f96b`) | identity sweeper исправлена | PASS |
 | 1B | `ARCHIVE_MEMBER_PARSE_CONTEXT_V1` | PASS (`24062c2`) | 99069 end-to-end подтверждён | PASS |
 | 1C | `GSFX_RESTORE_V1` | PASS (`24062c2`) | 99069 end-to-end подтверждён | PASS + коммит |
@@ -200,6 +200,14 @@ ZIP-определение по содержимому в `archive_extractor` (+
 Правило: для OBJECT/EMBEDDED сначала парсим смету, находим разделы и
 подтверждаем категорию в разделе. Только потом решаем, нужны ли другие
 документы. Предварительную медаль уточняем по section-подтверждению.
+
+СТАТУС (2026-10-19): Phase 1 estimate-first реализован; исправлен баг
+нормализации opportunity_track (сырой `EMBEDDED_MATERIAL` не матчился с
+GROUP_EMBEDDED, из-за чего 129 планов выбирали PARTICIPANT_REQUIREMENTS как
+fallback). Теперь первым выбирается ESTIMATE/NMCK/BOQ, остальные accepted
+документы — DEFERRED. Phase 3: section↔procurement comparison в карточке.
+Phase 4 dry-run: section-only confirmed_base обнулил бы 522 из 523 категорий
+(в разделах только 0.2% goods-фактов) — apply НЕ делаем до rollout секций.
 
 ### 1A. ARCHIVE_MEMBER_DEDUP_IDENTITY_V1
 

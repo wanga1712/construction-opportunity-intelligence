@@ -177,9 +177,13 @@ def build_category_cards(
     procurement_id: int,
     model_counts: Dict[str, Dict[str, Any]],
     extraction_outcomes: Dict[str, Dict[str, Any]],
+    procurement_title: Any = None,
+    okpd_name: Any = None,
+    object_class: Any = None,
 ) -> List[Dict[str, Any]]:
     """Собрать карточки категорий (одна opportunity = один блок)."""
     from src.services.document_queue_progress_service import queue_eta_seconds
+    from src.services.object_section_match_service import compare_section_to_procurement
 
     facts = list(supply_facts or [])
     docs = list(documents or [])
@@ -206,6 +210,24 @@ def build_category_cards(
         seen.add(key)
 
         products = _products_for_category(facts, code)
+        # EMBEDDED_ESTIMATE_PARSE_FIRST_V1: категория подтверждена разделом,
+        # только если найденные товары лежат в разделе, а не в RESIDUE.
+        _section_codes = sorted({
+            str(p.get("section_code") or "").strip()
+            for p in products
+            if str(p.get("section_code") or "").strip().upper() not in ("", "RESIDUE")
+        })
+        _section_names = [
+            str(p.get("section_name")).strip()
+            for p in products
+            if p.get("section_name")
+        ]
+        _object_match = compare_section_to_procurement(
+            " ".join(_section_names) or (opp.get("category_name") or code),
+            procurement_title=procurement_title,
+            okpd_name=okpd_name,
+            object_class=object_class,
+        )
         material_value = round(
             sum(_number(p.get("total")) or 0.0 for p in products), 2
         ) if products else None
@@ -224,6 +246,9 @@ def build_category_cards(
             "current_effective_score": _number(opp.get("current_effective_score")),
             "current_effective_medal": opp.get("current_effective_medal"),
             "current_effective_reason": opp.get("current_effective_reason"),
+            "section_confirmed": bool(_section_codes),
+            "section_codes": _section_codes,
+            "object_match": _object_match,
             "document_stage": _document_stage(queue_status, outcome),
             "document_progress": {
                 "done": done_docs, "total": total_docs, "scope": "procurement",

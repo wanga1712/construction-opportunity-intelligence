@@ -321,6 +321,23 @@ def load_procurement_dossier(db: Any, procurement_id: int) -> Dict[str, Any]:
         errors=errors, label="scope",
     )
     dossier["scope"] = scope_rows[0] if scope_rows else {}
+    # EMBEDDED_ESTIMATE_PARSE_FIRST_V1: object classification для сверки
+    # раздела сметы с объектом закупки.
+    _object_rows = _safe(
+        db,
+        None,
+        """
+        SELECT object_type, object_subtype, object_sector, application_area,
+               classification_status, classification_source, confidence
+          FROM crm_procurement_object_classifications
+         WHERE procurement_id = %s AND is_current
+         ORDER BY id DESC
+         LIMIT 1
+        """,
+        (int(procurement_id),),
+        errors=errors, label="object_classification",
+    )
+    dossier["object_classification"] = _object_rows[0] if _object_rows else {}
     # Ручные категории (MANUAL) — тот же источник данных, что и в таблице.
     try:
         from src.services.manual_category_service import list_manual_categories
@@ -668,9 +685,36 @@ def load_procurement_dossier(db: Any, procurement_id: int) -> Dict[str, Any]:
             procurement_id=int(procurement_id),
             model_counts=_model_counts,
             extraction_outcomes=_outcomes,
+            procurement_title=(dossier.get("identity") or {}).get("auction_name"),
+            okpd_name=(dossier.get("identity") or {}).get("okpd_name"),
+            object_class=" ".join(filter(None, [
+                (dossier.get("object_classification") or {}).get("object_type"),
+                (dossier.get("object_classification") or {}).get("object_subtype"),
+                (dossier.get("object_classification") or {}).get("object_sector"),
+                (dossier.get("object_classification") or {}).get("application_area"),
+            ])),
         )
     except Exception as _exc:  # noqa: BLE001
         _record_error(errors, "categories", _exc)
+
+    # EMBEDDED_ESTIMATE_PARSE_FIRST_V1: сравнение разделов сметы с закупкой.
+    try:
+        from src.services.object_section_match_service import compare_sections
+
+        _ident = dossier.get("identity") or {}
+        dossier["object_section_matches"] = compare_sections(
+            (dossier.get("section_projection") or {}).get("sections") or [],
+            procurement_title=_ident.get("auction_name"),
+            okpd_name=_ident.get("okpd_name"),
+            object_class=" ".join(filter(None, [
+                (dossier.get("object_classification") or {}).get("object_type"),
+                (dossier.get("object_classification") or {}).get("object_subtype"),
+                (dossier.get("object_classification") or {}).get("object_sector"),
+                (dossier.get("object_classification") or {}).get("application_area"),
+            ])),
+        )
+    except Exception as _exc:  # noqa: BLE001
+        _record_error(errors, "object_section_matches", _exc)
 
     docs = dossier["documents"]
     finds = dossier["findings"]

@@ -730,6 +730,19 @@ def _render_dossier(d: Dict[str, Any], db: Any = None) -> None:
                     ]) + '</div>',
                     unsafe_allow_html=True,
                 )
+                _sec_txt = (
+                    "Подтверждено разделом: " + ", ".join((_c.get("section_codes") or [])[:2])
+                    if _c.get("section_confirmed")
+                    else "Вне раздела (RESIDUE) — разделом не подтверждено"
+                )
+                _om = _c.get("object_match") or {}
+                st.markdown(
+                    '<div class="pc-muted">%s · объект: %s%s</div>'
+                    % (escape(_sec_txt), escape(str(_om.get("state") or "NO_DATA")),
+                       (" · " + escape(", ".join(_om.get("overlap") or [])))
+                       if _om.get("overlap") else ""),
+                    unsafe_allow_html=True,
+                )
                 _prods = _c.get("products") or []
                 if _prods:
                     for _trust, _items in _group_products_by_trust(_prods):
