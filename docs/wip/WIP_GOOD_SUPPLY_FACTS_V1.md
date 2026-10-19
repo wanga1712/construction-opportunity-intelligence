@@ -1,6 +1,6 @@
 # WIP GOOD_SUPPLY_FACTS_V1 — чистые данные «что можно поставить»
 
-Status: СПЕКА / ПРИОРИТЕТ. Owner: card data / document normalization.
+Status: DONE (`6d33c95`). Owner: card data / document normalization.
 
 ## Цель
 
@@ -70,6 +70,26 @@ build_good_supply_facts(procurement_id) -> {
 ```
 
 Сравнить на 60467 и 148391.
+
+### Phase 0.1 — диагностика нулевого goods-покрытия
+
+После rollout section-шаблонов выяснилось:
+
+```text
+curbstone: 209 разделов, goods=0
+drainage_water_management: 970 разделов, goods=0
+flooring: 175 разделов, goods=5
+```
+
+Разобрать почему:
+
+- `UNSUPPORTED_LAYOUT`;
+- нет `quantity_value` / `quantity_unit_normalized`;
+- нет `total_price_value`;
+- работы/агрегаты отсекаются canonical predicate.
+
+Без этого persistence `section_code` не поможет: разделы есть, а подтверждать
+в них нечего.
 
 ### Phase 1 — подключение к карточке
 
@@ -210,4 +230,94 @@ WORKS_HIDDEN              = YES
 AGGREGATES_HIDDEN         = YES
 SOURCE_QUOTE_PRESENT      = YES
 DB_WRITES                 = 0
+```
+
+## RESULT Phase 0.1 — диагностика 0–5 goods (2026-10-19)
+
+Инструмент: `scripts/audit_goods_coverage_by_category.py` (read-only).
+
+```text
+CATEGORY          TOTAL   TRUSTED   GOODS-kind  OK(classify_supply_row)  has_qty  has_unit  has_total
+curbstone         15532   0         12554       233                      14314    7720      569
+drainage          28081   0         21067       387                      24234    19245     1360
+flooring          25953   5         21950       171                      15783    13388     171
+cable_support     717     671       715         28                       649      577       32
+lighting          19627   12393     16457       139                      17858    12878     215
+```
+
+### Причины отсева (`classify_supply_row`)
+
+```text
+curbstone:  no_quantity 8034 | work 2978 | no_total 4261 | OK 233 | aggregate 26
+drainage:   no_total 10866 | no_quantity 9800 | work 7014 | OK 387 | aggregate 14
+flooring:   no_quantity 15502 | no_total 6277 | work 4003 | OK 171
+cable:      no_total 530 | no_quantity 157 | OK 28 | work 2
+lighting:   no_total 9089 | no_quantity 7202 | work 3170 | OK 139 | aggregate 27
+```
+
+### ГЛАВНЫЕ ВЫВОДЫ
+
+1. **Главный блокер — trust state, а не section-шаблоны.**
+
+```text
+curbstone : 15 532 / 15 532 = MANUAL_PROOF_QUARANTINE (100%)
+drainage  : 28 081 / 28 081 = MANUAL_PROOF_QUARANTINE (100%)
+flooring  : 25 948 / 25 953 = MANUAL_PROOF_QUARANTINE (99.98%), TRUSTED=5
+```
+
+`projected audit` считает только `TRUSTED_PRODUCTION`, поэтому и получает
+0 / 0 / 5 goods при тысячах GOODS-строк. Section-шаблоны тут ни при чём.
+
+2. **`total_price_value` почти не извлекается.**
+
+```text
+curbstone  569 / 15532  (3.7%)
+drainage  1360 / 28081  (4.8%)
+flooring   171 / 25953  (0.7%)
+cable       32 / 717    (4.5%)
+lighting   215 / 19627  (1.1%)
+```
+
+`classify_supply_row` требует total → `no_total` режет 4k–11k строк.
+
+3. **`no_quantity` — это в основном ресурсные строки, не товар.**
+
+```text
+curbstone 8034: "3", "Средний разряд работы 2,5", qty без unit
+drainage  9800: "Электроэнергия", "ОТм(Зтм) Средний разряд машинистов"
+flooring 15502: "Покрытие грунтовкой…", qty/unit отсутствуют
+```
+
+Их не надо «спасать» — они не продаваемые материалы.
+
+4. **WORKS отсекаются корректно**: curbstone 2 978, drainage 7 014,
+   flooring 4 003. Ложного подтверждения работами нет.
+
+5. **UNSUPPORTED_LAYOUT** (curbstone 895, drainage 6 406, flooring 3 159,
+   cable 333, lighting 4 720) влияет на `is_summarizable` (секции), но НЕ на
+   `classify_supply_row` (он layout не проверяет). Это отдельная ось.
+
+### ПЛАН Phase 1 (по приоритету)
+
+```text
+1. TRUST: разобрать, почему curbstone/drainage/flooring целиком в
+   MANUAL_PROOF_QUARANTINE (layout? quality gate?). Это даёт x25-x100
+   к числу подтверждаемых goods ещё до правок парсера.
+2. TOTAL MAPPING: извлекать total_price_value из правильных колонок
+   смет (J/K/L и аналоги) — снимет no_total 4k-11k.
+3. UNIT NORMALIZATION: подтягивать unit из соседней колонки, где он есть,
+   но не попал в normalized.
+4. no_quantity/работы/ресурсные строки — оставить отсечёнными.
+```
+
+ACCEPTANCE (Phase 0.1):
+
+```text
+DIAGNOSTIC_SCRIPT_ADDED=YES
+ROOT_CAUSE_TRUST=YES (curbstone/drainage 100% quarantine)
+ROOT_CAUSE_TOTAL=YES (total <5%)
+ROOT_CAUSE_NO_QUANTITY=YES (resource/work rows)
+WORKS_EXCLUDED=YES
+DB_WRITES=0
+SCORING_MEDAL_QUEUE_UNCHANGED=YES
 ```
