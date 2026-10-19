@@ -124,6 +124,21 @@ verify_source_quote проверяет source_quote как substring snapshot;
 
 `SECTION_CONFIRMED` не применяем, пока strict-проверка не заработает.
 
+### Phase 1.3 — run identity by source_document_id
+
+Вариант (a):
+
+```text
+ALTER TABLE structured_extraction_runs
+  ADD COLUMN IF NOT EXISTS source_document_id BIGINT;
+
+run identity:
+  (procurement_id, source_document_id, extractor_version)
+```
+
+Убирает коллизию вложенных/top-level документов с одинаковым `document_name`.
+После DDL — reparse 148391 и повторный strict dry-run.
+
 ### Phase 1.1 — total/unit mapping
 
 Извлекать `total_price_value` из правильных колонок смет, подтягивать unit из
@@ -446,6 +461,76 @@ b) scoped run key: 'document_name::df<source_document_id>' без DDL, но ме
 reparse 148391 -> strict dry-run; ожидаем composite_structures в кандидатах.
 
 `SECTION_CONFIRMED` не применялся: 60467 проходит strict, 148391 — нет.
+
+## RESULT — per-document run identity (2026-10-19)
+
+DDL применён через approved route (`sudo -n -u postgres psql -d
+document_intelligence --single-transaction`, `lock_timeout=15s`):
+
+```sql
+ALTER TABLE structured_extraction_runs
+    ADD COLUMN IF NOT EXISTS source_document_id BIGINT;
+ALTER TABLE structured_extraction_runs
+    DROP CONSTRAINT IF EXISTS uq_extraction_run_detail_version;
+CREATE UNIQUE INDEX uq_runs_procurement_source_extractor
+    ON structured_extraction_runs
+       (procurement_id, source_document_id, extractor_version)
+    WHERE source_document_id IS NOT NULL;
+CREATE UNIQUE INDEX uq_runs_detail_version_legacy
+    ON structured_extraction_runs (detail_id, extractor_version)
+    WHERE source_document_id IS NULL;
+```
+
+Перед DDL остановлены writers (4 document daemon + context-validator),
+завершены idle-in-transaction бэкенды, после DDL сервисы подняты —
+все `active`.
+
+КОД:
+
+```text
+persist_facts(..., source_document_id=None):
+  run lookup — (procurement_id, source_document_id, extractor_version);
+  legacy fallback — (procurement_id, document_name, extractor_version)
+                    AND source_document_id IS NULL;
+  INSERT пишет source_document_id;
+  ON CONFLICT — per-document partial unique index
+                (или legacy partial index для NULL).
+parse_extractors._persist_embedded:
+  передаёт source_document_id в persist_facts (DIRECT и EMBEDDED).
+```
+
+REPARSE 148391 (файлы сохранены после out-of-order download):
+
+```text
+37 files on disk, embedded 23 052
+```
+
+ФИНАЛЬНЫЙ STRICT DRY-RUN:
+
+```text
+EMBEDDED_CATEGORIES=['composite_structures', 'waterproofing']
+QUOTE_SNAPSHOT_CHECK=LITERAL_REQUIRED
+QUARANTINE_WITH_SECTION_TOTAL_SOURCE=685
+CANONICAL_GOODS=66   (waterproofing 52, composite_structures 14)
+SEMANTIC_DEDUP_FACTS=65
+DISTINCT_PROCUREMENT_CATEGORY_UNITS=2
+OPPORTUNITIES_PROJECTED_WITH_FACTS=2
+CONFIRMED_BASE_NEW_OR_CHANGED=2
+PROJECTED_CONFIRMED_BASE_DISTRIBUTION={'GOLD': 2}
+DB_WRITES=0
+APPLY_NOT_RUN=YES
+```
+
+EVIDENCE идентичности:
+
+```text
+entity 673920: source_document_id=24550, run_id=4464,
+               run.source_document_id=24550, source_quote position=6639
+```
+
+Оба кейса (60467 waterproofing + 148391 composite_structures) проходят strict
+provenance. `SECTION_CONFIRMED` применять можно только отдельным approval;
+apply НЕ выполнялся.
 
 ## RESULT Phase 1 — SECTION_CONFIRMED dry-run (2026-10-19)
 

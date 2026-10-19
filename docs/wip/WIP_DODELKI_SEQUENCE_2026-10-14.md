@@ -415,6 +415,15 @@ document_name — вложенный и top-level «Прил. №7» перез�
 одного run. Нужно добавить source_document_id в идентичность run (DDL) или
 scoped run key. SECTION_CONFIRMED не применяем.
 
+PER-DOCUMENT RUN IDENTITY (2026-10-19): DDL применён (source_document_id в
+structured_extraction_runs; unique index
+(procurement_id, source_document_id, extractor_version); legacy partial index
+для NULL). persist_facts ищет/создаёт run по новому ключу и пишет
+source_document_id. Reparse 148391 (37 файлов, embedded 23 052).
+ФИНАЛЬНЫЙ strict dry-run: 685 -> 66 canonical goods -> 65 unique -> 2
+opportunities -> GOLD 2 (waterproofing 60467 + composite_structures 148391).
+SECTION_CONFIRMED не применялся; apply — только отдельным approval.
+
 ### 4. CATEGORY_DISCOVERY_DYNAMIC_V1 — Phase C
 
 См. `docs/wip/WIP_CATEGORY_DISCOVERY_DYNAMIC_V1.md`.

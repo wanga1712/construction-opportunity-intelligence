@@ -351,6 +351,7 @@ def _persist_embedded(
             created, _reused, _stats = persist_facts(
                 conn, procurement_id=procurement_id, document_name=document_name,
                 category_code=category_code, facts=facts,
+                source_document_id=source_document_id,
             )
             return created
 
@@ -396,6 +397,7 @@ def _persist_embedded(
         created, _reused, _stats = persist_facts(
             conn, procurement_id=procurement_id, document_name=document_name,
             category_code=category_code, facts=facts, source_text=snapshot_text,
+            source_document_id=source_document_id,
         )
         return created
     except Exception as exc:  # never break parsing

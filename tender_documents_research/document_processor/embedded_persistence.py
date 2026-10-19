@@ -75,6 +75,7 @@ def persist_facts(
     facts: Iterable[Any],
     detail_id=None,
     source_text: Optional[str] = None,
+    source_document_id: Optional[int] = None,
 ) -> Tuple[int, int, Dict[str, int]]:
     """Insert facts for one document; re-runs reuse entities (idempotent)."""
     facts = list(facts)
@@ -97,11 +98,23 @@ def persist_facts(
         snapshot = source_text[:max_chars]
     else:
         snapshot = json.dumps([f.source_quote for f in facts][:200], ensure_ascii=False)
-    cur.execute(
-        "SELECT id FROM structured_extraction_runs"
-        " WHERE procurement_id=%s AND document_name=%s AND extractor_version=%s LIMIT 1",
-        (procurement_id, document_name, EXTRACTOR_VERSION),
-    )
+    # GOOD_SUPPLY_FACTS_V1: run identity is per source document. The same
+    # file_name can appear top-level and inside an archive; document_name alone
+    # merged those runs and their snapshots overwrote each other.
+    if source_document_id is not None:
+        cur.execute(
+            "SELECT id FROM structured_extraction_runs"
+            " WHERE procurement_id=%s AND source_document_id=%s AND extractor_version=%s"
+            " LIMIT 1",
+            (procurement_id, int(source_document_id), EXTRACTOR_VERSION),
+        )
+    else:
+        cur.execute(
+            "SELECT id FROM structured_extraction_runs"
+            " WHERE procurement_id=%s AND document_name=%s AND extractor_version=%s"
+            "   AND source_document_id IS NULL LIMIT 1",
+            (procurement_id, document_name, EXTRACTOR_VERSION),
+        )
     row = cur.fetchone()
     if row:
         run_id = row[0]
@@ -112,26 +125,38 @@ def persist_facts(
              hashlib.sha256(snapshot.encode("utf-8")).hexdigest(), run_id),
         )
     else:
+        if source_document_id is not None:
+            conflict_clause = (
+                "ON CONFLICT (procurement_id, source_document_id, extractor_version)"
+                " WHERE source_document_id IS NOT NULL DO UPDATE SET"
+            )
+        else:
+            conflict_clause = (
+                "ON CONFLICT (detail_id, extractor_version)"
+                " WHERE source_document_id IS NULL DO UPDATE SET"
+            )
         cur.execute(
-            """
+            f"""
             INSERT INTO structured_extraction_runs
-                (detail_id, procurement_id, category_code, document_name, page_or_sheet,
-                 source_text_snapshot, source_text_sha256, source_validator_name,
+                (detail_id, procurement_id, source_document_id, category_code, document_name,
+                 page_or_sheet, source_text_snapshot, source_text_sha256, source_validator_name,
                  source_validator_version, source_validation_method, extractor_name,
                  extractor_version, extraction_method, prompt_version, model_name, status,
                  created_at, completed_at, structured_fact_trust_state)
-             VALUES (%s,%s,%s,%s,'mixed',%s,%s,'PROVENANCE_CONTRACT','v1','PARSE_TIME',
+             VALUES (%s,%s,%s,%s,%s,'mixed',%s,%s,'PROVENANCE_CONTRACT','v1','PARSE_TIME',
                      'EMBEDDED_EXTRACTOR',%s,'DETERMINISTIC_ROW_MAP','none','none','COMPLETED',
                      NOW(),NOW(),'MANUAL_PROOF_QUARANTINE')
-             ON CONFLICT (detail_id, extractor_version) DO UPDATE SET
+             {conflict_clause}
                  category_code = EXCLUDED.category_code,
+                 source_document_id = EXCLUDED.source_document_id,
                  document_name = EXCLUDED.document_name,
                  source_text_snapshot = EXCLUDED.source_text_snapshot,
                  source_text_sha256 = EXCLUDED.source_text_sha256,
                  completed_at = NOW()
              RETURNING id
             """,
-            (detail_id, procurement_id, str(category_code)[:100], document_name, snapshot,
+            (detail_id, procurement_id, source_document_id, str(category_code)[:100],
+             document_name, snapshot,
              hashlib.sha256(snapshot.encode("utf-8")).hexdigest(), EXTRACTOR_VERSION),
         )
         run_id = cur.fetchone()[0]
