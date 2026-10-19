@@ -290,12 +290,18 @@ def load_procurement_dossier(db: Any, procurement_id: int) -> Dict[str, Any]:
         db,
         None,
         """
-        SELECT commercial_category_code, commercial_subcategory_code, opportunity_track,
-               status, category_confidence, candidate_medal, current_effective_medal,
-               commercial_priority_score, research_action
-        FROM crm_procurement_category_opportunities
-        WHERE procurement_id = %s
-        ORDER BY commercial_priority_score DESC NULLS LAST, commercial_category_code
+        SELECT o.commercial_category_code, o.commercial_subcategory_code, o.opportunity_track,
+               o.status, o.category_confidence, o.candidate_medal, o.current_effective_medal,
+               o.commercial_priority_score, o.research_action,
+               o.candidate_initial_score, o.candidate_initial_medal,
+               o.confirmed_base_score, o.confirmed_base_medal,
+               o.current_effective_score, o.current_effective_reason,
+               (SELECT c.category_name FROM crm_product_categories c
+                 WHERE c.category_code = o.commercial_category_code
+                 ORDER BY c.id LIMIT 1) AS category_name
+        FROM crm_procurement_category_opportunities o
+        WHERE o.procurement_id = %s
+        ORDER BY o.commercial_priority_score DESC NULLS LAST, o.commercial_category_code
         """,
         (int(procurement_id),),
         errors=errors, label="opportunities",
@@ -551,6 +557,40 @@ def load_procurement_dossier(db: Any, procurement_id: int) -> Dict[str, Any]:
     except Exception as _exc:  # дорожная проекция не должна ломать карточку
         _record_error(errors, "road_projection", _exc)
 
+    # PROCUREMENT_CARD_CATEGORY_PIPELINE_V1: read-model вкладки «Категории».
+    # Одна opportunity = один блок; медали — существующие authority-поля.
+    dossier["categories"] = []
+    try:
+        from src.services.document_queue_progress_service import load_queue_progress
+        from src.services.procurement_card_category_service import (
+            build_category_cards,
+            load_extraction_outcomes,
+            load_model_validation_counts,
+        )
+
+        _progress = load_queue_progress([int(procurement_id)])
+        _model_counts: Dict[str, Any] = {}
+        _outcomes: Dict[str, Any] = {}
+        try:
+            _model_counts = load_model_validation_counts(int(procurement_id))
+        except Exception as _exc:  # noqa: BLE001
+            _record_error(errors, "category_model_counts", _exc)
+        try:
+            _outcomes = load_extraction_outcomes(int(procurement_id))
+        except Exception as _exc:  # noqa: BLE001
+            _record_error(errors, "category_extraction_outcomes", _exc)
+        dossier["categories"] = build_category_cards(
+            opportunities=dossier["opportunities"],
+            supply_facts=dossier.get("supply_candidates") or [],
+            documents=dossier["documents"],
+            queue_progress=_progress,
+            procurement_id=int(procurement_id),
+            model_counts=_model_counts,
+            extraction_outcomes=_outcomes,
+        )
+    except Exception as _exc:  # noqa: BLE001
+        _record_error(errors, "categories", _exc)
+
     docs = dossier["documents"]
     finds = dossier["findings"]
     dossier["counts"] = {
@@ -567,6 +607,11 @@ def load_procurement_dossier(db: Any, procurement_id: int) -> Dict[str, Any]:
             1 for f in finds if f.get("provenance_status") == "LEGACY_UNVERIFIED"
         ),
         "opportunities": len(dossier["opportunities"]),
+        "categories": len(dossier.get("categories") or []),
+        "confirmed_categories": sum(
+            1 for c in (dossier.get("categories") or [])
+            if c.get("confirmed_base_medal")
+        ),
     }
     return dossier
 

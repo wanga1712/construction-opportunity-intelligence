@@ -2,8 +2,9 @@
 
 Только представление: данные берутся из read-only
 ``procurement_card_dossier_service``, контракты/идентификаторы не меняются.
-Структура: заголовок → 6 KPI-плиток → вкладки (Обзор / Документы / Находки /
-Что можно поставить / Очередь). Модальное окно открывается из «Таблицы закупок».
+Структура: заголовок → 6 KPI-плиток → вкладки (Обзор / Документы / Категории /
+История-Модель / Очередь). Raw findings — только в технической истории.
+Модальное окно открывается из «Таблицы закупок».
 """
 from __future__ import annotations
 
@@ -23,6 +24,10 @@ from src.services.procurement_card_dossier_service import (
     list_procurements_for_card,
     load_procurement_dossier,
     queue_procurement_for_documents,
+)
+from src.services.procurement_card_category_service import (
+    TRUST_GROUPS as _TRUST_LABELS,
+    group_products_by_trust as _group_products_by_trust,
 )
 from src.services.section_projection_service import TOTAL_NEEDS_REVIEW as _SECTION_TOTAL_REVIEW
 
@@ -109,7 +114,7 @@ _CSS = """
 .pc-table tbody tr:hover{background:#f2f7ff}
 .pc-muted{color:var(--pc-muted);font-size:12.5px}
 .pc-mono{font-family:ui-monospace,Consolas,monospace;font-size:11.5px}
-.pc-scroll{max-height:44vh;overflow:auto;border:1px solid var(--pc-line);border-radius:10px}
+.pc-scroll{max-height:none;overflow:visible;border:1px solid var(--pc-line);border-radius:10px}
 .pc-chip{display:inline-block;border:1px solid var(--pc-line);border-radius:11px;padding:1px 8px;
   font-size:11px;color:#41505f;background:#fff;margin:2px 4px 0 0}
 .pc-chip.ok{background:#e9f6ec;border-color:#a9d3b2;color:#226b31}
@@ -324,7 +329,7 @@ def _group_documents(documents: List[Dict[str, Any]]) -> List[List[Dict[str, Any
     return list(groups.values())
 
 
-def _render_history_tab(pid: int, db: Any) -> None:
+def _render_history_tab(pid: int, db: Any, findings: Optional[List[Dict[str, Any]]] = None) -> None:
     """Вкладка «История / Модель»: таймлайн закупки и точный model_input/промпт."""
     try:
         from src.services.crm_procurement_history_service import (
@@ -353,6 +358,37 @@ def _render_history_tab(pid: int, db: Any) -> None:
         st.text_area("Текст промпта", payload["prompt"], height=320, key=f"pc_prompt_{pid}")
     else:
         st.caption("Промпт не отрендерился (нет model_input).")
+
+    # Raw findings: техническая история, не пользовательский слой.
+    _finds = findings or []
+    if _finds:
+        with st.expander(f"Технические данные → Raw findings ({len(_finds)})"):
+            mode = st.radio(
+                "Показывать", ["Все", "VERIFIED", "INVALID/LEGACY"],
+                horizontal=True, key=f"pc_find_mode_{pid}",
+                label_visibility="collapsed",
+            )
+            shown = _finds
+            if mode == "VERIFIED":
+                shown = [f for f in _finds if f.get("provenance_status") == "VERIFIED"]
+            elif mode == "INVALID/LEGACY":
+                shown = [f for f in _finds if f.get("provenance_status") != "VERIFIED"]
+            st.caption(
+                f"показано {len(shown)} из {len(_finds)} · VERIFIED "
+                f"{sum(1 for f in _finds if f.get('provenance_status') == 'VERIFIED')} · "
+                f"LEGACY {sum(1 for f in _finds if f.get('provenance_status') == 'LEGACY_UNVERIFIED')} · "
+                f"INVALID {sum(1 for f in _finds if f.get('provenance_status') == 'INVALID')}"
+            )
+            st.markdown(_table_html(
+                ["Термин", "Метод", "Score", "Provenance", "Строка", "matched_text", "Файл"],
+                [
+                    [_fmt(f.get("matched_term")), _fmt(f.get("match_method")), _fmt(f.get("score")),
+                     _prov_chip(f.get("provenance_status")),
+                     f'{_fmt(f.get("page_or_sheet"))} / {_fmt(f.get("row_number"))}',
+                     f'<span class="pc-mono">{escape(str(f.get("matched_text") or "")[:180])}</span>',
+                     escape(str(f.get("file_name") or ""))]
+                    for f in shown[:150]
+                ]), unsafe_allow_html=True)
 
 
 def _render_dossier(d: Dict[str, Any], db: Any = None) -> None:
@@ -416,10 +452,11 @@ def _render_dossier(d: Dict[str, Any], db: Any = None) -> None:
         + _tile("Приём заявок до", _date(md.get("end_date")),
                 "Приём завершён" if expired else "", warn=expired)
         + _tile("Документы", f'{counts.get("documents", 0)} / {counts.get("downloaded", 0)}',
-                "ошибка запроса к БД" if documents_failed else "всего / скачано",
+                "ошибка запроса к БД" if documents_failed else "всего / обработано",
                 warn=documents_failed)
-        + _tile("Находки", str(counts.get("verified", 0)), "подтверждённых (VERIFIED)")
-        + _tile("Категорийные возможности", str(counts.get("opportunities", 0)))
+        + _tile("Категории", str(counts.get("categories", 0)), "найдено предварительно")
+        + _tile("Подтверждено", f'{counts.get("confirmed_categories", 0)} / {counts.get("categories", 0)}',
+                "после документов/модели")
         + '</div>',
         unsafe_allow_html=True,
     )
@@ -454,8 +491,7 @@ def _render_dossier(d: Dict[str, Any], db: Any = None) -> None:
     if _is_direct_track:
         _titles += _direct_tab_titles(_direct_state)
     else:
-        _titles.append(f"Находки ({counts.get('findings', 0)})")
-        _titles.append(f"Что можно поставить ({len(d.get('supply_candidates') or [])})")
+        _titles.append(f"Категории ({counts.get('categories', 0)})")
         if _spec:
             _direct_specs.append(("spec", f"Смета ({len(_spec)})"))
         if _tech:
@@ -469,8 +505,7 @@ def _render_dossier(d: Dict[str, Any], db: Any = None) -> None:
     _idx = 0
     tab_overview = _tabs[_idx]; _idx += 1
     tab_docs = _tabs[_idx]; _idx += 1
-    tab_find = None
-    tab_supply = None
+    tab_categories = None
     tab_estimate = tab_prod = tab_participant = tab_security = tab_additional = None
     if _is_direct_track:
         tab_estimate = _tabs[_idx]; _idx += 1
@@ -479,8 +514,7 @@ def _render_dossier(d: Dict[str, Any], db: Any = None) -> None:
         tab_security = _tabs[_idx]; _idx += 1
         tab_additional = _tabs[_idx]; _idx += 1
     else:
-        tab_find = _tabs[_idx]; _idx += 1
-        tab_supply = _tabs[_idx]; _idx += 1
+        tab_categories = _tabs[_idx]; _idx += 1
     tab_spec = tab_tech = tab_req = None
     for _key, _ in _direct_specs:
         if _key == "spec":
@@ -650,35 +684,73 @@ def _render_dossier(d: Dict[str, Any], db: Any = None) -> None:
                         'скачаны повторно с тем же именем и той же ссылкой.</div>'
                         % (len(_grouped), len(_docs), len(_dupes)), unsafe_allow_html=True)
 
-    if tab_find is not None:
-        with tab_find:
-            finds = d.get("findings") or []
-            mode = st.radio("Показывать", ["Все", "VERIFIED", "INVALID/LEGACY"], horizontal=True,
-                            key=f"pc_find_mode_{pid}", label_visibility="collapsed")
-            if mode == "VERIFIED":
-                finds = [f for f in finds if f.get("provenance_status") == "VERIFIED"]
-            elif mode == "INVALID/LEGACY":
-                finds = [f for f in finds if f.get("provenance_status") != "VERIFIED"]
-            _all_finds = d.get("findings") or []
-            _v = sum(1 for f in _all_finds if f.get("provenance_status") == "VERIFIED")
-            _l = sum(1 for f in _all_finds if f.get("provenance_status") == "LEGACY_UNVERIFIED")
-            _i = sum(1 for f in _all_finds if f.get("provenance_status") == "INVALID")
-            st.caption(f"показано {len(finds)} из {counts.get('findings', 0)} · "
-                       f"VERIFIED {_v} · LEGACY {_l} · INVALID {_i} · "
-                       f"в модель можно отправлять только VERIFIED")
-            st.markdown(_table_html(
-                ["Термин", "Метод", "Score", "Provenance", "Строка", "matched_text", "Файл"],
-                [
-                    [_fmt(f.get("matched_term")), _fmt(f.get("match_method")), _fmt(f.get("score")),
-                     _prov_chip(f.get("provenance_status")),
-                     f'{_fmt(f.get("page_or_sheet"))} / {_fmt(f.get("row_number"))}',
-                     f'<span class="pc-mono">{escape(str(f.get("matched_text") or "")[:180])}</span>',
-                     escape(str(f.get("file_name") or ""))]
-                    for f in finds[:150]
-                ]), unsafe_allow_html=True)
+    if tab_categories is not None:
+        with tab_categories:
+            _cards = d.get("categories") or []
+            if not _cards:
+                st.markdown('<div class="pc-muted">Текущих коммерческих категорий нет.</div>',
+                            unsafe_allow_html=True)
+            for _c in _cards:
+                _confirmed = _c.get("confirmed_base_medal")
+                st.markdown(
+                    '<div class="pc-card"><div class="pc-sect">🏷 %s'
+                    '<span class="pc-muted"> · %s · %s</span></div>'
+                    % (escape(str(_c.get("category_name") or "")),
+                       escape(str(_c.get("category_code") or "")),
+                       escape(str(_c.get("track") or "—")))
+                    + _kv([
+                        ["Предварительная медаль",
+                         f'{_medal_span(_c.get("candidate_initial_medal"))}'
+                         f' {_fmt(_c.get("candidate_initial_score"))}'],
+                        ["После проверки",
+                         f'{_medal_span(_confirmed)} {_fmt(_c.get("confirmed_base_score"))}'
+                         if _confirmed else '<span class="pc-muted">Ожидает подтверждения</span>'],
+                        ["Текущая",
+                         f'{_medal_span(_c.get("current_effective_medal"))}'
+                         f' {_fmt(_c.get("current_effective_score"))}'],
+                        ["Документы", escape(str(_c.get("document_stage") or "—"))],
+                        ["Модель",
+                         f'{escape(str(_c.get("model_stage") or "—"))}'
+                         f' · P {_fmt(_c.get("model_pending"))}'
+                         f' · C {_fmt(_c.get("model_confirmed"))}'
+                         f' · R {_fmt(_c.get("model_rejected"))}'
+                         f' · U {_fmt(_c.get("model_unknown"))}'],
+                        ["Материалов найдено",
+                         f'{_fmt(_c.get("product_count"))}'
+                         f' · позиций {_fmt(_c.get("line_count"))}'
+                         f' · {_money(_c.get("material_value"))}'],
+                    ]) + '</div>',
+                    unsafe_allow_html=True,
+                )
+                _prods = _c.get("products") or []
+                if _prods:
+                    for _trust, _items in _group_products_by_trust(_prods):
+                        st.markdown(
+                            '<div class="pc-muted">%s · %d</div>'
+                            % (escape(_TRUST_LABELS.get(_trust, _trust)), len(_items)),
+                            unsafe_allow_html=True,
+                        )
+                        st.markdown(_table_html(
+                            ["Материал", "Кол-во", "Ед.", "Цена", "Сумма",
+                             "Характеристики", "Цитата", "Раздел"],
+                            [
+                                [
+                                    escape(str(p.get("material") or "")),
+                                    _fmt(p.get("quantity")),
+                                    escape(str(p.get("unit") or "—")),
+                                    _money(p.get("unit_price")),
+                                    _money(p.get("total")),
+                                    _attrs(p) if p.get("attributes") else "—",
+                                    '<span class="pc-mono">%s</span>'
+                                    % escape(str(p.get("source_quote") or "")[:140]),
+                                    escape(str(p.get("section_name") or p.get("section_code") or "—")),
+                                ]
+                                for p in _items[:120]
+                            ]), unsafe_allow_html=True)
 
-    if tab_supply is not None:
-        with tab_supply:
+    # Раздел → материалы остаётся частью вкладки «Категории» (детализация).
+    if tab_categories is not None:
+        with tab_categories:
             supply = d.get("supply_candidates") or []
             _projection = d.get("section_projection") or {}
             _sections = _projection.get("sections") or []
@@ -776,7 +848,7 @@ def _render_dossier(d: Dict[str, Any], db: Any = None) -> None:
                 _render_additional(_direct_state)
 
     with tab_history:
-        _render_history_tab(pid, db)
+        _render_history_tab(pid, db, d.get("findings") or [])
 
     if tab_spec is not None:
         with tab_spec:
