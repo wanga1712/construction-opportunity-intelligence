@@ -637,8 +637,9 @@ def _emit_spec_tech(out: Dict[str, List[Dict[str, Any]]], data_rows: List[List[s
         if item.lower() not in seen:
             seen.add(item.lower())
             out["spec"].append({
-                "source_file": name, "header": _SPEC_HEADER,
-                "cells": [item, _norm_cell(_cell(row, i_okpd)), _norm_cell(_cell(row, i_qty))],
+                # Preserve the source table columns (unit/price/total) and carry
+                # the resolved item explicitly for merged-cell continuation rows.
+                "source_file": name, "header": header, "cells": row, "item": item,
             })
         char = _norm_cell(_cell(row, i_char))
         value = _norm_cell(_cell(row, i_val))

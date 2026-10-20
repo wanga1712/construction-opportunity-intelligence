@@ -20,6 +20,8 @@ from pathlib import Path
 import psycopg2
 import psycopg2.extras
 
+DIRECT_CATS = {"computers", "lighting", "cable_support_systems"}
+
 
 def _doc_conn():
     # Credentials приходят из воркерных EnvironmentFile (S13_DOCUMENT_DB_*),
@@ -160,6 +162,7 @@ def main() -> int:
                     source_document_id=item["id"],
                     physical_key=item["physical_download_key"],
                     line_meta=line_meta,
+                    track="DIRECT" if category in DIRECT_CATS else "EMBEDDED",
                 )
                 for key, value in (result or {}).items():
                     totals[key] += int(value or 0)

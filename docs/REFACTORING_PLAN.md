@@ -4461,3 +4461,74 @@ FINDINGS_COUNT_CATEGORY_SPECIFIC=YES
 RAW_FINDINGS_AVAILABLE_IN_TECH_HISTORY=YES
 DB_WRITES=0
 ```
+
+## 2026-10-20 — DIRECT_SUPPLY_GOODS_COVERAGE_V1 Phase 0 — DONE
+
+Read-only coverage audit на S13 для `computers`, `lighting`,
+`cable_support_systems` (`DB_WRITES=0`):
+
+```text
+CATEGORY               TOTAL  GOODS  HAS_QTY  HAS_UNIT  HAS_TOTAL  TRUSTED  QUARANTINE  OK
+computers               3234   3221    2692      2699       96       2972      262       84
+lighting               19628  16458   17859     12878      215      12393     7235      139
+cable_support_systems    717    715     649       577       32        671       46       28
+```
+
+Главный вывод: trust не является основным блокером
+(`TRUSTED_PRODUCTION=91.9% / 63.1% / 93.6%`). Основной разрыв — total mapping:
+`HAS_TOTAL=3.0% / 1.1% / 4.5%`; `no_total` отсекает
+`2448 / 8533 / 522` GOODS-строки. Quantity покрыт на `83–91%`, unit хуже всего у
+`lighting` (`65.6%`). Phase 1 должна поднять total/unit mapping и пересчитать
+`OK`, не меняя trust/scoring/medal/queue.
+
+```text
+DIRECT_GOODS_COVERAGE_AUDITED=YES
+DIRECT_GOODS_COVERAGE_AUDITED_AT=2026-10-20
+DB_WRITES=0
+SCORING_MEDAL_QUEUE_UNCHANGED=YES
+```
+
+## 2026-10-20 — DIRECT_SUPPLY_GOODS_COVERAGE_V1 Phase 1 — DONE
+
+DIRECT mapping исправлен:
+
+- `direct_document_extractor._emit_spec_tech` сохраняет исходные unit/price/total
+  колонки и resolved item вместо потери их при переходе на трёхколоночный шаблон;
+- `direct_runtime` использует все candidate-колонки, arithmetic proof
+  `qty * price ≈ total` (<=5%), fallback triple для merged/multi-level шапок,
+  unit из mapped/combined/neighbor-ячейки и integer rule для COUNT;
+- DIRECT facts объединяются с broad embedded fallback, DIRECT-enriched поля
+  имеют приоритет;
+- diagnostic reparse теперь передаёт `track=DIRECT` для `computers`, `lighting`,
+  `cable_support_systems`.
+
+Canary: `1157` lighting 943 facts, `452626` lighting 445,
+`409646` cable 4, `327006` computers 490. Все reparse jobs успешны.
+
+Повторный category-wide audit:
+
+```text
+CATEGORY               TOTAL  GOODS  HAS_QTY  HAS_UNIT  HAS_TOTAL  OK
+lighting               20301  17108   18322     13246      358      166
+cable_support_systems    741    739     661       597       32       28
+computers               3734   3713    2798      2895      194       84
+```
+
+Delta Phase 0 → Phase 1: lighting `total +143 / unit +368 / OK +27`;
+cable `total +0 / unit +20 / OK +0`; computers `total +98 / unit +196 / OK +0`.
+Для DIRECT drow-строк: `1157=142 totals`, `327006=98 totals`,
+`UNPROVEN_TOTAL=0`, `FRACTIONAL_COUNT=0`.
+
+Ограничения: cable canary не содержит доказуемых price/total; computers canary
+имеет доказанные totals, но price-sheet не содержит unit; lighting всё ещё
+основной объём `no_total`, поскольку выполнен canary, а не массовый reparse.
+
+```text
+DIRECT_TOTAL_UNIT_MAPPED=YES
+TOTAL_ARITHMETIC_PROOF_REQUIRED=YES
+UNPROVEN_TOTAL_NOT_WRITTEN=YES
+DIRECT_TRACK_IN_REPARSE=YES
+WORKS_RESOURCE_ROWS_EXCLUDED=YES
+DB_WRITES=REPARSE_ONLY
+SCORING_MEDAL_QUEUE_UNCHANGED=YES
+```

@@ -345,6 +345,7 @@ def _persist_embedded(
                 path, procurement_id=procurement_id, category_code=category_code,
                 document_name=document_name, source_document_id=source_document_id,
                 physical_key=physical_key,
+                text=text, line_meta=line_meta,
             )
             if not facts:
                 return 0

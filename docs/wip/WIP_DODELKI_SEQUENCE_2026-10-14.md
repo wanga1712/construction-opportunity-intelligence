@@ -24,7 +24,7 @@
 | P4 | `PROCUREMENT_CARD_CATEGORY_PIPELINE_V1` | DONE 2026-10-19 | вкладка «Категории» вместо «Находки» | PASS |
 | P5 | `PHYSICAL_KISOK_DASHBOARD_UPGRADE_V1` | DONE 2026-10-19 | CPU temp + per-core + аналитика киоска | PASS |
 | P6 | `EMBEDDED_ESTIMATE_PARSE_FIRST_V1` | Phase 1/3 DONE · Phase 4 dry-run | сначала смета, затем остальное | PASS |
-| P7 | `DIRECT_SUPPLY_GOODS_COVERAGE_V1` | СПЕКА | дожать товарные факты прямых поставок | PASS |
+| P7 | `DIRECT_SUPPLY_GOODS_COVERAGE_V1` | Phase 1 DONE 2026-10-20 | дожать товарные факты прямых поставок | PASS |
 | P8 | `FINDINGS_COUNT_SCOPE_V1` | DONE 2026-10-20 | не дублировать сырые находки по категориям | PASS |
 | 1A | `ARCHIVE_MEMBER_DEDUP_IDENTITY_V1` | DONE (`c66f96b`) | identity sweeper исправлена | PASS |
 | 1B | `ARCHIVE_MEMBER_PARSE_CONTEXT_V1` | PASS (`24062c2`) | 99069 end-to-end подтверждён | PASS |
@@ -234,6 +234,16 @@ Projected audit (в памяти): GOODS_FACTS_IN_SECTION=180 (1.6%),
 
 Правило: тот же goods-подход применяем к DIRECT_SUPPLY: total/unit mapping,
 strict trust, нормализованные товары в карточке.
+
+Phase 0 coverage: `computers 3234 / lighting 19628 / cable 717` entities;
+`has_total=3.0% / 1.1% / 4.5%` при `TRUSTED=91.9% / 63.1% / 93.6%`.
+Главный вход в Phase 1 — total mapping (`no_total=2448 / 8533 / 522`) и unit
+для `lighting` (`65.6%`). `DB_WRITES=0`.
+
+Phase 1: DIRECT arithmetic mapping + neighbor unit + DIRECT track reparse.
+Canary `1157/452626/409646/327006`. Итог: lighting `has_total 215→358`,
+computers `96→194`, cable `32→32`; `UNPROVEN_TOTAL=0`,
+`FRACTIONAL_COUNT=0`; `DB_WRITES=REPARSE_ONLY`.
 
 ### P8. FINDINGS_COUNT_SCOPE_V1
 

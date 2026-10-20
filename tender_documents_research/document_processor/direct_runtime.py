@@ -15,8 +15,16 @@ from __future__ import annotations
 
 import importlib.util
 import os
+import re
 from pathlib import Path
 from typing import Any, Dict, List, Optional
+
+from .embedded_extraction import normalize_unit, parse_number, split_quantity_unit
+from .estimate_value_mapping import (
+    find_arithmetic_triple,
+    quantity_for_unit,
+    select_arithmetic_pair,
+)
 
 DIRECT_EXTRACTOR_PATH = os.getenv(
     "DIRECT_EXTRACTOR_PATH", "/opt/CRM_Streamlit/src/services/direct_document_extractor.py"
@@ -73,6 +81,8 @@ def direct_facts(
     document_name: str,
     source_document_id: Optional[int],
     physical_key: Optional[str],
+    text: Optional[str] = None,
+    line_meta: Optional[Dict[int, Any]] = None,
 ) -> List[Any]:
     """DIRECT facts via explicit column mapping (never price-as-quantity)."""
     from document_processor.embedded_extraction import (
@@ -99,44 +109,99 @@ def direct_facts(
                 header = [str(h).strip().lower() for h in (row.get("header") or [])]
                 if not any(cells):
                     continue
-                i_name = _find(header, "наименован", "характеристик", "параметр", "показател", "товар")
-                i_unit = _find(header, "единиц", "ед. изм", "ед.изм", "ед ")
-                i_qty = _find(header, "кол-во", "количество", "кол.")
-                i_price = _find(header, "цена")
-                i_total = _find(header, "стоимост", "сумма")
-                name = _cell(cells, i_name)
+                name_indexes = _find_all(
+                    header, "наименован", "характеристик", "параметр",
+                    "показател", "товар",
+                )
+                name = row.get("item") or (
+                    _cell(cells, name_indexes[0]) if name_indexes else ""
+                )
                 if not name:
-                    name = max((c for c in cells if sum(ch.isalpha() for ch in c) >= 3),
-                               key=len, default="")
+                    name = max(
+                        (c for c in cells if sum(ch.isalpha() for ch in c) >= 3),
+                        key=len,
+                        default="",
+                    )
                 if not name or sum(ch.isalpha() for ch in name) < 3:
                     continue
-                # quantity strictly from the quantity column (fallback: a cell
-                # carrying qty+unit), never from the price/total columns.
-                qty = unit_raw = None
-                if 0 <= i_qty < len(cells):
-                    parsed = split_quantity_unit(cells[i_qty])
+
+                qty_indexes = _find_all(
+                    header, "кол-во", "количество", "кол.", "объем", "объём"
+                )
+                unit_indexes = _find_all(
+                    header, "единиц", "ед. изм", "ед.изм", "ед "
+                )
+                price_indexes = _find_all(header, "цена")
+                total_indexes = _find_all(
+                    header, "стоимост", "сумма", "итого", "всего", "затрат"
+                )
+
+                raw_qty = None
+                qty_index = None
+                unit_raw = None
+                for idx in qty_indexes:
+                    value = _cell(cells, idx)
+                    parsed = split_quantity_unit(value)
                     if parsed:
-                        qty, unit_raw = parsed[0], parsed[1]
-                    else:
-                        qty = parse_number(cells[i_qty])
-                if 0 <= i_unit < len(cells) and _cell(cells, i_unit):
-                    unit_raw = _cell(cells, i_unit)
-                if qty is None:
-                    for idx, cell in enumerate(cells):
-                        if idx in {i_price, i_total, i_name}:
-                            continue
-                        parsed = split_quantity_unit(cell)
-                        if parsed and parsed[2]:
-                            qty, unit_raw = parsed[0], parsed[1]
+                        raw_qty = parsed[0]
+                        unit_raw = parsed[1]
+                        qty_index = idx
+                        break
+                    parsed_qty = parse_number(value)
+                    if parsed_qty is not None:
+                        raw_qty = parsed_qty
+                        qty_index = idx
+                        break
+
+                if unit_raw is None:
+                    for idx in unit_indexes:
+                        value = _cell(cells, idx)
+                        if value and normalize_unit(value)[0]:
+                            unit_raw = value
                             break
+                if unit_raw is None and qty_index is not None:
+                    unit_raw = _nearest_unit(
+                        cells, qty_index, name_indexes + price_indexes + total_indexes
+                    )
+
                 unit_norm, family = normalize_unit(unit_raw)
-                unit_price = parse_number(_cell(cells, i_price)) if i_price >= 0 else None
-                line_total = parse_number(_cell(cells, i_total)) if i_total >= 0 else None
-                # A quantity without a recognized unit is a column-mapping error,
-                # not a fact (e.g. row index captured as quantity).
-                if qty is not None and unit_norm is None:
-                    qty = None
-                if qty is None and unit_price is None and line_total is None:
+                qty = quantity_for_unit(raw_qty, unit_norm)
+                prices = []
+                for idx in price_indexes:
+                    value = parse_number(_cell(cells, idx))
+                    if value is not None:
+                        prices.append((idx, value))
+                totals = []
+                for idx in total_indexes:
+                    value = parse_number(_cell(cells, idx))
+                    if value is not None:
+                        totals.append((idx, value))
+                pair = select_arithmetic_pair(qty, prices, totals)
+                if pair is None:
+                    numeric = _numeric_candidates(
+                        cells,
+                        header,
+                        excluded=set(name_indexes + unit_indexes),
+                    )
+                    triple = find_arithmetic_triple(numeric)
+                    if triple is not None:
+                        _qidx, raw_qty, _pidx, unit_price, _tidx, line_total, _ = triple
+                        qty = quantity_for_unit(raw_qty, unit_norm)
+                        pair = (_pidx, unit_price, _tidx, line_total, 0.0)
+
+                unit_price = line_total = None
+                if pair is not None:
+                    _price_idx, unit_price, _total_idx, line_total, _ = pair
+                    layout_status = "CONSISTENT"
+                elif qty is not None and prices and totals:
+                    layout_status = "INCONSISTENT_LAYOUT"
+                else:
+                    layout_status = "UNSUPPORTED_LAYOUT"
+
+                if qty is None:
+                    unit_price = line_total = None
+                    layout_status = "UNSUPPORTED_LAYOUT"
+                if raw_qty is None and not prices and not totals:
                     continue
                 quote = " | ".join(cells)[:500]
                 if "составляет" in quote.lower() or "рублей" in quote.lower() and " | " not in quote:
@@ -162,6 +227,7 @@ def direct_facts(
                     source_quote=quote,
                     confidence=0.9 if (qty is not None and unit_norm) else 0.7,
                     category_match=True,
+                    layout_status=layout_status,
                 )
                 fact.entity_fingerprint = fingerprint(fact, str(fact.row_or_line))
                 if fact.entity_fingerprint in seen:
@@ -169,29 +235,133 @@ def direct_facts(
                 seen.add(fact.entity_fingerprint)
                 facts.append(fact)
 
-    if facts:
-        return facts
-    # Fallback: flattened template text through the generic row parser.
-    text = build_direct_text(path)
-    if not text:
-        return []
-    return extract_facts(
-        procurement_id=procurement_id,
-        category_code=category_code,
-        document_name=document_name,
-        text=text,
-        line_meta=None,
-        source_document_id=source_document_id,
-        physical_key=physical_key,
-        category_keywords=(),
+    # Preserve broad row coverage while keeping the richer DIRECT mapping.
+    generic_facts = []
+    if path.suffix.lower() in (".xlsx", ".xlsm"):
+        from .smeta_forma_4b import detect_forma_4b, read_estimate, xlsx_sheet_names
+        from .xlsx_table_reader import read_tables
+        from .embedded_extraction import facts_from_table_rows
+
+        rows = (
+            read_estimate(path)
+            if detect_forma_4b(xlsx_sheet_names(path))
+            else read_tables(path)
+        )
+        generic_facts = facts_from_table_rows(
+            procurement_id=procurement_id,
+            category_code=category_code,
+            document_name=document_name,
+            rows=rows,
+            source_document_id=source_document_id,
+            physical_key=physical_key,
+        )
+    else:
+        generic_text = text or build_direct_text(path)
+        if generic_text:
+            generic_facts = extract_facts(
+                procurement_id=procurement_id,
+                category_code=category_code,
+                document_name=document_name,
+                text=generic_text,
+                line_meta=line_meta,
+                source_document_id=source_document_id,
+                physical_key=physical_key,
+                category_keywords=(),
+            )
+    return _merge_fact_sets(facts, generic_facts)
+
+
+def _normalized_quote(value: Any) -> str:
+    parts = []
+    for part in str(value or "").split("|"):
+        text = part.strip()
+        if len(text) > 2 and text[1] == "=" and text[0].isupper():
+            text = text[2:].strip()
+        if text:
+            parts.append(re.sub(r"\s+", " ", text))
+    return "|".join(parts)
+
+
+def _fact_score(fact: Any) -> tuple:
+    """Prefer DIRECT fields when the same source row also came from fallback."""
+    return (
+        4 if getattr(fact, "layout_status", None) == "CONSISTENT" else 1,
+        int(fact.line_total_value is not None),
+        int(fact.unit_price_value is not None),
+        int(fact.quantity_value is not None),
+        int(bool(fact.unit_normalized)),
     )
 
 
+def _merge_fact_sets(primary: List[Any], fallback: List[Any]) -> List[Any]:
+    """Merge by normalized source row; primary wins unless fallback is richer."""
+    merged: Dict[str, Any] = {}
+    order: List[str] = []
+    anonymous = 0
+    for fact in list(primary) + list(fallback):
+        key = _normalized_quote(getattr(fact, "source_quote", ""))
+        if not key:
+            anonymous += 1
+            key = f"__anonymous_{anonymous}"
+        current = merged.get(key)
+        if current is None:
+            merged[key] = fact
+            order.append(key)
+        elif _fact_score(fact) > _fact_score(current):
+            merged[key] = fact
+    return [merged[key] for key in order]
+
+
 def _find(header: List[str], *markers: str) -> int:
-    for i, h in enumerate(header):
-        if any(m in h for m in markers):
-            return i
-    return -1
+    matches = _find_all(header, *markers)
+    return matches[0] if matches else -1
+
+
+def _find_all(header: List[str], *markers: str) -> List[int]:
+    return [
+        idx
+        for idx, title in enumerate(header)
+        if any(marker in title for marker in markers)
+    ]
+
+
+def _numeric_candidates(
+    cells: List[str],
+    header: List[str],
+    *,
+    excluded: set[int],
+) -> List[tuple[int, float]]:
+    """Numbers eligible for arithmetic quantity/price/total proof."""
+    disallowed = ("код", "окпд", "№", "п/п", "поз", "индекс")
+    out: List[tuple[int, float]] = []
+    for idx, cell in enumerate(cells):
+        if idx in excluded:
+            continue
+        title = header[idx] if idx < len(header) else ""
+        if any(marker in title for marker in disallowed):
+            continue
+        if normalize_unit(cell)[0]:
+            continue
+        value = parse_number(cell)
+        if value is not None:
+            out.append((idx, value))
+    return out
+
+
+def _nearest_unit(
+    cells: List[str],
+    anchor: int,
+    excluded: List[int],
+) -> Optional[str]:
+    excluded_set = set(excluded)
+    candidates = []
+    for idx, cell in enumerate(cells):
+        if idx in excluded_set or not cell:
+            continue
+        normalized, _family = normalize_unit(cell)
+        if normalized:
+            candidates.append((abs(idx - anchor), idx, cell))
+    return min(candidates)[2] if candidates else None
 
 
 def _cell(cells: List[str], idx: int) -> str:
