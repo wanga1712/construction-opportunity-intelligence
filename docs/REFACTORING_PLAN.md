@@ -4393,3 +4393,71 @@ API поднимался транзиентно на S13 `127.0.0.1:8787` (venv 
 `/home/vitaliy/nodar-site-preview/auth.html`) остановлена как
 `IDENTITY_AUTHORITY_MISSING` — владелец сайта не описан в
 `docs/PROJECT_OPERATING_RULES.md`. Commit/push/deploy НЕ выполнялись.
+
+## 2026-10-20 — GOOD_SUPPLY_FACTS_V1 Phase 1.1b — DONE
+
+**Quantity/unit/total reconciliation ужесточён.** Добавлен
+`estimate_value_mapping.py`: COUNT-семейство (`PCS/UNIT/SET/PACK/ROLL/BAG/SHEET/PAIR`)
+допускает только целое количество; `total` принимается только при
+`qty * price ≈ total` (<=5%); при нескольких «Стоимость» выбирается
+арифметически доказанная, затем правая current-колонка. Headerless-путь больше
+не берёт первое число после unit — нужен доказанный triple quantity/price/total.
+Unit при пустой mapped-ячейке подтягивается из ближайшей соседней колонки.
+
+`good_supply_facts_service` и `section_detector.is_summarizable` дополнительно
+отсекают исторические строки с дробным COUNT-quantity, поэтому они не попадают
+в «Что можно поставить» и section sum. Новые extraction-факты уже имеют
+`quantity_value=NULL` для таких строк.
+
+Canary reparse: `60467`, `17236`, `26386`, `448082`; все jobs
+`Result=success / ExecMainStatus=0`. Новые inserted rows:
+`FRACTIONAL_COUNT=0`. В preferred good-supply слое видимых дробных COUNT-фактов
+`0`: `60467 — 160 GOODS`, `17236 — 19`, `26386 — 515`, `448082 — 0`.
+Для всех preferred-строк с total арифметика доказана:
+`60467 672/672`, `26386 1055/1055`, `17236 19/19`.
+
+Deployment: extraction/section/goods-модули обновлены на S13; четыре document
+daemon и `crm-streamlit.service` активны, `NRestarts=0`.
+
+Acceptance:
+
+```text
+INTEGER_QUANTITY_FOR_COUNT_UNITS=YES
+NO_QTY_AFTER_UNIT_BLIND_GUESS=YES
+TOTAL_MAPPED_FROM_CORRECT_COLUMNS=YES
+UNIT_FROM_NEIGHBOR_COLUMN=YES
+WORKS_RESOURCE_ROWS_EXCLUDED=YES
+DB_WRITES=REPARSE_ONLY
+SCORING_MEDAL_QUEUE_UNCHANGED=YES
+```
+
+Следующий этап — `DIRECT_SUPPLY_GOODS_COVERAGE_V1` для `computers`,
+`lighting`, `cable_support_systems`.
+
+## 2026-10-20 — FINDINGS_COUNT_SCOPE_V1 — DONE
+
+Пользовательский счётчик «Находки» больше не использует procurement-level
+`document_match_details`. `document_queue_progress_service.find_counts` теперь
+имеет форму `(procurement_id, category_code) -> count` и строится через
+`good_supply_facts_service.count_material_facts_by_category`: preferred
+`structured_entities`, `entity_type=PRODUCT`, `classify_fact_kind=GOODS`,
+quantity + normalized unit + source quote; работы, агрегаты и дробные
+COUNT-количества исключены.
+
+`analytics_table_workspace_service._attach_queue_status` подставляет счётчик по
+категории конкретной строки. Если фактических материалов нет, выводится `0`;
+одна и та же matcher-цифра не повторяется во всех категориях. Проверка 678:
+`RAW_MATCHER=14`, factual goods
+`composite=0 / curbstone=0 / drainage=0 / lighting=0 / waterproofing=12`.
+Raw matcher rows остаются в технической истории.
+
+Deployment: три CRM-модуля обновлены на S13; `crm-streamlit.service=active`,
+`NRestarts=0`.
+
+```text
+SAME_FINDINGS_NOT_REPEATED_PER_CATEGORY=YES
+FINDINGS_COUNT_IS_FACTUAL_GOODS=YES
+FINDINGS_COUNT_CATEGORY_SPECIFIC=YES
+RAW_FINDINGS_AVAILABLE_IN_TECH_HISTORY=YES
+DB_WRITES=0
+```

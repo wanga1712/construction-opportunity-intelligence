@@ -25,6 +25,12 @@ import re
 from dataclasses import dataclass, field
 from typing import Any, Dict, Iterable, List, Optional, Sequence, Tuple
 
+from .estimate_value_mapping import (
+    find_arithmetic_triple,
+    nearest_unit,
+    quantity_for_unit,
+    select_arithmetic_pair,
+)
 from .section_detector import (
     SECTION_RESIDUE,
     SectionTracker,
@@ -513,6 +519,145 @@ def _header_mapping(cells: Sequence[str]) -> Dict[str, int]:
     return {}
 
 
+_HEADER_MARKERS_V2 = {
+    "name": (
+        "\u043d\u0430\u0438\u043c\u0435\u043d\u043e\u0432\u0430\u043d",
+        "\u0445\u0430\u0440\u0430\u043a\u0442\u0435\u0440\u0438\u0441\u0442\u0438\u043a",
+        "\u043f\u0430\u0440\u0430\u043c\u0435\u0442\u0440",
+        "\u043f\u043e\u043a\u0430\u0437\u0430\u0442\u0435\u043b",
+        "\u0442\u043e\u0432\u0430\u0440",
+        "\u043c\u0430\u0442\u0435\u0440\u0438\u0430\u043b",
+        "\u043f\u043e\u0437\u0438\u0446\u0438",
+    ),
+    "unit": (
+        "\u0435\u0434\u0438\u043d\u0438\u0446",
+        "\u0435\u0434. \u0438\u0437\u043c",
+        "\u0435\u0434.\u0438\u0437\u043c",
+        "\u0435\u0434 ",
+    ),
+    "qty": (
+        "\u043a\u043e\u043b-\u0432\u043e",
+        "\u043a\u043e\u043b\u0438\u0447\u0435\u0441\u0442\u0432",
+        "\u043a\u043e\u043b.",
+    ),
+    "price": ("\u0446\u0435\u043d\u0430",),
+    "total": (
+        "\u0441\u0442\u043e\u0438\u043c\u043e\u0441\u0442",
+        "\u0441\u0443\u043c\u043c\u0430",
+        "\u0438\u0442\u043e\u0433\u043e",
+        "\u0432\u0441\u0435\u0433\u043e",
+        "\u0437\u0430\u0442\u0440\u0430\u0442",
+    ),
+}
+
+
+@dataclass(frozen=True)
+class _HeaderMap:
+    by_index: Dict[str, Tuple[int, ...]]
+    by_column: Dict[str, Tuple[str, ...]]
+
+
+def _row_column_values(meta: Dict[str, Any], cells: Sequence[str]) -> Dict[str, str]:
+    """Actual row values by source column, preserving source column identity."""
+    items = meta.get("cells") if isinstance(meta, dict) else None
+    if not items or len(items) != len(cells):
+        return {}
+    values: Dict[str, str] = {}
+    for item, text in zip(items, cells):
+        letter = str(item.get("column_letter") or "").strip().upper()
+        if not letter:
+            return {}
+        values[letter] = str(text)
+    return values
+
+
+def _header_mapping_candidates(
+    cells: Sequence[str], meta: Optional[Dict[str, Any]] = None
+) -> Optional[_HeaderMap]:
+    """Detect a header and retain every value-column candidate."""
+    low = [str(cell).strip().lower() for cell in cells]
+    by_index: Dict[str, List[int]] = {}
+    for field, markers in _HEADER_MARKERS_V2.items():
+        for idx, cell in enumerate(low):
+            if any(marker in cell for marker in markers):
+                by_index.setdefault(field, []).append(idx)
+    if not by_index.get("name") or not (
+        by_index.get("qty") or by_index.get("price") or by_index.get("total")
+    ):
+        return None
+    by_column: Dict[str, List[str]] = {}
+    row_columns = _row_column_values(meta or {}, cells)
+    if row_columns:
+        ordered_columns = list(row_columns)
+        for field, indices in by_index.items():
+            by_column[field] = [
+                ordered_columns[idx]
+                for idx in indices
+                if idx < len(ordered_columns)
+            ]
+    return _HeaderMap(
+        by_index={field: tuple(indices) for field, indices in by_index.items()},
+        by_column={field: tuple(columns) for field, columns in by_column.items()},
+    )
+
+
+def _mapped_cells(
+    mapping: _HeaderMap,
+    field: str,
+    cells: Sequence[str],
+    columns: Dict[str, str],
+) -> List[Tuple[Any, str]]:
+    """Non-empty cells for one semantic field."""
+    field_columns = mapping.by_column.get(field, ())
+    if field_columns:
+        return [
+            (column, columns[column])
+            for column in field_columns
+            if columns.get(column, "").strip()
+        ]
+    out: List[Tuple[Any, str]] = []
+    for idx in mapping.by_index.get(field, ()):
+        if 0 <= idx < len(cells) and str(cells[idx]).strip():
+            out.append((idx, str(cells[idx])))
+    return out
+
+
+def _unit_candidates(
+    cells: Sequence[str], columns: Dict[str, str], name_idx: Optional[int]
+) -> List[Tuple[Any, str, str, str]]:
+    """Normalized unit candidates as ``(key, raw, normalized, family)``."""
+    out: List[Tuple[Any, str, str, str]] = []
+    iterator = columns.items() if columns else enumerate(cells)
+    for key, cell in iterator:
+        if isinstance(key, int) and key == name_idx:
+            continue
+        normalized, family = normalize_unit(cell)
+        if normalized and family:
+            out.append((key, cell, normalized, family))
+    return out
+
+
+def _number_candidates(
+    cells: Sequence[str],
+    columns: Dict[str, str],
+    *,
+    exclude_keys: set,
+    exclude_leading: bool,
+) -> List[Tuple[Any, float]]:
+    """Cell values that are numbers rather than units or identifiers."""
+    out: List[Tuple[Any, float]] = []
+    iterator = columns.items() if columns else enumerate(cells)
+    for position, (key, cell) in enumerate(iterator):
+        if key in exclude_keys:
+            continue
+        if exclude_leading and position == 0:
+            continue
+        value = parse_number(cell)
+        if value is not None and normalize_unit(cell)[0] is None:
+            out.append((key, value))
+    return out
+
+
 def _split_row_cells(row_text: str, meta: Dict[str, Any]) -> List[str]:
     cells = meta.get("cells") if isinstance(meta, dict) else None
     if cells:
@@ -605,10 +750,15 @@ def _smeta_ocr_fact(
         return None
 
     tail = row_text[unit_match.end():].strip()
-    qty_match = _NUMBER.search(tail)
-    quantity = parse_number(qty_match.group(1)) if qty_match else None
     unit_raw = re.sub(r"\s+", "", unit_match.group(0)).lower()
     unit_norm, family = normalize_unit(_OCR_UNIT_ALIASES.get(unit_raw, unit_raw))
+    numeric = []
+    for match in _NUMBER.finditer(tail):
+        value = parse_number(match.group(1))
+        if value is not None:
+            numeric.append((match.start(), value))
+    triple = find_arithmetic_triple(numeric)
+    quantity = quantity_for_unit(triple[1] if triple else None, unit_norm)
     if quantity is None and unit_norm is None:
         return None
 
@@ -633,14 +783,14 @@ def _smeta_ocr_fact(
         source_quote=row_text[:500],
         confidence=0.78 if (quantity is not None and unit_norm) else 0.5,
         category_match=category_match or material_hint,
-        layout_status="OCR_SMETA_APPROX",
+        layout_status="UNSUPPORTED_LAYOUT",
     )
     fact.attributes = extract_attributes(name, category_code, row_text[:500])
     fact.entity_fingerprint = fingerprint(fact, f"line{line_no}")
     return fact
 
 
-def _row_to_fact(
+def _row_to_fact_legacy_old(
     *,
     procurement_id: int,
     category_code: str,
@@ -892,6 +1042,193 @@ def _row_to_fact(
     return fact
 
 
+def _row_to_fact_v2(
+    *,
+    procurement_id: int,
+    category_code: str,
+    document_name: str,
+    source_document_id: Optional[int],
+    physical_key: Optional[str],
+    line_no: int,
+    row_text: str,
+    meta: Dict[str, Any],
+    category_keywords: Sequence[str],
+    header_map: Optional[_HeaderMap] = None,
+) -> Optional[ExtractedFact]:
+    """Header-aware, arithmetic-proven row parser.
+
+    Unlike the legacy index-only mapper, this path preserves source columns and
+    never guesses quantity from the first number following a unit.
+    """
+    cells = _split_row_cells(row_text, meta)
+    if not cells:
+        return None
+    if len(cells) == 1:
+        return _smeta_ocr_fact(
+            row_text=row_text,
+            procurement_id=procurement_id,
+            category_code=category_code,
+            document_name=document_name,
+            source_document_id=source_document_id,
+            physical_key=physical_key,
+            line_no=line_no,
+            meta=meta,
+            category_keywords=category_keywords,
+        )
+
+    best_name = ""
+    best_score = -1
+    for cell in cells:
+        if _is_header(cell):
+            continue
+        alpha = sum(1 for char in cell if char.isalpha())
+        if alpha < 3 or len(cell) > 140 or len(cell.split()) > 12:
+            continue
+        score = alpha
+        if any(hint in cell.lower() for hint in _MATERIAL_HINTS):
+            score += 60
+        if any(keyword and keyword in cell.lower() for keyword in category_keywords):
+            score += 40
+        if _BAD_NAME.search(cell):
+            score -= 200
+        if score > best_score:
+            best_score = score
+            best_name = cell
+    if not best_name or best_score < 0 or _is_aggregate_name(best_name):
+        return None
+
+    columns = _row_column_values(meta, cells)
+    name_idx = next(
+        (idx for idx, cell in enumerate(cells) if cell == best_name), None
+    )
+    qty = unit_raw = unit_norm = family = None
+    qty_key = price_key = total_key = None
+    unit_price_value = line_total_value = None
+    unit_price_raw = line_total_raw = None
+    layout_status = "UNSUPPORTED_LAYOUT"
+
+    if header_map:
+        for key, cell in _mapped_cells(header_map, "qty", cells, columns):
+            parsed = split_quantity_unit(cell)
+            value = parsed[0] if parsed else parse_number(cell)
+            if value is not None:
+                qty, qty_key = value, key
+                if parsed and parsed[2]:
+                    unit_raw, unit_norm, family = parsed[1], parsed[2], parsed[3]
+                break
+
+        if unit_norm is None:
+            for key, cell in _mapped_cells(header_map, "unit", cells, columns):
+                normalized, normalized_family = normalize_unit(cell)
+                if normalized:
+                    unit_raw, unit_norm, family = cell, normalized, normalized_family
+                    break
+        if unit_norm is None and qty_key is not None:
+            nearest = nearest_unit(
+                _unit_candidates(cells, columns, name_idx), qty_key
+            )
+            if nearest:
+                _, unit_raw, unit_norm, family = nearest
+
+        qty = quantity_for_unit(qty, unit_norm)
+        prices = []
+        for key, cell in _mapped_cells(header_map, "price", cells, columns):
+            value = parse_number(cell)
+            if value is not None:
+                prices.append((key, value))
+        totals = []
+        for key, cell in _mapped_cells(header_map, "total", cells, columns):
+            value = parse_number(cell)
+            if value is not None:
+                totals.append((key, value))
+        pair = select_arithmetic_pair(qty, prices, totals)
+        if pair is not None:
+            price_key, unit_price_value, total_key, line_total_value, _ = pair
+            unit_price_raw = str(unit_price_value)
+            line_total_raw = str(line_total_value)
+            layout_status = "CONSISTENT"
+        elif qty is not None and prices and totals:
+            layout_status = "INCONSISTENT_LAYOUT"
+    else:
+        units = _unit_candidates(cells, columns, name_idx)
+        unit_keys = {item[0] for item in units}
+        numbers = _number_candidates(
+            cells,
+            columns,
+            exclude_keys=unit_keys,
+            exclude_leading=name_idx not in (None, 0),
+        )
+        triple = find_arithmetic_triple(numbers)
+        if triple is not None:
+            qty_key, qty, price_key, unit_price_value, total_key, line_total_value, _ = triple
+            nearest = nearest_unit(units, qty_key)
+            if nearest:
+                _, unit_raw, unit_norm, family = nearest
+            qty = quantity_for_unit(qty, unit_norm)
+            unit_price_raw = str(unit_price_value)
+            line_total_raw = str(line_total_value)
+            layout_status = "CONSISTENT"
+        elif units:
+            _, unit_raw, unit_norm, family = nearest_unit(units, None)
+
+    if qty is None:
+        unit_price_value = line_total_value = None
+        unit_price_raw = line_total_raw = None
+        layout_status = "UNSUPPORTED_LAYOUT"
+    if unit_norm is None:
+        return None
+
+    category_match = any(
+        keyword and keyword in row_text.lower() for keyword in category_keywords
+    )
+    material_hint = any(hint in best_name.lower() for hint in _MATERIAL_HINTS)
+    confidence = 0.4
+    if qty is not None and unit_norm:
+        confidence = 0.9
+    elif line_total_value is not None:
+        confidence = 0.6
+    if category_match:
+        confidence = min(0.98, confidence + 0.05)
+    elif material_hint:
+        confidence = min(0.95, confidence + 0.03)
+
+    fact = ExtractedFact(
+        procurement_id=procurement_id,
+        category_code=category_code,
+        document_name=document_name,
+        source_document_id=source_document_id,
+        physical_download_key=physical_key,
+        page_or_sheet=(
+            str(meta.get("sheet_name"))
+            if meta.get("sheet_name")
+            else (str(meta.get("page_number")) if meta.get("page_number") else None)
+        ),
+        row_or_line=(
+            f"row{meta.get('row_index')}"
+            if meta.get("row_index")
+            else f"line{line_no}"
+        ),
+        product_name_raw=best_name,
+        product_name_normalized=normalize_name(best_name),
+        quantity_raw=(str(qty) if qty is not None else None),
+        quantity_value=qty,
+        unit_raw=unit_raw,
+        unit_normalized=unit_norm,
+        measurement_family=family,
+        unit_price_raw=unit_price_raw,
+        unit_price_value=unit_price_value,
+        line_total_raw=line_total_raw,
+        line_total_value=line_total_value,
+        source_quote=row_text[:500],
+        confidence=confidence,
+        category_match=category_match,
+        layout_status=layout_status,
+    )
+    fact.attributes = extract_attributes(row_text, category_code, row_text[:500])
+    fact.entity_fingerprint = fingerprint(fact, str(fact.row_or_line))
+    return fact
+
+
 def _sheet_of(meta: Any) -> Optional[str]:
     """Sheet/page identity for the row (SECTION_LEVEL_NORMALIZATION_V1)."""
     if not isinstance(meta, dict):
@@ -964,7 +1301,7 @@ def extract_facts(
     processed = 0
     # Header-aware column mapping per table: qty/price/total only from their own
     # columns; a headerless table yields material/quantity but NO value.
-    headers: Dict[Any, Dict[str, int]] = {}
+    headers: Dict[Any, _HeaderMap] = {}
     # SECTION_LEVEL_NORMALIZATION_V1: deterministic section state (sheet × marker).
     tracker = SectionTracker()
     for line_no, row_text, meta in _iter_rows(text or "", line_meta):
@@ -975,11 +1312,11 @@ def extract_facts(
         sheet = _sheet_of(meta)
         section_code = tracker.observe(sheet, cells, row_text)
         table_key = (meta.get("table_index"), meta.get("sheet_name"), meta.get("file", ""))
-        mapping = _header_mapping(cells)
+        mapping = _header_mapping_candidates(cells, meta)
         if mapping:
             headers[table_key] = mapping
             continue
-        fact = _row_to_fact(
+        fact = _row_to_fact_v2(
             procurement_id=procurement_id,
             category_code=category_code,
             document_name=document_name,
@@ -1039,14 +1376,18 @@ def facts_from_table_rows(
             continue
         unit_raw = getattr(r, "quantity_unit", None)
         unit_norm, family = normalize_unit(unit_raw)
-        qty = getattr(r, "quantity_value", None)
+        qty = quantity_for_unit(
+            getattr(r, "quantity_value", None), unit_norm
+        )
         up = getattr(r, "unit_price_value", None)
         tot = getattr(r, "total_price_value", None)
         # A value requires a real position: quantity + unit (+ price column).
         if qty is None or unit_norm is None or (up is None and tot is not None):
             up = None
             tot = None
-        layout_status = "CONSISTENT"
+            layout_status = "UNSUPPORTED_LAYOUT"
+        else:
+            layout_status = "CONSISTENT"
         if qty is not None and up is not None and tot is not None:
             computed = float(qty) * float(up)
             denom = max(abs(float(tot)), abs(computed), 1.0)

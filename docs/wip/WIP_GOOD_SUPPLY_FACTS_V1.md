@@ -141,10 +141,20 @@ run identity:
 
 ### Phase 1.1 — total/unit mapping
 
-Статус: NEXT.
+Статус: DONE (Phase 1.1, embedded).
 
 Извлекать `total_price_value` из правильных колонок смет, подтягивать unit из
 соседней колонки. Это снимет `no_total` и `no_unit`.
+
+Дополнительное правило по quantity:
+
+```text
+для COUNT-семейства (шт/pcs/компл/упак) quantity должно быть целым;
+нецелое количество для счётных единиц -> quantity NULL и факт не summarizable;
+не брать первое число после unit вслепую.
+```
+
+Пример ошибки: `18.1 шт` — такое не может быть товарным количеством.
 
 ### Phase 1 — подключение к карточке
 
@@ -838,3 +848,85 @@ SECTION_CONFIRMED_APPLIED=NO
 DB_WRITES=reparse 60467/148391 only (approved)
 SCORING_MEDAL_QUEUE_UNCHANGED=YES
 ```
+
+## RESULT Phase 1.1b — integer quantity / proven totals / neighbor unit (2026-10-20)
+
+КОД:
+
+```text
+new: estimate_value_mapping.py
+  COUNT-family quantity -> NULL, если значение не целое;
+  total принимается только при qty * price ≈ total (<=5%);
+  при нескольких price/total колонках выбирается арифметически доказанная,
+  затем правая (current) колонка.
+
+embedded_extraction.py
+  header map сохраняет source column letters и ВСЕ candidate-колонки;
+  headerless path больше НЕ берёт первое число после unit: нужен
+  арифметически доказанный triple qty/price/total;
+  unit подтягивается из mapped или ближайшей соседней колонки;
+  COUNT-факт с дробным qty остаётся с quantity_value=NULL и не summarizable.
+
+xlsx_table_reader.py
+  qty/unit/price/total читаются по candidate-колонкам, а не по первой
+  найденной «Стоимость»; unit ищется также рядом с qty.
+
+good_supply_facts_service.py / section_detector.py
+  дробные COUNT-факты не выводятся как supply facts и не входят в section sum.
+```
+
+CANARY REPARSE: `60467`, `17236`, `26386`, `448082`; все systemd jobs завершены
+с `Result=success / ExecMainStatus=0`.
+
+НОВЫЕ FACTS ИЗ EXTRACTION OUTCOMES:
+
+```text
+60467  : 1 988
+17236  : 7 859
+26386  : 3 605
+448082 : 10
+```
+
+НОВЫЕ INSERTED-СТРОКИ (не исторические stale rows):
+
+```text
+procurement  total  fractional_COUNT  with_total  arithmetic_ok
+17236         2167   0                 11          11
+26386          946   0                 27          27
+60467            4   0                  0           0
+448082           0   0                  0           0
+```
+
+АКТУАЛЬНЫЙ GOOD-SUPPLY СЛОЙ (preferred suppression):
+
+```text
+procurement  scanned  GOODS visible  no_quantity  no_total  works hidden  fractional visible
+60467         1784     160            312          376       936           0
+17236        16104      19          13150         2261       674           0
+26386         3737     515            615          699      1901           0
+448082          10       0              0           10         0           0
+```
+
+Для всех preferred-строк с total выполнено `total = qty * price`; в кейсах
+`60467=672/672`, `26386=1055/1055`, `17236=19/19` арифметическая проверка
+проходит. Исторические дробные stale-строки физически не удалялись
+(`DB_WRITES=reparse only`), но скрыты из goods-выдачи и отсечены канонической
+section predicate.
+
+ACCEPTANCE Phase 1.1b:
+
+```text
+INTEGER_QUANTITY_FOR_COUNT_UNITS=YES
+NO_QTY_AFTER_UNIT_BLIND_GUESS=YES
+TOTAL_MAPPED_FROM_CORRECT_COLUMNS=YES
+UNIT_FROM_NEIGHBOR_COLUMN=YES
+WORKS_RESOURCE_ROWS_EXCLUDED=YES
+DB_WRITES=REPARSE_ONLY
+SCORING_MEDAL_QUEUE_UNCHANGED=YES
+```
+
+ДЕПЛОЙ: extraction/section/goods-модули обновлены на S13; четыре document daemon
+и `crm-streamlit.service` перезапущены, все `active`, `NRestarts=0`.
+
+СЛЕДУЮЩИЙ ШАГ: `DIRECT_SUPPLY_GOODS_COVERAGE_V1` для `computers`, `lighting`,
+`cable_support_systems`.

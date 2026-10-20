@@ -24,6 +24,8 @@
 | P4 | `PROCUREMENT_CARD_CATEGORY_PIPELINE_V1` | DONE 2026-10-19 | вкладка «Категории» вместо «Находки» | PASS |
 | P5 | `PHYSICAL_KISOK_DASHBOARD_UPGRADE_V1` | DONE 2026-10-19 | CPU temp + per-core + аналитика киоска | PASS |
 | P6 | `EMBEDDED_ESTIMATE_PARSE_FIRST_V1` | Phase 1/3 DONE · Phase 4 dry-run | сначала смета, затем остальное | PASS |
+| P7 | `DIRECT_SUPPLY_GOODS_COVERAGE_V1` | СПЕКА | дожать товарные факты прямых поставок | PASS |
+| P8 | `FINDINGS_COUNT_SCOPE_V1` | DONE 2026-10-20 | не дублировать сырые находки по категориям | PASS |
 | 1A | `ARCHIVE_MEMBER_DEDUP_IDENTITY_V1` | DONE (`c66f96b`) | identity sweeper исправлена | PASS |
 | 1B | `ARCHIVE_MEMBER_PARSE_CONTEXT_V1` | PASS (`24062c2`) | 99069 end-to-end подтверждён | PASS |
 | 1C | `GSFX_RESTORE_V1` | PASS (`24062c2`) | 99069 end-to-end подтверждён | PASS + коммит |
@@ -225,6 +227,24 @@ Projected audit (в памяти): GOODS_FACTS_IN_SECTION=180 (1.6%),
 0-5 goods-фактов), а не поиск разделов. `CATEGORY_ONLY_FROM_CONFIRMED_SECTION`
 НЕ включаем. Дальше: (a) persistence section_code через reparse/backfill
 (отдельный approval), (b) разбор goods extraction для этих категорий.
+
+### P7. DIRECT_SUPPLY_GOODS_COVERAGE_V1
+
+См. `docs/wip/WIP_DIRECT_SUPPLY_GOODS_COVERAGE_V1.md`.
+
+Правило: тот же goods-подход применяем к DIRECT_SUPPLY: total/unit mapping,
+strict trust, нормализованные товары в карточке.
+
+### P8. FINDINGS_COUNT_SCOPE_V1
+
+См. `docs/wip/WIP_FINDINGS_COUNT_SCOPE_V1.md`.
+
+Правило: сырой procurement-level matcher count не показываем в каждой строке
+категории. Либо category-specific, либо скрыть из таблицы.
+
+Реализовано: `find_counts` теперь `(procurement_id, category_code) -> factual
+GOODS count` из `structured_entities`; 678 проверен: raw matcher 14, по
+категориям `0/0/0/0/12`. Raw matcher output остаётся в технической истории.
 
 ### 1A. ARCHIVE_MEMBER_DEDUP_IDENTITY_V1
 

@@ -15,6 +15,7 @@
 """
 from __future__ import annotations
 
+import math
 import os
 import re
 from typing import Any, Dict, List, Optional
@@ -25,6 +26,9 @@ import psycopg2.extras
 from src.services.works_vs_goods_service import classify_fact_kind
 
 RESIDUE = "RESIDUE"
+COUNT_UNITS = frozenset(
+    {"PCS", "UNIT", "SET", "PACK", "ROLL", "BAG", "SHEET", "PAIR"}
+)
 #: агрегатные/шапочные строки — не товар
 _AGGREGATE_RE = re.compile(r"^\s*(итого|всего|стоимость|ндс|раздел|глава)\b", re.IGNORECASE)
 
@@ -81,6 +85,17 @@ def _is_aggregate(name: Any) -> bool:
     return bool(_AGGREGATE_RE.match(str(name or "")))
 
 
+def _fractional_count_quantity(row: Dict[str, Any]) -> bool:
+    unit = str(row.get("quantity_unit_normalized") or "").upper()
+    if unit not in COUNT_UNITS or row.get("quantity_value") is None:
+        return False
+    try:
+        quantity = float(row["quantity_value"])
+    except (TypeError, ValueError):
+        return True
+    return not math.isclose(quantity, round(quantity), rel_tol=0.0, abs_tol=1e-9)
+
+
 def classify_supply_row(row: Dict[str, Any]) -> Optional[str]:
     """Почему строка НЕ идёт в «что можно поставить» (или None, если годится)."""
     if not str(row.get("source_quote") or "").strip():
@@ -95,9 +110,67 @@ def classify_supply_row(row: Dict[str, Any]) -> Optional[str]:
         return "aggregate"
     if row.get("quantity_value") is None or not str(row.get("quantity_unit_normalized") or "").strip():
         return "no_quantity"
+    if _fractional_count_quantity(row):
+        return "no_quantity"
     if row.get("total_price_value") is None:
         return "no_total"
     return None
+
+
+def count_material_facts_by_category(
+    procurement_ids: List[int] | tuple[int, ...] | set[int],
+    *,
+    conn: Any,
+) -> Dict[tuple[int, str], int]:
+    """Count factual goods materials by ``(procurement_id, category_code)``.
+
+    Raw matcher rows are intentionally excluded. A material is counted only when
+    it is a preferred ``structured_entities`` PRODUCT with quantity, unit and
+    source quote, and is classified as GOODS rather than WORK/aggregate.
+    """
+    ids = sorted({int(pid) for pid in procurement_ids if pid})
+    if not ids:
+        return {}
+    sql = """
+        WITH preferred AS (
+            SELECT se.*,
+                   row_number() OVER (
+                       PARTITION BY se.procurement_id, se.source_document_id,
+                                    coalesce(se.row_or_line, ''),
+                                    coalesce(se.product_name_raw, '')
+                       ORDER BY (se.section_code IS NOT NULL) DESC, se.id DESC
+                   ) AS pref_rn
+              FROM structured_entities se
+             WHERE se.procurement_id = ANY(%s)
+               AND coalesce(se.category_code, '') NOT IN ('', 'unknown')
+               AND se.entity_type = 'PRODUCT'
+               AND se.quantity_value IS NOT NULL
+               AND coalesce(se.quantity_unit_normalized, '') <> ''
+               AND coalesce(se.source_quote, '') <> ''
+        )
+        SELECT procurement_id, category_code, product_name_raw,
+               product_name_normalized, quantity_value,
+               quantity_unit_normalized, source_quote
+          FROM preferred
+         WHERE pref_rn = 1
+    """
+    counts: Dict[tuple[int, str], int] = {}
+    with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+        cur.execute(sql, (ids,))
+        rows = cur.fetchall()
+    for raw in rows:
+        row = dict(raw)
+        category = str(row.get("category_code") or "").strip()
+        name = row.get("product_name_normalized") or row.get("product_name_raw")
+        if not category or category == "unknown":
+            continue
+        if classify_fact_kind(entity_type=row.get("entity_type"), name=name) != "GOODS":
+            continue
+        if _is_aggregate(name) or _fractional_count_quantity(row):
+            continue
+        key = (int(row["procurement_id"]), category)
+        counts[key] = counts.get(key, 0) + 1
+    return counts
 
 
 def to_flat_fact(row: Dict[str, Any]) -> Dict[str, Any]:

@@ -19,6 +19,7 @@ This module derives a deterministic section state, no model involved:
 """
 from __future__ import annotations
 
+import math
 import re
 from dataclasses import dataclass
 from typing import Any, Dict, List, Optional, Sequence
@@ -40,6 +41,11 @@ _AGGREGATE_NAME_RE = re.compile(
     r"^\s*(итого|всего|стоимость|ндс|раздел|глава)\b", re.IGNORECASE
 )
 _MONEY_UNIT_RE = re.compile(r"^\s*руб", re.IGNORECASE)
+
+
+_COUNT_UNITS = frozenset(
+    {"PCS", "UNIT", "SET", "PACK", "ROLL", "BAG", "SHEET", "PAIR"}
+)
 
 
 def is_aggregate_row(
@@ -75,6 +81,13 @@ def is_summarizable(
         return False
     if _MONEY_UNIT_RE.match(str(unit_normalized)):
         return False
+    if str(unit_normalized).upper() in _COUNT_UNITS:
+        try:
+            quantity = float(quantity_value)
+        except (TypeError, ValueError):
+            return False
+        if not math.isclose(quantity, round(quantity), rel_tol=0.0, abs_tol=1e-9):
+            return False
     if _AGGREGATE_NAME_RE.match(str(name or "")):
         return False
     return True

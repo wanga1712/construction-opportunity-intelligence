@@ -118,27 +118,14 @@ def load_queue_progress(
                 )
                 for pid, n in cur.fetchall():
                     doc_counts[int(pid)] = int(n or 0)
-                find_counts: Dict[int, int] = {}
-                cur.execute(
-                    """SELECT m.procurement_id, f.file_name, COUNT(*)
-                         FROM document_match_details d
-                         JOIN document_matches m ON m.id = d.match_id
-                         JOIN document_files f ON f.id = m.file_id
-                        WHERE m.procurement_id = ANY(%s)
-                        GROUP BY m.procurement_id, f.file_name""",
-                    (ids,),
-                )
-                # MATCH_TERM_HYGIENE_V1: матчи из требований/оценки/протоколов
-                # не считаем находками (см. match_source_filter).
-                from src.services.match_source_filter import (
-                    NON_RESEARCHABLE,
-                    classify_match_source,
+                # FINDINGS_COUNT_SCOPE_V1: category-specific GOODS from the
+                # preferred structured layer. Raw document_match_details remain
+                # available only in the technical history.
+                from src.services.good_supply_facts_service import (
+                    count_material_facts_by_category,
                 )
 
-                for pid, file_name, n in cur.fetchall():
-                    if classify_match_source(file_name) == NON_RESEARCHABLE:
-                        continue
-                    find_counts[int(pid)] = find_counts.get(int(pid), 0) + int(n or 0)
+                find_counts = count_material_facts_by_category(ids, conn=db)
         finally:
             if own_conn:
                 db.close()

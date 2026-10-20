@@ -725,6 +725,8 @@ _QUEUE_LABELS = {
     "RUNNING": "Обработка", "PROCESSING": "Обработка",
     "COMPLETED": "Обработана", "NO_LINKS": "Нет документов",
     "CANCELLED": "Снята (≥80%)", "FAILED": "Ошибка",
+    "SKIPPED_NOT_TARGET": "Вне очереди",
+    "SKIPPED_NOISE": "Вне очереди",
 }
 
 
@@ -752,6 +754,9 @@ def _attach_queue_status(rows: List[Dict[str, Any]]) -> None:
     find_counts = progress.get("find_counts") or {}
     for row in rows:
         pid = int(row["procurement_id"]) if row.get("procurement_id") else -1
+        category_code = str(row.get("category_code") or "")
+        finds_n = int(find_counts.get((pid, category_code), 0) or 0)
+        row["findings_count"] = finds_n
         entry = latest.get(pid)
         if not entry:
             continue
@@ -776,7 +781,6 @@ def _attach_queue_status(rows: List[Dict[str, Any]]) -> None:
         row["live_queue_depth"] = live_depth
         row["legacy_backlog"] = legacy_backlog
         docs_n = doc_counts.get(pid)
-        finds_n = find_counts.get(pid)
         if str(status).upper() == "COMPLETED":
             extra = []
             if docs_n is not None:
@@ -788,8 +792,6 @@ def _attach_queue_status(rows: List[Dict[str, Any]]) -> None:
         # «Документы»: если CRM-счётчик пуст, показываем реальное число из DI.
         if docs_n and str(row.get("documents_text") or "—").strip() in ("—", "-", ""):
             row["documents_text"] = f"{docs_n} ✓"
-        if finds_n is not None:
-            row["findings_count"] = finds_n
 
 
 def load_filter_options(crm_db: Any) -> Dict[str, Any]:

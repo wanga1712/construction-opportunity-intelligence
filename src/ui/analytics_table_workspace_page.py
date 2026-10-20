@@ -201,7 +201,10 @@ def render_analytics_table_workspace_page(service) -> None:
         )
         _page_pids = order_pids[(_page - 1) * _page_size: _page * _page_size]
         _page_rows = [_r for _pid in _page_pids for _r in grouped[_pid]]
-        st.caption(f"Найдено: {len(rows)} · тип: {_TYPE_LABELS.get(selected_mode, selected_mode)}")
+        st.caption(
+            f"Найдено: {len(rows)} · показано {len(_page_rows)} на странице "
+            f"· тип: {_TYPE_LABELS.get(selected_mode, selected_mode)}"
+        )
         if not rows:
             st.info("Под выбранные фильтры строк нет.")
             return
