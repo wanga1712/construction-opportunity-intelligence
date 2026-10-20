@@ -4431,6 +4431,47 @@ DB_WRITES=REPARSE_ONLY
 SCORING_MEDAL_QUEUE_UNCHANGED=YES
 ```
 
+## 2026-10-20 — DIRECT_SUPPLY_GOODS_COVERAGE_V1 Phase 2 — DRY-RUN DONE
+
+`verify_direct_supply_facts.py` ужесточён: promotion-кандидаты проходят
+`classify_supply_row`, то есть только category-specific GOODS с
+quantity + normalized unit + total + source_quote. Works, aggregates,
+неполные и дробные COUNT-факты исключены.
+
+Strict dry-run:
+
+```text
+DIRECT_QUARANTINE_TOTAL=8668
+DIRECT_GOODS_CANDIDATES=97
+DIRECT_NON_GOODS_OR_INCOMPLETE=8571
+DIRECT_QUOTE_VERIFIED_TO_PROMOTE=40
+DIRECT_GOODS_CANDIDATES_UNVERIFIED=57
+
+cable_support_systems: goods=4  verified=0  unverified=4
+computers:             goods=34 verified=0  unverified=34
+lighting:              goods=59 verified=40 unverified=19
+```
+
+Существующий trust остаётся: cable `671 trusted / 49 quarantine`,
+computers `2972 / 748`, lighting `12393 / 7871`.
+
+Для DIRECT parse-path provenance snapshot теперь строится из полного набора raw
+row `source_quote`, реально создавших facts, а не из альтернативного generic
+parser-text. После фикса и повторного canary reparse strict dry-run дал
+`40 verified / 57 unverified`.
+
+`--apply` не запускался; scoring/medal/queue unchanged. Массовый reparse не
+выполнялся.
+
+```text
+DIRECT_ONLY_SCOPE=YES
+GOODS_ONLY_PROMOTION_CANDIDATES=YES
+STRICT_LITERAL_QUOTE_CHECK=YES
+DB_WRITES=REPARSE_ONLY
+TRUST_APPLY_PENDING=YES
+SCORING_MEDAL_QUEUE_UNCHANGED=YES
+```
+
 Следующий этап — `DIRECT_SUPPLY_GOODS_COVERAGE_V1` для `computers`,
 `lighting`, `cable_support_systems`.
 

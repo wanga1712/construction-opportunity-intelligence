@@ -24,7 +24,7 @@
 | P4 | `PROCUREMENT_CARD_CATEGORY_PIPELINE_V1` | DONE 2026-10-19 | вкладка «Категории» вместо «Находки» | PASS |
 | P5 | `PHYSICAL_KISOK_DASHBOARD_UPGRADE_V1` | DONE 2026-10-19 | CPU temp + per-core + аналитика киоска | PASS |
 | P6 | `EMBEDDED_ESTIMATE_PARSE_FIRST_V1` | Phase 1/3 DONE · Phase 4 dry-run | сначала смета, затем остальное | PASS |
-| P7 | `DIRECT_SUPPLY_GOODS_COVERAGE_V1` | Phase 1 DONE 2026-10-20 | дожать товарные факты прямых поставок | PASS |
+| P7 | `DIRECT_SUPPLY_GOODS_COVERAGE_V1` | Phase 2 dry-run DONE / apply pending | дожать товарные факты прямых поставок | PASS |
 | P8 | `FINDINGS_COUNT_SCOPE_V1` | DONE 2026-10-20 | не дублировать сырые находки по категориям | PASS |
 | 1A | `ARCHIVE_MEMBER_DEDUP_IDENTITY_V1` | DONE (`c66f96b`) | identity sweeper исправлена | PASS |
 | 1B | `ARCHIVE_MEMBER_PARSE_CONTEXT_V1` | PASS (`24062c2`) | 99069 end-to-end подтверждён | PASS |
@@ -244,6 +244,10 @@ Phase 1: DIRECT arithmetic mapping + neighbor unit + DIRECT track reparse.
 Canary `1157/452626/409646/327006`. Итог: lighting `has_total 215→358`,
 computers `96→194`, cable `32→32`; `UNPROVEN_TOTAL=0`,
 `FRACTIONAL_COUNT=0`; `DB_WRITES=REPARSE_ONLY`.
+
+Phase 2 strict dry-run: `97` GOODS-кандидатов, `40` quote-verified,
+`57` unverified, `8571` non-goods/incomplete; `--apply` не запускался.
+DIRECT source snapshot теперь строится из raw row quotes, создавших facts.
 
 ### P8. FINDINGS_COUNT_SCOPE_V1
 

@@ -349,9 +349,16 @@ def _persist_embedded(
             )
             if not facts:
                 return 0
+            # DIRECT facts are built from template/table row cells. Their exact
+            # row texts are the provenance snapshot used by strict quote checks;
+            # the generic parser text can use a different cell layout.
+            direct_snapshot = "\n".join(
+                str(getattr(f, "source_quote", "") or "") for f in facts
+            )
             created, _reused, _stats = persist_facts(
                 conn, procurement_id=procurement_id, document_name=document_name,
                 category_code=category_code, facts=facts,
+                source_text=direct_snapshot,
                 source_document_id=source_document_id,
             )
             return created

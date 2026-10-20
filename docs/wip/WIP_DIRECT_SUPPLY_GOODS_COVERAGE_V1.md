@@ -1,6 +1,6 @@
 # WIP DIRECT_SUPPLY_GOODS_COVERAGE_V1 — дожать товарные факты прямых поставок
 
-Status: PHASE 1 DONE / PHASE 2 NEXT (2026-10-20). Owner: direct supply extraction / card supply facts.
+Status: PHASE 2 DRY-RUN DONE / APPLY PENDING (2026-10-20). Owner: direct supply extraction / card supply facts.
 
 ## Цель
 
@@ -54,6 +54,63 @@ DIRECT_TOTAL_UNIT_MAPPED=YES
 DIRECT_TRUST_VERIFIED=YES
 DIRECT_SUPPLY_CARD_NORMALIZED=YES
 DB_WRITES=0_UNTIL_APPROVED
+SCORING_MEDAL_QUEUE_UNCHANGED=YES
+```
+
+## RESULT Phase 2 (2026-10-20) — strict DIRECT trust dry-run
+
+`verify_direct_supply_facts.py` был ужесточён: кандидаты на promotion теперь
+проходят тот же `classify_supply_row`, что и пользовательский supply-слой:
+`GOODS`, category-specific, qty + normalized unit + total + source_quote.
+Работы, агрегаты, неполные и дробные COUNT-факты не промоутятся.
+
+DRY-RUN:
+
+```text
+DIRECT_CATEGORIES=['computers', 'lighting', 'cable_support_systems']
+DIRECT_QUARANTINE_TOTAL=8668
+DIRECT_GOODS_CANDIDATES=97
+DIRECT_NON_GOODS_OR_INCOMPLETE=8571
+DIRECT_QUOTE_VERIFIED_TO_PROMOTE=40
+DIRECT_GOODS_CANDIDATES_UNVERIFIED=57
+
+cable_support_systems: goods=4  verified=0   unverified=4
+computers:             goods=34 verified=0   unverified=34
+lighting:              goods=59 verified=40  unverified=19
+DRY_RUN=YES (no writes)
+```
+
+Существующий trust до apply:
+
+```text
+cable_support_systems: TRUSTED_PRODUCTION=671  | MANUAL_PROOF_QUARANTINE=49
+computers:             TRUSTED_PRODUCTION=2972 | MANUAL_PROOF_QUARANTINE=748
+lighting:              TRUSTED_PRODUCTION=12393| MANUAL_PROOF_QUARANTINE=7871
+```
+
+Исправление provenance:
+
+```text
+parse_extractors DIRECT path
+  source_text_snapshot = все raw row source_quote фактически созданных DIRECT facts;
+  это устраняет расхождение между template row text и generic parser text.
+```
+
+После provenance-фикса и повторного canary reparse strict dry-run дал
+`40 verified / 57 unverified`. Оставшиеся unverified относятся к строкам,
+чей source document ещё не переразбирался в этом canary либо не имеет
+доказуемого полного goods-факта. Массовый reparse не запускался.
+
+`--apply` НЕ запускался. Scoring/medal/queue не менялись.
+
+ACCEPTANCE Phase 2 dry-run:
+
+```text
+DIRECT_ONLY_SCOPE=YES
+GOODS_ONLY_PROMOTION_CANDIDATES=YES
+STRICT_LITERAL_QUOTE_CHECK=YES
+DB_WRITES=REPARSE_ONLY
+TRUST_APPLY_PENDING=YES
 SCORING_MEDAL_QUEUE_UNCHANGED=YES
 ```
 
