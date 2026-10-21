@@ -4583,6 +4583,36 @@ Daily-work screenshot:
 `docs/reports/s13_kiosk_command_center_v2/kiosk.daily_work_progress.1920x1080.png`.
 WIP: `docs/wip/WIP_S13_KIOSK_METRIC_SEMANTICS_FIX_V1.md`.
 
+## 2026-10-21 — RESOURCE_PRIORITY_DOC_PIPELINE_FIRST_V1 (P13) — DONE
+
+Document pipeline выведен вперёд по CPU:
+
+- 9 document workers: `CPUWeight=450`, `Nice=-5`, `CPUQuota=infinity`;
+- OCR ограничен cross-process semaphore на 4 tesseract;
+- tesseract получает однопоточные math-library env;
+- AI runner/validator: `CPUWeight=15`, `Nice=10`, services остаются
+  `inactive/disabled`;
+- активные background model workers также переведены на `15/10`;
+- parser-path не использует GPU/CUDA.
+
+Проверки: synthetic 8 OCR jobs → `MAX_CONCURRENCY=4`, live tesseract `4`;
+completed procurements `2/60m` до старта → `6/10m` после прогрева,
+waiting queue `452`, working `26`.
+
+Acceptance:
+
+```text
+AI_VALIDATOR_BACKGROUND_DRAIN_STOPPED=YES
+DOCUMENT_DAEMONS_HIGHER_PRIORITY=YES
+OCR_CONCURRENCY_BOUNDED=YES
+GPU_NOT_USED_FOR_DOCUMENT_PARSING=YES
+COMPLETED_PROCUREMENTS_PER_HOUR_INCREASED=WARMUP_YES (2/60m -> 6/10m)
+DB_WRITES=0
+SCORING_MEDAL_QUEUE_UNCHANGED=YES
+```
+
+WIP: `docs/wip/WIP_RESOURCE_PRIORITY_DOC_PIPELINE_FIRST_V1.md`.
+
 ## 2026-10-21 — AI_DAILY_BATCH_SCHEDULE_V1 (P14) — DONE
 
 AI переведён с непрерывного 45-секундного poll на ежедневный batch:

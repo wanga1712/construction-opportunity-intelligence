@@ -2,6 +2,7 @@ import os
 from pathlib import Path
 from typing import Any, Callable, Dict, Optional, Tuple
 
+from document_processor.ocr_concurrency import ocr_slot
 from document_processor.parsers.pdf_table_extractor import PdfTableExtractor
 
 
@@ -39,7 +40,10 @@ def _ocr_page_text(path: Path, page_idx: int, logger) -> str:
     chunks: list[str] = []
     for img in images:
         try:
-            ocr_text = pytesseract.image_to_string(img, lang="rus+eng", config="--psm 6")
+            with ocr_slot():
+                ocr_text = pytesseract.image_to_string(
+                    img, lang="rus+eng", config="--psm 6"
+                )
         except Exception as exc:
             logger.error(f"OCR ошибка стр. {page_idx}: {exc}")
             continue

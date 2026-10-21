@@ -10,6 +10,7 @@ from typing import Any, Dict, Optional, Tuple
 
 from document_processor.parsers import ExcelParser, WordParser
 from document_processor.parsers.pdf_parser import PdfParser
+from document_processor.ocr_concurrency import ocr_slot
 
 _logger = logging.getLogger("parse_utils")
 
@@ -64,9 +65,10 @@ def _ocr_rotation_probe(path: Path) -> int:
     best_rot, best_score = 0, -1
     for rot in (0, 90, 180, 270):
         try:
-            text = pytesseract.image_to_string(
-                img.rotate(rot, expand=True), lang="rus+eng", config="--psm 6"
-            )
+            with ocr_slot():
+                text = pytesseract.image_to_string(
+                    img.rotate(rot, expand=True), lang="rus+eng", config="--psm 6"
+                )
         except Exception as exc:  # noqa: BLE001
             _logger.warning("OCR rotation probe rot=%s failed: %s", rot, exc)
             continue
@@ -133,7 +135,10 @@ def parse_pdf_with_ocr(path: Path) -> Tuple[str, Optional[Dict[int, Dict[str, An
             if rotation:
                 img = img.rotate(rotation, expand=True)
             try:
-                ocr_text = pytesseract.image_to_string(img, lang="rus+eng", config="--psm 6")
+                with ocr_slot():
+                    ocr_text = pytesseract.image_to_string(
+                        img, lang="rus+eng", config="--psm 6"
+                    )
             except Exception as exc:  # noqa: BLE001
                 _logger.warning("OCR page %d failed for %s: %s", page_idx + 1, path.name, exc)
                 continue

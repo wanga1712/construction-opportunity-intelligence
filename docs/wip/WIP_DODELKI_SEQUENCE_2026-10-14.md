@@ -29,9 +29,10 @@
 | P9 | `S13_KIOSK_COMMAND_CENTER_V2` | DONE + metric semantics fix 2026-10-21 | единый операторский command center | PASS |
 | P11 | `MODEL_CANDIDATE_POOL_SCOPE_V1` | DONE | не показывать сырой validator backlog | PASS |
 | P12 | `KISOK_PIPELINE_DAILY_METRICS_V1` | ПРИОРИТЕТ | понятный дневной pipeline | PASS |
-| P13 | `RESOURCE_PRIORITY_DOC_PIPELINE_FIRST_V1` | ПРИОРИТЕТ | документы в приоритете ресурсов | PASS |
+| P13 | `RESOURCE_PRIORITY_DOC_PIPELINE_FIRST_V1` | DONE | документы в приоритете ресурсов | PASS |
 | P14 | `AI_DAILY_BATCH_SCHEDULE_V1` | DONE | AI не молотит 24/7 | PASS |
 | P15 | `PIPELINE_BATCH_PARALLEL_EXECUTION_V1` | ПРИОРИТЕТ | батчи и параллельность | PASS |
+| P16 | `STALE_PROCESSING_CLEANUP_V1` | ПРИОРИТЕТ | погасить залипшие PROCESSING | PASS |
 | 1A | `ARCHIVE_MEMBER_DEDUP_IDENTITY_V1` | DONE (`c66f96b`) | identity sweeper исправлена | PASS |
 | 1B | `ARCHIVE_MEMBER_PARSE_CONTEXT_V1` | PASS (`24062c2`) | 99069 end-to-end подтверждён | PASS |
 | 1C | `GSFX_RESTORE_V1` | PASS (`24062c2`) | 99069 end-to-end подтверждён | PASS + коммит |
@@ -310,6 +311,17 @@ current objects перенесены на `/tech`; activating показывае
 systemd hard cap 3h30m. Ollama keep-alive снижен до 5m, idle model выгружена.
 Power schedule просыпается в 02:55, чтобы timers реально сработали;
 resume-hook не запускает AI service вне ежедневного окна.
+
+### P13. RESOURCE_PRIORITY_DOC_PIPELINE_FIRST_V1
+
+См. `docs/wip/WIP_RESOURCE_PRIORITY_DOC_PIPELINE_FIRST_V1.md`.
+
+Статус: DONE (2026-10-21). Девять document workers работают с
+`CPUWeight=450`, `Nice=-5`, без CPUQuota. OCR ограничен глобальным
+cross-process semaphore: максимум 4 tesseract. AI runner/validator и
+model workers — `CPUWeight=15`, `Nice=10`; runner и validator остаются
+`inactive/disabled`. Live-warmup: completed procurements `2/60m` до старта
+→ `6/10m` после прогрева, tesseract processes 4.
 
 ### 1A. ARCHIVE_MEMBER_DEDUP_IDENTITY_V1
 
