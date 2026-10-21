@@ -26,6 +26,12 @@
 | P6 | `EMBEDDED_ESTIMATE_PARSE_FIRST_V1` | Phase 1/3 DONE · Phase 4 dry-run | сначала смета, затем остальное | PASS |
 | P7 | `DIRECT_SUPPLY_GOODS_COVERAGE_V1` | Phase 2 targeted reparse DONE / 4 source missing | дожать товарные факты прямых поставок | PASS |
 | P8 | `FINDINGS_COUNT_SCOPE_V1` | DONE 2026-10-20 | не дублировать сырые находки по категориям | PASS |
+| P9 | `S13_KIOSK_COMMAND_CENTER_V2` | DONE + metric semantics fix 2026-10-21 | единый операторский command center | PASS |
+| P11 | `MODEL_CANDIDATE_POOL_SCOPE_V1` | DONE | не показывать сырой validator backlog | PASS |
+| P12 | `KISOK_PIPELINE_DAILY_METRICS_V1` | ПРИОРИТЕТ | понятный дневной pipeline | PASS |
+| P13 | `RESOURCE_PRIORITY_DOC_PIPELINE_FIRST_V1` | ПРИОРИТЕТ | документы в приоритете ресурсов | PASS |
+| P14 | `AI_DAILY_BATCH_SCHEDULE_V1` | DONE | AI не молотит 24/7 | PASS |
+| P15 | `PIPELINE_BATCH_PARALLEL_EXECUTION_V1` | ПРИОРИТЕТ | батчи и параллельность | PASS |
 | 1A | `ARCHIVE_MEMBER_DEDUP_IDENTITY_V1` | DONE (`c66f96b`) | identity sweeper исправлена | PASS |
 | 1B | `ARCHIVE_MEMBER_PARSE_CONTEXT_V1` | PASS (`24062c2`) | 99069 end-to-end подтверждён | PASS |
 | 1C | `GSFX_RESTORE_V1` | PASS (`24062c2`) | 99069 end-to-end подтверждён | PASS + коммит |
@@ -265,6 +271,45 @@ trust `--apply` not run.
 Реализовано: `find_counts` теперь `(procurement_id, category_code) -> factual
 GOODS count` из `structured_entities`; 678 проверен: raw matcher 14, по
 категориям `0/0/0/0/12`. Raw matcher output остаётся в технической истории.
+
+### P9. S13_KIOSK_COMMAND_CENTER_V2
+
+См. `docs/wip/WIP_S13_KIOSK_COMMAND_CENTER_V2.md`.
+
+Правило: один экран 1920×1080 отвечает на пять операторских вопросов;
+technical counters не выводятся без unit/семантики; CPU/GPU учитывают caps.
+
+DONE 2026-10-21: procurement funnel, document/model pipeline, commercial
+best-medal buckets, flow-rate status, cap-aware CPU/GPU, real problems.
+Medal invariant OPEN 1401=1401, AWARDED1663=1663. Heavy cache 90s;
+DB_WRITES=0.
+
+METRIC_SEMANTICS_FIX_V1 DONE: current contour отделён от today cohort;
+false funnel удалён; live commercial = eligible OPEN+AWARDED; 175 excluded
+current objects перенесены на `/tech`; activating показывается как
+`ЗАПУСКАЕТСЯ`.
+
+### P11. MODEL_CANDIDATE_POOL_SCOPE_V1
+
+См. `docs/wip/WIP_MODEL_CANDIDATE_POOL_SCOPE_V1.md`.
+
+Правило: в киоске не показываем сырой `document_match_details` backlog.
+Показываем distinct `(procurement_id, category_code)` source-filtered GOODS.
+
+Статус: DONE (2026-10-21, kiosk/read-model). Главный model KPI переведён
+на pair-единицу; raw counts доступны только на `/tech`. На первом замере:
+`raw=1 064 813`, `candidates=29 926`; live backlog уменьшается по мере
+валидации. Validator authority не менялся.
+
+### P14. AI_DAILY_BATCH_SCHEDULE_V1
+
+См. `docs/wip/WIP_AI_DAILY_BATCH_SCHEDULE_V1.md`.
+
+Статус: DONE (2026-10-21). AI runner переведён с 45-секундного цикла на
+ежедневный запуск в 03:30; sync — в 03:00. Batch limit 300, runner cap 3h,
+systemd hard cap 3h30m. Ollama keep-alive снижен до 5m, idle model выгружена.
+Power schedule просыпается в 02:55, чтобы timers реально сработали;
+resume-hook не запускает AI service вне ежедневного окна.
 
 ### 1A. ARCHIVE_MEMBER_DEDUP_IDENTITY_V1
 

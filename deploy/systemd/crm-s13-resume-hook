@@ -1,0 +1,40 @@
+#!/bin/bash
+# Restore CRM timers after resume. Daily sync and AI runs are owned by their
+# timers (03:00 and 03:30), so resume must not start the AI service directly.
+set -euo pipefail
+LOG_TAG="crm-s13-resume-hook"
+
+case "${1:-}/${2:-}" in
+  post/suspend|post/hibernate|post/hybrid-sleep)
+    logger -t "$LOG_TAG" "resume after $2 — restoring CRM production"
+    systemctl start crm-procurement-sync.timer || true
+    systemctl start crm-ai-assessment-runner.timer || true
+    systemctl start crm-v3-daily-medal-reevaluation.timer || true
+
+    STATE=/var/lib/crm-v3-canary/s13_power_schedule/pre_suspend_state.json
+    if [ -f "$STATE" ]; then
+      start_containers=$(python3 -c "import json;print(' '.join(json.load(open('$STATE')).get('containers',[])))" 2>/dev/null || true)
+      start_units=$(python3 -c "import json;print(' '.join(json.load(open('$STATE')).get('units',[])))" 2>/dev/null || true)
+      start_timers=$(python3 -c "import json;print(' '.join(json.load(open('$STATE')).get('timers',[])))" 2>/dev/null || true)
+      [ -n "$start_containers" ] && timeout 300 docker start $start_containers || true
+      for u in $start_units; do systemctl start "$u" || true; done
+      for t in $start_timers; do systemctl start "$t" || true; done
+    fi
+    systemctl start ollama.service || true
+
+    mkdir -p /var/lib/crm-v3-canary/s13_power_schedule
+    {
+      echo "resumed_at=$(date -Is)"
+      echo "sync_timer=$(systemctl is-active crm-procurement-sync.timer)"
+      echo "sync_next=$(systemctl show crm-procurement-sync.timer -p NextElapseUSecRealtime --value)"
+      echo "ai_timer=$(systemctl is-active crm-ai-assessment-runner.timer)"
+      echo "ai_next=$(systemctl show crm-ai-assessment-runner.timer -p NextElapseUSecRealtime --value)"
+      echo "medal_timer=$(systemctl is-active crm-v3-daily-medal-reevaluation.timer)"
+      echo "medal_next=$(systemctl show crm-v3-daily-medal-reevaluation.timer -p NextElapseUSecRealtime --value)"
+    } > /var/lib/crm-v3-canary/s13_power_schedule/last_resume.txt
+    logger -t "$LOG_TAG" "resume hook done"
+    ;;
+  *)
+    ;;
+esac
+exit 0

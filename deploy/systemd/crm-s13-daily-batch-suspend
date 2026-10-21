@@ -1,0 +1,11 @@
+#!/bin/bash
+# Wake S13 before the daily S7 sync and AI batch. The canonical suspend helper
+# already verifies and programs RTC, stops production, and suspends.
+set -euo pipefail
+
+business_tz="Europe/Moscow"
+export CRM_S13_ONE_TIME_WAKE_ISO
+CRM_S13_ONE_TIME_WAKE_ISO="$(
+  TZ="$business_tz" date -d "tomorrow 02:55" "+%Y-%m-%dT%H:%M:%S"
+)"
+exec /usr/local/sbin/crm-s13-scheduled-suspend

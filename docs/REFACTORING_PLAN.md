@@ -4431,6 +4431,223 @@ DB_WRITES=REPARSE_ONLY
 SCORING_MEDAL_QUEUE_UNCHANGED=YES
 ```
 
+## 2026-10-21 — KISOK_ANALYTICS_METRICS_REDESIGN_V1 — DONE
+
+Физический kiosk (`/usr/local/bin/s13_dashboard3.py`) вместо технического
+`ОБРАБОТАНО X/Y` показывает четыре управленческие карточки:
+`Контур сегодня`, `Сравнение с вчера`, `Успеваем?`, `Смена статусов`.
+
+Источники:
+
+- latest `crm_contour_progress_snapshots` — total processed/remaining/progress;
+- `crm_procurements.crm_created_at` + `opportunity_track` — new today/yesterday
+  с direct/object/unknown split;
+- `document_processing_queue` (`COMPLETED.completed_at`) — processed today/yesterday
+  и throughput за последние 60 минут;
+- `crm_procurements.award_date=current_date` — awarded today с direct/object split.
+
+ETA вычисляется только как `remaining / actual completions per hour`. При
+`speed=0` ETA показывается как `н/д`; пороги статуса: `<=12ч` успеваем,
+`<=24ч` на грани, `>24ч` отстаём. В проверке: today received `1773`
+(`direct=179`, `object=8`), processed `3`; yesterday `134/1`; speed `0/час`;
+snapshot progress `8482/8818`, remaining `336`.
+
+API response ~`720 ms`, heavy cache `4507 ms` and remains stable between 3s
+requests. `DB_WRITES=0`. Backup:
+`/home/sergey/s13_dashboard3.py.bak-p9-20261021`.
+`s13-dashboard3.service` and `s13-kiosk.service` active, `NRestarts=0`.
+
+```text
+TOTAL_PROCESSED_VISIBLE=YES
+NEW_TODAY_SPLIT_DIRECT_OBJECT=YES
+REMAINING_WITH_PROGRESS_BAR=YES
+YESTERDAY_COMPARISON=YES
+REAL_THROUGHPUT_ETA=YES
+FAKE_ETA=0
+STATUS_CHANGES_TODAY=YES
+DB_WRITES=0
+DASHBOARD_REFRESH_BOUNDED=YES
+```
+
+## 2026-10-21 — S13_KIOSK_COMMAND_CENTER_V2 — DONE
+
+Физический kiosk переработан в один операторский экран 1920×1080 без
+вертикальной прокрутки. Сохранены CPU/GPU/RAM/disks/temperature, но resource
+monitoring стал cap-aware:
+
+- CPU: busy%, intel_pstate cap, approximate hardware-equivalent load, frequency
+  current/scaling/hardware max, turbo, governor;
+- GPU: busy, VRAM, draw/limit/default/max power, cap%, headroom, locked power,
+  clocks, throttle reasons; `SW_POWER_CAP` показывается как фактический
+  `POWER LIMIT`, без ложного утверждения throttle.
+
+Главный экран содержит:
+
+- procurement funnel: received → admitted → documents → model → commercial
+  result, с явными units и event-date delta;
+- document pipeline и model/normalization с человекочитаемыми состояниями;
+- commercial result: objects, with commerce, document confirmed, OPEN/AWARDED
+  и procurement-level best current medal;
+- flow status с arrivals/hour, processed/hour, balance/hour и queue delta/hour;
+- единый header health (`OK/WARNING/CRITICAL`) по реальным компонентам.
+
+Medal invariant проверен:
+
+```text
+OPEN buckets=1401 = distinct eligible procurements 1401
+AWARDED buckets=1663 = distinct eligible procurements 1663
+```
+
+Current API content: received today `1775`, admitted `1152`, document-processed
+procurements `3`, model-processed `442`, commercial result `230`; queue
+waiting `459`, working `25`, errors `99`; model candidates waiting `1 065 197`,
+confirmed today `42`; commercial objects `3239`, document confirmed `524`,
+category opportunities `8388`. Rates lack a valid sample and display `н/д`,
+not fake zero. Heavy cache `~10849 ms` every 90s; API requests remain bounded
+(`~700 ms`, stable cache).
+
+Phase 0 and final screenshots:
+
+- `docs/reports/s13_kiosk_command_center_v2/kiosk.phase0.1920x1080.png`;
+- `docs/reports/s13_kiosk_command_center_v2/kiosk.v2.1920x1080.png`.
+
+UI renders at 100% scale and fills the full 1920×1080 viewport; the former
+`zoom:0.82` was removed. `DB_WRITES=0`; backup
+`/home/sergey/s13_dashboard3.py.bak-p9-20261021`; both systemd units active,
+`NRestarts=0`.
+
+WIP: `docs/wip/WIP_S13_KIOSK_COMMAND_CENTER_V2.md`.
+
+## 2026-10-21 — S13_KIOSK_METRIC_SEMANTICS_FIX_V1 — DONE
+
+После metric audit исправлена только presentation/semantics Command Center.
+Follow-up: главным progress bar сделан дневной рабочий объём, а общий
+накопленный контур оставлен вторичной строкой:
+
+- `8483/8832/349` показываются как secondary contour, не как progress дня;
+- `BACKLOG_AT_DAY_START=323` зафиксирован последним snapshot до 00:00;
+- `DAILY_WORKLOAD = 323 + 1152 = 1475`;
+- `PROCESSED_FROM_DAY_WORK_SET=442`, `DAILY_REMAINING=1033`,
+  `DAILY_PROGRESS=30.0%`;
+- `BACKLOG_DELTA_TODAY = 349 - 323 = +26`, показан как рост хвоста;
+- `RECEIVED_TODAY=1775` остаётся информационным KPI и не входит в
+  denominator дневного progress;
+- удалён ложный funnel из независимых event counts;
+- today cohort рассчитывается пересечением received set:
+  `received=1775`, `admitted=1152`, `model_from_received=320`,
+  `commercial_from_received=196`, единый unit `PROCUREMENT`;
+- event activity вынесена отдельно: document-completed procurements,
+  AI-assessed procurements, validated match details, commercial-result
+  procurements;
+- document queue подписан как tasks/procurement queue jobs, не physical docs;
+- `MATCH_DETAIL` validation отделён от procurement-level AI assessment;
+- main commercial authority = `CURRENT + ELIGIBLE + OPEN/AWARDED`;
+  live commercial `3064 = OPEN 1401 + AWARDED 1663`;
+- duplicate `ACTIVE_OBJECTS/WITH_COMMERCE` удалён из main;
+- document-confirmed live cohort `501`, live category opportunities `7922`;
+- 175 current objects вне live cohort исключены из main и доступны в `/tech`;
+- best-medal buckets mutually exclusive; invariant проверяется API;
+- systemd labels: `active=РАБОТАЕТ`, `activating=ЗАПУСКАЕТСЯ`,
+  `reloading=ПЕРЕЗАПУСК`, `inactive=ОСТАНОВЛЕН`, `failed=ОШИБКА`;
+- throughput/ETA отсутствующей скорости остаются `н/д`;
+- cap-aware CPU/GPU monitoring сохранён.
+
+Acceptance:
+
+```text
+TOP_BACKLOG_LABEL_CORRECT=YES
+MAIN_PROGRESS_IS_DAILY_WORK_PROGRESS=YES
+BACKLOG_AT_DAY_START_FIXED_FOR_DAY=YES
+RECEIVED_TODAY_NOT_USED_AS_WORKLOAD_DENOMINATOR=YES
+PROCESSED_TODAY_COUNTED_ONLY_FROM_DAY_WORK_SET=YES
+DAILY_PROGRESS_MATH_EXACT=YES
+BACKLOG_DELTA_VISIBLE=YES
+TOTAL_CONTOUR_PROGRESS_STILL_VISIBLE_AS_SECONDARY=YES
+NO_MIXED_COHORT_IN_MAIN_PROGRESS=YES
+FALSE_FUNNEL_REMOVED=YES
+TODAY_COHORT_SINGLE_UNIT=YES
+MODEL_PROCUREMENT_AND_MATCH_DETAIL_SEPARATED=YES
+COMMERCIAL_MAIN_SET_SINGLE_AUTHORITY=YES
+LIVE_COMMERCIAL=OPEN+AWARDED
+DUPLICATE_ACTIVE_WITH_COMMERCE_REMOVED=YES
+UNEXPLAINED_175_NOT_IN_MAIN_LIVE_TOTAL=YES
+BEST_MEDAL_BUCKETS_EXCLUSIVE=YES
+ACTIVATING_NOT_RENDERED_AS_OFF=YES
+NO_FAKE_ZERO_SPEED=YES
+READ_ONLY=YES
+```
+
+Screenshot:
+`docs/reports/s13_kiosk_command_center_v2/kiosk.semantics_fix.1920x1080.png`.
+Daily-work screenshot:
+`docs/reports/s13_kiosk_command_center_v2/kiosk.daily_work_progress.1920x1080.png`.
+WIP: `docs/wip/WIP_S13_KIOSK_METRIC_SEMANTICS_FIX_V1.md`.
+
+## 2026-10-21 — AI_DAILY_BATCH_SCHEDULE_V1 (P14) — DONE
+
+AI переведён с непрерывного 45-секундного poll на ежедневный batch:
+
+- `crm-procurement-sync.timer` — 03:00, `Persistent=false`;
+- `crm-ai-assessment-runner.timer` — 03:30, `Persistent=false`;
+- runner: batch limit 300, internal runtime cap 3h;
+- systemd `TimeoutStartSec=3h30m`;
+- `CRM_V3_OLLAMA_KEEP_ALIVE=5m`;
+- idle Qwen model выгружена, GPU memory освобождена;
+- S13 wake перенесён на 02:55, иначе timers пропускались бы из-за
+  nightly suspend;
+- resume-hook восстанавливает timers, но не запускает AI service вне окна;
+- runner и validator остаются inactive; validator authority не менялся.
+
+Acceptance:
+
+```text
+AI_RUNNER_NOT_EVERY_45S=YES
+AI_RUNS_ONCE_OR_ON_DEMAND_PER_DAY=YES
+GPU_FREE_AFTER_BATCH=YES
+DOCUMENT_PIPELINE_GETS_RESOURCES=YES
+WAKE_BEFORE_SYNC=YES
+RESUME_DOES_NOT_START_AI_OUTSIDE_WINDOW=YES
+DB_WRITES=0
+SCORING_MEDAL_QUEUE_UNCHANGED=YES
+```
+
+WIP: `docs/wip/WIP_AI_DAILY_BATCH_SCHEDULE_V1.md`.
+
+## 2026-10-21 — MODEL_CANDIDATE_POOL_SCOPE_V1 (P11) — DONE
+
+Kiosk model block больше не показывает сырой `document_match_details`
+backlog как бизнес-кандидатов:
+
+- `MODEL_WAITING=29 926` на первом замере — distinct
+  `(procurement_id, category_code)`;
+- подпись — `кандидатов (procurement × category)`;
+- `working`, validated, confirmed, rejected и unknown считаются в той же
+  pair-единице; buckets взаимоисключающие;
+- speed — candidate pairs/hour по последним 30 завершённым парам;
+- raw counts (`1 064 813` waiting rows и event rows) перенесены в `/tech`;
+- live pair backlog уменьшается вместе с валидацией (`29 924` на финальном
+  snapshot);
+- validator authority, admission, scoring/medal/queue не менялись,
+  `DB_WRITES=0`.
+
+Acceptance:
+
+```text
+RAW_MATCH_DETAILS_NOT_SHOWN_AS_BUSINESS_CANDIDATES=YES
+MODEL_WAITING_IS_DISTINCT_OPPORTUNITIES=YES
+MODEL_BUCKETS_USE_PAIR_UNIT=YES
+PAIR_BUCKET_INVARIANT=OK
+WORKING_COUNT_IS_MEANINGFUL=YES
+RAW_COUNTS_ONLY_IN_TECH=YES
+VALIDATOR_AUTHORITY_CHANGED=NO
+DB_WRITES=0
+SCORING_MEDAL_QUEUE_UNCHANGED=YES
+```
+
+Screenshot:
+`docs/reports/s13_kiosk_command_center_v2/kiosk.model_candidate_pool_scope.1920x1080.png`.
+WIP: `docs/wip/WIP_MODEL_CANDIDATE_POOL_SCOPE_V1.md`.
+
 ## 2026-10-20 — DIRECT_SUPPLY_GOODS_COVERAGE_V1 Phase 2 — DRY-RUN DONE
 
 `verify_direct_supply_facts.py` ужесточён: promotion-кандидаты проходят

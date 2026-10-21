@@ -1,0 +1,12 @@
+[Unit]
+Description=CRM procurement sync: daily S7 to S13 import at 03:00
+
+[Timer]
+OnCalendar=*-*-* 03:00:00
+AccuracySec=1min
+RandomizedDelaySec=0
+Persistent=false
+Unit=crm-procurement-sync.service
+
+[Install]
+WantedBy=timers.target
