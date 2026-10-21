@@ -43,6 +43,11 @@ _WORK_NAME_RE = re.compile(
 #: нумерация позиции в начале названия: «2.2.4 », «1.13 », «1) »
 _NUMBER_PREFIX_RE = re.compile(r"^\s*\d+(?:[.,]\d+)*(?:[.)])?\s+")
 
+# Public patterns for read-only DB projections that must mirror
+# ``classify_fact_kind`` without loading every entity row into Python.
+WORK_NAME_REGEX_PATTERN = _WORK_NAME_RE.pattern
+NUMBER_PREFIX_REGEX_PATTERN = _NUMBER_PREFIX_RE.pattern
+
 
 def classify_fact_kind(*, entity_type: Optional[str] = None, name: Optional[str] = None) -> str:
     """`GOODS` | `WORK` для одного факта (детерминированно, без модели)."""

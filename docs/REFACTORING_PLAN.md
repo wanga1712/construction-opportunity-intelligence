@@ -4673,25 +4673,36 @@ WIP: `docs/wip/WIP_AI_DAILY_BATCH_SCHEDULE_V1.md`.
 ## 2026-10-21 — MODEL_CANDIDATE_POOL_SCOPE_V1 (P11) — DONE
 
 Kiosk model block больше не показывает сырой `document_match_details`
-backlog как бизнес-кандидатов:
+backlog как бизнес-кандидатов. Финальный scope ограничен текущими
+opportunities:
 
-- `MODEL_WAITING=29 926` на первом замере — distinct
-  `(procurement_id, category_code)`;
+- `MODEL_WAITING=880` — distinct `(procurement_id, category_code)`;
+- denominator — `8 335` CURRENT opportunities в
+  `ACTIVE/FOLLOW_UP_AWARDED`;
+- waiting pool строится из `structured_entities`, а не из raw matcher rows;
+- source document фильтруется как `RESEARCHABLE`;
+- work-name отсекаются тем же regex, что `classify_fact_kind`;
 - подпись — `кандидатов (procurement × category)`;
 - `working`, validated, confirmed, rejected и unknown считаются в той же
   pair-единице; buckets взаимоисключающие;
 - speed — candidate pairs/hour по последним 30 завершённым парам;
-- raw counts (`1 064 813` waiting rows и event rows) перенесены в `/tech`;
-- live pair backlog уменьшается вместе с валидацией (`29 924` на финальном
-  snapshot);
+- raw pending rows (`1 065 172`) остаются только в `/tech`;
 - validator authority, admission, scoring/medal/queue не менялись,
   `DB_WRITES=0`.
+
+Ожидаемые `~1591` на текущих данных не воспроизвелись: все goods-пары
+`structured_entities` дают `1684`, их CURRENT-пересечение после strict
+source-filter — `880`. Число не подменялось.
 
 Acceptance:
 
 ```text
 RAW_MATCH_DETAILS_NOT_SHOWN_AS_BUSINESS_CANDIDATES=YES
 MODEL_WAITING_IS_DISTINCT_OPPORTUNITIES=YES
+CURRENT_OPPORTUNITIES_ONLY=YES
+COMMERCIAL_STATES=ACTIVE+FOLLOW_UP_AWARDED
+SOURCE_FILTER_APPLIED=YES
+GOODS_ONLY_CANDIDATES=YES
 MODEL_BUCKETS_USE_PAIR_UNIT=YES
 PAIR_BUCKET_INVARIANT=OK
 WORKING_COUNT_IS_MEANINGFUL=YES
@@ -4702,7 +4713,7 @@ SCORING_MEDAL_QUEUE_UNCHANGED=YES
 ```
 
 Screenshot:
-`docs/reports/s13_kiosk_command_center_v2/kiosk.model_candidate_pool_scope.1920x1080.png`.
+`docs/reports/s13_kiosk_command_center_v2/kiosk.model_current_opportunity_pool.1920x1080.png`.
 WIP: `docs/wip/WIP_MODEL_CANDIDATE_POOL_SCOPE_V1.md`.
 
 ## 2026-10-20 — DIRECT_SUPPLY_GOODS_COVERAGE_V1 Phase 2 — DRY-RUN DONE

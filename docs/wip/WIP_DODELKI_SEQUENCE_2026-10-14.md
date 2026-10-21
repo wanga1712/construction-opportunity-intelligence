@@ -298,9 +298,10 @@ current objects перенесены на `/tech`; activating показывае
 Показываем distinct `(procurement_id, category_code)` source-filtered GOODS.
 
 Статус: DONE (2026-10-21, kiosk/read-model). Главный model KPI переведён
-на pair-единицу; raw counts доступны только на `/tech`. На первом замере:
-`raw=1 064 813`, `candidates=29 926`; live backlog уменьшается по мере
-валидации. Validator authority не менялся.
+на pair-единицу внутри CURRENT opportunities
+`ACTIVE/FOLLOW_UP_AWARDED`; source filter — `RESEARCHABLE`, только GOODS.
+Фактический pool: `8 335 current pairs → 880 candidates`; raw counts
+доступны только на `/tech`. Validator authority не менялся.
 
 ### P14. AI_DAILY_BATCH_SCHEDULE_V1
 
