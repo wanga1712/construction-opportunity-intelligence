@@ -1,6 +1,6 @@
 # WIP DIRECT_SUPPLY_GOODS_COVERAGE_V1 — дожать товарные факты прямых поставок
 
-Status: PHASE 2 DRY-RUN DONE / APPLY PENDING (2026-10-20). Owner: direct supply extraction / card supply facts.
+Status: PHASE 2 TARGETED REPARSE DONE / 4 SOURCE_MISSING OPEN (2026-10-21). Owner: direct supply extraction / card supply facts.
 
 ## Цель
 
@@ -55,6 +55,99 @@ DIRECT_TRUST_VERIFIED=YES
 DIRECT_SUPPLY_CARD_NORMALIZED=YES
 DB_WRITES=0_UNTIL_APPROVED
 SCORING_MEDAL_QUEUE_UNCHANGED=YES
+```
+
+## RESULT Phase 2 inventory (2026-10-21)
+
+Сформирован точный inventory `57` unverified DIRECT goods-фактов.
+
+```text
+unverified facts            = 57
+unique source documents     = 23
+unique procurements         = 21
+cable_support_systems       = 4 facts / 1 document
+computers                   = 34 facts / 19 documents
+lighting                    = 19 facts / 3 documents
+source_document_local_status= PRESENT 19 / MISSING 4
+unique physical paths       = 22 (18 PRESENT / 4 MISSING; one shared path)
+unverified reason           = QUOTE_NOT_LITERAL 57
+```
+
+Файлы:
+
+```text
+docs/reports/direct_supply_goods_coverage/unverified_direct_facts_20261021.csv
+docs/reports/direct_supply_goods_coverage/unverified_direct_source_documents_20261021.csv
+docs/reports/direct_supply_goods_coverage/UNVERIFIED_DIRECT_FACTS_INVENTORY_2026-10-21.md
+```
+
+Missing local files:
+
+```text
+procurement  category               source_document_id  rows
+12017        cable_support_systems  89543               4
+458438       lighting               90512               9
+459949       lighting               100459              5
+460533       computers              100658              1
+```
+
+Порядок закрытия:
+
+1. Точечно перепарсить 19 PRESENT source-document IDs (18 physical files).
+2. Отдельно восстановить/скачать 4 MISSING файла, затем перепарсить.
+3. Повторить strict dry-run `verify_direct_supply_facts.py`.
+4. `--apply` только после успешного literal quote check.
+
+`DB_WRITES=0`; reparse и trust apply в этом шаге не запускались.
+
+## RESULT targeted reparse (2026-10-21)
+
+Перепарсены только 19 `PRESENT` source-document IDs. Для этого в
+`reparse_procurement_sections.py` добавлен повторяемый фильтр
+`--source-document-id`; 4 MISSING файла не затрагивались.
+
+```text
+original unverified facts        = 57
+reparsed source-document IDs     = 19
+stale superseded by verified row = 38
+actionable unverified remaining  = 19
+```
+
+Семантические replacements:
+
+```text
+computers: 33
+lighting:   5
+cable_support_systems: 0
+```
+
+Оставшиеся 19 строк относятся только к 4 MISSING документам:
+
+```text
+source_document_id  rows  procurement
+89543                 4   12017
+90512                 9   458438
+100459                5   459949
+100658                1   460533
+```
+
+Strict dry-run после reparse:
+
+```text
+DIRECT_GOODS_CANDIDATES=142
+DIRECT_QUOTE_VERIFIED_TO_PROMOTE=85
+DIRECT_RAW_UNVERIFIED=57
+DIRECT_STALE_SUPERSEDED=38
+DIRECT_GOODS_CANDIDATES_UNVERIFIED=19
+DB_WRITES=REPARSE_ONLY
+TRUST_APPLY_PENDING=YES
+```
+
+Reconciliation:
+
+```text
+docs/reports/direct_supply_goods_coverage/unverified_direct_facts_after_reparse_20261021.csv
+docs/reports/direct_supply_goods_coverage/superseded_direct_facts_after_reparse_20261021.csv
 ```
 
 ## RESULT Phase 2 (2026-10-20) — strict DIRECT trust dry-run

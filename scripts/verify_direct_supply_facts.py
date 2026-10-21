@@ -44,7 +44,7 @@ def di_dsn():
 
 
 CANDIDATES_SQL = """
-    SELECT se.id, se.category_code, se.entity_type,
+    SELECT se.id, se.category_code, se.source_document_id, se.entity_type,
            se.product_name_raw, se.product_name_normalized,
            se.quantity_value, se.quantity_unit_normalized,
            se.total_price_value, se.source_quote,
@@ -68,11 +68,11 @@ def main() -> int:
         cur.execute(CANDIDATES_SQL, (EXTRACTOR_VERSION, DIRECT_CATS))
         candidates = cur.fetchall()
         goods = []
-        by_category = {}
+        verified_keys = set()
         for row in candidates:
             (
-                entity_id, category_code, entity_type, name_raw, name_norm,
-                quantity, unit, total, quote, snapshot,
+                entity_id, category_code, source_document_id, entity_type,
+                name_raw, name_norm, quantity, unit, total, quote, snapshot,
             ) = row
             payload = {
                 "category_code": category_code,
@@ -89,13 +89,48 @@ def main() -> int:
             verified = bool(
                 quote and snapshot is not None and str(quote) in str(snapshot)
             )
-            goods.append((int(entity_id), str(category_code), verified))
-            stats = by_category.setdefault(
-                str(category_code), {"goods": 0, "verified": 0, "unverified": 0}
+            semantic_key = (
+                str(category_code),
+                str(source_document_id),
+                str(name_norm or name_raw or "").strip().lower(),
+                round(float(quantity), 9),
+                str(unit or "").upper(),
+                round(float(total), 2),
             )
+            goods.append(
+                {
+                    "id": int(entity_id),
+                    "category": str(category_code),
+                    "verified": verified,
+                    "semantic_key": semantic_key,
+                }
+            )
+            if verified:
+                verified_keys.add(semantic_key)
+
+        ids = [item["id"] for item in goods if item["verified"]]
+        stale_ids = [
+            item["id"]
+            for item in goods
+            if not item["verified"] and item["semantic_key"] in verified_keys
+        ]
+        actionable_unverified = [
+            item
+            for item in goods
+            if not item["verified"] and item["semantic_key"] not in verified_keys
+        ]
+        by_category = {}
+        for item in goods:
+            stats = by_category.setdefault(item["category"], {
+                "goods": 0, "verified": 0, "stale": 0, "unverified": 0
+            })
             stats["goods"] += 1
-            stats["verified" if verified else "unverified"] += 1
-        ids = [entity_id for entity_id, _category, verified in goods if verified]
+            if item["verified"]:
+                stats["verified"] += 1
+            elif item["id"] in stale_ids:
+                stats["stale"] += 1
+            else:
+                stats["unverified"] += 1
         cur.execute(
             "SELECT count(*) FROM structured_entities"
             " WHERE extractor_version=%s AND category_code = ANY(%s)"
@@ -108,12 +143,15 @@ def main() -> int:
         print(f"DIRECT_GOODS_CANDIDATES={len(goods)}")
         print(f"DIRECT_NON_GOODS_OR_INCOMPLETE={quarantine_total - len(goods)}")
         print(f"DIRECT_QUOTE_VERIFIED_TO_PROMOTE={len(ids)}")
-        print(f"DIRECT_GOODS_CANDIDATES_UNVERIFIED={len(goods) - len(ids)}")
+        print(f"DIRECT_RAW_UNVERIFIED={len(goods) - len(ids)}")
+        print(f"DIRECT_STALE_SUPERSEDED={len(stale_ids)}")
+        print(f"DIRECT_GOODS_CANDIDATES_UNVERIFIED={len(actionable_unverified)}")
         for category in sorted(by_category):
             stats = by_category[category]
             print(
                 f"CATEGORY {category}: goods={stats['goods']}"
-                f" verified={stats['verified']} unverified={stats['unverified']}"
+                f" verified={stats['verified']} stale={stats['stale']}"
+                f" unverified={stats['unverified']}"
             )
         if not args.apply:
             print("DRY_RUN=YES (no writes)")

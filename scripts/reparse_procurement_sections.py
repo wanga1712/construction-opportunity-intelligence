@@ -36,18 +36,24 @@ def _doc_conn():
     )
 
 
-def _targets(conn, procurement_id: int):
+def _targets(conn, procurement_id: int, source_document_ids=None):
     cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+    where_ids = ""
+    params = [procurement_id]
+    if source_document_ids:
+        where_ids = " AND id = ANY(%s)"
+        params.append([int(x) for x in source_document_ids])
     cur.execute(
-        """
+        f"""
         SELECT id, file_name, local_path, physical_download_key
           FROM document_files
          WHERE procurement_id = %s
            AND coalesce(local_path, '') <> ''
            AND local_deleted_at IS NULL
+           {where_ids}
          ORDER BY id
         """,
-        (procurement_id,),
+        tuple(params),
     )
     return [dict(row) for row in cur.fetchall()]
 
@@ -88,6 +94,8 @@ def _category_maps(conn, procurement_id: int):
 def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--procurement-id", type=int, required=True)
+    ap.add_argument("--source-document-id", type=int, action="append",
+                    help="точечно обработать только указанный document_files.id (можно повторять)")
     ap.add_argument("--local-only", action="store_true",
                     help="только файлы, уже лежащие на диске (без скачивания)")
     ap.add_argument("--apply", action="store_true", help="по умолчанию dry-run")
@@ -97,7 +105,7 @@ def main() -> int:
 
     conn = _doc_conn()
     try:
-        rows = _targets(conn, args.procurement_id)
+        rows = _targets(conn, args.procurement_id, args.source_document_id)
         by_doc, by_df, default_cat = _category_maps(conn, args.procurement_id)
     finally:
         conn.close()
@@ -111,6 +119,8 @@ def main() -> int:
 
     print("procurement:", args.procurement_id, "| document_files rows with local_path:",
           len(rows), "| distinct paths:", len(grouped))
+    if args.source_document_id:
+        print("source_document_ids:", sorted(args.source_document_id))
     print("on disk:", len(present), "| missing:", len(missing), "| apply:", bool(args.apply))
     for path in missing[:5]:
         print("   MISSING:", path)

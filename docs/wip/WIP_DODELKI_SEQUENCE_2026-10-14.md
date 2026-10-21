@@ -24,7 +24,7 @@
 | P4 | `PROCUREMENT_CARD_CATEGORY_PIPELINE_V1` | DONE 2026-10-19 | вкладка «Категории» вместо «Находки» | PASS |
 | P5 | `PHYSICAL_KISOK_DASHBOARD_UPGRADE_V1` | DONE 2026-10-19 | CPU temp + per-core + аналитика киоска | PASS |
 | P6 | `EMBEDDED_ESTIMATE_PARSE_FIRST_V1` | Phase 1/3 DONE · Phase 4 dry-run | сначала смета, затем остальное | PASS |
-| P7 | `DIRECT_SUPPLY_GOODS_COVERAGE_V1` | Phase 2 dry-run DONE / apply pending | дожать товарные факты прямых поставок | PASS |
+| P7 | `DIRECT_SUPPLY_GOODS_COVERAGE_V1` | Phase 2 targeted reparse DONE / 4 source missing | дожать товарные факты прямых поставок | PASS |
 | P8 | `FINDINGS_COUNT_SCOPE_V1` | DONE 2026-10-20 | не дублировать сырые находки по категориям | PASS |
 | 1A | `ARCHIVE_MEMBER_DEDUP_IDENTITY_V1` | DONE (`c66f96b`) | identity sweeper исправлена | PASS |
 | 1B | `ARCHIVE_MEMBER_PARSE_CONTEXT_V1` | PASS (`24062c2`) | 99069 end-to-end подтверждён | PASS |
@@ -248,6 +248,12 @@ computers `96→194`, cable `32→32`; `UNPROVEN_TOTAL=0`,
 Phase 2 strict dry-run: `97` GOODS-кандидатов, `40` quote-verified,
 `57` unverified, `8571` non-goods/incomplete; `--apply` не запускался.
 DIRECT source snapshot теперь строится из raw row quotes, создавших facts.
+Inventory 2026-10-21: `57` facts / `23` source docs / `21` procurements;
+`19` source-document IDs PRESENT (18 physical files), `4` MISSING
+(`89543/90512/100459/100658`).
+Targeted reparse закрыл `38/57` через verified replacements; остались только
+`19` строк из 4 MISSING документов. `DB_WRITES=REPARSE_ONLY`,
+trust `--apply` not run.
 
 ### P8. FINDINGS_COUNT_SCOPE_V1
 

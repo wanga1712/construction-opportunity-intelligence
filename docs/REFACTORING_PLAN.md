@@ -4472,6 +4472,67 @@ TRUST_APPLY_PENDING=YES
 SCORING_MEDAL_QUEUE_UNCHANGED=YES
 ```
 
+## 2026-10-21 — DIRECT unverified facts inventory — READY
+
+Сформирован inventory 57 strict-unverified DIRECT goods-фактов:
+
+```text
+facts=57 | source_documents=23 | procurements=21
+cable_support_systems=4 facts / 1 document
+computers=34 facts / 19 documents
+lighting=19 facts / 3 documents
+source-document IDs PRESENT=19 | MISSING=4
+unique physical paths: 22 (PRESENT=18, MISSING=4; one path shared)
+reason=QUOTE_NOT_LITERAL (57)
+```
+
+Артефакты:
+
+- `docs/reports/direct_supply_goods_coverage/unverified_direct_facts_20261021.csv`;
+- `docs/reports/direct_supply_goods_coverage/unverified_direct_source_documents_20261021.csv`;
+- `docs/reports/direct_supply_goods_coverage/UNVERIFIED_DIRECT_FACTS_INVENTORY_2026-10-21.md`.
+
+4 missing source documents: `89543` (pid 12017), `90512` (458438),
+`100459` (459949), `100658` (460533). Остальные 19 source-document IDs
+(18 physical files) присутствуют на S13 и готовы к точечному reparse.
+Reparse/trust apply не запускались,
+`DB_WRITES=0`.
+
+## 2026-10-21 — DIRECT targeted reparse — DONE / 4 SOURCE_MISSING OPEN
+
+`reparse_procurement_sections.py` получил повторяемый фильтр
+`--source-document-id`. Перепарсены только 19 PRESENT source-document IDs;
+4 MISSING исключены.
+
+```text
+original unverified facts        = 57
+reparsed source-document IDs     = 19
+stale superseded by verified row = 38
+actionable unverified remaining  = 19
+```
+
+38 replacements: computers 33, lighting 5. Оставшиеся 19 строк относятся ровно
+к четырём MISSING документам: `89543=4`, `90512=9`, `100459=5`, `100658=1`.
+
+`verify_direct_supply_facts.py` теперь различает raw unverified и stale:
+
+```text
+DIRECT_GOODS_CANDIDATES=142
+DIRECT_QUOTE_VERIFIED_TO_PROMOTE=85
+DIRECT_RAW_UNVERIFIED=57
+DIRECT_STALE_SUPERSEDED=38
+DIRECT_GOODS_CANDIDATES_UNVERIFIED=19
+DRY_RUN=YES
+```
+
+Post-reparse reconciliation:
+
+- `unverified_direct_facts_after_reparse_20261021.csv` — 19 actionable;
+- `superseded_direct_facts_after_reparse_20261021.csv` — 38 stale с replacement
+  entity IDs.
+
+Trust `--apply` не запускался. Scoring/medal/queue unchanged.
+
 Следующий этап — `DIRECT_SUPPLY_GOODS_COVERAGE_V1` для `computers`,
 `lighting`, `cable_support_systems`.
 
