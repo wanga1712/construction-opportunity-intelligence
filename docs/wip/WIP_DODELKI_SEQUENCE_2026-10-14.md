@@ -32,7 +32,7 @@
 | P13 | `RESOURCE_PRIORITY_DOC_PIPELINE_FIRST_V1` | DONE | документы в приоритете ресурсов | PASS |
 | P14 | `AI_DAILY_BATCH_SCHEDULE_V1` | DONE | AI не молотит 24/7 | PASS |
 | P15 | `PIPELINE_BATCH_PARALLEL_EXECUTION_V1` | ПРИОРИТЕТ | батчи и параллельность | PASS |
-| P16 | `STALE_PROCESSING_CLEANUP_V1` | ПРИОРИТЕТ | погасить залипшие PROCESSING | PASS |
+| P16 | `STALE_PROCESSING_CLEANUP_V1` | DONE | погасить залипшие PROCESSING | PASS |
 | 1A | `ARCHIVE_MEMBER_DEDUP_IDENTITY_V1` | DONE (`c66f96b`) | identity sweeper исправлена | PASS |
 | 1B | `ARCHIVE_MEMBER_PARSE_CONTEXT_V1` | PASS (`24062c2`) | 99069 end-to-end подтверждён | PASS |
 | 1C | `GSFX_RESTORE_V1` | PASS (`24062c2`) | 99069 end-to-end подтверждён | PASS + коммит |
@@ -322,6 +322,17 @@ cross-process semaphore: максимум 4 tesseract. AI runner/validator и
 model workers — `CPUWeight=15`, `Nice=10`; runner и validator остаются
 `inactive/disabled`. Live-warmup: completed procurements `2/60m` до старта
 → `6/10m` после прогрева, tesseract processes 4.
+
+### P16. STALE_PROCESSING_CLEANUP_V1
+
+См. `docs/wip/WIP_STALE_PROCESSING_CLEANUP_V1.md`.
+
+Статус: DONE (2026-10-21). Точному stale predicate на момент cleanup
+соответствовали 23 строки (ещё 4 из первоначальных 27 уже изменились
+конкурентно). Все 23 переведены `PROCESSING -> NO_LINKS` с
+`last_error=no_selected_documents`; preimage сохранён. Claim guard требует
+непустой `selected_documents` в обоих claim-путях. После рестарта
+`PROCESSING_WITHOUT_SELECTED_DOCS=0`, включая повторную проверку через 20с.
 
 ### 1A. ARCHIVE_MEMBER_DEDUP_IDENTITY_V1
 

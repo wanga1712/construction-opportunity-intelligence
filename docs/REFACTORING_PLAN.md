@@ -4583,6 +4583,33 @@ Daily-work screenshot:
 `docs/reports/s13_kiosk_command_center_v2/kiosk.daily_work_progress.1920x1080.png`.
 WIP: `docs/wip/WIP_S13_KIOSK_METRIC_SEMANTICS_FIX_V1.md`.
 
+## 2026-10-21 — STALE_PROCESSING_CLEANUP_V1 (P16) — DONE
+
+Устранены залипшие document queue tasks без выбранных документов:
+
+- 23 строки переведены `PROCESSING -> NO_LINKS` с
+  `last_error=no_selected_documents`;
+- preimage 23 строк сохранён в
+  `/var/lib/crm-v3-canary/stale_processing_cleanup/preimage_20261021.json`;
+- claim guard добавлен в `S13V2QueueRepository` (оба пути) и
+  `S13V2QueueBackend`;
+- задача без непустого JSON-массива `selected_documents` больше не может
+  перейти в `PROCESSING`;
+- 9 document workers перезапущены с новым claim SQL.
+
+Проверки:
+
+```text
+PROCESSING_WITHOUT_SELECTED_DOCS=0
+NO_NEW_STALE_PROCESSING=YES
+AFTER_20S_STALE=0
+ADMISSION_UNCHANGED=YES
+DB_WRITES=APPROVED_TERMINAL_STATUS_ONLY
+SCORING_MEDAL_QUEUE_UNCHANGED=YES
+```
+
+WIP: `docs/wip/WIP_STALE_PROCESSING_CLEANUP_V1.md`.
+
 ## 2026-10-21 — RESOURCE_PRIORITY_DOC_PIPELINE_FIRST_V1 (P13) — DONE
 
 Document pipeline выведен вперёд по CPU:

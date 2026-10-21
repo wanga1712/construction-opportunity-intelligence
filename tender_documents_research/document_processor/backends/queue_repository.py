@@ -29,6 +29,12 @@ _S13_CLAIM_ADMISSION_FILTER = """
     )
 """
 
+_NONEMPTY_SELECTED_DOCS_FILTER = """
+    AND q.selected_documents IS NOT NULL
+    AND jsonb_typeof(q.selected_documents) = 'array'
+    AND q.selected_documents <> '[]'::jsonb
+"""
+
 #: Queue V2 payload columns returned on claim (targeted downloader input).
 _QUEUE_V2_COLS = """q.plan_version, q.research_action_v2, q.document_plan_version,
                    q.selected_source_document_ids, q.selected_physical_keys,
@@ -168,6 +174,7 @@ class S13V2QueueRepository(QueueRepository):
                         FROM document_processing_queue q
                        WHERE q.status IN ('PENDING', 'PRE_RESEARCH_WAITING')
                          AND (q.pipeline_generation = %s OR q.pipeline_generation IS NULL)
+                         {_NONEMPTY_SELECTED_DOCS_FILTER}
                          {_S13_CLAIM_ADMISSION_FILTER}
                          {lane_filter}
                        ORDER BY {order_clause}
@@ -240,8 +247,9 @@ class S13V2QueueRepository(QueueRepository):
             with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
                 for predicate, predicate_params in subpools:
                     sql = f"""SELECT {_COLS}
-                              FROM document_processing_queue q
+                             FROM document_processing_queue q
                              WHERE q.status IN ('PENDING', 'PRE_RESEARCH_WAITING')
+                               {_NONEMPTY_SELECTED_DOCS_FILTER}
                                AND {predicate}{_GEN_FILTER}{_S13_CLAIM_ADMISSION_FILTER}{lane_filter}
                              ORDER BY {_ORDER}
                              LIMIT %s
@@ -287,6 +295,9 @@ class S13V2QueueRepository(QueueRepository):
                        worker_id  = %s,
                        started_at = NOW()
                  WHERE id IN ({id_placeholders})
+                   AND selected_documents IS NOT NULL
+                   AND jsonb_typeof(selected_documents) = 'array'
+                   AND selected_documents <> '[]'::jsonb
              RETURNING
                  id, procurement_id, source_table, source_id,
                  contract_number, queue_lane, pipeline_generation,

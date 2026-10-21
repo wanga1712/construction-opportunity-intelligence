@@ -73,6 +73,9 @@ class S13V2QueueBackend:
                    FROM document_processing_queue q
                   WHERE q.status = 'PENDING'
                     AND (q.next_attempt_at IS NULL OR q.next_attempt_at <= NOW())
+                    AND q.selected_documents IS NOT NULL
+                    AND jsonb_typeof(q.selected_documents) = 'array'
+                    AND q.selected_documents <> '[]'::jsonb
                     {lane_filter}
                   ORDER BY {_LANE_RANK_SQL} ASC,
                            q.priority_score DESC,
