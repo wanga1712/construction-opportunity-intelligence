@@ -535,7 +535,7 @@ def main():
                 validator,
                 priors,
                 taxonomy_snapshot,
-                batch_size=20,
+                batch_size=int(os.getenv("VALIDATOR_BATCH_SIZE", "50")),
             )
             if batch_res.has_technical_failure:
                 if current_backoff <= 0.0:

@@ -22,7 +22,22 @@ def ocr_max_concurrency() -> int:
         configured = int(os.getenv("OCR_MAX_CONCURRENCY", str(DEFAULT_MAX_CONCURRENCY)))
     except ValueError:
         configured = DEFAULT_MAX_CONCURRENCY
-    return max(2, min(4, configured))
+    base = max(2, min(4, configured))
+    if os.getenv("OCR_BACKPRESSURE_ENABLED", "1") not in ("1", "true", "yes", "on"):
+        return base
+    try:
+        load_1m = os.getloadavg()[0]
+        cpu_count = max(1, os.cpu_count() or 1)
+        high_watermark = float(os.getenv("OCR_CPU_HIGH_WATERMARK", "0.9"))
+        if load_1m / cpu_count >= high_watermark:
+            try:
+                floor = int(os.getenv("OCR_BACKPRESSURE_MIN_CONCURRENCY", "2"))
+            except ValueError:
+                floor = 2
+            return max(2, min(base, floor))
+    except (AttributeError, OSError, ValueError):
+        pass
+    return base
 
 
 @contextmanager
