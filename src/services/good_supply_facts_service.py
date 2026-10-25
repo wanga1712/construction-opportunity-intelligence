@@ -30,7 +30,7 @@ COUNT_UNITS = frozenset(
     {"PCS", "UNIT", "SET", "PACK", "ROLL", "BAG", "SHEET", "PAIR"}
 )
 #: агрегатные/шапочные строки — не товар
-_AGGREGATE_RE = re.compile(r"^\s*(итого|всего|стоимость|ндс|раздел|глава)\b", re.IGNORECASE)
+_AGGREGATE_RE = re.compile(r"^\s*(итого|всего|стоимость|ндс|раздел|глава|\d+(?:\.\d+)*\s+\S)", re.IGNORECASE)
 
 DEFAULT_LIMIT = 300
 
@@ -110,6 +110,8 @@ def classify_supply_row(row: Dict[str, Any]) -> Optional[str]:
         return "aggregate"
     if row.get("quantity_value") is None or not str(row.get("quantity_unit_normalized") or "").strip():
         return "no_quantity"
+    if str(row.get("quantity_unit_normalized") or "").upper() not in COUNT_UNITS:
+        return "bulk_material"
     if _fractional_count_quantity(row):
         return "no_quantity"
     if row.get("total_price_value") is None:
@@ -165,6 +167,8 @@ def count_material_facts_by_category(
         if not category or category == "unknown":
             continue
         if classify_fact_kind(entity_type=row.get("entity_type"), name=name) != "GOODS":
+            continue
+        if str(row.get("quantity_unit_normalized") or "").upper() not in COUNT_UNITS:
             continue
         if _is_aggregate(name) or _fractional_count_quantity(row):
             continue
@@ -234,6 +238,7 @@ def build_good_supply_facts(
 
     facts: List[Dict[str, Any]] = []
     hidden = {"work": 0, "aggregate": 0, "no_quantity": 0, "no_total": 0,
+              "bulk_material": 0,
               "no_quote": 0, "no_category": 0}
     residue = 0
     for row in rows:
