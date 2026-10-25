@@ -1,6 +1,6 @@
 # WIP DIRECT_SUPPLY_TEMPLATE_CONSISTENCY_V1 — отдельные правила DIRECT и PROJECT/OBJECT
 
-Status: PHASE 2 DOWNLOAD + FACT DRY-RUN DONE; PERSIST PENDING.
+Status: PHASE 3 PERSIST DONE (2026-10-25).
 Owner: document processor + commercial routing.
 
 ## Проблема
@@ -212,6 +212,42 @@ STRUCTURED_FACTS_AFTER=5 041
 HISTORICAL_MISSING_QTY=751 (не изменено)
 HISTORICAL_MISSING_UNIT=945 (не изменено)
 STRUCTURED_ENTITIES_WRITES=0
+```
+
+## Phase 3 — canary + persist
+
+Canary `467984`:
+
+```text
+before structured_entities=0
+after structured_entities=1
+product_name_raw=С ветильник светодиодный ДСП45-50-023 Liner Р RD 840
+qty=100 PCS
+unit_normalized=PCS
+price/total=NULL
+```
+
+Полный approved persist:
+
+```text
+items=94
+created=68
+reused=88
+before_global structured_facts=362414
+after_global structured_facts=362482
+missing_qty=93722 (без изменений)
+missing_unit=84772 (без изменений)
+```
+
+Исторические malformed facts не переписывались.
+
+Acceptance:
+
+```text
+CANARY_PERSIST_OK=YES
+ALL_SUPPORTED_DIRECT_FACTS_PERSISTED=YES
+STRUCTURED_ENTITIES_WRITES=APPROVED_STRICT_FACTS
+HISTORICAL_FACTS_UNCHANGED=YES
 ```
 
 ## Acceptance
