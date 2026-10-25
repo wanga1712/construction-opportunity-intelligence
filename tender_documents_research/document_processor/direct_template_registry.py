@@ -6,6 +6,12 @@ from pathlib import Path
 from typing import Optional, Tuple
 
 DIRECT_TRACKS = frozenset({"DIRECT", "DIRECT_SUPPLY"})
+SKIP_DOCUMENT_CLASSES = frozenset({
+    "LEGAL_GENERAL",
+    "PARTICIPANT_REQUIREMENTS",
+    "OTHER",
+})
+ARCHIVE_FORMATS = frozenset({"zip", "rar", "7z"})
 
 
 @dataclass(frozen=True)
@@ -63,6 +69,31 @@ _TEMPLATES = {
             _key("lighting", "NMCK_JUSTIFICATION", "xlsx"),
             accepted_kinds=("spec", "tech"),
         ),
+    _key("lighting", "NMCK_JUSTIFICATION", "pdf", ("spec", "tech")):
+        DirectTemplate(
+            _key("lighting", "NMCK_JUSTIFICATION", "pdf"),
+            accepted_kinds=("spec", "tech"),
+        ),
+    _key("lighting", "CONTRACT_PROJECT", "docx", ("spec", "tech")):
+        DirectTemplate(
+            _key("lighting", "CONTRACT_PROJECT", "docx"),
+            accepted_kinds=("spec", "tech"),
+        ),
+    _key("computers", "NMCK_JUSTIFICATION", "pdf", ("spec", "tech")):
+        DirectTemplate(
+            _key("computers", "NMCK_JUSTIFICATION", "pdf"),
+            accepted_kinds=("spec", "tech"),
+        ),
+    _key("computers", "CONTRACT_PROJECT", "docx", ("spec", "tech")):
+        DirectTemplate(
+            _key("computers", "CONTRACT_PROJECT", "docx"),
+            accepted_kinds=("spec", "tech"),
+        ),
+    _key("computers", "CONTRACT_PROJECT", "pdf", ("spec", "tech")):
+        DirectTemplate(
+            _key("computers", "CONTRACT_PROJECT", "pdf"),
+            accepted_kinds=("spec", "tech"),
+        ),
     _key("flooring", "ESTIMATE", "xlsx", ("spec", "tech")):
         DirectTemplate(_key("flooring", "ESTIMATE", "xlsx"), accepted_kinds=("spec", "tech")),
     _key("cable_support_systems", "TECH_SPEC", "docx", ("tech", "spec")):
@@ -74,6 +105,16 @@ _TEMPLATES = {
         DirectTemplate(
             _key("cable_support_systems", "TECH_SPEC", "pdf"),
             accepted_kinds=("tech", "spec"),
+        ),
+    _key("cable_support_systems", "NMCK_JUSTIFICATION", "xlsx", ("spec", "tech")):
+        DirectTemplate(
+            _key("cable_support_systems", "NMCK_JUSTIFICATION", "xlsx"),
+            accepted_kinds=("spec", "tech"),
+        ),
+    _key("cable_support_systems", "CONTRACT_PROJECT", "docx", ("spec", "tech")):
+        DirectTemplate(
+            _key("cable_support_systems", "CONTRACT_PROJECT", "docx"),
+            accepted_kinds=("spec", "tech"),
         ),
     _key("cable_support_systems", "TECH_SPEC", "xlsx", ("tech", "spec")):
         DirectTemplate(
@@ -111,6 +152,28 @@ def resolve_direct_template(
         file_format=normalize_file_format(file_format),
     )
     return _TEMPLATES.get(key)
+
+
+def classify_direct_document(
+    *,
+    category_code: object,
+    opportunity_track: object,
+    document_class: object,
+    file_format: object,
+) -> str:
+    """Return SUPPORTED / MUST_SKIP / DEFERRED_ARCHIVE / UNSUPPORTED."""
+    if resolve_direct_template(
+        category_code=category_code,
+        opportunity_track=opportunity_track,
+        document_class=document_class,
+        file_format=file_format,
+    ):
+        return "SUPPORTED"
+    if str(document_class or "").strip().upper() in SKIP_DOCUMENT_CLASSES:
+        return "MUST_SKIP"
+    if normalize_file_format(file_format) in ARCHIVE_FORMATS:
+        return "DEFERRED_ARCHIVE"
+    return "UNSUPPORTED"
 
 
 def resolve_direct_template_for_path(

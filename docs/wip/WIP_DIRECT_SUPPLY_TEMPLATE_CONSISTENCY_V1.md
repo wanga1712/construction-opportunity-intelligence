@@ -285,6 +285,47 @@ missing_unit=84772 (без изменений)
 `PARTICIPANT_REQUIREMENTS`, `OTHER`, архивы) требуют отдельного решения:
 некоторые из них принципиально не должны давать товарные факты.
 
+## Phase 3c — классификация unsupported
+
+Введены явные классы:
+
+```text
+MUST_SKIP:
+  LEGAL_GENERAL
+  PARTICIPANT_REQUIREMENTS
+  OTHER
+
+DEFERRED_ARCHIVE:
+  zip / rar / 7z
+```
+
+Добавлены supported-шаблоны:
+
+```text
+CONTRACT_PROJECT docx/pdf
+NMCK_JUSTIFICATION pdf
+```
+
+Live audit:
+
+```text
+SUPPORTED=135
+MUST_SKIP=44
+DEFERRED_ARCHIVE=8
+```
+
+Повторный download/dry-run/persist:
+
+```text
+documents=142
+documents_with_facts=49
+strict_facts=163
+created=1
+reused=162
+structured_facts 362486 -> 362487
+missing_qty/unit без изменений
+```
+
 ## Acceptance
 
 ```text

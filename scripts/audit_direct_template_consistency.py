@@ -17,6 +17,7 @@ if CRM_ROOT not in sys.path:
     sys.path.insert(0, CRM_ROOT)
 
 from document_processor.direct_template_registry import (  # noqa: E402
+    classify_direct_document,
     normalize_direct_track,
     normalize_file_format,
     resolve_direct_template,
@@ -54,6 +55,7 @@ def main() -> int:
     result = {
         "current_direct_pairs": 0,
         "documents": Counter(),
+        "classification": Counter(),
         "supported_documents": Counter(),
         "unsupported_documents": Counter(),
         "strict_facts": 0,
@@ -104,6 +106,14 @@ def main() -> int:
                 )
                 target = "supported_documents" if template else "unsupported_documents"
                 result[target][key] += 1
+                result["classification"][
+                    classify_direct_document(
+                        category_code=category,
+                        opportunity_track="DIRECT_SUPPLY",
+                        document_class=doc_class,
+                        file_format=fmt,
+                    )
+                ] += 1
 
         with di.cursor() as cur:
             cur.execute("""
