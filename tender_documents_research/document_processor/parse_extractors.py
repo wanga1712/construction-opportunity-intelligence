@@ -19,6 +19,7 @@ from typing import Any, Dict, Optional
 logger = logging.getLogger("parse_extractors")
 
 _TAXONOMY_INDEX_CACHE: Dict[str, Any] | None = None
+_CATEGORY_SIGNAL_INDEX_CACHE: Dict[str, set] | None = None
 
 
 def _taxonomy_index() -> Dict[str, Any]:
@@ -28,6 +29,24 @@ def _taxonomy_index() -> Dict[str, Any]:
 
         _TAXONOMY_INDEX_CACHE = load_keyword_index()
     return _TAXONOMY_INDEX_CACHE
+
+
+def _category_signal_index() -> Dict[str, set]:
+    global _CATEGORY_SIGNAL_INDEX_CACHE
+    if _CATEGORY_SIGNAL_INDEX_CACHE is None:
+        from document_processor.crm_taxonomy_loader import CrmTaxonomyLoader
+
+        snapshot = CrmTaxonomyLoader().load_snapshot()
+        index: Dict[str, set] = {}
+        for code, category in snapshot.categories.items():
+            phrases = list(category.get("positive_signals") or [])
+            phrases += list(category.get("aliases") or [])
+            for phrase in phrases:
+                phrase = str(phrase).strip().lower()
+                if phrase:
+                    index.setdefault(phrase, set()).add(code)
+        _CATEGORY_SIGNAL_INDEX_CACHE = index
+    return _CATEGORY_SIGNAL_INDEX_CACHE
 
 
 def _resolve_embedded_category(name: str, fallback: str) -> Optional[str]:
@@ -41,6 +60,11 @@ def _resolve_embedded_category(name: str, fallback: str) -> Optional[str]:
             weight = int(bucket.get("weight") or 100)
             for category in bucket.get("category_codes") or []:
                 scores[category] = scores.get(category, 0) + weight
+    if not scores:
+        for phrase, categories in _category_signal_index().items():
+            if phrase in low:
+                for category in categories:
+                    scores[category] = scores.get(category, 0) + 100
     if not scores:
         return None
     return max(scores, key=lambda k: (scores[k], k))

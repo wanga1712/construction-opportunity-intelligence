@@ -68,6 +68,8 @@ class CrmTaxonomyLoader:
             SELECT
                 c.category_code,
                 c.category_name,
+                c.positive_signals AS category_positive_signals,
+                c.aliases AS category_aliases,
                 s.subcategory_code,
                 s.subcategory_name,
                 s.technical_parameters,
@@ -100,6 +102,8 @@ class CrmTaxonomyLoader:
                 {
                     "category_code": category_code,
                     "category_name": category_name,
+                    "positive_signals": self._normalize_json_list(row.get("category_positive_signals")),
+                    "aliases": self._normalize_json_list(row.get("category_aliases")),
                     "subcategories": {},
                 },
             )
