@@ -18,6 +18,7 @@ for path in (CRM_ROOT, "/opt/tender_documents_research"):
         sys.path.insert(0, path)
 
 from document_processor.direct_template_registry import (  # noqa: E402
+    classify_direct_document,
     normalize_direct_track,
     normalize_file_format,
     resolve_direct_template,
@@ -55,7 +56,7 @@ def _connections():
     return crm, di
 
 
-def inventory() -> list[dict]:
+def inventory(include_all: bool = False) -> list[dict]:
     _load_env()
     crm, di = _connections()
     try:
@@ -104,7 +105,13 @@ def inventory() -> list[dict]:
                 document_class=doc_class,
                 file_format=fmt,
             )
-            if template is None:
+            classification = classify_direct_document(
+                category_code=category,
+                opportunity_track="DIRECT_SUPPLY",
+                document_class=doc_class,
+                file_format=fmt,
+            )
+            if template is None and not include_all:
                 continue
             key = (int(pid), category, int(file_id or 0), doc_class, fmt)
             if key in seen:
@@ -125,7 +132,8 @@ def inventory() -> list[dict]:
                 "local_path": local,
                 "download_status": status,
                 "local_deleted_at": deleted.isoformat() if deleted else None,
-                "template": template.extractor,
+                "template": (template.extractor if template else None),
+                "classification": classification,
             })
     return out
 

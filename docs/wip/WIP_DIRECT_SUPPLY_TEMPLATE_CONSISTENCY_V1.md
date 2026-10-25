@@ -326,6 +326,28 @@ structured_facts 362486 -> 362487
 missing_qty/unit без изменений
 ```
 
+## Phase 3d — DEFERRED_ARCHIVE
+
+Для архивных DIRECT-документов добавлен отдельный обработчик:
+
+```text
+скрипт: scripts/direct_supply_archive_persist.py
+АрхивExtractor -> члены архива -> strict DIRECT template по фактическому формату
+```
+
+Прогон:
+
+```text
+ARCHIVES=8
+DOWNLOAD_MISSING_ARCHIVES=7
+created=2
+reused=0
+```
+
+Основные члены архивов пока не дали фактов: PDF/docx внутри архивов
+нуждаются в отдельном архивном шаблоне, а `.sig`/`.txt`/служебные файлы
+пропускаются.
+
 ## Acceptance
 
 ```text
