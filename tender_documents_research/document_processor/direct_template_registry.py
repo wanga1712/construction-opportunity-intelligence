@@ -36,19 +36,43 @@ def _key(category: str, document_class: str, fmt: str,
 _TEMPLATES = {
     _key("lighting", "TECH_SPEC", "docx", ("tech", "spec")):
         DirectTemplate(_key("lighting", "TECH_SPEC", "docx"), accepted_kinds=("tech", "spec")),
+    _key("lighting", "TECH_SPEC", "pdf", ("tech", "spec")):
+        DirectTemplate(_key("lighting", "TECH_SPEC", "pdf"), accepted_kinds=("tech", "spec")),
     _key("lighting", "TECH_SPEC", "xlsx", ("tech", "spec")):
         DirectTemplate(_key("lighting", "TECH_SPEC", "xlsx"), accepted_kinds=("tech", "spec")),
     _key("computers", "TECH_SPEC", "docx", ("tech", "spec")):
         DirectTemplate(_key("computers", "TECH_SPEC", "docx"), accepted_kinds=("tech", "spec")),
+    _key("computers", "TECH_SPEC", "pdf", ("tech", "spec")):
+        DirectTemplate(_key("computers", "TECH_SPEC", "pdf"), accepted_kinds=("tech", "spec")),
     _key("computers", "TECH_SPEC", "xlsx", ("tech", "spec")):
         DirectTemplate(_key("computers", "TECH_SPEC", "xlsx"), accepted_kinds=("tech", "spec")),
     _key("computers", "PRODUCT_SPECIFICATION", "xlsx", ("spec",)):
         DirectTemplate(_key("computers", "PRODUCT_SPECIFICATION", "xlsx"), accepted_kinds=("spec",)),
+    _key("computers", "PRODUCT_SPECIFICATION", "docx", ("spec", "tech")):
+        DirectTemplate(
+            _key("computers", "PRODUCT_SPECIFICATION", "docx"),
+            accepted_kinds=("spec", "tech"),
+        ),
+    _key("computers", "NMCK_JUSTIFICATION", "xlsx", ("spec", "tech")):
+        DirectTemplate(
+            _key("computers", "NMCK_JUSTIFICATION", "xlsx"),
+            accepted_kinds=("spec", "tech"),
+        ),
+    _key("lighting", "NMCK_JUSTIFICATION", "xlsx", ("spec", "tech")):
+        DirectTemplate(
+            _key("lighting", "NMCK_JUSTIFICATION", "xlsx"),
+            accepted_kinds=("spec", "tech"),
+        ),
     _key("flooring", "ESTIMATE", "xlsx", ("spec", "tech")):
         DirectTemplate(_key("flooring", "ESTIMATE", "xlsx"), accepted_kinds=("spec", "tech")),
     _key("cable_support_systems", "TECH_SPEC", "docx", ("tech", "spec")):
         DirectTemplate(
             _key("cable_support_systems", "TECH_SPEC", "docx"),
+            accepted_kinds=("tech", "spec"),
+        ),
+    _key("cable_support_systems", "TECH_SPEC", "pdf", ("tech", "spec")):
+        DirectTemplate(
+            _key("cable_support_systems", "TECH_SPEC", "pdf"),
             accepted_kinds=("tech", "spec"),
         ),
     _key("cable_support_systems", "TECH_SPEC", "xlsx", ("tech", "spec")):

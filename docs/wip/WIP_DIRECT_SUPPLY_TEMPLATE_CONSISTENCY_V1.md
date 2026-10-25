@@ -250,6 +250,41 @@ STRUCTURED_ENTITIES_WRITES=APPROVED_STRICT_FACTS
 HISTORICAL_FACTS_UNCHANGED=YES
 ```
 
+## Phase 3b — расширение supported templates
+
+Добавлены strict-шаблоны:
+
+```text
+TECH_SPEC pdf для lighting/computers/cable_support_systems
+PRODUCT_SPECIFICATION docx для computers
+NMCK_JUSTIFICATION xlsx для computers/lighting
+```
+
+Повторный download + dry-run:
+
+```text
+supported documents=124
+documents_with_facts=47
+strict_facts=160
+facts_missing_qty=0
+facts_missing_unit=0
+facts_bad_price_proof=0
+```
+
+Persist:
+
+```text
+created=4
+reused=156
+structured_facts 362482 -> 362486
+missing_qty=93722 (без изменений)
+missing_unit=84772 (без изменений)
+```
+
+Оставшиеся unsupported классы (`CONTRACT_PROJECT`, `LEGAL_GENERAL`,
+`PARTICIPANT_REQUIREMENTS`, `OTHER`, архивы) требуют отдельного решения:
+некоторые из них принципиально не должны давать товарные факты.
+
 ## Acceptance
 
 ```text
