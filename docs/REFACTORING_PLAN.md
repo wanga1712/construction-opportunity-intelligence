@@ -4431,6 +4431,151 @@ DB_WRITES=REPARSE_ONLY
 SCORING_MEDAL_QUEUE_UNCHANGED=YES
 ```
 
+## 2026-10-22 — queue unplanned repair after interrupted 03:00 sync
+
+Ночной `crm-procurement-sync` был прерван остановкой сервера, из-за чего
+в `document_processing_queue` осталось 701 строк
+`PENDING/PRE_RESEARCH_WAITING` без `selected_documents`. Document workers
+по P16 не берут такие строки, поэтому киоск показывал `допущено 0 /
+обработано 0`.
+
+Исправлено вручную:
+
+```text
+701 unplanned -> 120 claimable PENDING + 25 PROCESSING (на момент проверки);
+527 неисполнимых unplanned строк переведены в NO_LINKS
+  (last_error=REPAIR_UNPLANNED_NOT_CLAIMABLE);
+document_files восстановлены только для eligible pids через
+  resolve_document_links -> document_files -> build_queue_plan_v2.
+```
+
+Проверка:
+
+```text
+UNPLANNED_PIDS=0
+PENDING_HAS_SELECTED=true=120
+PROCESSING=25
+document worker journal: [QUEUE_V2] action=... selected=1 -> download -> COMPLETED
+```
+
+DB writes: `APPROVED_REPAIR_QUEUE_STATUS_AND_PLAN`.
+
+## 2026-10-25 — DIRECT_SUPPLY_TEMPLATE_CONSISTENCY_V1 — PHASE 1 DONE
+
+Зафиксирован WIP: DIRECT_SUPPLY и PROJECT/OBJECT должны иметь раздельные
+правила lifecycle, отображения и шаблонов извлечения фактов.
+
+```text
+DIRECT_SUPPLY:
+  короткий цикл, после закрытия не переводим в проектно-объектный follow-up,
+  не показываем как объектные «разыгранные», свой медальный lifecycle не заводим.
+
+PROJECT/OBJECT:
+  EMBEDDED_MATERIAL / DESIGN_REQUIREMENT / DESIGN_INFLUENCE,
+  отдельный lifecycle и свои медали.
+```
+
+Шаблоны извлечения:
+
+```text
+key = (category_code, opportunity_track, document_class, формат)
+```
+
+Обязательное правило факта:
+
+```text
+quantity + unit обязательны;
+price/total только через arithmetic proof;
+без quantity+unit факт не пишется;
+никаких fallback-догадок из ОКПД при отсутствии реальной строки.
+```
+
+WIP: `docs/wip/WIP_DIRECT_SUPPLY_TEMPLATE_CONSISTENCY_V1.md`.
+
+Phase 1 реализован и развёрнут: strict template registry, document_class
+context propagation, DIRECT-only facts, удалён generic fallback,
+Analytics AWARDED ограничен PROJECT/OBJECT, commercial portal разделён на
+`OPEN / AWARDED_FOLLOWUP / CLOSED_DIRECT`.
+
+Read-only audit:
+
+```text
+CURRENT_DIRECT_PAIRS=1322
+DOCUMENTS_CHECKED=187
+TEMPLATE_SUPPORTED=89
+TEMPLATE_UNSUPPORTED=98
+STRICT_FACTS_CURRENT_DIRECT=5041
+AWARDED_DIRECT_IN_LIVE_MARKET=0
+```
+
+Strict synthetic canary PASS. Реальный reparse не выполнялся: исходные файлы
+89 supported documents удалены retention'ом. Нужен out-of-order download,
+затем fact dry-run и отдельный approval на persist.
+
+Phase 2 DONE (download + dry-run): live inventory `94 contexts / 92 unique
+sources`; out-of-order download `92/92`, errors `0`; fact-only dry-run
+`156 strict facts`, missing qty/unit `0`, bad price proof `0`.
+`467984` PASS (`100 PCS`). `structured_entities` unchanged (`5041` before/after),
+persist ждёт отдельного approval.
+
+## 2026-10-22 — S13 post-boot health watchdog
+
+Добавлен дежурный post-boot/periodic watchdog, чтобы после принудительного
+выключения/включения сервер сам поднимал ядро и не оставлял pipeline без
+движения:
+
+```text
+deploy/crm-s13-post-boot-health.sh
+deploy/systemd/crm-s13-post-boot-health.service
+deploy/systemd/crm-s13-post-boot-health.timer
+```
+
+Watchdog:
+
+```text
+ждёт S7 DB/Tailscale до 5 минут;
+поднимает core CRM/document/kiosk units;
+восстанавливает timers;
+после boot рестартует factual-feeder и shadow-predictor после S7;
+проверяет dashboard HTTP 8897;
+логирует QUEUE_UNPLANNED_ROWS.
+```
+
+Timer: `OnBootSec=5min`, `OnUnitActiveSec=10min`.
+
+## 2026-10-22 — software/license/IT-service procurement suppression
+
+Закупка `467596` (ПО, лицензии, ИБ-услуги) ошибочно классифицировалась как
+`WORKS_WITH_EMBEDDED_PRODUCTS` и попадала в current opportunities.
+
+Исправлено:
+
+```text
+scope_authority: PURE_SERVICE / EXCLUDED
+  reason=NON_INTERESTING_SOFTWARE_LICENSES_SERVICES
+opportunity 17252: commercial_state=SUPPRESSED, status=SUPERSEDED
+```
+
+Добавлено детерминированное правило в
+`src/services/pre_research_scope_gate.py`:
+
+```text
+программное обеспечение / лицензии / неисключительные права /
+информационная безопасность / техническая поддержка / сертификаты ТП
++ работы или услуги
+-> PURE_SERVICE
+```
+
+Deploy: S13 `/opt/CRM_Streamlit/src/services/pre_research_scope_gate.py`,
+backup `.bak-20261022`.
+
+Следом подавлены 27 похожих current opportunities (29 строк opportunities)
+с теми же software/license/IT-service маркерами.
+
+Ретро-аудит по всем `crm_procurements`: совпадений `1057`; из них
+`373` имели scope-authority строку. Все `373` переведены в
+`PURE_SERVICE / EXCLUDED`, `40` opportunities — в `SUPERSEDED / SUPPRESSED`.
+
 ## 2026-10-21 — KISOK_ANALYTICS_METRICS_REDESIGN_V1 — DONE
 
 Физический kiosk (`/usr/local/bin/s13_dashboard3.py`) вместо технического
@@ -4583,6 +4728,37 @@ Daily-work screenshot:
 `docs/reports/s13_kiosk_command_center_v2/kiosk.daily_work_progress.1920x1080.png`.
 WIP: `docs/wip/WIP_S13_KIOSK_METRIC_SEMANTICS_FIX_V1.md`.
 
+## 2026-10-21 — PIPELINE_BATCH_PARALLEL_EXECUTION_V1 (P15) — DONE
+
+Pipeline stages получили явные batch и parallel limits:
+
+- document batch `50`: `open=10`, остальные 8 workers по `5`;
+- global download concurrency `4` через существующий
+  `DownloadCoordinator`;
+- OCR normal `4`, при CPU load/cpu ≥ `0.9` снижается до `2`;
+- model batch `50` с gate `parsed_candidates >= 50`;
+- validator batch `50`; validator остаётся disabled;
+- continuous second-pass worker переведён в manual oneshot batch50 и
+  disabled;
+- AI timer остаётся daily; AI/validator/second-pass services inactive,
+  GPU compute apps отсутствуют.
+
+Проверки:
+
+```text
+PIPELINE_STAGES_ISOLATED=YES
+DOWNLOAD_PARSE_PARALLEL=YES
+MODEL_BATCH=50
+DOCUMENT_BATCH=50
+GPU_NOT_USED_FOR_DOCUMENT_PARSING=YES
+AI_RUNS_IN_WINDOW_NOT_CONTINUOUS=YES
+MODEL_GATE=880_PARSED_PASS
+DB_WRITES=APPROVED_ONLY
+SCORING_MEDAL_QUEUE_UNCHANGED=YES
+```
+
+WIP: `docs/wip/WIP_PIPELINE_BATCH_PARALLEL_EXECUTION_V1.md`.
+
 ## 2026-10-21 — STALE_PROCESSING_CLEANUP_V1 (P16) — DONE
 
 Устранены залипшие document queue tasks без выбранных документов:
@@ -4644,16 +4820,19 @@ WIP: `docs/wip/WIP_RESOURCE_PRIORITY_DOC_PIPELINE_FIRST_V1.md`.
 
 AI переведён с непрерывного 45-секундного poll на ежедневный batch:
 
-- `crm-procurement-sync.timer` — 03:00, `Persistent=false`;
-- `crm-ai-assessment-runner.timer` — 03:30, `Persistent=false`;
+- `crm-procurement-sync.timer` — 08:45, `Persistent=false`;
+- `crm-ai-assessment-runner.timer` — 09:00, `Persistent=false`;
 - runner: batch limit 300, internal runtime cap 3h;
 - systemd `TimeoutStartSec=3h30m`;
 - `CRM_V3_OLLAMA_KEEP_ALIVE=5m`;
 - idle Qwen model выгружена, GPU memory освобождена;
-- S13 wake перенесён на 02:55, иначе timers пропускались бы из-за
-  nightly suspend;
+- S13 wake — 08:30, иначе timers пропускались бы из-за nightly suspend;
 - resume-hook восстанавливает timers, но не запускает AI service вне окна;
 - runner и validator остаются inactive; validator authority не менялся.
+
+Correction 2026-10-22: владелец подтвердил, что ночной сон 23:00–06:00
+обязателен, поэтому wake/sync/AI перенесены на 08:30/08:45/09:00 вместо
+02:55/03:00/03:30.
 
 Acceptance:
 
@@ -4715,6 +4894,44 @@ SCORING_MEDAL_QUEUE_UNCHANGED=YES
 Screenshot:
 `docs/reports/s13_kiosk_command_center_v2/kiosk.model_current_opportunity_pool.1920x1080.png`.
 WIP: `docs/wip/WIP_MODEL_CANDIDATE_POOL_SCOPE_V1.md`.
+
+## 2026-10-21 — KISOK_PIPELINE_DAILY_METRICS_V1 (P12) — DONE
+
+Физический kiosk-дашборд разделил физические распарсенные файлы и
+queue-задачи, а модель показывает явный вход в модель и результаты
+валидации:
+
+- `Распарсено файлов сегодня` из `document_processing_results`
+  (`status='COMPLETED'`, `coalesce(completed_at, created_at) >= current_date`);
+- `Очередь задач завершено` из `document_processing_queue`
+  (`status='COMPLETED'`, `completed_at >= current_date`);
+- `Ушло в модель сегодня` из `document_matches.created_at >= current_date`
+  через `document_match_details`;
+- `Подтверждено / Отклонено / Не определено` из model candidate pool
+  валидационных статусов;
+- скорость по документам — последние 30 завершённых queue-задач; при
+  недостаточной выборке отображается `н/д`, а не 0.
+
+Изменён только `deploy/s13_dashboard3.py`; `DB_WRITES=0`.
+Проверка: `python -m py_compile deploy/s13_dashboard3.py` — OK.
+Deploy: `/usr/local/bin/s13_dashboard3.py` обновлён, backup
+`/usr/local/bin/s13_dashboard3.py.bak-p12-20261021`, оба dashboard/kiosk
+`active`, local/deployed SHA256 совпадают. API smoke:
+`documents.parsed_today=45`, `model.sent_today=952`,
+`documents.done_today=14`.
+
+Acceptance:
+
+```text
+PARSED_FILES_TODAY_VISIBLE=YES
+MODEL_SENT_TODAY_VISIBLE=YES
+MODEL_CONFIRMED_REJECTED_VISIBLE=YES
+SPEED_NONE_IS_HONEST=YES
+FAKE_SPEED=0
+DB_WRITES=0
+```
+
+WIP: `docs/wip/WIP_KISOK_PIPELINE_DAILY_METRICS_V1.md`.
 
 ## 2026-10-20 — DIRECT_SUPPLY_GOODS_COVERAGE_V1 Phase 2 — DRY-RUN DONE
 

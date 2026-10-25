@@ -529,7 +529,12 @@ def _mode_sql(mode: str) -> tuple[str, tuple]:
     if mode == OPEN_TORGI:
         return " AND o.commercial_state = %s", ("ACTIVE",)
     if mode == AWARDED_TYPE:
-        return " AND o.commercial_state = %s", ("FOLLOW_UP_AWARDED",)
+        return (
+            " AND o.commercial_state = %s"
+            " AND o.opportunity_track IN"
+            " ('EMBEDDED_MATERIAL','DESIGN_REQUIREMENT','DESIGN_INFLUENCE')",
+            ("FOLLOW_UP_AWARDED",),
+        )
     if mode == DIRECT_SUPPLY:
         return " AND o.opportunity_track = %s", (DIRECT_SUPPLY,)
     if mode == EMBEDDED_MATERIAL:

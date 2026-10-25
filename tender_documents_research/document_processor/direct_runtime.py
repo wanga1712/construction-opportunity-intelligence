@@ -14,6 +14,7 @@ reuse the same normalizer + persistence contract, so both tracks land in the sam
 from __future__ import annotations
 
 import importlib.util
+import logging
 import os
 import re
 from pathlib import Path
@@ -25,6 +26,9 @@ from .estimate_value_mapping import (
     quantity_for_unit,
     select_arithmetic_pair,
 )
+from .direct_template_registry import resolve_direct_template_for_path
+
+logger = logging.getLogger("direct_runtime")
 
 DIRECT_EXTRACTOR_PATH = os.getenv(
     "DIRECT_EXTRACTOR_PATH", "/opt/CRM_Streamlit/src/services/direct_document_extractor.py"
@@ -83,8 +87,9 @@ def direct_facts(
     physical_key: Optional[str],
     text: Optional[str] = None,
     line_meta: Optional[Dict[int, Any]] = None,
+    document_class: Optional[str] = None,
 ) -> List[Any]:
-    """DIRECT facts via explicit column mapping (never price-as-quantity)."""
+    """DIRECT facts via strict category/track/class/format template."""
     from document_processor.embedded_extraction import (
         ExtractedFact,
         extract_facts,
@@ -95,6 +100,19 @@ def direct_facts(
         split_quantity_unit,
     )
 
+    template = resolve_direct_template_for_path(
+        path,
+        category_code=category_code,
+        opportunity_track="DIRECT_SUPPLY",
+        document_class=document_class,
+    )
+    if template is None:
+        logger.info(
+            "DIRECT template not found: category=%s class=%s format=%s doc=%s",
+            category_code, document_class, path.suffix.lower(), document_name,
+        )
+        return []
+
     module = _load_module()
     facts: List[ExtractedFact] = []
     seen: set = set()
@@ -103,7 +121,7 @@ def direct_facts(
             tables = module.extract_tables([str(path)]) or {}
         except Exception:
             tables = {}
-        for kind in ("spec", "tech", "requirements"):
+        for kind in template.accepted_kinds:
             for row in tables.get(kind, []) or []:
                 cells = [str(c).strip() for c in (row.get("cells") or [])]
                 header = [str(h).strip().lower() for h in (row.get("header") or [])]
@@ -163,6 +181,12 @@ def direct_facts(
                     unit_raw = _nearest_unit(
                         cells, qty_index, name_indexes + price_indexes + total_indexes
                     )
+                if raw_qty is None or unit_raw is None:
+                    trailing_qty, trailing_unit = _trailing_qty_unit(cells)
+                    if raw_qty is None:
+                        raw_qty = trailing_qty
+                    if unit_raw is None:
+                        unit_raw = trailing_unit
 
                 unit_norm, family = normalize_unit(unit_raw)
                 qty = quantity_for_unit(raw_qty, unit_norm)
@@ -198,10 +222,7 @@ def direct_facts(
                 else:
                     layout_status = "UNSUPPORTED_LAYOUT"
 
-                if qty is None:
-                    unit_price = line_total = None
-                    layout_status = "UNSUPPORTED_LAYOUT"
-                if raw_qty is None and not prices and not totals:
+                if qty is None or not unit_norm:
                     continue
                 quote = " | ".join(cells)[:500]
                 if "составляет" in quote.lower() or "рублей" in quote.lower() and " | " not in quote:
@@ -235,40 +256,7 @@ def direct_facts(
                 seen.add(fact.entity_fingerprint)
                 facts.append(fact)
 
-    # Preserve broad row coverage while keeping the richer DIRECT mapping.
-    generic_facts = []
-    if path.suffix.lower() in (".xlsx", ".xlsm"):
-        from .smeta_forma_4b import detect_forma_4b, read_estimate, xlsx_sheet_names
-        from .xlsx_table_reader import read_tables
-        from .embedded_extraction import facts_from_table_rows
-
-        rows = (
-            read_estimate(path)
-            if detect_forma_4b(xlsx_sheet_names(path))
-            else read_tables(path)
-        )
-        generic_facts = facts_from_table_rows(
-            procurement_id=procurement_id,
-            category_code=category_code,
-            document_name=document_name,
-            rows=rows,
-            source_document_id=source_document_id,
-            physical_key=physical_key,
-        )
-    else:
-        generic_text = text or build_direct_text(path)
-        if generic_text:
-            generic_facts = extract_facts(
-                procurement_id=procurement_id,
-                category_code=category_code,
-                document_name=document_name,
-                text=generic_text,
-                line_meta=line_meta,
-                source_document_id=source_document_id,
-                physical_key=physical_key,
-                category_keywords=(),
-            )
-    return _merge_fact_sets(facts, generic_facts)
+    return facts
 
 
 def _normalized_quote(value: Any) -> str:
@@ -362,6 +350,25 @@ def _nearest_unit(
         if normalized:
             candidates.append((abs(idx - anchor), idx, cell))
     return min(candidates)[2] if candidates else None
+
+
+def _trailing_qty_unit(cells: List[str]) -> tuple[Optional[float], Optional[str]]:
+    """Recover merged-header layouts where unit+qty occupy the row tail."""
+    unit_index = None
+    unit_raw = None
+    for idx in range(len(cells) - 1, -1, -1):
+        normalized, _family = normalize_unit(cells[idx])
+        if normalized:
+            unit_index = idx
+            unit_raw = cells[idx]
+            break
+    if unit_index is None:
+        return None, None
+    for value in cells[unit_index + 1:]:
+        quantity = parse_number(value)
+        if quantity is not None:
+            return quantity, unit_raw
+    return None, unit_raw
 
 
 def _cell(cells: List[str], idx: int) -> str:

@@ -1,7 +1,9 @@
 # Document Processor — README модуля
 
-> Сервер 13 · `/opt/tender_documents_research/document_processor/`  
-> Обновлён: 2026-08-04
+> Архитектурный снимок ниже частично описывает состояние на 2026-08-04 и не
+> является источником истины для topology, БД, workers или доступа. Актуальная
+> карта: [`docs/PROJECT_OVERVIEW_AND_AUDIT.md`](../../docs/PROJECT_OVERVIEW_AND_AUDIT.md),
+> authority доступа: [`docs/PROJECT_OPERATING_RULES.md`](../../docs/PROJECT_OPERATING_RULES.md).
 
 ---
 
@@ -125,12 +127,16 @@ predicted_gold_probability = f(commercial_scale, deadline_feasibility, category_
 | `queue_priority_calculator.py` | Формула P0-P4, `PriorityInput/Result` |
 | `priority_recalculator.py` | Ежедневный пересчёт всех pending-строк |
 | `crm_queue_bridge.py` | CRM → document_processing_queue |
-| `document_downloader.py` | Скачивание, checksum, архивы |
-| `document_parser.py` | Текст, таблицы, OCR |
+| `downloader.py` | Скачивание, checksum, архивы |
+| `parser_factory.py`, `parsers/` | Текст, таблицы, Office, PDF и OCR |
 
 ---
 
-## 11. База данных (сервер 7, БД tender_monitor)
+## 11. База данных
+
+Canonical document intelligence DB, runtime role и DDL route определены в
+`docs/PROJECT_OPERATING_RULES.md`. Не использовать старую топологию из истории
+этого файла.
 
 **Основная таблица:** `document_processing_queue`
 
@@ -163,15 +169,10 @@ WHERE status='pending';
 
 ---
 
-## 13. SSH доступ
+## 13. Доступ и эксплуатация
 
-```bash
-# Прямо на сервер 13 через прокси сервер 7
-ssh -i ~/.ssh/<SSH_IDENTITY> -o ProxyJump=<S7_SSH_USER>@S7 <S13_SSH_USER>@S13
-
-# Логи воркера
-journalctl -u tender-docs-daemon-open.service -n 50 --no-pager
-
-# Рестарт
-sudo systemctl restart tender-docs-daemon-open.service
-```
+Не копировать SSH-команды из исторических отчётов. Перед любым подключением,
+просмотром production logs или изменением unit прочитать полностью
+`docs/PROJECT_OPERATING_RULES.md` и использовать только подтверждённую там
+identity/configuration. Список unit/drop-in файлов в репозитории не доказывает
+их фактическую активность.

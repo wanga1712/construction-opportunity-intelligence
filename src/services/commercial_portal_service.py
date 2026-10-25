@@ -54,7 +54,9 @@ WITH opp AS (
 ), market AS (
     SELECT sa.procurement_id,
            CASE WHEN sa.source_lifecycle = 'OPEN' THEN 'OPEN'
-                ELSE 'AWARDED_FOLLOWUP' END                                    AS segment,
+                WHEN coalesce(o.has_project_embedded, false)
+                  THEN 'AWARDED_FOLLOWUP'
+                ELSE 'CLOSED_DIRECT' END                                       AS segment,
            sa.source_lifecycle,
            sa.procurement_scope_type,
            sa.admission_state,
@@ -76,6 +78,7 @@ _METRICS_SQL = UNIVERSE_SQL + """
 SELECT 'COMMERCIAL_UNIVERSE_DISTINCT' AS metric, count(*)::bigint AS value FROM market
 UNION ALL SELECT 'OPEN_DISTINCT',             count(*) FROM market WHERE segment = 'OPEN'
 UNION ALL SELECT 'AWARDED_FOLLOWUP_DISTINCT', count(*) FROM market WHERE segment = 'AWARDED_FOLLOWUP'
+UNION ALL SELECT 'CLOSED_DIRECT_DISTINCT',    count(*) FROM market WHERE segment = 'CLOSED_DIRECT'
 UNION ALL SELECT 'WITH_COMMERCE',             count(*) FROM market WHERE has_commerce
 UNION ALL SELECT 'WITHOUT_COMMERCE',          count(*) FROM market WHERE NOT has_commerce
 UNION ALL SELECT 'DIRECT_SUPPLY',             count(*) FROM market WHERE has_direct_supply
@@ -135,9 +138,10 @@ SELECT segment, procurement_scope_type, count(*)::bigint AS procurements
             "unit": "DISTINCT_PROCUREMENT_ID",
             "metrics": values,
             "invariants": {
-                "open_plus_awarded_eq_universe": (
+                "open_awarded_closed_direct_eq_universe": (
                     values.get("OPEN_DISTINCT", 0)
-                    + values.get("AWARDED_FOLLOWUP_DISTINCT", 0) == universe),
+                    + values.get("AWARDED_FOLLOWUP_DISTINCT", 0)
+                    + values.get("CLOSED_DIRECT_DISTINCT", 0) == universe),
                 "commerce_split_eq_universe": (
                     values.get("WITH_COMMERCE", 0)
                     + values.get("WITHOUT_COMMERCE", 0) == universe),

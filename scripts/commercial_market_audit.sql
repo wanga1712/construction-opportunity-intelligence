@@ -43,7 +43,9 @@ SELECT procurement_id,
 -- Commercial universe = live market segments (disjoint by admission state).
 CREATE TEMP VIEW audit_market AS
 SELECT sa.procurement_id,
-       CASE WHEN sa.source_lifecycle = 'OPEN' THEN 'OPEN' ELSE 'AWARDED_FOLLOWUP' END AS segment,
+       CASE WHEN sa.source_lifecycle = 'OPEN' THEN 'OPEN'
+            WHEN coalesce(o.has_project_embedded, false) THEN 'AWARDED_FOLLOWUP'
+            ELSE 'CLOSED_DIRECT' END AS segment,
        sa.source_lifecycle,
        sa.procurement_scope_type,
        sa.admission_state,
@@ -63,6 +65,7 @@ SELECT sa.procurement_id,
 SELECT 'COMMERCIAL_UNIVERSE_DISTINCT' AS metric, count(*)::bigint AS value FROM audit_market
 UNION ALL SELECT 'OPEN_DISTINCT',             count(*) FROM audit_market WHERE segment = 'OPEN'
 UNION ALL SELECT 'AWARDED_FOLLOWUP_DISTINCT', count(*) FROM audit_market WHERE segment = 'AWARDED_FOLLOWUP'
+UNION ALL SELECT 'CLOSED_DIRECT_DISTINCT',    count(*) FROM audit_market WHERE segment = 'CLOSED_DIRECT'
 UNION ALL SELECT 'WITH_COMMERCE',             count(*) FROM audit_market WHERE has_commerce
 UNION ALL SELECT 'WITHOUT_COMMERCE',          count(*) FROM audit_market WHERE NOT has_commerce
 UNION ALL SELECT 'DIRECT_SUPPLY',             count(*) FROM audit_market WHERE has_direct_supply
@@ -78,7 +81,8 @@ ORDER BY 1;
 SELECT
   (SELECT count(*) FROM audit_market WHERE segment = 'OPEN')
     + (SELECT count(*) FROM audit_market WHERE segment = 'AWARDED_FOLLOWUP')
-      = (SELECT count(*) FROM audit_market)                        AS open_plus_awarded_eq_universe,
+    + (SELECT count(*) FROM audit_market WHERE segment = 'CLOSED_DIRECT')
+      = (SELECT count(*) FROM audit_market)                        AS open_awarded_closed_direct_eq_universe,
   (SELECT count(*) FROM audit_market WHERE has_commerce)
     + (SELECT count(*) FROM audit_market WHERE NOT has_commerce)
       = (SELECT count(*) FROM audit_market)                        AS commerce_split_eq_universe,

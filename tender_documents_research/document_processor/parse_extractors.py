@@ -250,6 +250,7 @@ def extract_and_persist(
     physical_key: Optional[str] = None,
     line_meta: Optional[Dict[int, Any]] = None,
     track: Optional[str] = None,
+    document_class: Optional[str] = None,
 ) -> Dict[str, int]:
     """Best-effort parse-time extraction; never raises.
 
@@ -288,6 +289,7 @@ def extract_and_persist(
                 result["embedded"] = _persist_embedded(
                     conn, path, text, line_meta, int(procurement_id), name,
                     category_code, source_document_id, physical_key, track,
+                    document_class,
                 )
                 try:
                     from document_processor.embedded_persistence import record_outcome
@@ -330,6 +332,7 @@ def _persist_embedded(
     source_document_id: Optional[int],
     physical_key: Optional[str],
     track: Optional[str] = None,
+    document_class: Optional[str] = None,
 ) -> int:
     """Run the category-bound extractor during parsing (file still on disk)."""
     try:
@@ -346,6 +349,7 @@ def _persist_embedded(
                 document_name=document_name, source_document_id=source_document_id,
                 physical_key=physical_key,
                 text=text, line_meta=line_meta,
+                document_class=document_class,
             )
             if not facts:
                 return 0

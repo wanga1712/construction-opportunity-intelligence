@@ -2,8 +2,16 @@
 
 > **Canonical hosts, operators, SSH/DB/service identities and access rules:**
 > [docs/PROJECT_OPERATING_RULES.md](docs/PROJECT_OPERATING_RULES.md).
+> **Полная карта текущего проекта и аудит согласованности:**
+> [docs/PROJECT_OVERVIEW_AND_AUDIT.md](docs/PROJECT_OVERVIEW_AND_AUDIT.md).
+> **План согласования модулей, устранения дублей и файлов >450 строк:**
+> [docs/MODULE_CONSISTENCY_REFACTORING_PLAN.md](docs/MODULE_CONSISTENCY_REFACTORING_PLAN.md).
 > **Refactoring & launch plan:** [docs/REFACTORING_PLAN.md](docs/REFACTORING_PLAN.md) / [docs/CRM_V3_LAUNCH_ROADMAP.md](docs/CRM_V3_LAUNCH_ROADMAP.md).
 > **Analytics Contour V2 UI rebuild:** [docs/ANALYTICS_CONTOUR_V2_UI_REBUILD_PLAN.md](docs/ANALYTICS_CONTOUR_V2_UI_REBUILD_PLAN.md).
+>
+> **Текущее UI-состояние (2026-10-25):** стартовый экран — таблица закупок
+> (`table_workspace`). Analytics V2 сохранён как скрытый legacy/deep-link
+> route; актуальная навигация определяется `src/ui/nav.py`.
 >
 > ### UI Contract (краткий)
 >
@@ -367,7 +375,11 @@ AI CARD SESSION (Интерактивная сессия пользовател�
 
 ## 5. Запуск и тестирование
 
-```bash
+```powershell
+# Python >=3.13,<3.14; CRM_SOURCE_ROOT должен указывать на существующий
+# внешний исходник, а runtime-параметры берутся из корневого .env.
+python -m pip install -r requirements.txt
+
 # Запуск тестов обучения, таксономии и контрактов приоритета
 $env:PYTHONPATH="."
 python -m pytest tests/test_okpd_prior_learning.py tests/test_okpd_admission.py tests/test_taxonomy_service.py -v
@@ -375,3 +387,8 @@ python -m pytest tests/test_okpd_prior_learning.py tests/test_okpd_admission.py 
 # Запуск Streamlit на альтернативном dev-порту (теневой режим)
 streamlit run app.py --server.port 8503
 ```
+
+Дополнительные профили зависимостей находятся в
+`requirements-learning.txt` и `tender_documents_research/requirements.txt`.
+Команды тестов выше документированы, но в рамках аудита от 2026-10-25 не
+запускались.

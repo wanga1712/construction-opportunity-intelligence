@@ -47,6 +47,31 @@ PENDING, но unclaimable. Это не относится к GSFX parser.
 4. Проверить, почему `active-production-loop` inactive — это отдельный факт,
    но не причина 0 клеймов для claimable строк.
 
+## Приоритетная подзадача: rebuild CURRENT → Queue V2
+
+Есть коммерчески CURRENT opportunities, у которых документная строка осталась
+legacy/SKIPPED_NOT_TARGET/unadmitted. Их надо пересоздавать по текущим правилам,
+но **не «все строки БД», а только актуальные CURRENT opportunities**.
+
+Порядок:
+
+1. Read-only reconciliation:
+
+```text
+CRM: crm_procurement_category_opportunities.status='CURRENT'
+     research_action in document-research actions
+DI:  document_processing_queue строки по procurement_id
+```
+
+2. Для каждой CURRENT opportunity определить, нужен ли document research, и
+   построить Queue V2 payload через текущий `build_queue_v2_plan`.
+3. Dry-run: посчитать закупки, документы, предполагаемый HTTP-объём.
+4. Поставить в очередь батчами с admission/plan, не меняя scoring/medal.
+5. Сначала узкая canary (например 60467 + N похожих), потом остальные.
+
+Это расширяет текущий WIP и снимает разрыв «карточка видит CURRENT, а документный
+демон не видит задачу».
+
 ## Acceptance
 
 ```text

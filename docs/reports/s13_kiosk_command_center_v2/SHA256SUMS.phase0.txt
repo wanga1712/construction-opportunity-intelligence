@@ -1,0 +1,2 @@
+﻿99126063b63971face5a09609114616ba3dc7b1004906ed6109d7f51b16c2153  C:\Users\Lenovo\Projects\CRM_Streamlit\deploy\s13_dashboard3.py
+43cc0a95c583d06e01d538e3f37230a4c60bd8acc9284612bc30d6472086cdad  C:\Users\Lenovo\Projects\CRM_Streamlit\deploy\s13_kiosk_start.sh

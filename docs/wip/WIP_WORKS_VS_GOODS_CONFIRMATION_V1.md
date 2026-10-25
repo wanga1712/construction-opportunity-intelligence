@@ -1,6 +1,6 @@
 # WIP WORKS_VS_GOODS_CONFIRMATION_V1 — подтверждать только товаром, а не работами
 
-Status: CORE DONE (`3e73b10`); перед CARD_MEDAL нужен follow-up карточки.
+Status: DONE (`1b79397`).
 Owner: подтверждение категорий и «что можно поставить» в карточке.
 
 Полная спека: `.codex_worktrees/works_vs_goods_confirmation_v1/WIP.md`.

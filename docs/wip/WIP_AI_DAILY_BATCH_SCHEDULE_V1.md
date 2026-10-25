@@ -47,14 +47,14 @@ GPU освобождается после батча
 
 ## Реализовано
 
-- `crm-procurement-sync.timer`: `OnCalendar=*-*-* 03:00:00`,
+- `crm-procurement-sync.timer`: `OnCalendar=*-*-* 08:45:00`,
   `Persistent=false`;
-- `crm-ai-assessment-runner.timer`: `OnCalendar=*-*-* 03:30:00`,
+- `crm-ai-assessment-runner.timer`: `OnCalendar=*-*-* 09:00:00`,
   `Persistent=false`; `OnUnitActiveSec=45s` и `OnBootSec` удалены;
 - AI batch: `--limit 300 --max-runtime-sec 10800`;
 - hard systemd cap: `TimeoutStartSec=12600` (3h30m);
 - `CRM_V3_OLLAMA_KEEP_ALIVE=5m`, чтобы GPU освобождался после батча;
-- power schedule: RTC wake перенесён на 02:55 через
+- power schedule: RTC wake — на 08:30 через
   `crm-s13-daily-batch-suspend`; resume-hook восстанавливает timers,
   но больше не запускает `crm-ai-assessment-runner.service` напрямую;
 - validator authority и его stopped-state не менялись.
@@ -66,10 +66,39 @@ crm-ai-assessment-runner.timer=active/enabled
 crm-ai-assessment-runner.service=inactive
 crm-v3-context-validator.service=inactive
 crm-procurement-sync.timer=active/enabled
-NEXT_SYNC=2026-10-22 03:00 MSK
-NEXT_AI_BATCH=2026-10-22 03:30 MSK
+NEXT_SYNC=2026-10-23 08:45 MSK
+NEXT_AI_BATCH=2026-10-23 09:00 MSK
 NEXT_SUSPEND=2026-10-21 23:00 MSK
-NEXT_WAKE=2026-10-22 02:55 MSK
+NEXT_WAKE=2026-10-23 08:30 MSK
+```
+
+## CORRECTION 2026-10-22 — сон 23:00–06:00 не трогаем
+
+Владелец подтвердил: сервер должен спать с 23:00 до 06:00, пробуждение
+на 02:55/03:00 недопустимо. Поэтому sync и AI перенесены на время после
+пробуждения:
+
+```text
+RTC wake: 08:30 MSK
+sync:     08:45 MSK
+AI batch: 09:00 MSK
+suspend:  23:00 MSK
+```
+
+Изменения:
+
+```text
+/etc/systemd/system/crm-procurement-sync.timer
+/etc/systemd/system/crm-ai-assessment-runner.timer
+/usr/local/sbin/crm-s13-daily-batch-suspend
+```
+
+Backups:
+
+```text
+/etc/systemd/system/crm-procurement-sync.timer.bak-prewake-20261022
+/etc/systemd/system/crm-ai-assessment-runner.timer.bak-prewake-20261022
+/usr/local/sbin/crm-s13-daily-batch-suspend.bak-prewake-20261022
 ```
 
 GPU после остановки idle-модели:

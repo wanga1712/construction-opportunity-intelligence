@@ -1,0 +1,17 @@
+{
+  "by_category": {
+    "cable_support_systems": 16,
+    "computers": 123,
+    "lighting": 17
+  },
+  "documents": 94,
+  "documents_missing": 0,
+  "documents_present": 94,
+  "documents_with_facts": 46,
+  "documents_without_facts": 48,
+  "facts": 156,
+  "facts_bad_price_proof": 0,
+  "facts_missing_qty": 0,
+  "facts_missing_unit": 0,
+  "failures": []
+}

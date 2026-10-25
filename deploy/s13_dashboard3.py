@@ -405,6 +405,15 @@ def model_candidate_pool_metrics():
         out.update({"raw_waiting_rows":i(rr[0][0]),
                     "raw_working_rows":i(rr[0][1]),
                     "raw_done_today":i(rr[0][2])})
+    sent_sql="""
+        SELECT count(*)
+          FROM document_matches m
+          JOIN document_match_details d ON d.match_id = m.id
+         WHERE m.created_at >= current_date
+    """
+    sr=i(pq("document_intelligence",sent_sql,40))
+    if sr is not None:
+        out["sent_today"]=sr
 
     val_job_sql=f"""
         WITH recent AS (
@@ -438,10 +447,11 @@ def command_center_metrics():
     out={"available":True,
          "today":{},"yesterday":{},"delta":{},
          "documents":{"waiting":None,"working":None,"done_today":None,
+                      "parsed_today":None,
                       "errors":None,"no_links":None,"throughput_per_hour":None},
          "model":{"unit":"PROCUREMENT_X_CATEGORY","waiting":None,"working":None,
                   "raw_waiting_rows":None,"raw_working_rows":None,
-                  "done_today":None,"raw_done_today":None,
+                  "done_today":None,"raw_done_today":None,"sent_today":None,
                   "confirmed_today":None,"rejected_today":None,"unknown_today":None,
                   "throughput_per_hour":None},
          "commercial":{"objects":None,"with_commerce":None,"document_confirmed":None,
@@ -547,6 +557,16 @@ def command_center_metrics():
             out["documents"].update({"waiting":i(dr[0][0]),"working":i(dr[0][1]),
                                      "done_today":i(dr[0][2]),"errors":i(dr[0][3]),
                                      "no_links":i(dr[0][4])})
+        parsed_sql="""
+        SELECT count(*) FILTER (
+                 WHERE status='COMPLETED'
+                   AND coalesce(completed_at, created_at) >= current_date)
+          FROM document_processing_results
+         WHERE pipeline_generation='S13_V4_EXHAUSTIVE_CONTEXT'
+        """
+        pr=i(pq("document_intelligence",parsed_sql,30))
+        if pr is not None:
+            out["documents"]["parsed_today"]=pr
         job_sql="""
         WITH last_jobs AS (
           SELECT completed_at FROM document_processing_queue
@@ -996,8 +1016,8 @@ async function tick(){try{const m=await (await fetch('/api/metrics')).json(),cmd
  const acts=[['Задачи документов завершены',dt.processed,'procurements'],['AI assessed',t.model_processed,'procurements'],['Validated match details',mo.raw_done_today,'match details'],['Commercial results',co.result_today,'procurements']];
  $('activity').innerHTML=acts.map(a=>`<div class="activity"><b>${nn(a[1])}</b><span>${a[0]} · ${a[2]}</span></div>`).join('');
  const docRate=d.throughput_per_hour,docEta=(docRate>0&&d.waiting>0)?d.waiting/docRate:null;
- $('docpipe').innerHTML=`<div class="tiny">1 задача = 1 procurement queue job; не физический документ</div>`+line('Задач ожидают',nn(d.waiting))+line('Задач в работе',nn(d.working))+line('Задач готово сегодня',nn(d.done_today))+line('Ошибок в backlog',nn(d.errors))+line('Скорость',docRate==null?'н/д':num1(docRate)+' задач/час')+line('Хвост',fmtEta(docEta))+`<div class="tiny">throughput: последние 30 завершённых задач</div>`;
- $('modelpipe').innerHTML=`<div class="tiny">кандидатов (procurement × category) · current opportunities ${nn(mo.current_opportunity_pairs)}</div>`+line('Кандидатов ожидают',nn(mo.waiting))+line('Сейчас в работе',nn(mo.working))+line('Проверено сегодня',nn(mo.done_today))+line('Подтверждено сегодня',nn(mo.confirmed_today))+line('Отклонено сегодня',nn(mo.rejected_today))+line('Не определено сегодня',nn(mo.unknown_today))+line('Скорость',mo.throughput_per_hour==null?'н/д':num1(mo.throughput_per_hour)+' кандидатов/час')+`<div class="tiny">source=RESEARCHABLE · GOODS only · raw backlog → <a class="tech-link" href="/tech">TECH</a></div>`;
+ $('docpipe').innerHTML=`<div class="tiny">файлы: document_processing_results · задачи: queue jobs</div>`+line('Распарсено файлов сегодня',nn(d.parsed_today))+line('Очередь задач завершено',nn(d.done_today))+line('Задач ожидают',nn(d.waiting))+line('Задач в работе',nn(d.working))+line('Ошибок в backlog',nn(d.errors))+line('Скорость',docRate==null?'н/д':num1(docRate)+' задач/час')+line('Хвост',fmtEta(docEta))+`<div class="tiny">скорость: последние 30 завершённых задач; нет данных за окно → н/д</div>`;
+ $('modelpipe').innerHTML=`<div class="tiny">кандидатов (procurement × category) · current opportunities ${nn(mo.current_opportunity_pairs)}</div>`+line('Кандидатов ожидают',nn(mo.waiting))+line('Сейчас в работе',nn(mo.working))+line('Ушло в модель сегодня',nn(mo.sent_today))+line('Подтверждено сегодня',nn(mo.confirmed_today))+line('Отклонено сегодня',nn(mo.rejected_today))+line('Не определено сегодня',nn(mo.unknown_today))+line('Скорость',mo.throughput_per_hour==null?'н/д':num1(mo.throughput_per_hour)+' кандидатов/час')+`<div class="tiny">source=RESEARCHABLE · GOODS only · raw backlog → <a class="tech-link" href="/tech">TECH</a></div>`;
  const aw=dk.awarded_today||{};
  const live=co.live_total,excluded=co.excluded_count,excludedLink=excluded?` · вне live cohort ${nn(excluded)} → <a class="tech-link" href="/tech">TECH</a>`:'';
  $('commercial').innerHTML=`<div class="inner-grid"><div>${line('LIVE COMMERCIAL',nn(live))}${line('Документально подтверждено',nn(co.document_confirmed_live))}${line('Категорийные возможности',nn(co.category_opportunities_live))}</div><div>${line('Идут торги',nn(sumMedals(co.open)))}${line('Разыгранные',nn(sumMedals(co.awarded)))}<div class="tiny">CURRENT + ELIGIBLE + OPEN/AWARDED</div></div></div><div class="split-grid"><div><div class="small">ИДУТ ТОРГИ</div><div class="medals">${medal('OPEN',co.open)}</div></div><div><div class="small">РАЗЫГРАННЫЕ</div><div class="medals">${medal('AWARDED',co.awarded)}</div></div></div><div class="tiny">${excludedLink} · medal invariant ${co.medal_invariant_ok?'OK':'FAIL'} · сегодня разыграно: direct ${nn(aw.direct||0)} / объекты ${nn(aw.object||0)}</div>`;

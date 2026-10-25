@@ -6,6 +6,26 @@ __pycache__/
 .pytest_cache/
 catboost_info/
 
+# Local Codex/worktree state
+.codex/
+.codex_staging/
+.codex_worktrees/
+worktrees/
+
+# Local diagnostics and scratch artifacts
+logs/
+scratch/
+*.log
+tmp_*
+/=
+*.bak_local_*
+*.backup
+
+# Generated local audit/shadow datasets
+data/ai_shadow/
+data/legacy_okpd_audit_stderr.txt
+data/pre_research_scope_*.jsonl
+
 *.py[cod]
 
 # Generated ML/Prior models and dataset snapshots

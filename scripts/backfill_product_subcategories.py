@@ -109,6 +109,7 @@ def select_candidates(
                    o.id, o.procurement_id,
                    o.commercial_category_code AS category_code,
                    o.opportunity_track,
+                   o.routing_version,
                    p.initial_price AS amount, p.auction_name AS title
             FROM crm_procurement_category_opportunities o
             LEFT JOIN crm_procurements p ON p.id = o.procurement_id
@@ -271,8 +272,27 @@ def main() -> int:
                        updated_at = NOW()
                  WHERE id = %s AND status = 'CURRENT'
                    AND commercial_subcategory_code IS NULL
+                   AND NOT EXISTS (
+                     SELECT 1
+                       FROM crm_procurement_category_opportunities x
+                      WHERE x.procurement_id = %s
+                        AND x.commercial_category_code = %s
+                        AND x.opportunity_track = %s
+                        AND x.routing_version IS NOT DISTINCT FROM %s
+                        AND x.commercial_subcategory_code = %s
+                   )
                 """,
-                (r.subcategory_code, r.source, r.confidence, c["id"]),
+                (
+                    r.subcategory_code,
+                    r.source,
+                    r.confidence,
+                    c["id"],
+                    c["procurement_id"],
+                    c["category_code"],
+                    c["opportunity_track"],
+                    c.get("routing_version"),
+                    r.subcategory_code,
+                ),
             )
             written += cur.rowcount
         conn.commit()

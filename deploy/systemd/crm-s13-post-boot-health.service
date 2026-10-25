@@ -1,0 +1,13 @@
+[Unit]
+Description=S13 post-boot health watchdog (wait for S7, restore core services)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/crm-s13-post-boot-health boot
+TimeoutStartSec=360
+RemainAfterExit=yes
+
+[Install]
+WantedBy=multi-user.target

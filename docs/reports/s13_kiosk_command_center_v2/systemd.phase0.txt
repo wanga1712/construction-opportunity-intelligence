@@ -1,0 +1,41 @@
+﻿# /etc/systemd/system/s13-dashboard3.service
+[Unit]
+Description=S13 dashboard v3 (3-layer procurement view) - test 8897
+After=network-online.target
+[Service]
+Type=simple
+ExecStart=/usr/bin/python3 /usr/local/bin/s13_dashboard3.py
+Restart=always
+Nice=5
+[Install]
+WantedBy=multi-user.target
+
+# /etc/systemd/system/s13-kiosk.service
+[Unit]
+Description=S13 graphical kiosk (X + Firefox fullscreen dashboard)
+After=multi-user.target s13-web-dashboard.service
+Wants=s13-web-dashboard.service
+Conflicts=getty@tty7.service
+
+[Service]
+Type=simple
+User=sergey
+Environment=HOME=/home/sergey
+Environment=XAUTHORITY=/home/sergey/.Xauthority
+ExecStart=/usr/bin/xinit /usr/local/bin/s13_kiosk_start.sh -- :0 vt7 -nolisten tcp
+Restart=always
+RestartSec=5
+Nice=5
+
+[Install]
+WantedBy=multi-user.target
+UNIT_STATE
+NRestarts=0
+ExecMainPID=1939077
+ActiveState=active
+SubState=running
+
+NRestarts=0
+ExecMainPID=1939130
+ActiveState=active
+SubState=running

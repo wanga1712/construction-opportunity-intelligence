@@ -62,6 +62,17 @@ _DESIGN_RE = re.compile(
 _SERVICE_RE = re.compile(
     r"оказани\w*\s+услуг|техническ\w*\s+обслужив|обслужив|уборк|диагностик", re.I
 )
+_SOFTWARE_IT_SERVICE_RE = re.compile(
+    r"лиценз|неисключительн\w+\s+прав|информационн\w+\s+безопасност|"
+    r"техническ\w+\s+поддержк|сертификат\w+\s+тп",
+    re.I,
+)
+_SOFTWARE_ONLY_RE = re.compile(r"программн\w+\s+обеспечени", re.I)
+_HARDWARE_SUPPLY_RE = re.compile(
+    r"ноутбук|компьютер|сервер|системн\w+\s+блок|моноблок|планшет|"
+    r"рабоч\w+\s+станц|оборудовани|аппаратн",
+    re.I,
+)
 _INSTALL_RE = re.compile(r"монтаж|пусконалад|установк", re.I)
 _CONSUMABLE_RE = re.compile(r"материал|расходн|комплектующ", re.I)
 _PRODUCT_RE = re.compile(
@@ -86,11 +97,18 @@ def classify_pre_research_scope(title: Any, okpd_code: Any = None) -> dict[str, 
     has_install = bool(_INSTALL_RE.search(text))
     has_consumable = bool(_CONSUMABLE_RE.search(text))
     has_product = bool(_PRODUCT_RE.search(text))
+    has_software_it_service = bool(_SOFTWARE_IT_SERVICE_RE.search(text))
+    has_software_only = bool(_SOFTWARE_ONLY_RE.search(text))
+    has_hardware_supply = bool(_HARDWARE_SUPPLY_RE.search(text))
     product_okpd = any(code.startswith(_PRODUCT_OKPD_PREFIXES) for code in okpd)
 
-    if has_design and has_work and has_supply:
+    if has_software_it_service:
+        scope, reason = SCOPE_PURE_SERVICE, "software_license_it_service"
+    elif has_software_only and not has_hardware_supply:
+        scope, reason = SCOPE_PURE_SERVICE, "software_only_no_hardware"
+    elif has_design and has_work and has_supply:
         scope, reason = SCOPE_MIXED, "design+works+supply"
-    elif has_supply and has_install and ("оборудован" in lower or product_okpd):
+    elif has_supply and has_install:
         scope, reason = SCOPE_EQUIPMENT_INSTALL, "supply+installation"
     elif has_design:
         scope, reason = SCOPE_DESIGN, "explicit_design"
@@ -100,10 +118,10 @@ def classify_pre_research_scope(title: Any, okpd_code: Any = None) -> dict[str, 
         scope, reason = SCOPE_SERVICE_CONSUMABLES, "service+consumables"
     elif has_service and not has_supply:
         scope, reason = SCOPE_PURE_SERVICE, "explicit_service"
-    elif has_supply and (has_product or product_okpd):
+    elif has_supply and has_product:
         scope, reason = SCOPE_DIRECT_GOODS, "explicit_supply+product_evidence"
-    elif has_product and product_okpd and not (has_work or has_design or has_service):
-        scope, reason = SCOPE_DIRECT_GOODS, "product_subject+product_okpd"
+    elif has_product and not (has_work or has_design or has_service):
+        scope, reason = SCOPE_DIRECT_GOODS, "product_subject"
     else:
         scope, reason = SCOPE_UNKNOWN, "insufficient_pre_research_evidence"
     return {"procurement_scope_type": scope, "scope_method": reason}

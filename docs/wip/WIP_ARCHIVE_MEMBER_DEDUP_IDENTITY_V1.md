@@ -1,6 +1,6 @@
 # WIP ARCHIVE_MEMBER_DEDUP_IDENTITY_V1 — dedup-sweeper не гасит члены архива
 
-Status: СПЕКА / ПРИОРИТЕТ ПЕРЕД GSFX-добивкой. Owner: document_intelligence.
+Status: DONE (`c66f96b`). Owner: document_intelligence.
 
 ## Проблема
 
@@ -72,6 +72,13 @@ B_HTTP_REQUESTS=0
   пока не добавляем: сначала sweeper должен поработать.
 - CRM/medal/queue.
 - GSFX parser и skip-list.
+
+## FOLLOW-UP (41714 backlog)
+
+Под старой identity было погашено 41714 archive-member строк по всей БД. Для
+текущей GSFX-очереди восстановлены только 1775 `.gsfx`-строк (26 закупок).
+Массовый restore остальных 41714 строк — отдельный backlog WIP
+`ARCHIVE_MEMBER_BULK_RESTORE_V1`; сейчас не выполняем.
 
 ## RESULT (2026-10-14)
 

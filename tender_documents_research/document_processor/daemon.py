@@ -620,6 +620,7 @@ class DocumentProcessorDaemon:
                 "source_document_id": _entry.get("source_document_id"),
                 "physical_key": _entry.get("physical_key"),
                 "track": _entry.get("track"),
+                "document_class": _entry.get("document_class"),
                 "selection_type": _entry.get("selection_type"),
             }
             selected_doc_context[str(_name).strip().lower()] = _ctx

@@ -80,8 +80,7 @@ _CSS = """
   .tw-rb{grid-column:1 / -1}}
 .tw-group>summary::-webkit-details-marker{display:none}
 .tw-gtitle{font-weight:650;color:#141b24;font-size:13.5px;line-height:1.3;
-  overflow-wrap:break-word;word-break:normal;min-width:0;
-  display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+  overflow-wrap:anywhere;word-break:normal;min-width:0;white-space:normal}
 .tw-group>summary,.tw-group>summary *{text-decoration:none}
 .tw-gcap{min-width:0}
 .tw-gmeta{color:#7c848f;font-size:11px;margin-top:2px}

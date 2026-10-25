@@ -28,10 +28,10 @@
 | P8 | `FINDINGS_COUNT_SCOPE_V1` | DONE 2026-10-20 | не дублировать сырые находки по категориям | PASS |
 | P9 | `S13_KIOSK_COMMAND_CENTER_V2` | DONE + metric semantics fix 2026-10-21 | единый операторский command center | PASS |
 | P11 | `MODEL_CANDIDATE_POOL_SCOPE_V1` | DONE | не показывать сырой validator backlog | PASS |
-| P12 | `KISOK_PIPELINE_DAILY_METRICS_V1` | ПРИОРИТЕТ | понятный дневной pipeline | PASS |
+| P12 | `KISOK_PIPELINE_DAILY_METRICS_V1` | DONE | понятный дневной pipeline | PASS |
 | P13 | `RESOURCE_PRIORITY_DOC_PIPELINE_FIRST_V1` | DONE | документы в приоритете ресурсов | PASS |
 | P14 | `AI_DAILY_BATCH_SCHEDULE_V1` | DONE | AI не молотит 24/7 | PASS |
-| P15 | `PIPELINE_BATCH_PARALLEL_EXECUTION_V1` | ПРИОРИТЕТ | батчи и параллельность | PASS |
+| P15 | `PIPELINE_BATCH_PARALLEL_EXECUTION_V1` | DONE | батчи и параллельность | PASS |
 | P16 | `STALE_PROCESSING_CLEANUP_V1` | DONE | погасить залипшие PROCESSING | PASS |
 | 1A | `ARCHIVE_MEMBER_DEDUP_IDENTITY_V1` | DONE (`c66f96b`) | identity sweeper исправлена | PASS |
 | 1B | `ARCHIVE_MEMBER_PARSE_CONTEXT_V1` | PASS (`24062c2`) | 99069 end-to-end подтверждён | PASS |
@@ -303,6 +303,17 @@ current objects перенесены на `/tech`; activating показывае
 Фактический pool: `8 335 current pairs → 880 candidates`; raw counts
 доступны только на `/tech`. Validator authority не менялся.
 
+### P12. KISOK_PIPELINE_DAILY_METRICS_V1
+
+См. `docs/wip/WIP_KISOK_PIPELINE_DAILY_METRICS_V1.md`.
+
+Статус: DONE (2026-10-21). В `deploy/s13_dashboard3.py` разделены физические
+распарсенные файлы (`document_processing_results`) и queue-задачи
+(`document_processing_queue`); модель показывает явный вход в модель
+(`document_matches.created_at >= current_date`) и confirmed/rejected/unknown.
+Скорость честная: нет данных за окно → `н/д`, не `0`.
+`DB_WRITES=0`.
+
 ### P14. AI_DAILY_BATCH_SCHEDULE_V1
 
 См. `docs/wip/WIP_AI_DAILY_BATCH_SCHEDULE_V1.md`.
@@ -334,6 +345,16 @@ model workers — `CPUWeight=15`, `Nice=10`; runner и validator остаютс�
 `last_error=no_selected_documents`; preimage сохранён. Claim guard требует
 непустой `selected_documents` в обоих claim-путях. После рестарта
 `PROCESSING_WITHOUT_SELECTED_DOCS=0`, включая повторную проверку через 20с.
+
+### P15. PIPELINE_BATCH_PARALLEL_EXECUTION_V1
+
+См. `docs/wip/WIP_PIPELINE_BATCH_PARALLEL_EXECUTION_V1.md`.
+
+Статус: DONE (2026-10-21). Document batch `50` распределён
+`10 + 8×5`, download gate `4`, OCR `4→2` по CPU backpressure. Model
+batch/gate `50`; validator batch `50`, но AI/validator/second-pass
+остаются disabled. GPU не используется вне batch. Проверка gate:
+`parsed_candidates=880`, `PASS`.
 
 ### 1A. ARCHIVE_MEMBER_DEDUP_IDENTITY_V1
 

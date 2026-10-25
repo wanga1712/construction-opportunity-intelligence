@@ -31,6 +31,8 @@ MODEL_BATCH_SIZE=30
 MEDAL_REVALIDATION_SAME_RULES=YES
 AVERAGE_PRICE_BENCHMARK=OPTIONAL
 DB_WRITES=APPROVED_ONLY
+MODEL_DOC_REQUESTS_COUNTED=YES
+ALWAYS_SHOW_CATEGORY_RESULT=YES
 ```
 
 ## Фазы
@@ -99,6 +101,14 @@ MODEL_BATCH_SIZE = 30
 очередь пополняется по мере готовности
 ```
 
+Для каждой category opportunity считаем:
+
+```text
+model_document_requests_count
+```
+
+Это число раз, когда модель запрашивала доскачивание/переразбор документов.
+
 ### Phase 3.2 — model revalidation and feedback
 
 После переразбора модель повторяет:
@@ -108,6 +118,7 @@ normalization -> medal revalidation -> commit proposal
 ```
 
 Если данных снова недостаточно — фиксируем reason, не зацикливаемся.
+Итог показываем в любом случае: найдено/ошибка/не найдено дальше ничего.
 
 ### Phase 4 — medal revalidation
 
