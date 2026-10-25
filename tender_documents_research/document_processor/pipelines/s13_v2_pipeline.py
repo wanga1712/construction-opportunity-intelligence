@@ -222,6 +222,7 @@ class S13V2Pipeline:
                         physical_key=ctx.get("physical_key"),
                         track=ctx.get("track"),
                         document_class=ctx.get("document_class"),
+                        allowed_categories=set(category_codes) if category_codes else None,
                         line_meta=line_meta,
                     )
                 except Exception as exc:  # never break parsing
