@@ -459,8 +459,12 @@ def _persist_embedded(
             return 0
         from collections import defaultdict
 
+        from document_processor.goods_fact_gate import is_confident_count_goods
+
         grouped = defaultdict(list)
         for fact in facts:
+            if not is_confident_count_goods(fact):
+                continue
             fact_name = (
                 getattr(fact, "product_name_raw", "")
                 or getattr(fact, "product_name_normalized", "")

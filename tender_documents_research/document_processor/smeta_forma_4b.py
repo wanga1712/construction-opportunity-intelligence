@@ -139,9 +139,11 @@ def _sheet_rows(zf: zipfile.ZipFile, member: str, strings: List[str]):
             if not match or value is None or value.text is None:
                 continue
             raw = value.text
-            cells[match.group(1)] = (
-                strings[int(raw)] if raw.isdigit() and int(raw) < len(strings) else raw
-            )
+            if cell.get("t") == "s" and raw.isdigit() and int(raw) < len(strings):
+                text = strings[int(raw)]
+            else:
+                text = raw
+            cells[match.group(1)] = text
         yield int(row.get("r") or 0), cells
 
 

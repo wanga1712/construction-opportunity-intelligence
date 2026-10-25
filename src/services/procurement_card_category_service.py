@@ -273,7 +273,9 @@ def build_category_cards(
             "material_value": material_value,
             "quantities_by_unit": _quantities_by_unit(products),
         })
-    return cards
+    # EMBEDDED_CATEGORY_DISCOVERY_CONFIRMATION_V1: empty model categories are
+    # not shown; only categories with real countable goods survive.
+    return [card for card in cards if int(card.get("line_count") or 0) > 0]
 
 
 def group_products_by_trust(products: Iterable[Dict[str, Any]]) -> List[Tuple[str, List[Dict[str, Any]]]]:

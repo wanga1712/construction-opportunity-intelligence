@@ -28,7 +28,7 @@ HEADER_PATTERNS = {
     "unit": re.compile(r"ед\.?\s*изм|единиц", re.IGNORECASE),
     "qty": re.compile(r"кол-?во|количеств|объ[её]м", re.IGNORECASE),
     "price": re.compile(r"цена", re.IGNORECASE),
-    "total": re.compile(r"стоимост|сумма|итого", re.IGNORECASE),
+    "total": re.compile(r"стоимост|сумма|итого|всего", re.IGNORECASE),
 }
 
 
