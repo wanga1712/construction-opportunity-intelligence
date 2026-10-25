@@ -2,8 +2,6 @@ from __future__ import annotations
 
 from src.repositories.analytics_category_repository import AnalyticsCategoryRepository
 from src.services.analytics_categories import list_available_categories
-from src.services import analytics_contour_v2_page as service_page
-from src.services import crm_profile_service
 from src.ui import analytics_contour_v2_page as ui_page
 
 
@@ -93,42 +91,3 @@ def test_ui_wrapper_uses_injected_repository_without_postgresql():
         "Категория Б",
         "Категория А",
     ]
-
-
-class FakeStreamlit:
-    def __init__(self):
-        self.session_state = {}
-        self.selectboxes = []
-
-    def markdown(self, *_args, **_kwargs):
-        return None
-
-    def selectbox(self, label, options, **_kwargs):
-        self.selectboxes.append((label, options))
-        return None
-
-    def segmented_control(self, *_args, **_kwargs):
-        return None
-
-    def radio(self, *_args, **_kwargs):
-        return None
-
-    def button(self, *_args, **_kwargs):
-        return False
-
-
-def test_service_fallback_uses_injected_repository(monkeypatch):
-    fake_st = FakeStreamlit()
-    calls = []
-    monkeypatch.setattr(service_page, "st", fake_st)
-    monkeypatch.setattr(crm_profile_service, "load_profiles", lambda: [])
-    monkeypatch.setattr(crm_profile_service, "load_subcategories", lambda *_args: [])
-    class FakeRepository:
-        def list_available_categories(self):
-            calls.append("repository")
-            return ["Категория Б", "Категория А"]
-
-    service_page._render_filters(FakeRepository())
-
-    assert calls == ["repository"]
-    assert ("Категория", ["Все", "Категория Б", "Категория А"]) in fake_st.selectboxes

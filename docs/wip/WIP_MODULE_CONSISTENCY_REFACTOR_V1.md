@@ -1,6 +1,6 @@
 # WIP MODULE_CONSISTENCY_REFACTOR_V1 — единая authority модулей и файлы >450 строк
 
-Status: **PHASE 1 CONSISTENCY BLOCKERS DONE / PHASE 2 NOT STARTED**.
+Status: **PHASE 1 ACCEPTED / PHASE 2 DUPLICATE AUTHORITY DONE — READY FOR REVIEW**.
 
 Owner: repository architecture, Python runtime, CRM UI, routing and document pipeline.
 
@@ -483,5 +483,120 @@ LOCAL_MISSING_ROUTE_DEPENDENCIES=0
 PYTHON_3_13_EVIDENCE=4 passed
 PHASE_1_REVIEW=ACCEPTED
 PHASE_2_STARTED=NO
+DB_WRITES=0
+```
+
+## RESULT (2026-10-25) — PHASE 2
+
+STATUS: **DONE — duplicate authorities and runtime backup artifacts removed.**
+
+CHANGES:
+
+- removed exact service copies:
+  - `src/services/card_compact.py`;
+  - `src/services/crm_profiles_page.py`;
+- canonicalized app/navigation:
+  - kept root `app.py` as Streamlit entrypoint;
+  - kept `src/ui/app_bootstrap.py` and `src/ui/nav.py`;
+  - removed root `nav.py`, `src/services/app.py`, `src/services/nav.py`;
+- removed UI implementations from services:
+  - `analytics_contour_v2_page.py`;
+  - `card_tabs_ai.py`;
+  - `card_tabs_medals.py`;
+  - `tabs.py`;
+- removed legacy service-page mock-card tests and the obsolete service fallback
+  assertion; canonical UI/repository coverage remains in `tests/`;
+- removed `src/ui/product_subcategories_service.py`; canonical schema/service
+  authority is `src/services/product_subcategories_service.py`;
+- removed undiscovered `src/ui/components/analytics_v2/test_torgi_tab.py`;
+  discoverable `tests/test_torgi_tab.py` remains the broader/newer suite;
+- removed tracked runtime backup artifacts: three `.bak` files, two
+  `downloader/http_client.backup` files and
+  `src/services/computers_service.py.tmp_path_issue/`;
+- backup audit recognizes `.bak`, `.bak_*`, `.bak.*`, `.backup`, `.orig` and
+  any path component ending in `.tmp_path_issue`; it also reports an empty
+  legacy temp directory;
+- physically removed leftover
+  `src/services/computers_service.py.tmp_path_issue/__pycache__`;
+- restored original Unicode/`None`/empty-string category rows in
+  `tests/test_analytics_v2_categories_boundary.py`;
+- `scripts/production_reconciliation_audit.py` no longer treats
+  `src/services/app.py` as host-local configuration; a production copy is
+  classified as `STALE_OLD_CODE`;
+- added read-only `scripts/audit_module_consistency_phase2.py` and
+  `tests/test_module_consistency_phase2.py`, including negative controls for
+  duplicate files, hidden tests and backup detection.
+
+PYTHON 3.13.14 RESULTS:
+
+```text
+EXACT_DUPLICATE_RUNTIME_GROUPS=0
+CANONICAL_APP_AUTHORITY=app.py+src/ui/app_bootstrap.py
+CANONICAL_NAV_AUTHORITY=src/ui/nav.py
+UI_CODE_IN_SERVICES_DUPLICATION=0
+PRODUCT_SUBCATEGORY_SCHEMA_AUTHORITY=src/services/product_subcategories_service.py
+UNDISCOVERED_TEST_COPIES=0
+BACKUP_ARTIFACTS=0
+BACKUP_PATTERN_NEGATIVE_CONTROLS=PASS
+EMPTY_TMP_PATH_ISSUE_DIRECTORY_DETECTED=YES
+RESTORED_CATEGORY_COVERAGE=PASS
+PHASE2_TARGETED_TEST=5_passed
+DB_WRITES=0
+```
+
+The expanded targeted selection has 13 failures on Phase 2 versus 15 on
+pre-Phase-2 `cfcb657`. Every Phase 2 failure name is present in the baseline;
+the two removed failures belonged to the deleted legacy service-page module.
+No new failing test was introduced. Existing baseline defects remain recorded in
+evidence and are not hidden or converted into passes.
+
+EVIDENCE:
+
+```text
+docs/reports/module_consistency_phase2/phase2_audit_py313.json
+docs/reports/module_consistency_phase2/phase2_targeted_pytest.txt
+docs/reports/module_consistency_phase2/phase2_expanded_pytest.txt
+docs/reports/module_consistency_phase2/prephase2_cfcb657_pytest.txt
+```
+
+DEVIATIONS:
+
+- `docs/reports/procurement_identity_link_deadline_correctness/s7_required_tags_223_fz.json.bak`
+  is a historical evidence snapshot, not runtime code, and was retained;
+- historical copies under `scratch/production_reconciliation/` are retained as
+  audit snapshots and are outside runtime roots;
+- `scripts/repair_lighting_estimate_facts.py` belongs to parallel work and is
+  excluded from Phase 2;
+- concurrent modifications to `src/services/good_supply_facts_service.py` and
+  `src/services/works_vs_goods_service.py` also belong to parallel work and are
+  excluded from Phase 2;
+- no commit or deploy was performed for Phase 2.
+
+NEXT: Phase 3 only after explicit user request.
+
+## REVIEW (2026-10-25) — PHASE 2 ACCEPTED
+
+Reviewer checks confirmed the corrected backup/path detection, restored category
+boundary coverage, and `STALE_OLD_CODE` reconciliation classification. Direct
+negative controls detected both `x.py.bak_local_20261025` and empty/non-empty
+`foo.tmp_path_issue`; the repository audit reported no runtime backup artifacts,
+duplicate authorities, hidden tests, or UI implementations under services.
+
+The saved Python 3.13.14 evidence reports `5 passed`. The local reviewer runtime
+is Python 3.12, so its explicit Python 3.13 gate is not a substitute for that
+evidence; all non-runtime audit fields and direct negative controls were
+reproduced. All 13 current expanded-suite failure names are present in the
+pre-Phase-2 baseline.
+
+The accepted changeset is based on current HEAD `5cf084e`; concurrent commits
+`a346db4` and `5cf084e` are already in ancestry. The remaining working-tree
+change in `src/services/works_vs_goods_service.py` is parallel work and is
+explicitly excluded from the Phase 2 commit.
+
+```text
+PHASE_2_REVIEW=ACCEPTED
+PHASE_2_COMMIT_SCOPE=WHITELISTED
+PHASE_2_DEPLOYED=NO
+PHASE_3_STARTED=NO
 DB_WRITES=0
 ```

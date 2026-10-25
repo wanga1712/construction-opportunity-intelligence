@@ -306,7 +306,7 @@ workers. Наличие unit-файла в репозитории не подт�
 |---|---|---|
 | Закрыто | Orphan `src/services/crm_procurements_repository.py` с missing import | Удалён в Phase 1; callers не найдены |
 | Закрыто | Runtime/ML/training imports отсутствовали в manifests | Добавлены и двусторонне проверены профили `documents`, `learning`, `training`, `dev` |
-| Высокий | Найдены две exact duplicate пары (`card_compact`, `crm_profiles_page`) и несколько расходящихся UI/service shadow-копий | Канонизировать authority по фазам из `MODULE_CONSISTENCY_REFACTORING_PLAN.md`; не удалять только по совпадению имени |
+| Закрыто | Exact service-копии `card_compact`, `crm_profiles_page` и legacy UI/service shadow-модули | Phase 2 оставил canonical UI authority; duplicate runtime groups и UI-code-in-services = 0 |
 | Средний | 68 рабочих Python-файлов превышают 450 строк; крупнейшие: `crm_ai_assessment_runner.py` (1932), `embedded_extraction.py` (1440), `analytics_v2/tabs.py` (1152), `procurement_card_dossier_service.py` (1090), `object_detail.py` (1081) | Для затрагиваемых файлов записывать объяснение в плане или декомпозировать по правилу проекта; не начинать массовый рефакторинг вне текущего этапа |
 | Средний | 11 тестовых модулей также превышают 450 строк | Декомпозировать после стабилизации production authorities, по behavior contracts |
 | Средний | Три каталога миграций не имеют общего ledger/runner | Зафиксировать ownership, порядок и applied-state вне имён файлов |
@@ -314,7 +314,7 @@ workers. Наличие unit-файла в репозитории не подт�
 | Закрыто | Deep-link `procurement_card` полагался на default dependency | Явно задан `CRM_DB_ONLY` в Phase 1 |
 | Низкий | Доступный локально Python — 3.12.10 при требовании проекта `>=3.13,<3.14` | Выполнять runtime/import/test acceptance в Python 3.13 environment |
 | Низкий | Имя файла `pages/AI_╨░╨╜╨░╨╗╨╕╤В╨╕╨║╨░.py` повреждено перекодировкой | Переименовать отдельным изменением с проверкой Streamlit multipage navigation |
-| Низкий | В дереве есть `.bak`, `.backup`, `.tmp_path_issue`, `tmp_*`, локальные логи и крупные preimage-файлы | Определить retention/.gitignore policy; не удалять без проверки принадлежности и WIP |
+| Закрыто | Runtime backup artifacts `.bak`, `.backup`, `.tmp_path_issue` | Удалены в Phase 2; historical evidence snapshots в `scratch/` и docs сохранены отдельно |
 | Низкий | Единственная битая Markdown-ссылка находится в архиве: `tender_documents_research/docs/archive/FULL_PRODUCT_FUNNEL.md` → отсутствующий `FULL_PRODUCT_FUNNEL.sql` | Оставить как исторический дефект либо добавить явную пометку «файл утрачен» |
 
 ### Что не проверялось

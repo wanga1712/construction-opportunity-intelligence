@@ -30,7 +30,6 @@ DESIRED_RUNTIME_FIXES = {
     "src/ui/components/analytics_v2/annotation_card_sections.py",
 }
 HOST_LOCAL_FILES = {
-    "src/services/app.py",
     "src/services/commercial_routing_v3/canonical_card.py",
     "src/services/commercial_routing_v3/document_links.py",
     "src/services/commercial_routing_v3/queue_producer.py",
@@ -42,6 +41,9 @@ HOST_LOCAL_FILES = {
     "src/ui/customers_page.py",
     "src/ui/infrastructure_page.py",
     "src/ui/waterproofing_uk_tab.py",
+}
+STALE_LEGACY_FILES = {
+    "src/services/app.py",
 }
 SECRET_OR_ENV_FILES = {
     "src/migrations/crm_tender_match_cache_rehome_to_crm.sql",
@@ -66,6 +68,8 @@ def drift_classification(rel: str, eol_only: bool) -> tuple[str, str, str]:
         return "DESIRED_RUNTIME_FIX_NOT_COMMITTED", "annotation queue/workbench/card", "Matches verified local runtime-fix commit 20cb2e8 after EOL normalization"
     if rel in HOST_LOCAL_FILES:
         return "HOST_LOCAL_CONFIGURATION", "host defaults/operator diagnostics", "Concrete host/operator values replace canonical logical aliases"
+    if rel in STALE_LEGACY_FILES:
+        return "STALE_OLD_CODE", "legacy service bootstrap", "Removed in Phase 2; root app.py plus src/ui/app_bootstrap.py is canonical"
     if rel in SECRET_OR_ENV_FILES:
         return "SECRET_OR_ENVIRONMENT_SPECIFIC", "migration comments", "Concrete access identity/endpoint appears only in an operational comment"
     if rel in STALE_PHASE10_FILES:

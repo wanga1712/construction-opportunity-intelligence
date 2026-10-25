@@ -1,0 +1,17 @@
+{
+  "acceptance": {
+    "BACKUP_ARTIFACTS": 0,
+    "CANONICAL_APP_AUTHORITY": true,
+    "CANONICAL_NAV_AUTHORITY": "src/ui/nav.py",
+    "EXACT_DUPLICATE_RUNTIME_GROUPS": 0,
+    "LEGACY_AUTHORITY_FILES": [],
+    "PRODUCT_SUBCATEGORY_SCHEMA_AUTHORITY": "src/services/product_subcategories_service.py",
+    "PYTHON_RUNTIME_3_13": true,
+    "UI_CODE_IN_SERVICES_DUPLICATION": 0,
+    "UNDISCOVERED_TEST_COPIES": 0
+  },
+  "backup_artifacts": [],
+  "duplicate_groups": [],
+  "hidden_tests": [],
+  "python_runtime": "3.13.14"
+}

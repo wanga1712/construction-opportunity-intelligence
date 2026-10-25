@@ -4459,6 +4459,40 @@ DB_WRITES=0
 PHASE_2_STARTED=NO
 ```
 
+## 2026-10-25 — MODULE_CONSISTENCY_REFACTOR_V1 Phase 2 — DONE
+
+Duplicate authority cleanup завершён отдельными подфазами: удалены две exact
+service-копии, legacy root/service `nav` и service app bootstrap, UI-реализации
+Analytics V2/card tabs из `src/services`, старая `src/ui`-копия product
+subcategory service, hidden `src/**/test_torgi_tab.py` и runtime backup
+artifacts. Canonical authority: root `app.py` + `src/ui/app_bootstrap.py`,
+`src/ui/nav.py`, `src/services/product_subcategories_service.py`.
+
+Добавлены `scripts/audit_module_consistency_phase2.py` и negative-control tests.
+Python 3.13.14 audit:
+
+```text
+EXACT_DUPLICATE_RUNTIME_GROUPS=0
+CANONICAL_APP_AUTHORITY=YES
+CANONICAL_NAV_AUTHORITY=src/ui/nav.py
+UI_CODE_IN_SERVICES_DUPLICATION=0
+PRODUCT_SUBCATEGORY_SCHEMA_AUTHORITY=src/services/product_subcategories_service.py
+UNDISCOVERED_TEST_COPIES=0
+BACKUP_ARTIFACTS=0
+BACKUP_PATTERN_NEGATIVE_CONTROLS=PASS
+PHASE2_TARGETED_TEST=5 passed
+DB_WRITES=0
+```
+
+Expanded targeted selection: Phase 2 has 13 failures against 15 on pre-Phase-2
+`cfcb657`; all remaining failures are baseline and no new failing test name was
+introduced. Reviewer acceptance is recorded by the dedicated Phase 2 commit
+containing this entry; deploy was not performed. Phase 3 не начата.
+`scripts/repair_lighting_estimate_facts.py`,
+`src/services/good_supply_facts_service.py` and
+`src/services/works_vs_goods_service.py` are concurrent work and are excluded
+from the Phase 2 change set.
+
 ## 2026-10-22 — queue unplanned repair after interrupted 03:00 sync
 
 Ночной `crm-procurement-sync` был прерван остановкой сервера, из-за чего
