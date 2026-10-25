@@ -18,6 +18,33 @@ from typing import Any, Dict, Optional
 
 logger = logging.getLogger("parse_extractors")
 
+_TAXONOMY_INDEX_CACHE: Dict[str, Any] | None = None
+
+
+def _taxonomy_index() -> Dict[str, Any]:
+    global _TAXONOMY_INDEX_CACHE
+    if _TAXONOMY_INDEX_CACHE is None:
+        from document_processor.crm_taxonomy_loader import load_keyword_index
+
+        _TAXONOMY_INDEX_CACHE = load_keyword_index()
+    return _TAXONOMY_INDEX_CACHE
+
+
+def _resolve_embedded_category(name: str, fallback: str) -> Optional[str]:
+    """Return the best registry category for a row, or None."""
+    low = str(name or "").lower()
+    if not low:
+        return None
+    scores: Dict[str, int] = {}
+    for phrase, bucket in _taxonomy_index().items():
+        if phrase in low:
+            weight = int(bucket.get("weight") or 100)
+            for category in bucket.get("category_codes") or []:
+                scores[category] = scores.get(category, 0) + weight
+    if not scores:
+        return None
+    return max(scores, key=lambda k: (scores[k], k))
+
 
 def _section_cells(quote: str) -> list:
     """Split a stored cell dump ("A=… | B=…") into bare cell texts.
@@ -406,12 +433,38 @@ def _persist_embedded(
             )
         if not facts:
             return 0
-        created, _reused, _stats = persist_facts(
-            conn, procurement_id=procurement_id, document_name=document_name,
-            category_code=category_code, facts=facts, source_text=snapshot_text,
-            source_document_id=source_document_id,
-        )
-        return created
+        from collections import defaultdict
+
+        grouped = defaultdict(list)
+        for fact in facts:
+            fact_name = (
+                getattr(fact, "product_name_raw", "")
+                or getattr(fact, "product_name_normalized", "")
+                or ""
+            )
+            resolved = _resolve_embedded_category(fact_name, category_code)
+            if resolved is None:
+                continue
+            fact.category_code = resolved
+            grouped[resolved].append(fact)
+        if not grouped:
+            return 0
+        total_created = 0
+        for resolved_category, group in grouped.items():
+            group_snapshot = "\n".join(
+                str(getattr(f, "source_quote", "") or "") for f in group
+            )
+            created, _reused, _stats = persist_facts(
+                conn,
+                procurement_id=procurement_id,
+                document_name=document_name,
+                category_code=resolved_category,
+                facts=group,
+                source_text=group_snapshot,
+                source_document_id=source_document_id,
+            )
+            total_created += int(created or 0)
+        return total_created
     except Exception as exc:  # never break parsing
         logger.warning("embedded extraction failed for %s: %s", document_name, exc)
         return 0
