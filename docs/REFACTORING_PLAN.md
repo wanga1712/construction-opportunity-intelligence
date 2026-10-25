@@ -4431,6 +4431,34 @@ DB_WRITES=REPARSE_ONLY
 SCORING_MEDAL_QUEUE_UNCHANGED=YES
 ```
 
+## 2026-10-25 вЂ” MODULE_CONSISTENCY_REFACTOR_V1 Phase 1 review rework вЂ” DONE
+
+Phase 1 consistency blockers РёСЃРїСЂР°РІР»РµРЅС‹ РїРѕСЃР»Рµ review. Dependency audit С‚РµРїРµСЂСЊ С‡РёС‚Р°РµС‚
+РІСЃРµ РїСЏС‚СЊ requirements manifests Рё СЃСЂР°РІРЅРёРІР°РµС‚ РёС… СЃ effective extras `pyproject.toml` РІ РѕР±Рµ
+СЃС‚РѕСЂРѕРЅС‹, РІРєР»СЋС‡Р°СЏ exact version specifiers. Document runtime РїРѕРґРґРµСЂР¶РёРІР°РµС‚ РєР°Рє
+`tender_documents_research.*`, С‚Р°Рє Рё production top-level `document_processor.*` /
+`database_work.*`; method-level test РІС‹РїРѕР»РЅСЏРµС‚ legacy queue operations Р±РµР·
+special document-runtime `PYTHONPATH`. `claim_batch` РїСЂРѕРІРµСЂСЏРµС‚ РЅР°СЃС‚РѕСЏС‰РёР№
+`claim_batch_ids` С‡РµСЂРµР· fake DB, Р±РµР· monkeypatch С„СѓРЅРєС†РёРё.
+
+Python 3.13.14 audit: 795 Python files, unresolved internal imports 0, missing
+route dependencies 0, undeclared direct imports 0, manifest gaps 0. Targeted
+contract tests: 4 passed, including a negative control for two-way manifest and
+version comparison. Pre-Phase-1 `0f99be0` Рё Phase 1 snapshot РґР°СЋС‚ РѕРґРёРЅР°РєРѕРІС‹Р№
+baseline **17 passed / 7 failed**; СЃРїРёСЃРѕРє РёРјС‘РЅ СѓРїР°РІС€РёС… С‚РµСЃС‚РѕРІ Р·Р°С„РёРєСЃРёСЂРѕРІР°РЅ РІ WIP.
+
+```text
+PROFILE_MANIFEST_TWO_WAY=PASS
+PROFILE_MANIFEST_VERSION_SPECIFIERS=PASS
+LEGACY_QUEUE_METHODS_TESTED=YES
+REAL_CLAIM_BATCH_IDS_PATH=PASS
+PROJECT_PACKAGE_IMPORT_MODE=PASS
+PRODUCTION_TOP_LEVEL_IMPORT_MODE=PASS
+PHASE1_REGRESSION=NONE
+DB_WRITES=0
+PHASE_2_STARTED=NO
+```
+
 ## 2026-10-22 — queue unplanned repair after interrupted 03:00 sync
 
 Ночной `crm-procurement-sync` был прерван остановкой сервера, из-за чего

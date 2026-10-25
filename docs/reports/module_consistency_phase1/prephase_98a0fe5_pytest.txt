@@ -1,0 +1,57 @@
+F.FF...F....F..F...F....                                                 [100%]
+=================================== FAILURES ===================================
+________________ test_canonical_function_exports_and_signatures ________________
+tests/test_app_bootstrap_relocation.py:60: in test_canonical_function_exports_and_signatures
+    assert set(functions) == set(FUNCTION_SIGNATURES)
+E   AssertionError: assert {'_create_ser...rror', 'main'} == {'_create_ser...rror', 'main'}
+E
+E     Extra items in the left set:
+E     '_render_page'
+E     Use -v to get more diff
+____________ test_relocated_page_selection_and_orchestration_order _____________
+tests/test_app_bootstrap_relocation.py:119: in test_relocated_page_selection_and_orchestration_order
+    assert _run_main(monkeypatch) == [
+E   AssertionError: assert ['navigation', 'page_render'] == ['watchdog', ...'page_render']
+E
+E     At index 0 diff: 'navigation' != 'watchdog'
+E     Right contains 3 more items, first extra item: 'get_service'
+E     Use -v to get more diff
+____________________ test_relocated_unknown_route_behavior _____________________
+tests/test_app_bootstrap_relocation.py:129: in test_relocated_unknown_route_behavior
+    assert _run_main(monkeypatch, page="unknown") == [
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+tests/test_app_bootstrap_relocation.py:114: in _run_main
+    app_bootstrap.main()
+src/ui/app_bootstrap.py:211: in main
+    service = _get_service(load_companies=True, ping=False)
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E   TypeError: _run_main.<locals>.<lambda>() got an unexpected keyword argument 'load_companies'
+__________ test_bootstrap_runs_watchdog_navigation_and_renderer_once ___________
+tests/test_production_entrypoint.py:74: in test_bootstrap_runs_watchdog_navigation_and_renderer_once
+    assert events == [
+E   AssertionError: assert ['navigation'...', 'renderer'] == ['navigation'...', 'renderer']
+E
+E     At index 1 diff: 'dependency/session_state' != 'watchdog'
+E     Use -v to get more diff
+_____________________ test_companies_pages_require_service _____________________
+tests/test_ui_interactive_performance.py:23: in test_companies_pages_require_service
+    assert requires_companies_service(page) is True
+E   AssertionError: assert False is True
+E    +  where False = requires_companies_service('objects_v2')
+_________________ test_objects_v2_still_gets_companies_service _________________
+tests/test_ui_interactive_performance.py:84: in test_objects_v2_still_gets_companies_service
+    assert events[0] == "watchdog"
+E   AssertionError: assert ('get_service', {'load_companies': False, 'ping': False}) == 'watchdog'
+_______________ test_background_slice_excludes_interactive_cpus ________________
+tests/test_ui_resource_policy_contract.py:13: in test_background_slice_excludes_interactive_cpus
+    assert "CPUQuota=600%" in text
+E   AssertionError: assert 'CPUQuota=600%' in '# CRM background AI / model / document compute\n# Hard CPU headroom: interactive reserved CPUs are NOT available here...llama, docs, bake-offs)\nAllowedCPUs=2-7\nCPUQuota=500%\nCPUWeight=50\nIOWeight=50\nMemoryHigh=22G\nMemorySwapMax=8G\n'
+=========================== short test summary info ============================
+FAILED tests/test_app_bootstrap_relocation.py::test_canonical_function_exports_and_signatures
+FAILED tests/test_app_bootstrap_relocation.py::test_relocated_page_selection_and_orchestration_order
+FAILED tests/test_app_bootstrap_relocation.py::test_relocated_unknown_route_behavior
+FAILED tests/test_production_entrypoint.py::test_bootstrap_runs_watchdog_navigation_and_renderer_once
+FAILED tests/test_ui_interactive_performance.py::test_companies_pages_require_service
+FAILED tests/test_ui_interactive_performance.py::test_objects_v2_still_gets_companies_service
+FAILED tests/test_ui_resource_policy_contract.py::test_background_slice_excludes_interactive_cpus
+7 failed, 17 passed in 2.16s

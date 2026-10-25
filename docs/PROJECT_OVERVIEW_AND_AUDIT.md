@@ -232,21 +232,23 @@ Canonical document DB и допустимые queue statuses определен�
 
 ## 8. Конфигурация и зависимости
 
-- `pyproject.toml` и корневой `requirements.txt` согласованы по восьми базовым
-  пакетам: Streamlit, pandas, psycopg2, dotenv, loguru, reportlab, requests и
-  plotly.
-- `requirements-learning.txt` добавляет catboost, scikit-learn и numpy.
+- `pyproject.toml` и корневой `requirements.txt` согласованы по девяти базовым
+  пакетам: Streamlit, pandas, psycopg2, dotenv, loguru, reportlab, requests,
+  plotly и psutil.
+- Profile manifests:
+  - `documents` — `requirements-documents.txt`;
+  - `learning` — `requirements-learning.txt`;
+  - `training` — `requirements-training.txt`;
+  - `dev` — `requirements-dev.txt`.
 - `tender_documents_research/requirements.txt` отдельно описывает document
   runtime: Office/PDF/OCR/fuzzy matching и системные метрики.
-- training-контур дополнительно импортирует `torch`, `transformers`, `peft` и
-  `bitsandbytes`; они не входят в корневой manifest и должны устанавливаться в
-  отдельном training environment.
+- `psutil` перенесён в base; document/ML/training imports закреплены в
+  соответствующих extras/manifests.
 
-Обнаружен dependency risk: рабочий `src/` напрямую импортирует `PyPDF2`,
-`pypdf`, `python-docx`, `PyMuPDF` (`fitz`) и `psutil`, которых нет в корневом
-manifest. ML-импорты частично покрыты `requirements-learning.txt`. До чистого
-развёртывания нужно либо добавить runtime extras/группы, либо сделать эти
-импорты строго опциональными и документировать профиль установки.
+Phase 1 consistency audit выполняет двустороннее сравнение каждого effective
+profile (`base`, `base+documents`, `base+learning`, `base+training`,
+`base+dev`) с соответствующим requirements file по именам пакетов и exact
+version specifiers.
 
 ## 9. Скрипты, службы и эксплуатация
 
@@ -293,21 +295,23 @@ workers. Наличие unit-файла в репозитории не подт�
 - 968 Python-файлов, включая основной `tests/` corpus;
 - все 968 файлов разбираются Python AST без синтаксических ошибок;
 - корневой README содержит 6 локальных ссылок, все существуют;
-- текущие sidebar routes имеют обработчики и dependency-классы;
-- `pyproject.toml` и `requirements.txt` совпадают по базовым зависимостям.
+- все handled routes имеют явные dependency-классы;
+- все пять dependency profiles совпадают с requirements manifests в обе
+  стороны;
+- unresolved internal imports = 0.
 
 ### Найденные несоответствия
 
 | Приоритет | Наблюдение | Рекомендация |
 |---|---|---|
-| Высокий | `src/services/crm_procurements_repository.py` импортирует отсутствующий `src.services.session_crm_db`; сам модуль не импортируется другими Python-файлами и выглядит как orphan legacy | Удалить после подтверждения либо перевести на актуальный session/DB boundary и покрыть route-level проверкой |
-| Высокий | Часть runtime-зависимостей `src/` отсутствует в корневых manifests | Ввести extras (`documents`, `learning`, `training`) или единый lock/constraints профиль |
+| Закрыто | Orphan `src/services/crm_procurements_repository.py` с missing import | Удалён в Phase 1; callers не найдены |
+| Закрыто | Runtime/ML/training imports отсутствовали в manifests | Добавлены и двусторонне проверены профили `documents`, `learning`, `training`, `dev` |
 | Высокий | Найдены две exact duplicate пары (`card_compact`, `crm_profiles_page`) и несколько расходящихся UI/service shadow-копий | Канонизировать authority по фазам из `MODULE_CONSISTENCY_REFACTORING_PLAN.md`; не удалять только по совпадению имени |
 | Средний | 68 рабочих Python-файлов превышают 450 строк; крупнейшие: `crm_ai_assessment_runner.py` (1932), `embedded_extraction.py` (1440), `analytics_v2/tabs.py` (1152), `procurement_card_dossier_service.py` (1090), `object_detail.py` (1081) | Для затрагиваемых файлов записывать объяснение в плане или декомпозировать по правилу проекта; не начинать массовый рефакторинг вне текущего этапа |
 | Средний | 11 тестовых модулей также превышают 450 строк | Декомпозировать после стабилизации production authorities, по behavior contracts |
 | Средний | Три каталога миграций не имеют общего ledger/runner | Зафиксировать ownership, порядок и applied-state вне имён файлов |
 | Средний | `tender_documents_research/README.md` и `document_processor/README.md` содержали снимок августа 2026, старую БД/топологию и несуществующие имена файлов | README сокращены до актуальной карты и подчинены operating rules |
-| Низкий | Deep-link `procurement_card` имеет обработчик, но не задан явно в `PAGE_DEPENDENCY` и полагается на default `COMPANIES_SERVICE` | Добавить явную запись при следующем изменении маршрутизации, чтобы dependency-контракт не зависел от fallback |
+| Закрыто | Deep-link `procurement_card` полагался на default dependency | Явно задан `CRM_DB_ONLY` в Phase 1 |
 | Низкий | Доступный локально Python — 3.12.10 при требовании проекта `>=3.13,<3.14` | Выполнять runtime/import/test acceptance в Python 3.13 environment |
 | Низкий | Имя файла `pages/AI_╨░╨╜╨░╨╗╨╕╤В╨╕╨║╨░.py` повреждено перекодировкой | Переименовать отдельным изменением с проверкой Streamlit multipage navigation |
 | Низкий | В дереве есть `.bak`, `.backup`, `.tmp_path_issue`, `tmp_*`, локальные логи и крупные preimage-файлы | Определить retention/.gitignore policy; не удалять без проверки принадлежности и WIP |

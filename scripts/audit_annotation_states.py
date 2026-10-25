@@ -7,7 +7,10 @@ from dotenv import load_dotenv
 load_dotenv(root / ".env", override=True)
 from src.services.db_bootstrap import connect_databases
 from src.ui.components.analytics_v2 import tabs
-from annotation_state_service import load_current_annotation_states, annotation_state_counts
+from src.services.annotation_state_service import (
+    annotation_state_counts,
+    load_current_annotation_states,
+)
 
 _, _, crm_db, _ = connect_databases()
 out = {}

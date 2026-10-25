@@ -1,0 +1,14 @@
+COMMIT=0f99be06950ec19d0f8c14a1866e51f2aea02ba5
+PYTHON=3.13.14
+CRM_SOURCE_ROOT=/opt/pythonProject89
+PYTHONPATH=/opt/pythonProject89:<snapshot>:/opt/tender_documents_research
+
+F.FF...F....F..F...F....
+FAILED tests/test_app_bootstrap_relocation.py::test_canonical_function_exports_and_signatures
+FAILED tests/test_app_bootstrap_relocation.py::test_relocated_page_selection_and_orchestration_order
+FAILED tests/test_app_bootstrap_relocation.py::test_relocated_unknown_route_behavior
+FAILED tests/test_production_entrypoint.py::test_bootstrap_runs_watchdog_navigation_and_renderer_once
+FAILED tests/test_ui_interactive_performance.py::test_companies_pages_require_service
+FAILED tests/test_ui_interactive_performance.py::test_objects_v2_still_gets_companies_service
+FAILED tests/test_ui_resource_policy_contract.py::test_background_slice_excludes_interactive_cpus
+7 failed, 17 passed in 2.02s

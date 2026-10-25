@@ -88,14 +88,40 @@ class LegacyQueueRepository(QueueRepository):
         batch_size: int,
         queue_lanes: Optional[Sequence[str]] = None,
     ) -> List[Dict[str, Any]]:
-        from .queue_manager import QueueManager
-        qm = QueueManager(self._db)
-        rows = qm.get_next_batch(worker_id, batch_size)
-        return rows or []
+        from tender_documents_research.document_processor.queue_claim import claim_batch_ids
+        from tender_documents_research.document_processor.queue_priority import QueuePriorityPolicy
+
+        rows = claim_batch_ids(
+            db_execute=lambda query, params=None, fetch=True: self._db.execute_query(
+                "tender_monitor", query, params, fetch=fetch
+            ),
+            worker_id=worker_id,
+            batch_size=batch_size,
+            priority_case=QueuePriorityPolicy().sql_order_case(),
+            where_extra="",
+            extra_params=[],
+            queue_lanes=queue_lanes,
+        )
+        return [
+            {
+                "id": row[0],
+                "contract_reg_number": row[1],
+                "table_source": row[2],
+                "queue_lane": row[3] if len(row) > 3 else None,
+                "priority_class": row[4] if len(row) > 4 else None,
+                "priority_score": row[5] if len(row) > 5 else None,
+            }
+            for row in (rows or [])
+        ]
 
     def mark_no_links(self, task_id: int, reason: str) -> None:
-        from .queue_manager import QueueManager
-        QueueManager(self._db).mark_no_links(task_id, reason)
+        self._db.execute_query(
+            "tender_monitor",
+            "UPDATE document_processing_queue"
+            " SET status='no_links', worker_id=NULL, started_at=NULL,"
+            " completed_at=NOW(), error_message=%s WHERE id=%s",
+            (reason[:2000], task_id),
+        )
 
     def mark_failed(self, task_id: int, error: str, attempt_count: int) -> None:
         self._db.execute_query(
@@ -122,10 +148,17 @@ class LegacyQueueRepository(QueueRepository):
         )
 
     def reset_stale_tasks(self, stale_minutes: int, worker_id: int) -> int:
-        from .daemon_maintenance import DaemonMaintenance
-        dm = DaemonMaintenance(self._db, worker_id, 0, None)
-        dm.reset_stale_tasks()
-        return 0
+        rows = self._db.execute_query(
+            "tender_monitor",
+            "UPDATE document_processing_queue"
+            " SET status='pending', worker_id=NULL, started_at=NULL"
+            " WHERE status='processing'"
+            "   AND (worker_id=%s OR started_at < NOW() - (%s || ' minutes')::interval)"
+            " RETURNING id",
+            (worker_id, str(stale_minutes)),
+            fetch=True,
+        ) or []
+        return len(rows)
 
 
 # ──────────────────────────────────────────────────────────────────────────────

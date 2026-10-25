@@ -5,8 +5,12 @@ from dotenv import load_dotenv
 from contextlib import contextmanager
 from typing import Optional, Dict
 
-from utils.logger_config import get_logger
-from utils.exceptions import DatabaseError
+if (__package__ or "").startswith("tender_documents_research."):
+    from ..utils.logger_config import get_logger
+    from ..utils.exceptions import DatabaseError
+else:
+    from utils.logger_config import get_logger
+    from utils.exceptions import DatabaseError
 
 logger = get_logger()
 

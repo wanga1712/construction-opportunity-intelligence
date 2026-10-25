@@ -1,8 +1,12 @@
 import os
 from typing import List, Dict, Optional, Sequence
 
-from database_work.database_connection import DatabaseManager
-from utils.logger_config import get_logger
+if (__package__ or "").startswith("tender_documents_research."):
+    from ..database_work.database_connection import DatabaseManager
+    from ..utils.logger_config import get_logger
+else:
+    from database_work.database_connection import DatabaseManager
+    from utils.logger_config import get_logger
 
 from .completion_guard import CompletionGuardDecision, evaluate_completion_guard
 from .queue_priority import QueuePriorityPolicy

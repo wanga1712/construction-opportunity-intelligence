@@ -388,7 +388,17 @@ python -m pytest tests/test_okpd_prior_learning.py tests/test_okpd_admission.py 
 streamlit run app.py --server.port 8503
 ```
 
-Дополнительные профили зависимостей находятся в
-`requirements-learning.txt` и `tender_documents_research/requirements.txt`.
+Профили зависимостей:
+
+- `base` — `pyproject.toml` / `requirements.txt`;
+- `documents` — `requirements-documents.txt`;
+- `learning` — `requirements-learning.txt`;
+- `training` — `requirements-training.txt`;
+- `dev` — `requirements-dev.txt`.
+
+Эти файлы и extras в `pyproject.toml` проверяются двусторонним
+consistency-audit по именам пакетов и version specifiers.
+`tender_documents_research/requirements.txt` остаётся manifest внешнего
+document runtime.
 Команды тестов выше документированы, но в рамках аудита от 2026-10-25 не
 запускались.

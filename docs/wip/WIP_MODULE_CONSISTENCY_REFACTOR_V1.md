@@ -1,6 +1,6 @@
 # WIP MODULE_CONSISTENCY_REFACTOR_V1 — единая authority модулей и файлы >450 строк
 
-Status: **PHASE 0 AUDIT DONE / IMPLEMENTATION NOT STARTED**.
+Status: **PHASE 1 CONSISTENCY BLOCKERS DONE / PHASE 2 NOT STARTED**.
 
 Owner: repository architecture, Python runtime, CRM UI, routing and document pipeline.
 
@@ -289,3 +289,199 @@ FOLLOW-UP:
 
 - explicit user request to start **Phase 1**;
 - provide/use a Python 3.13 environment before code acceptance.
+
+## RESULT (2026-10-25) — PHASE 1
+
+STATUS: **DONE AFTER REVIEW REWORK — consistency blockers closed. Phase 2 not started.**
+
+CHANGES:
+
+- deleted orphan `src/services/crm_procurements_repository.py`; repository-wide
+  search found no Python callers, only historical documentation references;
+- added explicit `"procurement_card": PageDependency.CRM_DB_ONLY` to
+  `PAGE_DEPENDENCY`;
+- removed fragile `QueueManager`/`DaemonMaintenance` delegation from
+  `src/services/queue_repository.py`; legacy methods now use canonical
+  `tender_documents_research.document_processor.queue_claim` and their existing
+  `DatabaseManager` boundary;
+- `LegacyQueueRepository.claim_batch` now passes the full required
+  `claim_batch_ids` contract: `where_extra=""` and `extra_params=[]`;
+- `document_processor.queue_manager` and `database_work.database_connection`
+  explicitly support both import contracts: canonical project package mode and
+  production top-level mode (`python -m document_processor.daemon`);
+- the method-level contract test actually calls the real unmodified
+  `claim_batch_ids` through fake DB, then calls `mark_no_links` and
+  `reset_stale_tasks`; it asserts the generated claim SQL and parameters; a
+  subprocess test loads the same runtime in both import modes without a special
+  document-runtime `PYTHONPATH`;
+- canonicalized `annotation_state_service` import in
+  `scripts/audit_annotation_states.py` to
+  `src.services.annotation_state_service`;
+- defined dependency profiles:
+  - **base** = `[project].dependencies` / `requirements.txt`;
+  - **documents** = `pyproject.toml[documents]` /
+    `requirements-documents.txt`;
+  - **learning** = `pyproject.toml[learning]` /
+    `requirements-learning.txt`;
+  - **training** = `pyproject.toml[training]` /
+    `requirements-training.txt`;
+  - **dev** = `pyproject.toml[dev]` / `requirements-dev.txt`;
+- added `psutil` to base; Python 3.13-compatible learning versions;
+- added `scripts/audit_module_consistency_phase1.py`;
+- added `tests/test_module_consistency_phase1.py`;
+- audit recursively opens all five requirements files and compares effective
+  profiles with `pyproject.toml` in both directions by package name and exact
+  version specifier;
+- removed accidental empty file `$null`;
+- synchronized `README.md` and `docs/PROJECT_OVERVIEW_AND_AUDIT.md` with the
+  five dependency profiles and closed Phase 1 findings.
+
+PYTHON 3.13 COMMANDS:
+
+```text
+tar -czf module_consistency_phase1_snapshot_final.tar.gz \
+  app.py nav.py pyproject.toml requirements*.txt src scripts \
+  tender_documents_research training pages tests deploy
+
+/opt/CRM_Streamlit/.venv313/bin/python -m py_compile \
+  app.py src/ui/page_deps.py src/services/queue_repository.py \
+  scripts/audit_annotation_states.py \
+  scripts/audit_module_consistency_phase1.py
+
+PYTHONPATH=<snapshot> \
+/opt/CRM_Streamlit/.venv313/bin/python \
+  scripts/audit_module_consistency_phase1.py
+
+PYTHONPATH=<snapshot> \
+/opt/CRM_Streamlit/.venv313/bin/python -m pytest -q \
+  tests/test_module_consistency_phase1.py
+
+git archive --format=tar.gz -o prephase_98a0fe5.tar.gz 98a0fe5
+
+CRM_SOURCE_ROOT=/opt/pythonProject89 \
+PYTHONPATH=/opt/pythonProject89:<prephase-snapshot>:/opt/tender_documents_research \
+/opt/CRM_Streamlit/.venv313/bin/python -m pytest -q --tb=short \
+  tests/test_app_bootstrap_relocation.py \
+  tests/test_production_entrypoint.py \
+  tests/test_ui_interactive_performance.py \
+  tests/test_ui_resource_policy_contract.py
+
+CRM_SOURCE_ROOT=/opt/pythonProject89 \
+PYTHONPATH=/opt/pythonProject89:<phase1-snapshot>:/opt/tender_documents_research \
+/opt/CRM_Streamlit/.venv313/bin/python -m pytest -q --tb=short \
+  tests/test_app_bootstrap_relocation.py \
+  tests/test_production_entrypoint.py \
+  tests/test_ui_interactive_performance.py \
+  tests/test_ui_resource_policy_contract.py
+
+git archive --format=tar.gz -o prephase_0f99be0.tar.gz 0f99be0
+
+CRM_SOURCE_ROOT=/opt/pythonProject89 \
+PYTHONPATH=/opt/pythonProject89:<prephase-0f99be0-snapshot>:/opt/tender_documents_research \
+/opt/CRM_Streamlit/.venv313/bin/python -m pytest -q --tb=short \
+  tests/test_app_bootstrap_relocation.py \
+  tests/test_production_entrypoint.py \
+  tests/test_ui_interactive_performance.py \
+  tests/test_ui_resource_policy_contract.py
+```
+
+RESULTS:
+
+```text
+PYTHON_RUNTIME=3.13.14
+PYTHON_FILES=795
+UNRESOLVED_INTERNAL_IMPORTS=0
+HANDLED_ROUTES=21
+MISSING_ROUTE_DEPENDENCIES=0
+UNDECLARED_DIRECT_IMPORTS=0
+PROFILE_MANIFEST_GAPS=0
+PROFILE_MANIFEST_TWO_WAY=PASS
+PROFILE_MANIFEST_VERSION_SPECIFIERS=PASS
+PROFILE_MANIFEST_DETAIL=base/documents/learning/training/dev:PASS
+TARGETED_PHASE1_TEST=4_passed
+LEGACY_QUEUE_METHODS_TESTED=claim_batch,mark_no_links,reset_stale_tasks
+NO_DOC_RUNTIME_PYTHONPATH=YES
+PROJECT_PACKAGE_IMPORT_MODE=PASS
+PRODUCTION_TOP_LEVEL_IMPORT_MODE=PASS
+MANIFEST_NEGATIVE_CONTROL=PASS
+PY_COMPILE=PASS
+NULL_FILE_PRESENT=NO
+REAL_CLAIM_BATCH_IDS_PATH=PASS
+CLAIM_BATCH_MONKEYPATCH=NO
+```
+
+ACCEPTANCE:
+
+```text
+UNRESOLVED_INTERNAL_IMPORTS=0
+ALL_HANDLED_ROUTES_HAVE_EXPLICIT_DEPENDENCY=YES
+DIRECT_IMPORTS_DECLARED_IN_PROFILE=YES
+PYTHON_RUNTIME=3.13
+REAL_LEGACY_CLAIM_PATH_TESTED=YES
+BUSINESS_LOGIC_CHANGED=NO
+DB_WRITES=0
+```
+
+DEVIATIONS:
+
+- local Windows interpreter is Python 3.12.10, so all Python 3.13 checks were
+  executed against a temporary read-only repository snapshot using the S13
+  Python 3.13.14 venv; production files were not deployed;
+- regression evidence is anchored at pre-Phase-1 `0f99be0`; while review was
+  in progress the branch advanced through independent direct-supply commit
+  `6f6052a`. Phase 1 remained uncommitted above that HEAD. Reviewer repeated
+  the read-only consistency audit on the combined worktree: 796 scanned files,
+  manifest/import/route gaps 0; the only local audit failure is the expected
+  Python 3.12 runtime gate. Direct-supply commits remain otherwise unmodified;
+- the earlier unsupported statement about “9 old failures” is withdrawn. The
+  executed selection contains 24 tests and has exactly **17 passed / 7 failed**
+  on both pre-Phase-1 `0f99be0` and the Phase 1 snapshot:
+
+```text
+test_app_bootstrap_relocation.py::test_canonical_function_exports_and_signatures
+test_app_bootstrap_relocation.py::test_relocated_page_selection_and_orchestration_order
+test_app_bootstrap_relocation.py::test_relocated_unknown_route_behavior
+test_production_entrypoint.py::test_bootstrap_runs_watchdog_navigation_and_renderer_once
+test_ui_interactive_performance.py::test_companies_pages_require_service
+test_ui_interactive_performance.py::test_objects_v2_still_gets_companies_service
+test_ui_resource_policy_contract.py::test_background_slice_excludes_interactive_cpus
+```
+
+  The `0f99be0` and Phase 1 runs have the same failure set and counts. The
+  7-failure set is therefore baseline, not a Phase 1 regression;
+- dependency profile versions target Python 3.13 but packages were not installed
+  or resolved from the network during this read-only audit.
+
+EVIDENCE FILES:
+
+```text
+docs/reports/module_consistency_phase1/phase1_audit_py313.json
+docs/reports/module_consistency_phase1/prephase_98a0fe5_pytest.txt
+docs/reports/module_consistency_phase1/prephase_0f99be0_pytest.txt
+docs/reports/module_consistency_phase1/phase1_pytest.txt
+docs/reports/module_consistency_phase1/phase1_targeted_pytest.txt
+docs/reports/module_consistency_phase1/phase1_import_contract_py313.txt
+```
+
+NEXT: Phase 2 only after explicit user request.
+
+## REVIEW (2026-10-25) — ACCEPTED
+
+Reviewer reproduced the real, unpatched call
+`LegacyQueueRepository(FakeDb()).claim_batch(17, 1, ["open_active"])` and
+verified the returned row mapping, generated `UPDATE document_processing_queue`,
+lane predicate and parameters `(17, 17, "open_active", 1)`. `mark_no_links`
+and `reset_stale_tasks` were also executed against the fake DB boundary.
+
+```text
+REAL_CLAIM_BATCH_IDS_PATH=PASS
+CLAIM_BATCH_MONKEYPATCH=NO
+LOCAL_COMBINED_TREE_FILES=796
+LOCAL_MANIFEST_GAPS=0
+LOCAL_UNRESOLVED_IMPORTS=0
+LOCAL_MISSING_ROUTE_DEPENDENCIES=0
+PYTHON_3_13_EVIDENCE=4 passed
+PHASE_1_REVIEW=ACCEPTED
+PHASE_2_STARTED=NO
+DB_WRITES=0
+```

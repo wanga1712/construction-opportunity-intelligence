@@ -1,0 +1,76 @@
+{
+  "acceptance": {
+    "ALL_HANDLED_ROUTES_HAVE_EXPLICIT_DEPENDENCY": true,
+    "DIRECT_IMPORTS_DECLARED_IN_PROFILE": true,
+    "PROFILE_MANIFEST_GAPS": 0,
+    "PYTHON_RUNTIME_3_13": true,
+    "UNRESOLVED_INTERNAL_IMPORTS": 0
+  },
+  "handled_routes": [
+    "ai_review",
+    "analytics_v3",
+    "category_registry",
+    "companies",
+    "computers",
+    "crm_profiles",
+    "customers",
+    "expert_annotation",
+    "export_pdf",
+    "infrastructure",
+    "map",
+    "objects",
+    "objects_copy",
+    "objects_v2",
+    "okpd_prior_analytics",
+    "opportunity_radar",
+    "pipeline",
+    "procurement_card",
+    "system_health",
+    "table_workspace",
+    "waterproofing"
+  ],
+  "missing_route_dependencies": [],
+  "profile_import_gaps": {
+    "base": [],
+    "dev": [],
+    "documents": [],
+    "learning": [],
+    "training": []
+  },
+  "profile_manifests": {
+    "base": {
+      "ok": true,
+      "pyproject_only": [],
+      "requirements_only": [],
+      "version_mismatches": []
+    },
+    "dev": {
+      "ok": true,
+      "pyproject_only": [],
+      "requirements_only": [],
+      "version_mismatches": []
+    },
+    "documents": {
+      "ok": true,
+      "pyproject_only": [],
+      "requirements_only": [],
+      "version_mismatches": []
+    },
+    "learning": {
+      "ok": true,
+      "pyproject_only": [],
+      "requirements_only": [],
+      "version_mismatches": []
+    },
+    "training": {
+      "ok": true,
+      "pyproject_only": [],
+      "requirements_only": [],
+      "version_mismatches": []
+    }
+  },
+  "python_files": 795,
+  "python_runtime": "3.13.14",
+  "undeclared_direct_imports": [],
+  "unresolved_internal_imports": []
+}
