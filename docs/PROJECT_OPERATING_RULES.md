@@ -169,6 +169,63 @@ Read-only inventory получен через `systemctl show` 2026-08-16. Пу�
 Нельзя начинать с перебора usernames. `docs/HOSTS.md` и service documentation
 являются навигационными/операционными справками и обязаны ссылаться сюда.
 
+## Operational fast path for AI agents
+
+Этот раздел оптимизирует повторяющиеся операции после того, как approved
+route уже определён выше. Он не расширяет identities, access или write
+authority.
+
+### SSH
+
+- Не повторяй identity discovery на каждой операции и не перебирай
+  usernames, hosts, aliases или keys.
+- Если доступна persistent shell/session, переиспользуй её для связанных
+  read-only команд.
+- Без persistent session группируй связанные команды в один SSH invocation.
+- Не изменяй SSH config ради оптимизации и не добавляй alias, ProxyJump или
+  ControlMaster без отдельной необходимости и решения.
+
+### PostgreSQL
+
+- Несколько связанных read-only запросов выполняй одной psql-сессией или одним
+  SQL batch. Для аудита допустим pattern:
+
+```sql
+BEGIN READ ONLY;
+
+-- связанные SELECT-запросы
+
+COMMIT;
+```
+
+- Не открывай отдельное подключение ради каждого `COUNT(*)`, если counts
+  относятся к одному аудиту.
+- CRM и document_intelligence остаются разными базами: не создавай фиктивную
+  cross-database transaction.
+- Write/DDL routes подчиняются существующим ownership, migration и approval
+  правилам этого документа.
+
+### Runtime inspection
+
+За одну инфраструктурную задачу один раз зафиксируй baseline:
+
+```text
+host
+working directory
+deployed HEAD/source
+dirty state
+relevant service state
+```
+
+Не повторяй baseline перед каждым grep/query. Повтори его перед mutation или
+deploy, либо если появился признак изменения состояния.
+
+### Logs
+
+Используй bounded logs: конкретный unit, ограниченное число строк и нужный
+временной диапазон. Не читай весь journal без причины. Сначала ищи нужную
+ошибку или событие, расширяй окно только при недостаточности первого среза.
+
 ## Documentation consolidation record
 
 На 2026-08-16 conflicting/stale access statements были найдены в

@@ -10,3 +10,45 @@ service identities и порядка доступа — `docs/PROJECT_OPERATING_
 пользователей, роли, хосты, владельцев, ключи или credentials. Если authority
 не найдена после предписанной проверки, остановись с
 `IDENTITY_AUTHORITY_MISSING`.
+
+# Эффективность работы AI-кодера
+
+Минимизация повторной работы не отменяет correctness, authority checks,
+acceptance и проверку изменённого кода.
+
+1. **Один bootstrap на задачу.** Один раз определи repository root, branch,
+   HEAD, dirty state, relevant WIP, нужные файлы и approved infrastructure
+   route. Не повторяй discovery перед каждой командой. Повторно проверяй Git
+   только перед commit/push, после сообщения о параллельных изменениях,
+   неожиданного изменения файлов или перед production deploy.
+2. **Не перечитывай большие файлы.** Если файл уже прочитан в текущей задаче,
+   используй `rg -n`, `sed -n '<start>,<end>p'`, `git diff -- <file>` или
+   `git show <commit>:<file>`.
+3. **Ограничивай вывод.** Предпочитай `git --no-pager`, `git diff --stat`,
+   `git diff --unified=3`, точные `rg` patterns, нужные SQL columns и `LIMIT`.
+   Не выводи secrets, environment целиком, огромные таблицы и неограниченные
+   journal/tree outputs. Для логов начинай с unit, `-n N`, временного окна или
+   поиска ошибки.
+4. **Группируй операции.** Связанные read-only checks выполняй одной shell,
+   SSH или psql сессией. Не открывай отдельные SSH/psql подключения ради
+   каждого scalar query.
+5. **Не повторяй успешные проверки.** Установленные в задаче connection,
+   path, service identity, schema и query result считаются действующими, пока
+   нет признака изменения состояния.
+6. **Тесты от узких к широким.** Сначала syntax/import, затем тесты
+   изменённого модуля, связанные contracts и только при необходимости широкий
+   suite. Не повторяй одинаковый зелёный тест без изменения кода.
+7. **Не делай лишних рестартов.** Заверши связанный patch и проверки, затем
+   выполни максимум один необходимый restart/reload. Не чередуй edit/restart
+   без необходимости.
+8. **Используй существующую authority.** Если host, SSH route, DB role,
+   endpoint, service или working directory уже утверждены в
+   `docs/PROJECT_OPERATING_RULES.md`, не ищи их заново по системе. Проверяй
+   только изменяемое состояние: active state, deployed HEAD, current schema и
+   runtime config.
+9. **Не трать отчёт на рутину.** Финальный отчёт содержит изменённые файлы,
+   проверки, результат, commit, blockers и deviations. Не описывай обычные
+   `cd`, `pwd`, SSH connect, grep и другие стандартные шаги.
+10. **Correctness важнее экономии.** Не угадывай identities, не пропускай
+    обязательные authority/acceptance checks, не скрывай ошибки, не используй
+    stale runtime и не выполняй опасные mutations без согласования.
