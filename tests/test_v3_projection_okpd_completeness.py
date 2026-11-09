@@ -62,5 +62,5 @@ def test_upsert_update_writes_okpd(monkeypatch) -> None:
         dry_run=False,
     )
     assert action == "update"
-    assert "okpd_code = %(okpd_code)s" in captured["sql"]
+    assert "okpd_code = COALESCE(%(okpd_code)s, okpd_code)" in captured["sql"]
     assert captured["params"]["okpd_code"] == "26.20.11.110"
