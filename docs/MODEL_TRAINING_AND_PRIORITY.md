@@ -147,6 +147,81 @@ $$P(\text{Hit} \mid \text{OKPD}) = \frac{k_{\text{level}} + m \cdot P_{\text{par
 
 ---
 
+## 8.1. Историческая эволюция research priority
+
+Обучаемый контур развивался как исследовательский приоритет **до скачивания
+документации**, а не как бизнес-admission:
+
+1. **`OKPD_HIERARCHICAL_PRIOR_V1` (Deterministic Baseline)**:
+   иерархический байесовский prior по уровням ОКПД
+   (`full → level3 → level2 → root → global`).
+2. **`okpd_research_hit_v1` (OKPD-Only ML Classifier)**:
+   CatBoost-классификатор по категориальным кодам ОКПД.
+3. **`TITLE_TEXT_BASELINE_V2` (Text N-Gram Baseline)**:
+   TF-IDF word/char n-grams и калиброванная логистическая регрессия по
+   `auction_name`.
+4. **`TITLE_SEMANTIC_V2` (Domain-Aware Semantic Model)**:
+   семантическая модель с разделением предметных областей и OOF-защитой от
+   утечек.
+5. **`research_priority_v2` (Combined V2 Model)**:
+   ансамбль HistGradientBoosting/CatBoost с OOF-семантикой, domain
+   disambiguation, иерархическим ОКПД target-encoding и логарифмической ценой
+   лота.
+
+Semantic disambiguation подавляет межпредметные ложные срабатывания:
+
+- `инъектирование трещин`, деформационные швы и подземные конструкции — это
+  строительный контекст, а не медицинские инъекции;
+- наружное/фасадное освещение отделяется от поставки серверных процессоров и
+  видеокарт;
+- промышленные полимерные полы отделяются от медицинской и офисной мебели;
+- работы отделяются от прямой поставки товара.
+
+Управляемая taxonomy может менять research priority без переобучения модели:
+`BOOST +0.25`, `DOWNWEIGHT -0.25`, `EXPLORE +0.15`,
+`EXCLUDE_FROM_PRIMARY -0.50`, `NEUTRAL 0.00`; правила применяются по longest
+prefix matching.
+
+```text
+SHADOW_PRIORITY = clamp(P(MODEL_V2) + TAXONOMY_ADJUSTMENT, 0, 1)
+```
+
+### Historical benchmark snapshot: 112 проверенных объектов
+
+Таблица сохранена как исторический benchmark research-priority моделей. Она не
+является live-метрикой коммерческого рынка и не должна использоваться как
+текущее состояние production.
+
+| Модель | PR-AUC | ROC-AUC | Top 10% Hits | Top 20% Hits | Top 30% Hits | Lift@10 |
+| :--- | :---: | :---: | :---: | :---: | :---: | :---: |
+| **BASELINE V1 (OKPD)** | 0.5809 | 0.8240 | 10 / 12 (83.3%) | 13 / 23 (56.5%) | 13 / 34 (38.2%) | 3.59x |
+| **CatBoost V1 (OKPD-only)** | 0.5308 | 0.6418 | 10 / 12 (83.3%) | 14 / 23 (60.9%) | 15 / 34 (44.1%) | 3.59x |
+| **TITLE TEXT V2 (OOF CV)** | 0.6837 | 0.8846 | 9 / 12 (75.0%) | 15 / 23 (65.2%) | 21 / 34 (61.8%) | 3.23x |
+| **TITLE SEMANTIC V2 (OOF CV)** | **0.7308** | **0.9003** | **10 / 12 (83.3%)** | **16 / 23 (69.6%)** | **23 / 34 (67.6%)** | **3.59x** |
+| **COMBINED V2 (Fitted)** | **1.0000** | **1.0000** | **12 / 12 (100%)** | **23 / 23 (100%)** | **26 / 34 (100%)** | **4.31x** |
+
+### Приоритет не равен фильтрации
+
+Research priority никогда не исключает закупку из обработки. Все
+детерминированные `TARGET`-закупки сохраняют `eventual coverage`:
+
+- `GOLD` обрабатывается преимущественно раньше `SILVER`;
+- `SILVER` раньше `BRONZE`;
+- `BRONZE` раньше `WOOD`;
+- каждая группа получает гарантированную долю вычислительной мощности;
+- `WOOD` не становится вечным хвостом, а aging повышает старые необработанные
+  карточки.
+
+```text
+MODEL_CONTROLS_ADMISSION = NO
+MODEL_CAN_PERMANENTLY_SKIP_WOOD = NO
+ALL_TARGET_EVENTUALLY_RESEARCHED = YES
+WOOD_EXPLORATION_BUDGET > 0
+NEW_CATEGORY_DISCOVERY_PRESERVED = YES
+```
+
+---
+
 ## 9. Семантика медальных корзин и обработка совпадений (Tie Policy)
 
 Медали присваиваются на основании перцентилей распределения $P(\text{RESEARCH\_HIT})$:
