@@ -46,7 +46,6 @@ from src.services.waterproofing_deals import (
     deal_columns,
     deal_key,
     load_deal_states,
-    merge_deal_state,
 )
 from src.services.waterproofing_funnel import (
     ACCOUNT_STAGES,
@@ -54,6 +53,12 @@ from src.services.waterproofing_funnel import (
     FUNNEL_ACCOUNT,
     FUNNEL_DEAL,
     normalize_stage,
+)
+from src.services.waterproofing_stage_move import (
+    INVALID_FUNNEL,
+    INVALID_STAGE,
+    STALE_STAGE_MOVE,
+    move_card_stage,
 )
 from src.ui.components.hydro_drag_drop import hydro_drag_drop
 from src.ui.hydro_board import (
@@ -75,6 +80,7 @@ INTAKE_KEY = "hydro_intake_open"
 ACCOUNT_BOARD_KEY = "hydro_board_account"
 DEAL_BOARD_KEY = "hydro_board_deal"
 DRAG_EVENT_KEY = "hydro_kanban_last_drag_event"
+DRAG_NOTICE_KEY = "hydro_kanban_drag_notice"
 
 
 def _load_615(service: Any) -> dict[str, Any]:
@@ -165,57 +171,30 @@ def _cap_base_column(columns: list[dict[str, Any]]) -> None:
             column["cards"] = cards[:BASE_LIMIT]
 
 
-def _move_card_to_stage(
-    event: dict[str, Any],
-    account_cards: list[dict[str, Any]],
-    deal_cards: list[dict[str, Any]],
-) -> bool:
-    """Persist one drop event after validating its funnel and target stage."""
+def _consume_drag_event(event: dict[str, Any]) -> None:
+    """Validate and persist one structured drop event."""
+    if event.get("type") != "hydro_stage_move":
+        return
     event_id = str(event.get("event_id") or "")
     if not event_id or event_id == st.session_state.get(DRAG_EVENT_KEY):
-        return False
-    funnel = str(event.get("funnel") or "")
-    card_key = str(event.get("card_key") or "")
-    target_stage = str(event.get("target_stage") or "")
-    if funnel == FUNNEL_ACCOUNT:
-        card = next((row for row in account_cards if str(row.get("key") or "") == card_key), None)
-        allowed = {stage.id for stage in ACCOUNT_STAGES}
-        if card is None or target_stage not in allowed:
-            return False
-        merge_contour_state(card_key, {
-            "uk_name": card.get("uk_name") or "",
-            "uk_inn": card.get("uk_inn") or "",
-            "uk_ogrn": card.get("uk_ogrn") or "",
-            "uk_phone": card.get("uk_phone") or "",
-            "uk_address": card.get("uk_address") or "",
-            "object_count": int(card.get("object_count") or 0),
-            "parking_count": int(card.get("parking_count") or 0),
-            "total_underground_floors": int(card.get("total_underground_floors") or 0),
-            "max_underground_floors": int(card.get("max_underground_floors") or 0),
-            "ge1_floors": int(card.get("ge1_floors") or 0),
-            "ge2_floors": int(card.get("ge2_floors") or 0),
-            "stage": target_stage,
-            "next_action": STAGE_DEFAULT_ACTIONS.get(target_stage, ""),
-            "next_action_date": next_touch_default(target_stage),
-        })
-    elif funnel == FUNNEL_DEAL:
-        card = next((row for row in deal_cards if str(row.get("key") or "") == card_key), None)
-        allowed = {stage.id for stage in DEAL_STAGES}
-        if card is None or target_stage not in allowed:
-            return False
-        merge_deal_state(card_key, {
-            "address": card.get("address") or "",
-            "cadastral_number": card.get("cadastral_number") or "",
-            "uk_key": card.get("uk_key") or "",
-            "uk_name": card.get("uk_name") or "",
-            "stage": target_stage,
-            "next_action": STAGE_DEFAULT_ACTIONS.get(target_stage, ""),
-            "next_action_date": next_touch_default(target_stage),
-        })
-    else:
-        return False
+        return
+    result = move_card_stage(
+        card_key=str(event.get("card_key") or ""),
+        funnel=str(event.get("funnel") or ""),
+        from_stage=str(event.get("from_stage") or ""),
+        to_stage=str(event.get("to_stage") or ""),
+    )
     st.session_state[DRAG_EVENT_KEY] = event_id
-    return True
+    reason = str(result.get("reason") or "")
+    if reason == STALE_STAGE_MOVE:
+        st.session_state[DRAG_NOTICE_KEY] = (
+            "Этап уже был изменён в другой вкладке. Доска обновлена без перезаписи."
+        )
+    elif reason in (INVALID_FUNNEL, INVALID_STAGE):
+        st.session_state[DRAG_NOTICE_KEY] = (
+            "Перемещение отклонено: этап не относится к этой воронке."
+        )
+    st.rerun()
 
 
 def _render_drag_and_drop(
@@ -249,8 +228,8 @@ def _render_drag_and_drop(
         for stage in stages
     ]
     event = hydro_drag_drop(cards=cards, columns=columns, key="hydro_kanban_drag")
-    if isinstance(event, dict) and _move_card_to_stage(event, account_cards, deal_cards):
-        st.rerun()
+    if isinstance(event, dict):
+        _consume_drag_event(event)
 
 
 def _render_actions(service: Any, snapshot: dict[str, Any]) -> None:
@@ -366,6 +345,9 @@ def render_kanban_tab(service: ObjectsService) -> None:
     if db_ok:
         _render_intake(uk_rows, states)
 
+    drag_notice = st.session_state.pop(DRAG_NOTICE_KEY, None)
+    if drag_notice:
+        st.warning(str(drag_notice))
     st.caption("Перетащите карточку в колонку нужного этапа.")
     account_columns_rows = account_columns(visible_accounts)
     _cap_base_column(account_columns_rows)

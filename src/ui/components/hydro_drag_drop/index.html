@@ -186,14 +186,15 @@
         event.preventDefault();
         const targetStage = column.dataset.hydroColumnStage;
         const move = {
+          type: "hydro_stage_move",
           event_id: Date.now().toString(36) + "-" + Math.random().toString(36).slice(2),
           funnel: dragState.funnel,
           card_key: dragState.cardKey,
-          source_stage: dragState.sourceStage,
-          target_stage: targetStage,
+          from_stage: dragState.sourceStage,
+          to_stage: targetStage,
         };
         finishDrag();
-        if (move.source_stage !== move.target_stage) {
+        if (move.from_stage !== move.to_stage) {
           sendMsg("streamlit:setComponentValue", { value: move, dataType: "json" });
         }
       }
