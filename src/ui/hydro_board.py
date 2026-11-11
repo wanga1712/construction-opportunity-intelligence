@@ -17,6 +17,8 @@ from typing import Any, Callable, Iterable
 
 import streamlit as st
 
+from src.ui.hydro_dom import kanban_column_key
+
 COLUMN_WIDTH = 300
 BOARD_HEIGHT = 620
 BAND_ACCOUNT = ("Воронка УК", "Найти УК → выйти на ЛПР → провести встречу → получить объекты и доступ")
@@ -52,10 +54,14 @@ def render_column_head(column: dict[str, Any]) -> None:
 
 
 def render_column(
-    column: dict[str, Any], render_card: CardRenderer, *, width: int = COLUMN_WIDTH
+    column: dict[str, Any],
+    render_card: CardRenderer,
+    *,
+    width: int = COLUMN_WIDTH,
+    dom_key: str | None = None,
 ) -> None:
     """One funnel column; both boards reuse this skeleton."""
-    with st.container(border=True, width=width):
+    with st.container(border=True, width=width, key=dom_key):
         render_column_head(column)
         amount = str(column.get("amount_label") or "").strip()
         if amount and amount not in ("—", "0 ₽"):
@@ -98,7 +104,12 @@ def render_board(
     """
     with st.container(horizontal=True, gap="small", height=height, autoscroll=False, key=key):
         for column in columns:
-            render_column(column, render_card, width=width)
+            render_column(
+                column,
+                render_card,
+                width=width,
+                dom_key=kanban_column_key(key, str(column.get("stage") or "")),
+            )
 
 
 __all__ = [

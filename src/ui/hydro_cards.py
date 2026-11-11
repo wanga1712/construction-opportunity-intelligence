@@ -21,6 +21,7 @@ from src.services.waterproofing_funnel import (
     STAGE_DEFAULT_ACTIONS,
     STAGE_LABELS,
 )
+from src.ui.hydro_dom import kanban_card_key
 
 OPEN_UK_KEY = "hydro_open_uk"
 
@@ -101,9 +102,9 @@ def deal_card_lines(card: dict[str, Any]) -> list[str]:
 
 def render_account_card(card: dict[str, Any]) -> None:
     """УК card with the link into the detailed account card."""
-    with st.container(border=True):
+    key = str(card.get("key") or "")
+    with st.container(border=True, key=kanban_card_key("account", key)):
         st.markdown("  \n".join(account_card_lines(card)))
-        key = str(card.get("key") or "")
         if st.button("Открыть карточку УК", key=f"hydro_open_{key}", use_container_width=True):
             st.session_state[OPEN_UK_KEY] = key
             st.rerun()
@@ -169,7 +170,8 @@ def _deal_progress_form(card: dict[str, Any]) -> None:
 
 def render_deal_card(card: dict[str, Any]) -> None:
     """Object card with the progress form for that object."""
-    with st.container(border=True):
+    key = str(card.get("key") or "")
+    with st.container(border=True, key=kanban_card_key("deal", key)):
         st.markdown("  \n".join(deal_card_lines(card)))
         _deal_progress_form(card)
 

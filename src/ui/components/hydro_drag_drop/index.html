@@ -1,0 +1,254 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8" />
+  <style>
+    html, body {
+      margin: 0;
+      padding: 0;
+      width: 100%;
+      height: 1px;
+      overflow: hidden;
+      background: transparent;
+    }
+  </style>
+</head>
+<body>
+  <script>
+    function sendMsg(type, data) {
+      window.parent.postMessage(
+        Object.assign({ isStreamlitMessage: true, type: type }, data),
+        "*"
+      );
+    }
+
+    function setupDragDrop(args) {
+      const parentWindow = window.parent;
+      const parentDoc = parentWindow.document;
+
+      if (parentWindow.__hydroKanbanCleanup) {
+        parentWindow.__hydroKanbanCleanup();
+      }
+
+      const cardSpecs = Array.isArray(args.cards) ? args.cards : [];
+      const columnSpecs = Array.isArray(args.columns) ? args.columns : [];
+      const cardNodes = [];
+      const columnNodes = [];
+      const originalTitles = new Map();
+      let dragState = null;
+      let readyColumn = null;
+
+      const style = parentDoc.createElement("style");
+      style.id = "hydro-kanban-drag-style";
+      style.textContent = `
+        .hydro-draggable-card {
+          position: relative;
+          cursor: grab;
+          border-left: 3px solid #0176D3 !important;
+          user-select: none;
+        }
+        .hydro-draggable-card * {
+          user-select: none;
+        }
+        .hydro-draggable-card input,
+        .hydro-draggable-card textarea,
+        .hydro-draggable-card [contenteditable="true"] {
+          user-select: text;
+        }
+        .hydro-draggable-card::before {
+          content: "⠿";
+          position: absolute;
+          top: 3px;
+          right: 7px;
+          z-index: 3;
+          color: #0176D3;
+          font-size: 1.05rem;
+          font-weight: 700;
+          line-height: 1;
+          pointer-events: none;
+        }
+        .hydro-draggable-card.hydro-dragging {
+          cursor: grabbing;
+          opacity: 0.48;
+        }
+        .hydro-drop-column {
+          transition: outline-color 120ms ease, background-color 120ms ease;
+        }
+        .hydro-drop-column.hydro-drop-ready {
+          outline: 2px dashed #0176D3;
+          outline-offset: -4px;
+          background-color: rgba(1, 118, 211, 0.06) !important;
+        }
+      `;
+      parentDoc.head.appendChild(style);
+
+      function findCard(spec) {
+        return parentDoc.querySelector(".st-key-" + spec.dom_key);
+      }
+
+      function findColumn(spec) {
+        return parentDoc.querySelector(".st-key-" + spec.dom_key);
+      }
+
+      cardSpecs.forEach(function (spec) {
+        const node = findCard(spec);
+        if (!node) return;
+        originalTitles.set(node, node.getAttribute("title"));
+        node.draggable = true;
+        node.classList.add("hydro-draggable-card");
+        node.dataset.hydroCardKey = spec.card_key;
+        node.dataset.hydroCardStage = spec.stage;
+        node.dataset.hydroCardFunnel = spec.funnel;
+        node.title = "Перетащите карточку в нужный этап";
+        cardNodes.push(node);
+      });
+
+      columnSpecs.forEach(function (spec) {
+        const node = findColumn(spec);
+        if (!node) return;
+        node.dataset.hydroColumnStage = spec.stage;
+        node.dataset.hydroColumnFunnel = spec.funnel;
+        node.classList.add("hydro-drop-column");
+        columnNodes.push(node);
+      });
+
+      function clearReadyColumn() {
+        if (readyColumn) readyColumn.classList.remove("hydro-drop-ready");
+        readyColumn = null;
+      }
+
+      function finishDrag() {
+        if (dragState && dragState.node) {
+          dragState.node.classList.remove("hydro-dragging");
+        }
+        clearReadyColumn();
+        dragState = null;
+      }
+
+      function isInteractive(target) {
+        return Boolean(target.closest(
+          "button, input, textarea, select, [role='button'], " +
+          "[data-baseweb='select'], [contenteditable='true'], iframe"
+        ));
+      }
+
+      function onDragStart(event) {
+        const node = event.target.closest("[data-hydro-card-key]");
+        if (!node) return;
+        if (isInteractive(event.target)) {
+          event.preventDefault();
+          return;
+        }
+        dragState = {
+          node: node,
+          cardKey: node.dataset.hydroCardKey,
+          funnel: node.dataset.hydroCardFunnel,
+          sourceStage: node.dataset.hydroCardStage,
+        };
+        event.dataTransfer.effectAllowed = "move";
+        event.dataTransfer.setData("text/plain", dragState.cardKey);
+        window.setTimeout(function () {
+          if (node) node.classList.add("hydro-dragging");
+        }, 0);
+      }
+
+      function onDragOver(event) {
+        if (!dragState) return;
+        const column = event.target.closest(
+          "[data-hydro-column-stage][data-hydro-column-funnel]"
+        );
+        if (!column || column.dataset.hydroColumnFunnel !== dragState.funnel) return;
+        event.preventDefault();
+        event.dataTransfer.dropEffect = "move";
+        if (readyColumn !== column) {
+          clearReadyColumn();
+          readyColumn = column;
+          readyColumn.classList.add("hydro-drop-ready");
+        }
+      }
+
+      function onDragLeave(event) {
+        if (!readyColumn) return;
+        if (!readyColumn.contains(event.relatedTarget)) {
+          clearReadyColumn();
+        }
+      }
+
+      function onDrop(event) {
+        if (!dragState) return;
+        const column = event.target.closest(
+          "[data-hydro-column-stage][data-hydro-column-funnel]"
+        );
+        if (!column || column.dataset.hydroColumnFunnel !== dragState.funnel) {
+          finishDrag();
+          return;
+        }
+        event.preventDefault();
+        const targetStage = column.dataset.hydroColumnStage;
+        const move = {
+          event_id: Date.now().toString(36) + "-" + Math.random().toString(36).slice(2),
+          funnel: dragState.funnel,
+          card_key: dragState.cardKey,
+          source_stage: dragState.sourceStage,
+          target_stage: targetStage,
+        };
+        finishDrag();
+        if (move.source_stage !== move.target_stage) {
+          sendMsg("streamlit:setComponentValue", { value: move, dataType: "json" });
+        }
+      }
+
+      function onDragEnd() {
+        finishDrag();
+      }
+
+      parentDoc.addEventListener("dragstart", onDragStart, true);
+      parentDoc.addEventListener("dragover", onDragOver, true);
+      parentDoc.addEventListener("dragleave", onDragLeave, true);
+      parentDoc.addEventListener("drop", onDrop, true);
+      parentDoc.addEventListener("dragend", onDragEnd, true);
+
+      parentWindow.__hydroKanbanCleanup = function () {
+        parentDoc.removeEventListener("dragstart", onDragStart, true);
+        parentDoc.removeEventListener("dragover", onDragOver, true);
+        parentDoc.removeEventListener("dragleave", onDragLeave, true);
+        parentDoc.removeEventListener("drop", onDrop, true);
+        parentDoc.removeEventListener("dragend", onDragEnd, true);
+        finishDrag();
+        cardNodes.forEach(function (node) {
+          node.draggable = false;
+          node.classList.remove("hydro-draggable-card", "hydro-dragging");
+          node.removeAttribute("data-hydro-card-key");
+          node.removeAttribute("data-hydro-card-stage");
+          node.removeAttribute("data-hydro-card-funnel");
+          if (originalTitles.get(node) === null) {
+            node.removeAttribute("title");
+          } else {
+            node.setAttribute("title", originalTitles.get(node));
+          }
+        });
+        columnNodes.forEach(function (node) {
+          node.classList.remove("hydro-drop-column", "hydro-drop-ready");
+          node.removeAttribute("data-hydro-column-stage");
+          node.removeAttribute("data-hydro-column-funnel");
+        });
+        if (style.parentNode) style.parentNode.removeChild(style);
+      };
+
+      sendMsg("streamlit:setFrameHeight", { height: 1 });
+    }
+
+    window.addEventListener("message", function (event) {
+      const data = event.data;
+      if (!data) return;
+      if (data.type === "streamlit:render") {
+        window.setTimeout(function () {
+          setupDragDrop(data.args || {});
+        }, 0);
+      }
+    });
+
+    sendMsg("streamlit:componentReady", { apiVersion: 1 });
+  </script>
+</body>
+</html>
