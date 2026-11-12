@@ -1,11 +1,23 @@
 # WIP CRM COMMERCIAL LOGIC END-TO-END TESTING V1
 
-Status: READY_FOR_CODER_ACCEPTANCE (2026-11-12).
+Status: TASK_READY_FOR_CODER - NOT_EXECUTED (2026-11-12).
 
 Owner: CRM commercial contour.
 
 Purpose: verify that a CURRENT procurement card reflects the commercial logic
 that was actually designed, not merely that Streamlit returns HTTP 200.
+
+This is a production acceptance task, not evidence that acceptance has already
+passed. No `PASS` or `PASS_WITH_REVIEW` result is valid until T01-T12 have been
+executed against the named production baseline and the manual UI checks have
+been completed.
+
+If the coder cannot obtain approved read-only production access, stop with
+`BLOCKED_PRODUCTION_ACCESS`. If browser access for T12 is unavailable, stop
+with `BLOCKED_UI_ACCESS`. Do not infer UI acceptance from service-level data.
+
+This task does not authorize downloads, mass reparse, DB/CRM writes, model calls
+or code changes. Finding a defect produces a separate bounded fix task.
 
 Production baseline:
 
@@ -15,6 +27,34 @@ CODE_COMMIT=324eaf6
 CRM_STREAMLIT=active
 HTTP=200
 ```
+
+The baseline values above are preconditions to re-check at test start. They are
+not a substitute for T01.
+
+## 0. Execution contract
+
+The coder must:
+
+1. Record local and production Git/hash state.
+2. Execute T01-T12 in order.
+3. Keep all production database sessions read-only.
+4. Perform the manual UI checks in T12 with the deployed Streamlit application.
+5. Save raw evidence and the machine-readable report.
+6. Report every failure without fixing it inside the acceptance run.
+7. Return `PASS`, `PASS_WITH_REVIEW`, `FAIL` or `BLOCKED` only after all
+   applicable checks have a recorded result.
+
+Allowed access:
+
+```text
+SSH_ALIAS=s13
+CRM_DB=crm, read-only
+DOCUMENT_DB=document_intelligence, read-only
+STREAMLIT=http://127.0.0.1:8504/
+```
+
+Do not print credentials, environment dumps, source URLs containing secrets or
+private keys.
 
 ## 1. What must be tested
 
@@ -218,6 +258,31 @@ Commercial offers:
 
 Do not treat quote row codes `12.1`, `12.2`, `12.3` as quantities.
 
+## 4.1 Current execution state
+
+Only bounded local/service canaries have been observed while preparing this
+task. They do not constitute the production acceptance run.
+
+```text
+T01_STATIC_RUNTIME=PARTIAL
+T02_CATEGORY_ISOLATION=PARTIAL_SAMPLE_ONLY
+T03_POSITION_VISIBILITY=PARTIAL_SERVICE_ONLY
+T04_UNASSIGNED_HYGIENE=PARTIAL_PID_43009_ONLY
+T05_GRANDSMETA_COLUMNS=PARTIAL_CANARIES_ONLY
+T06_CATEGORY_VOLUME_COMPLETENESS=PARTIAL_CANARIES_ONLY
+T07_COMMERCIAL_OFFER_SEPARATION=PARTIAL_PID_214966_ONLY
+T08_MEDAL_LIFECYCLE=NOT_RUN
+T09_PRIORITY_AND_DAILY_LOADS=NOT_RUN
+T10_QUEUE_RESILIENCE=NOT_RUN
+T11_NEW_CARD_PATH=NOT_RUN
+T12_MANUAL_UI_ACCEPTANCE=NOT_RUN
+FULL_ACCEPTANCE=NOT_RUN
+```
+
+The coder must replace every `PARTIAL`/`NOT_RUN` value with evidence-backed
+`PASS`, `FAIL`, `BLOCKED` or `INCONCLUSIVE`. Local unit canaries cannot be
+reported as production acceptance.
+
 ## 5. Test matrix
 
 ### T01 Static/runtime load
@@ -402,6 +467,8 @@ Required keys:
   "medal_priority_failures": [],
   "queue_failures": [],
   "manual_ui_results": [],
+  "blockers": [],
+  "execution_status": "NOT_RUN|RUNNING|COMPLETED|BLOCKED",
   "acceptance": "PASS|PASS_WITH_REVIEW|FAIL"
 }
 ```
@@ -458,10 +525,21 @@ UNASSIGNED_PRODUCT_ROWS_AFTER_FILTER=509 for PID 43009
 UNASSIGNED_OVERHEAD_ROWS_EXPECTED=0
 ```
 
-The 510 count is not accepted as category coverage. It is the current bounded
+The 509 count is not accepted as category coverage. It is the current bounded
 review pool. The coder must classify recurring product families into approved
 categories or leave explicit `REVIEW_REQUIRED`; suppressing the rows is not a
 pass.
+
+## 9.1 Result rules
+
+```text
+PASS_REQUIRES_T01_T12_COMPLETE=YES
+PASS_REQUIRES_MANUAL_UI_T12=YES
+PARTIAL_CANARY_IS_NOT_PRODUCTION_ACCEPTANCE=YES
+NO_PRODUCTION_ACCESS=>BLOCKED_PRODUCTION_ACCESS
+NO_BROWSER_FOR_T12=>BLOCKED_UI_ACCESS
+FAILURE_IS_NOT_FIXED_INSIDE_ACCEPTANCE_RUN=YES
+```
 
 ## 10. Scope exclusions
 
