@@ -29,7 +29,6 @@ from src.services.procurement_card_category_service import (
     TRUST_GROUPS as _TRUST_LABELS,
     group_products_by_trust as _group_products_by_trust,
 )
-from src.services.procurement_category_presentation import summarize_category_cards
 from src.services.section_projection_service import TOTAL_NEEDS_REVIEW as _SECTION_TOTAL_REVIEW
 
 _MEDAL_CSS = {
@@ -749,330 +748,118 @@ def _render_dossier(d: Dict[str, Any], db: Any = None) -> None:
 
     if tab_categories is not None:
         with tab_categories:
-            _cards = d.get("categories") or []
-            if not _cards:
-                st.markdown('<div class="pc-muted">Текущих коммерческих категорий нет.</div>',
-                            unsafe_allow_html=True)
-            else:
-                _category_summary = summarize_category_cards(_cards)
-                st.markdown('<div class="pc-sect">Category totals and subcategories</div>',
-                            unsafe_allow_html=True)
-                for _summary in _category_summary:
-                    _subtext = " | ".join(
-                        f'{x["subcategory_name"]} ({x["subcategory_code"]}): '
-                        f'{_money(x.get("material_value"))}'
-                        for x in (_summary.get("subcategories") or [])
-                    ) or "subcategories not classified"
-                    _duplicate_count = int(
-                        _summary.get("duplicate_source_copies_collapsed") or 0
-                    )
-                    if _duplicate_count:
-                        _subtext += f" | duplicate source copies collapsed: {_duplicate_count}"
-                    st.markdown(
-                        '<div class="pc-card"><b>%s</b> | %s | %s | positions %s | '
-                        'source rows %s | evidence %s | %s<br>'
-                        '<span class="pc-muted">%s</span></div>'
-                        % (
-                            escape(str(_summary.get("category_name") or "")),
-                            escape(str(_summary.get("category_code") or "")),
-                            escape(str(_summary.get("track") or "unknown")),
-                            _fmt(_summary.get("line_count")),
-                            _fmt(_summary.get("source_row_count")),
-                            _fmt(_summary.get("evidence_line_count")),
-                            _money(_summary.get("material_value")),
-                            escape(_subtext),
-                        ),
-                        unsafe_allow_html=True,
-                    )
-            _unassigned = d.get("unassigned_products") or []
-            if _unassigned:
-                st.markdown(
-                    '<div class="pc-sect" style="margin-top:14px">'
-                    f'Без категории / требуют разбора ({len(_unassigned)})</div>'
-                    '<div class="pc-muted">Товары не отнесены к категории или '
-                    'подкатегории. Они не входят в суммы и медали категорий выше.</div>',
-                    unsafe_allow_html=True,
+            cards = d.get("categories") or []
+            if not cards:
+                st.info("Товарных категорий пока нет.")
+            for summary in cards:
+                code = str(summary.get("category_code") or "")
+                products = [p for p in (summary.get("positions") or [])
+                            if str(p.get("category_code") or "") == code]
+                subcategories = summary.get("subcategory_summary") or []
+                medal = summary.get("current_effective_medal")
+                title = (
+                    f'{summary.get("category_name") or code}  '
+                    f'{_money(summary.get("commercial_value"))} · '
+                    f'{summary.get("position_count", len(products))} позиций · '
+                    f'{len(subcategories)} подкатегорий'
+                    + (f' · {medal}' if medal else '')
                 )
-                st.markdown(_table_html(
-                    ["Материал", "Кол-во", "Ед.", "Цена", "Сумма",
-                     "Документ", "Цитата"],
-                    [
-                        [
-                            escape(str(product.get("material") or ""))
-                            + (
-                                ' <span class="pc-note">×%s</span>'
-                                % _fmt(product.get("occurrence_count"))
-                                if int(product.get("occurrence_count") or 1) > 1
-                                else ""
-                            ),
-                            _fmt(product.get("quantity")),
+                with st.expander(title, expanded=(code == "composite_structures")):
+                    for sub in subcategories:
+                        st.markdown(
+                            f'**{escape(str(sub.get("subcategory_name") or sub.get("subcategory_code") or ""))}**  '
+                            f'{_fmt(sub.get("position_count"))} позиций'
+                        )
+                    products.sort(key=lambda p: (
+                        str(p.get("document_name") or p.get("source_document_id") or ""),
+                        str(p.get("sheet_name") or p.get("page_or_sheet") or ""),
+                        str(p.get("row_or_line") or ""),
+                        str(p.get("id") or p.get("entity_id") or ""),
+                    ))
+                    if products:
+                        rows = []
+                        for product in products:
+                            name = (product.get("product_name_raw")
+                                    or product.get("product_name_normalized") or "")
+                            rows.append([
+                                escape(str(name)), _fmt(product.get("quantity")),
+                                escape(str(product.get("unit") or "—")),
+                                _money(product.get("unit_price")),
+                                _money(product.get("total")),
+                            ])
+                        st.markdown(_table_html(
+                            ["Наименование", "Кол-во", "Ед.", "Цена", "Сумма"], rows,
+                        ), unsafe_allow_html=True)
+                        with st.expander("Техническая информация о строках"):
+                            for product in products:
+                                residue = str(product.get("section_code") or "").upper() == "RESIDUE"
+                                section = "Раздел документа не определён" if residue else str(product.get("section_code") or "—")
+                                st.markdown(
+                                    f'**{escape(str(product.get("product_name_raw") or product.get("product_name_normalized") or ""))}** · '
+                                    f'{escape(str(product.get("document_name") or product.get("source_document_id") or "—"))} · '
+                                    f'строка {escape(str(product.get("row_or_line") or "—"))} · {escape(section)}'
+                                    f'<br>{escape(str(product.get("source_quote") or ""))}',
+                                    unsafe_allow_html=True,
+                                )
+                    else:
+                        candidates = int(summary.get("evidence_line_count") or 0)
+                        st.info("Товарные позиции пока не подтверждены"
+                                + (f" · {candidates} документальных кандидатов" if candidates else ""))
+                    with st.expander("Техническая информация"):
+                        st.caption(
+                            f'category_code={code}; track={summary.get("track") or "—"}; '
+                            f'value basis={summary.get("commercial_value_basis") or "—"}; '
+                            f'positions={summary.get("position_count", len(products))}; '
+                            f'value positions={summary.get("value_position_count")}; '
+                            f'confirmed positions={summary.get("confirmed_position_count")}'
+                        )
+
+            orphan_positions = d.get("category_positions_without_current_opportunity") or []
+            if orphan_positions:
+                with st.expander(
+                    f"Позиции категоризированы, текущей возможности нет ({len(orphan_positions)})",
+                    expanded=False,
+                ):
+                    rows = []
+                    for product in orphan_positions:
+                        name = (product.get("product_name_raw")
+                                or product.get("product_name_normalized") or "")
+                        rows.append([
+                            escape(str(name)), _fmt(product.get("quantity")),
                             escape(str(product.get("unit") or "—")),
                             _money(product.get("unit_price")),
                             _money(product.get("total")),
-                            escape(str(product.get("document_name") or "—")),
-                            '<span class="pc-mono">%s</span>'
-                            % escape(str(product.get("source_quote") or "")[:160]),
-                        ]
-                        for product in _unassigned[:120]
-                    ],
-                    wrap=False,
-                ), unsafe_allow_html=True)
-            with st.expander("Позиции и исходные строки", expanded=True):
-                for _c in _cards:
-                    _confirmed = _c.get("confirmed_base_medal")
-                    _evidence_only = (
-                        _c.get("render_kind") == "EVIDENCE_ONLY"
-                        or bool(_c.get("evidence_only"))
-                    )
-                    _reference_rates = int(_c.get("reference_rate_count") or 0)
-                    st.markdown(
-                        '<div class="pc-card"><div class="pc-sect">🏷 %s'
-                        '<span class="pc-muted"> · %s · %s%s</span></div>'
-                        % (escape(str(_c.get("category_name") or "")),
-                           escape(
-                               str(_c.get("category_code") or "")
-                               + (" / " + str(_c.get("subcategory_code"))
-                                  if _c.get("subcategory_code") else "")
-                           ),
-                           escape(str(_c.get("track") or "—")),
-                           " · EVIDENCE ONLY" if _evidence_only else "")
-                        + _kv([
-                            ["Предварительная медаль",
-                             "— · только evidence"
-                             if _evidence_only else
-                             f'{_medal_span(_c.get("candidate_initial_medal"))}'
-                             f' {_fmt(_c.get("candidate_initial_score"))}'],
-                            ["После проверки",
-                             (
-                                 f"— · справочных ставок {_reference_rates}; "
-                                 "объём и сумма не заданы"
-                             )
-                             if _evidence_only and _reference_rates else
-                             "— · нет qty/unit/total"
-                             if _evidence_only else
-                             f'{_medal_span(_confirmed)} {_fmt(_c.get("confirmed_base_score"))}'
-                             if _confirmed else '<span class="pc-muted">Ожидает подтверждения</span>'],
-                            ["Текущая",
-                             "— · medal не назначается"
-                             if _evidence_only else
-                             f'{_medal_span(_c.get("current_effective_medal"))}'
-                             f' {_fmt(_c.get("current_effective_score"))}'],
-                            ["Документы", escape(str(_c.get("document_stage") or "—"))],
-                            ["Модель",
-                             f'{escape(str(_c.get("model_stage") or "—"))}'
-                             f' · P {_fmt(_c.get("model_pending"))}'
-                             f' · C {_fmt(_c.get("model_confirmed"))}'
-                             f' · R {_fmt(_c.get("model_rejected"))}'
-                             f' · U {_fmt(_c.get("model_unknown"))}'],
-                            ["Материалов найдено",
-                             f'{_fmt(_c.get("product_count"))}'
-                             f' · позиций {_fmt(_c.get("line_count"))}'
-                             f' · evidence {_fmt(_c.get("evidence_line_count"))}'
-                             f' · {_money(_c.get("material_value"))}'],
-                        ]) + '</div>',
-                        unsafe_allow_html=True,
-                    )
-                    _sec_txt = (
-                        "Подтверждено разделом: " + ", ".join((_c.get("section_codes") or [])[:2])
-                        if _c.get("section_confirmed")
-                        else "Вне раздела (RESIDUE) — разделом не подтверждено"
-                    )
-                    _om = _c.get("object_match") or {}
-                    st.markdown(
-                        '<div class="pc-muted">%s · объект: %s%s</div>'
-                        % (escape(_sec_txt), escape(str(_om.get("state") or "NO_DATA")),
-                           (" · " + escape(", ".join(_om.get("overlap") or [])))
-                           if _om.get("overlap") else ""),
-                        unsafe_allow_html=True,
-                    )
-                    _prods = _c.get("products") or []
-                    if _prods:
-                        for _trust, _items in _group_products_by_trust(_prods):
-                            st.markdown(
-                                '<div class="pc-muted">%s · %d</div>'
-                                % (escape(_TRUST_LABELS.get(_trust, _trust)), len(_items)),
-                                unsafe_allow_html=True,
-                            )
-                            st.markdown(_table_html(
-                                ["Материал", "Кол-во", "Ед.", "Цена", "Сумма",
-                                 "Характеристики", "Цитата", "Раздел"],
-                                [
-                                    [
-                                        escape(str(p.get("material") or ""))
-                                        + (
-                                            ' <span class="pc-note">×%s</span>'
-                                            % _fmt(p.get("occurrence_count"))
-                                            if int(p.get("occurrence_count") or 1) > 1
-                                            else ""
-                                        ),
-                                        _fmt(p.get("quantity")),
-                                        escape(str(p.get("unit") or "—")),
-                                        _money(p.get("unit_price")),
-                                        _money(p.get("total")),
-                                        _attrs(p) if p.get("attributes") else "—",
-                                        '<span class="pc-mono">%s</span>'
-                                        % escape(str(p.get("source_quote") or "")[:140]),
-                                        escape(str(p.get("section_name") or p.get("section_code") or "—")),
-                                    ]
-                                    for p in _items[:120]
-                                ]), unsafe_allow_html=True)
-                    _evidence_rows = _c.get("evidence_materials") or []
-                    if _evidence_rows:
-                        st.markdown(
-                            '<div class="pc-muted">EVIDENCE ONLY · '
-                            + (
-                                "цена показана как справочная ставка; "
-                                "объём и итог по категории не вычисляются"
-                                if _reference_rates
-                                else "материал и характеристики найдены, "
-                                "но подтверждённого qty/unit/total нет"
-                            )
-                            + "</div>",
-                            unsafe_allow_html=True,
-                        )
-                        st.markdown(_table_html(
-                            ["Материал", "Кол-во", "Ед.", "Цена", "Сумма",
-                             "Характеристики", "Цитата", "Статус"],
-                            [
-                                [
-                                    escape(str(p.get("material")
-                                               or p.get("product_name_raw") or "")),
-                                    "—",
-                                    escape(str(p.get("unit") or "—")),
-                                    _money(
-                                        p.get("unit_price")
-                                        if p.get("unit_price") is not None
-                                        else p.get("unit_price_value")
-                                    ),
-                                    "—",
-                                    _attrs(p) if p.get("attributes") else "—",
-                                    '<span class="pc-mono">%s</span>'
-                                    % escape(str(p.get("source_quote") or "")[:240]),
-                                    (
-                                        "СПРАВОЧНАЯ СТАВКА"
-                                        if str(p.get("layout_status") or "").upper()
-                                        == "UNIT_RATE_ONLY"
-                                        else "EVIDENCE ONLY"
-                                    ),
-                                ]
-                                for p in _evidence_rows[:40]
-                            ]), unsafe_allow_html=True)
+                        ])
+                    st.markdown(_table_html(
+                        ["Наименование", "Кол-во", "Ед.", "Цена", "Сумма"], rows,
+                    ), unsafe_allow_html=True)
 
-        # Раздел → материалы остаётся частью вкладки «Категории» (детализация).
-    if tab_categories is not None:
-        with tab_categories:
-            supply = d.get("supply_candidates") or []
-            _projection = d.get("section_projection") or {}
-            _sections = _projection.get("sections") or []
-
-            def _material_rows(items: List[Dict[str, Any]]) -> List[List[str]]:
-                # GOOD_SUPPLY_FACTS_V1: плоский материалоцентричный набор —
-                # материал, кол-во, ед., цена, сумма, характеристики, цитата, раздел.
-                out = []
-                for m in items:
-                    qty = m.get("quantity") if m.get("quantity") is not None else m.get("quantity_value")
-                    unit = (
-                        m.get("unit")
-                        or m.get("quantity_unit_normalized")
-                        or m.get("quantity_unit_raw")
-                    )
-                    price = m.get("unit_price") if m.get("unit_price") is not None else m.get("unit_price_value")
-                    total = m.get("total") if m.get("total") is not None else m.get("total_price_value")
-                    out.append([
-                        escape(str(m.get("material") or m.get("product_name_normalized")
-                                   or m.get("product_name_raw") or ""))
-                        + (
-                            ' <span class="pc-note">×%s</span>'
-                            % _fmt(m.get("occurrence_count"))
-                            if int(m.get("occurrence_count") or 1) > 1
-                            else ""
-                        ),
-                        _fmt(qty),
-                        escape(str(unit or "—")),
-                        _money(price),
-                        _money(total),
-                        _attrs(m) if m.get("attributes") else "—",
-                        '<span class="pc-mono">%s</span>' % escape(str(m.get("source_quote") or "")[:140]),
-                        escape(str(m.get("section_name") or "—")),
-                    ])
-                return out
-
-            _mat_cols = ["Материал", "Кол-во", "Ед.", "Цена", "Сумма", "Характеристики",
-                         "Цитата", "Раздел"]
-            if _sections:
-                # SECTION_LEVEL_NORMALIZATION_V1 (Phase 3): раздел → сумма → материалы.
-                for _sec in _sections:
-                    _state = str(_sec.get("total_state") or "unknown")
-                    if _state == "confirmed":
-                        _total_txt = _money(_sec.get("total_value"))
-                    elif _state == "unreliable":
-                        _total_txt = ('<span class="pc-chip warn">%s</span>'
-                                      % escape(_SECTION_TOTAL_REVIEW))
-                    else:
-                        _total_txt = "—"
-                    _page_txt = (" · " + escape(str(_sec.get("page_or_sheet")))
-                                 if _sec.get("page_or_sheet") else "")
-                    st.markdown(
-                        '<div class="pc-muted">Раздел <b>%s</b>%s · материалов: %s · сумма раздела: %s</div>'
-                        % (escape(str(_sec.get("section_name") or "")), _page_txt,
-                           _fmt(_sec.get("material_count")), _total_txt),
-                        unsafe_allow_html=True,
-                    )
-                    st.markdown(
-                        _table_html(_mat_cols, _material_rows(_sec.get("materials") or []), wrap=False),
-                        unsafe_allow_html=True,
-                    )
-                _residue = _projection.get("residue") or {}
-                _residue_rows = _residue.get("rows") or []
-                if _residue_rows:
-                    st.markdown(
-                        '<div class="pc-muted">Остаток (вне разделов): %s</div>'
-                        % _fmt(_residue.get("count")),
-                        unsafe_allow_html=True,
-                    )
-                    st.markdown(
-                        _table_html(_mat_cols, _material_rows(_residue_rows), wrap=False),
-                        unsafe_allow_html=True,
-                    )
-            elif supply:
-                st.markdown(_table_html(
-                    ["Товар/материал", "Характеристики", "Кол-во", "Цена", "Сумма", "Отношение", "Trust"],
-                    [
-                        [escape(str(s.get("product_name_normalized") or s.get("product_name_raw") or "")),
-                         _attrs(s),
-                         f'{_fmt(s.get("quantity_value"))} '
-                         f'{_fmt(s.get("unit") or s.get("quantity_unit_normalized") or s.get("quantity_unit_raw"))}',
-                         _money(s.get("unit_price_value")), _money(s.get("total_price_value")),
-                         _fmt(s.get("product_relation")), _fmt(s.get("structured_fact_trust_state"))]
-                        for s in supply
-                    ]), unsafe_allow_html=True)
-            else:
-                st.markdown('<div class="pc-muted">Извлечённых товаров нет: extraction ещё не '
-                            'прогнан. Кандидаты — вкладка «Находки», фильтр VERIFIED.</div>',
-                            unsafe_allow_html=True)
-
-    if _is_direct_track:
-        if tab_estimate is not None:
-            with tab_estimate:
-                _render_estimate(_direct_state, pid)
-        if tab_prod is not None:
-            with tab_prod:
-                _render_product_delivery(_direct_state)
-        if tab_participant is not None:
-            with tab_participant:
-                _render_participant(_direct_state)
-        if tab_security is not None:
-            with tab_security:
-                _render_security(_direct_state)
-        if tab_additional is not None:
-            with tab_additional:
-                _render_additional(_direct_state)
-
-    with tab_history:
-        _render_history_tab(
-            pid, db, d.get("findings") or [],
-            int(counts.get("findings_hidden_non_researchable") or 0),
-        )
+            unassigned = [p for p in (d.get("unassigned_products") or [])
+                          if str(p.get("category_code") or "").strip().lower()
+                          in ("", "unknown")]
+            if unassigned:
+                with st.expander(
+                    f"Без категории / требуют разбора ({len(unassigned)})", expanded=False,
+                ):
+                    unassigned.sort(key=lambda p: (
+                        str(p.get("document_name") or p.get("source_document_id") or ""),
+                        str(p.get("sheet_name") or p.get("page_or_sheet") or ""),
+                        str(p.get("row_or_line") or ""),
+                        str(p.get("id") or p.get("entity_id") or ""),
+                    ))
+                    rows = []
+                    for product in unassigned:
+                        name = (product.get("product_name_raw")
+                                or product.get("product_name_normalized") or "")
+                        rows.append([
+                            escape(str(name)), _fmt(product.get("quantity")),
+                            escape(str(product.get("unit") or "—")),
+                            _money(product.get("unit_price")),
+                            _money(product.get("total")),
+                        ])
+                    st.markdown(_table_html(
+                        ["Наименование", "Кол-во", "Ед.", "Цена", "Сумма"], rows,
+                    ), unsafe_allow_html=True)
 
     if tab_spec is not None:
         with tab_spec:

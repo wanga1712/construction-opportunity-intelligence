@@ -255,6 +255,18 @@ def _factual_product_groups(
     return groups
 
 
+def _position_subcategory_summary(positions: Iterable[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    grouped: Dict[str, int] = {}
+    for position in positions or ():
+        code = str(position.get("subcategory_code") or "").strip()
+        if code:
+            grouped[code] = grouped.get(code, 0) + 1
+    return [
+        {"subcategory_code": code, "position_count": count}
+        for code, count in sorted(grouped.items())
+    ]
+
+
 def build_category_cards(
     *,
     opportunities: Iterable[Dict[str, Any]],
@@ -265,6 +277,7 @@ def build_category_cards(
     model_counts: Dict[str, Dict[str, Any]],
     extraction_outcomes: Dict[str, Dict[str, Any]],
     evidence_rows: Iterable[Dict[str, Any]] = (),
+    category_positions: Optional[Iterable[Dict[str, Any]]] = None,
     procurement_title: Any = None,
     okpd_name: Any = None,
     object_class: Any = None,
@@ -274,6 +287,11 @@ def build_category_cards(
     from src.services.object_section_match_service import compare_section_to_procurement
 
     facts = list(supply_facts or [])
+    positions_by_category: Dict[str, List[Dict[str, Any]]] = {}
+    for position in category_positions or ():
+        code = str(position.get("category_code") or "").strip()
+        if code:
+            positions_by_category.setdefault(code, []).append(dict(position))
     evidence = list(evidence_rows or [])
     docs = list(documents or [])
     latest = (queue_progress.get("latest") or {}).get(int(procurement_id))
@@ -303,6 +321,71 @@ def build_category_cards(
             category_code=code,
             subcategory_code=sub,
         )
+        if category_positions is not None:
+            positions = [
+                row for row in positions_by_category.get(code, [])
+                if not sub or sub == _UNCLASSIFIED_SENTINEL
+                or str(row.get("subcategory_code") or "") == sub
+            ]
+            value_ids = {
+                str(row.get("structured_entity_id") or row.get("id") or "")
+                for row in products
+            }
+            confirmed_states = {"TRUSTED_PRODUCTION", "SECTION_CONFIRMED"}
+            for position in positions:
+                position["value_eligible"] = str(
+                    position.get("structured_entity_id") or ""
+                ) in value_ids
+                position["confirmation_eligible"] = (
+                    str(position.get("trust_state") or "").upper()
+                    in confirmed_states
+                )
+            category_value = _number(opp.get("expected_category_value"))
+            card = {
+                "category_code": code,
+                "category_name": opp.get("category_name") or code,
+                "subcategory_code": sub or None,
+                "subcategory_name": opp.get("subcategory_name") or sub or None,
+                "track": track or None,
+                "status": opp.get("status"),
+                "candidate_initial_score": _number(opp.get("candidate_initial_score")),
+                "candidate_initial_medal": opp.get("candidate_initial_medal"),
+                "confirmed_base_score": _number(opp.get("confirmed_base_score")),
+                "confirmed_base_medal": opp.get("confirmed_base_medal"),
+                "current_effective_score": _number(opp.get("current_effective_score")),
+                "current_effective_medal": opp.get("current_effective_medal"),
+                "current_effective_reason": opp.get("current_effective_reason"),
+                "commercial_state": opp.get("commercial_state"),
+                "confirmation_state": (
+                    "CONFIRMED" if opp.get("confirmed_base_medal") else "UNCONFIRMED"
+                ),
+                "positions": positions,
+                "products": positions,
+                "position_count": len(positions),
+                "line_count": len(positions),
+                "source_row_count": len(positions),
+                "value_positions": [p for p in positions if p["value_eligible"]],
+                "value_position_count": sum(1 for p in positions if p["value_eligible"]),
+                "confirmed_positions": [p for p in positions if p["confirmation_eligible"]],
+                "confirmed_position_count": sum(1 for p in positions if p["confirmation_eligible"]),
+                "commercial_value": category_value,
+                "commercial_value_basis": opp.get("category_value_basis"),
+                "material_value": category_value,
+                "document_stage": _document_stage(queue_status, extraction_outcomes.get(code)),
+                "document_progress": {"done": done_docs, "total": total_docs, "scope": "procurement"},
+                "document_eta_seconds": eta,
+                "model_stage": _model_stage(model_counts.get(code)),
+                "model_pending": (model_counts.get(code) or {}).get("pending"),
+                "model_confirmed": (model_counts.get(code) or {}).get("confirmed"),
+                "model_rejected": (model_counts.get(code) or {}).get("rejected"),
+                "model_unknown": (model_counts.get(code) or {}).get("unknown"),
+                "subcategory_summary": _position_subcategory_summary(positions),
+                "subcategories": _position_subcategory_summary(positions),
+                "evidence_line_count": len(evidence),
+                "evidence_materials": [],
+            }
+            cards.append(card)
+            continue
         cross_products = [
             product
             for product in products
@@ -461,6 +544,9 @@ def build_category_cards(
                 "cross_category_line_count": len(group_cross),
             })
             cards.append(group_card)
+    if category_positions is not None:
+        return cards
+
     for evidence_row in evidence:
         code = str(evidence_row.get("category_code") or "").strip()
         sub = str(evidence_row.get("subcategory_code") or "").strip()

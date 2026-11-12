@@ -168,6 +168,99 @@ def _safe_di(sql: str, params: tuple = (), errors: Optional[List[str]] = None,
         return []
 
 
+def load_category_positions(
+    procurement_id: int, errors: Optional[List[str]] = None
+) -> List[Dict[str, Any]]:
+    """Load factual estimate positions independently of supply/value eligibility."""
+    rows = _safe_di(
+        """
+        WITH preferred AS (
+            SELECT se.*,
+                   r.document_name,
+                   row_number() OVER (
+                       PARTITION BY se.procurement_id, se.source_document_id,
+                                    coalesce(se.row_or_line, ''),
+                                    coalesce(se.product_name_raw, '')
+                       ORDER BY (se.section_code IS NOT NULL) DESC, se.id DESC
+                   ) AS pref_rn,
+                   count(*) OVER (
+                       PARTITION BY se.procurement_id, se.source_document_id,
+                                    coalesce(se.row_or_line, ''),
+                                    coalesce(se.product_name_raw, '')
+                   ) AS physical_version_count,
+                   count(*) FILTER (
+                       WHERE se.quantity_value IS NOT NULL
+                         AND coalesce(se.quantity_unit_normalized, se.quantity_unit_raw, '') <> ''
+                         AND se.unit_price_value IS NOT NULL
+                         AND se.total_price_value IS NOT NULL
+                   ) OVER (
+                       PARTITION BY se.procurement_id, se.source_document_id,
+                                    coalesce(se.row_or_line, ''),
+                                    coalesce(se.product_name_raw, '')
+                   ) AS physical_full_quartet_count
+              FROM structured_entities se
+              LEFT JOIN structured_extraction_runs r ON r.id = se.run_id
+             WHERE se.procurement_id = %s
+               AND se.entity_type = 'PRODUCT'
+        )
+        SELECT id AS structured_entity_id, procurement_id,
+               category_code, subcategory_code,
+               product_name_raw, product_name_normalized,
+               quantity_value AS quantity,
+               coalesce(quantity_unit_normalized, quantity_unit_raw) AS unit,
+               unit_price_value AS unit_price, total_price_value AS total,
+               coalesce(section_code, 'RESIDUE') AS section_code,
+               section_name, source_document_id, document_name,
+               page_or_sheet, row_or_line,
+               structured_fact_trust_state AS trust_state,
+               extractor_version,
+               quantity_value IS NOT NULL AS has_quantity,
+               coalesce(quantity_unit_normalized, quantity_unit_raw, '') <> '' AS has_unit,
+               unit_price_value IS NOT NULL AS has_unit_price,
+               total_price_value IS NOT NULL AS has_total,
+               (quantity_value IS NOT NULL
+                AND coalesce(quantity_unit_normalized, quantity_unit_raw, '') <> ''
+                AND unit_price_value IS NOT NULL
+                AND total_price_value IS NOT NULL) AS full_quartet,
+               physical_version_count,
+               greatest(physical_version_count - 1, 0) AS stale_duplicate_count,
+               greatest(physical_full_quartet_count -
+                        CASE WHEN quantity_value IS NOT NULL
+                                  AND coalesce(quantity_unit_normalized, quantity_unit_raw, '') <> ''
+                                  AND unit_price_value IS NOT NULL
+                                  AND total_price_value IS NOT NULL
+                             THEN 1 ELSE 0 END, 0) AS suppressed_full_quartet_count,
+               physical_full_quartet_count,
+               source_quote
+          FROM preferred
+         WHERE pref_rn = 1
+         ORDER BY document_name NULLS LAST, page_or_sheet NULLS LAST,
+                  row_or_line NULLS LAST, structured_entity_id
+        """,
+        (int(procurement_id),), errors=errors, label="category_positions",
+    )
+    return rows
+
+
+def is_true_unassigned_category(code: Any) -> bool:
+    return str(code or "").strip().lower() in ("", "unknown")
+
+
+def positions_without_current_opportunity(
+    positions: List[Dict[str, Any]], cards: List[Dict[str, Any]]
+) -> List[Dict[str, Any]]:
+    represented_ids = {
+        str(position.get("structured_entity_id") or "")
+        for card in cards or []
+        for position in card.get("positions") or []
+    }
+    return [
+        row for row in positions or []
+        if not is_true_unassigned_category(row.get("category_code"))
+        and str(row.get("structured_entity_id") or "") not in represented_ids
+    ]
+
+
 def _di_write_conn() -> Any:
     """Отдельное autocommit-подключение для управляемой постановки в очередь."""
     from src.services.crm_db_runtime import require_crm_db_connect_kwargs
@@ -379,6 +472,7 @@ def load_procurement_dossier(db: Any, procurement_id: int) -> Dict[str, Any]:
         None,
         """
         SELECT o.commercial_category_code, o.commercial_subcategory_code, o.opportunity_track,
+               o.commercial_state, o.expected_category_value, o.category_value_basis,
                o.status, o.routing_version, o.category_confidence, o.candidate_medal, o.current_effective_medal,
                o.commercial_priority_score, o.research_action,
                o.candidate_initial_score, o.candidate_initial_medal,
@@ -1118,6 +1212,40 @@ def load_procurement_dossier(db: Any, procurement_id: int) -> Dict[str, Any]:
         )
 
         _progress = load_queue_progress([int(procurement_id)])
+        _category_positions = load_category_positions(
+            int(procurement_id), errors=errors
+        )
+        dossier["category_positions"] = _category_positions
+        dossier["category_position_audit"] = {
+            "preferred_positions": len(_category_positions),
+            "category_assigned_positions": sum(
+                1 for row in _category_positions
+                if not is_true_unassigned_category(row.get("category_code"))
+            ),
+            "true_unassigned_positions": sum(
+                1 for row in _category_positions
+                if is_true_unassigned_category(row.get("category_code"))
+            ),
+            "stale_duplicates_suppressed": sum(
+                int(row.get("stale_duplicate_count") or 0)
+                for row in _category_positions
+            ),
+            "full_quartet_preferred": sum(
+                1 for row in _category_positions if row.get("full_quartet")
+            ),
+            "full_quartet_raw": sum(
+                int(row.get("physical_full_quartet_count") or 0)
+                for row in _category_positions
+            ),
+            "full_quartet_duplicates_suppressed": sum(
+                int(row.get("suppressed_full_quartet_count") or 0)
+                for row in _category_positions
+            ),
+        }
+        dossier["unassigned_products"] = [
+            row for row in _category_positions
+            if is_true_unassigned_category(row.get("category_code"))
+        ]
         _model_counts: Dict[str, Any] = {}
         _outcomes: Dict[str, Any] = {}
         try:
@@ -1135,6 +1263,7 @@ def load_procurement_dossier(db: Any, procurement_id: int) -> Dict[str, Any]:
                 or dossier.get("supply_candidates")
                 or []
             ),
+            category_positions=_category_positions,
             documents=dossier["documents"],
             queue_progress=_progress,
             procurement_id=int(procurement_id),
@@ -1149,6 +1278,14 @@ def load_procurement_dossier(db: Any, procurement_id: int) -> Dict[str, Any]:
                 (dossier.get("object_classification") or {}).get("object_sector"),
                 (dossier.get("object_classification") or {}).get("application_area"),
             ])),
+        )
+        dossier["category_positions_without_current_opportunity"] = (
+            positions_without_current_opportunity(
+                _category_positions, dossier["categories"]
+            )
+        )
+        dossier["category_position_audit"]["positions_without_current_opportunity"] = len(
+            dossier["category_positions_without_current_opportunity"]
         )
     except Exception as _exc:  # noqa: BLE001
         _record_error(errors, "categories", _exc)
