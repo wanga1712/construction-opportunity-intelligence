@@ -271,6 +271,7 @@ quoted rate. The scoped release allows exactly:
 /opt/CRM_Streamlit/src/services/procurement_card_dossier_service.py
 /opt/CRM_Streamlit/src/services/procurement_card_category_service.py
 /opt/CRM_Streamlit/src/services/procurement_category_presentation.py
+/opt/CRM_Streamlit/src/services/product_subcategory_composite_seed_data.py
 /opt/CRM_Streamlit/src/services/good_supply_facts_service.py
 /opt/CRM_Streamlit/src/services/composite_visibility_service.py
 /opt/CRM_Streamlit/src/ui/procurement_card_page.py

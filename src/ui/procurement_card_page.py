@@ -796,7 +796,13 @@ def _render_dossier(d: Dict[str, Any], db: Any = None) -> None:
                      "Документ", "Цитата"],
                     [
                         [
-                            escape(str(product.get("material") or "")),
+                            escape(str(product.get("material") or ""))
+                            + (
+                                ' <span class="pc-note">×%s</span>'
+                                % _fmt(product.get("occurrence_count"))
+                                if int(product.get("occurrence_count") or 1) > 1
+                                else ""
+                            ),
                             _fmt(product.get("quantity")),
                             escape(str(product.get("unit") or "—")),
                             _money(product.get("unit_price")),

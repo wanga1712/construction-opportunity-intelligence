@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import logging
 import os
+import re
 from typing import Any, Dict, List, Optional
 
 import psycopg2
@@ -45,6 +46,55 @@ SUPPLY_SQL_LIMIT = 300
 SUPPLY_ROWS_LIMIT = 100
 
 _DI_CONN: Any = None
+
+_UNASSIGNED_COST_RE = re.compile(
+    r"^\s*(?:"
+    r"ФОТ|ОТ|ЭМ|ЗТ|НР|СП|М|МАТ|ОБ|"
+    r"строительств\w*|реконструкц\w*|ремонт\b|"
+    r"проектирован\w*|разработк\w*"
+    r")(?:\s|$)",
+    re.IGNORECASE,
+)
+
+
+def _is_unassigned_product_candidate(row: Dict[str, Any]) -> bool:
+    """Keep reviewable goods, not estimate totals, overhead or work rows."""
+    from src.services.works_vs_goods_service import classify_fact_kind
+
+    name = str(row.get("material") or "").strip()
+    unit = str(row.get("unit") or "").strip()
+    if len(name) < 2 or not name:
+        return False
+    if unit in {"%", "ПРОЦЕНТ", "PERCENT"}:
+        return False
+    if _UNASSIGNED_COST_RE.match(name):
+        return False
+    if re.fullmatch(r"[A-Za-zА-Яа-яЁё]{1,2}", name):
+        return False
+    return classify_fact_kind(name=name) == "GOODS"
+
+
+def _dedupe_unassigned_products(rows: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    """Collapse identical review rows while retaining their occurrence count."""
+    out: List[Dict[str, Any]] = []
+    seen: dict[tuple, int] = {}
+    for source in rows:
+        row = dict(source)
+        key = (
+            re.sub(r"\s+", " ", str(row.get("material") or "")).strip().casefold(),
+            str(row.get("quantity")),
+            str(row.get("unit") or "").strip().upper(),
+            str(row.get("unit_price")),
+            str(row.get("total")),
+        )
+        if key in seen:
+            existing = out[seen[key]]
+            existing["occurrence_count"] = int(existing.get("occurrence_count") or 1) + 1
+            continue
+        row["occurrence_count"] = 1
+        seen[key] = len(out)
+        out.append(row)
+    return out
 
 
 def _section_source_sql(*, use_estimate_rows: bool, procurement_id: int) -> str:
@@ -622,7 +672,7 @@ def load_procurement_dossier(db: Any, procurement_id: int) -> Dict[str, Any]:
             dossier["supply_audit"] = {"error": str(_exc)}
 
     if not _direct_track:
-        dossier["unassigned_products"] = _safe_di(
+        _unassigned_candidates = _safe_di(
             """
             SELECT id, source_document_id, document_name, row_ref,
                    name_raw AS material, name_normalized,
@@ -641,11 +691,16 @@ def load_procurement_dossier(db: Any, procurement_id: int) -> Dict[str, Any]:
                AND coalesce(source_quote, '') !~ 'ТЦ_'
                AND coalesce(name_raw, '') !~* '^(итого|всего|стоимость|ндс|раздел|глава)'
              ORDER BY total_value DESC NULLS LAST, id
-             LIMIT 500
+             LIMIT 1500
             """,
             (int(procurement_id),),
             errors=errors, label="unassigned_products",
         )
+        dossier["unassigned_products"] = _dedupe_unassigned_products([
+            row
+            for row in _unassigned_candidates
+            if _is_unassigned_product_candidate(row)
+        ])
 
     # SECTION_LEVEL_NORMALIZATION_V1 (Phase 3): «раздел → сумма раздела → материалы»
     # + отдельный «остаток». Число показывается только для SECTION_TOTAL/COMPUTED_SUM;

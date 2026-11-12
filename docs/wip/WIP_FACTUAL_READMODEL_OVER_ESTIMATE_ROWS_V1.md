@@ -202,8 +202,19 @@ procurement quantities, and are not summed.
 
 `PID 42971` now has five consistent `structural_reinforcement /
 injection_repair_materials` rows and category value `438,634.47 RUB`.
-`PID 43009` now has category value `707,440.07 RUB` instead of the prior
-unit-rate sum `32,981.32 RUB`.
+`PID 43009` now has three composite subcategories instead of a single
+unit-rate artifact:
+
+```text
+composite_guardrails_stairs =   707,440.07 RUB / 5 rows
+composite_drainage_channels =   132,981.86 RUB / 1 row
+polymer_cords_twines        =     3,039.11 RUB / 10 rows
+composite_structures total  =   843,461.04 RUB
+```
+
+The unassigned block filters overhead/aggregate labels (`ФОТ`, `НР`, `СП`,
+percent rows) and collapses identical review rows while retaining an
+occurrence count.
 
 ```text
 PY_COMPILE=PASS

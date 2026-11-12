@@ -54,10 +54,39 @@ def _quoted_numbers(source_quote: str) -> tuple[list[tuple[str, float]], dict[st
     return numbers, raw_by_label
 
 
+def _preferred_grand_smeta_match(
+    numbers: list[tuple[str, float]],
+) -> tuple[str, float, str, float, str, float, float] | None:
+    """Prefer known current-price columns over arbitrary arithmetic triples."""
+    by_label = dict(numbers)
+    for qty_label, price_label, total_label in (
+        ("O", "U", "X"),
+        ("P", "V", "Y"),
+    ):
+        if all(label in by_label for label in (qty_label, price_label, total_label)):
+            quantity = by_label[qty_label]
+            price = by_label[price_label]
+            total = by_label[total_label]
+            denominator = max(abs(total), abs(quantity * price), 1.0)
+            delta = abs(total - quantity * price) / denominator
+            if delta <= 0.05:
+                return (
+                    qty_label,
+                    quantity,
+                    price_label,
+                    price,
+                    total_label,
+                    total,
+                    delta,
+                )
+    return None
+
+
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--procurement-ids", required=True)
-    parser.add_argument("--category-code", required=True)
+    parser.add_argument("--category-code")
+    parser.add_argument("--match-name")
     parser.add_argument("--apply", action="store_true")
     parser.add_argument("--expected-plan-sha256")
     parser.add_argument(
@@ -82,18 +111,29 @@ def main() -> int:
     conn = connect_document_db()
     try:
         with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+            where = """
+                 WHERE procurement_id = ANY(%s)
+                   AND row_kind = 'GOODS'
+            """
+            params: list[Any] = [pids]
+            if args.category_code:
+                where += " AND category_code = %s"
+                params.append(args.category_code)
+            if args.match_name:
+                where += " AND name_raw ILIKE %s"
+                params.append(f"%{args.match_name}%")
             cur.execute(
                 """
                 SELECT id, procurement_id, row_ref, name_raw, quantity_raw,
                        quantity_value, unit_raw, unit_price_raw, unit_price_value,
                        total_raw, total_value, layout_status, source_quote
                   FROM structured_estimate_rows
-                 WHERE procurement_id = ANY(%s)
-                   AND category_code = %s
-                   AND row_kind = 'GOODS'
+                """
+                + where
+                + """
                  ORDER BY id
                 """,
-                (pids, args.category_code),
+                tuple(params),
             )
             rows = [dict(row) for row in cur.fetchall()]
 
@@ -101,7 +141,9 @@ def main() -> int:
         unresolved: list[dict[str, Any]] = []
         for row in rows:
             numbers, raw_by_label = _quoted_numbers(str(row["source_quote"] or ""))
-            match = find_arithmetic_triple(numbers)
+            match = _preferred_grand_smeta_match(numbers)
+            if match is None:
+                match = find_arithmetic_triple(numbers)
             if match is None:
                 unresolved.append(
                     {
@@ -196,6 +238,7 @@ def main() -> int:
             "plan_sha256": digest,
             "procurement_ids": pids,
             "category_code": args.category_code,
+            "match_name": args.match_name,
             "rows_scanned": len(rows),
             "planned_updates": len(plan),
             "unresolved": unresolved,

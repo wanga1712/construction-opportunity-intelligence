@@ -215,6 +215,15 @@ def _bulk_material_reason(row: Dict[str, Any], name: Any) -> Optional[str]:
         return None
     if category not in BULK_TARGET_CATEGORIES or unit not in BULK_UNITS:
         return "bulk_material"
+    if category == "composite_structures" and re.search(
+        r"брикет|издели|лоток|профил|настил",
+        str(name or ""),
+        re.IGNORECASE,
+    ):
+        # Manufactured composite products may mention their mineral filler
+        # (for example an epoxy-crushed-stone drainage briquette) without
+        # becoming a bulk aggregate.
+        return None
     if _BULK_NEGATIVE_RE.search(str(name or "")):
         return "bulk_material"
     try:
