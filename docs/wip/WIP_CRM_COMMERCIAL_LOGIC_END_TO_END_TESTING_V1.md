@@ -11,7 +11,7 @@ Production baseline:
 
 ```text
 BRANCH=CRM-ANALYTICS-V2-UI-REBUILD-1
-CODE_COMMIT=b15d579
+CODE_COMMIT=324eaf6
 CRM_STREAMLIT=active
 HTTP=200
 ```
@@ -64,6 +64,18 @@ FARTHER_STAGE_END_IS_LESS_ATTRACTIVE=YES
 
 A category summary total is insufficient. The card must expose the positions
 that form that total.
+
+Presentation terminology:
+
+```text
+position = one commercial material with the same unit and unit price
+source row = one persisted estimate-row occurrence
+```
+
+Repeated application of the same material/unit/rate in different estimate rows
+must be aggregated into one position: quantities and line totals are summed,
+and the source occurrence count is shown as `xN`. Source rows remain available
+for audit.
 
 Required presentation per category/subcategory:
 
@@ -140,7 +152,8 @@ Expected:
 
 ```text
 CATEGORY=structural_reinforcement/injection_repair_materials
-ROWS=5
+COMMERCIAL_POSITIONS=1
+SOURCE_ROWS=5
 CATEGORY_VALUE=438634.47 RUB
 LAYOUT=CONSISTENT
 ```
@@ -153,10 +166,10 @@ triple.
 Expected composite breakdown:
 
 ```text
-composite_guardrails_stairs=707440.07 RUB / 5 rows
+composite_guardrails_stairs=707440.07 RUB / 3 positions / 5 source rows
 composite_drainage_channels=132981.86 RUB / 1 row
-polymer_adhesives_binders=32243.07 RUB / 2 rows
-polymer_cords_twines=3039.11 RUB / 10 rows
+polymer_adhesives_binders=32243.07 RUB / 1 position / 2 source rows
+polymer_cords_twines=3039.11 RUB / 1 position / 10 source rows
 composite_structures_total=875704.11 RUB
 ```
 
@@ -167,6 +180,8 @@ Polyamide cord acceptance:
 
 - every source row is assigned to
   `composite_structures/polymer_cords_twines`;
+- the card shows one aggregated position with quantity `0.003253 T`, unit price
+  `934247.77 RUB`, total `3039.11 RUB` and `x10` source occurrences;
 - row `X` is the line total, not base rate `Q`;
 - quantity uses coefficient-adjusted `O`, not original `I`;
 - ten distinct estimate coordinates contribute `3039.11 RUB`;
@@ -232,6 +247,9 @@ For every category card:
 - `products[].subcategory_code == card.subcategory_code`;
 - a row from another category is a hard failure.
 
+Also verify that `line_count` means commercial positions while
+`source_row_count` counts original estimate rows.
+
 ### T03 Position visibility
 
 Open each category with `line_count > 0`.
@@ -240,6 +258,8 @@ Pass:
 
 - all contributing positions are visible to a normal user;
 - the displayed total equals the sum of displayed confirmed row totals;
+- repeated source occurrences are represented by one aggregated position with
+  an occurrence count and auditable source-row references;
 - evidence-only rows are labeled and excluded from the confirmed sum.
 
 Fail:
@@ -434,8 +454,7 @@ At the time this WIP was created:
 POLYAMIDE_CORD_CATEGORY_ASSIGNED=YES
 POLYAMIDE_CORD_VALUE=3039.11 RUB
 COMPOSITE_DRAINAGE_BRIQUETTE_VALUE=132981.86 RUB
-UNASSIGNED_PRODUCT_ROWS_AFTER_FILTER=RECOUNT_REQUIRED
-PRE_EPOXY_CLASSIFICATION_REVIEW_POOL=510 for PID 43009
+UNASSIGNED_PRODUCT_ROWS_AFTER_FILTER=509 for PID 43009
 UNASSIGNED_OVERHEAD_ROWS_EXPECTED=0
 ```
 
