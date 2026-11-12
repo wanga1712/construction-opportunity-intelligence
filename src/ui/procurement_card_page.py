@@ -817,7 +817,7 @@ def _render_dossier(d: Dict[str, Any], db: Any = None) -> None:
                     ],
                     wrap=False,
                 ), unsafe_allow_html=True)
-            with st.expander("Expand subcategory details and source rows", expanded=False):
+            with st.expander("Позиции и исходные строки", expanded=True):
                 for _c in _cards:
                     _confirmed = _c.get("confirmed_base_medal")
                     _evidence_only = (

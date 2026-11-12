@@ -224,6 +224,14 @@ def _bulk_material_reason(row: Dict[str, Any], name: Any) -> Optional[str]:
         # (for example an epoxy-crushed-stone drainage briquette) without
         # becoming a bulk aggregate.
         return None
+    if category == "structural_reinforcement" and re.search(
+        r"анкер|арматур|инъекцион|клей|смол|композит",
+        str(name or ""),
+        re.IGNORECASE,
+    ):
+        # Anchoring/repair compounds may state that they are installed in
+        # concrete without themselves being a bulk concrete material.
+        return None
     if _BULK_NEGATIVE_RE.search(str(name or "")):
         return "bulk_material"
     try:
@@ -393,7 +401,17 @@ def classify_supply_row(row: Dict[str, Any]) -> Optional[str]:
         str(row.get("quantity_unit_normalized") or "").upper() in COUNT_UNITS
         and _fractional_count_quantity(row)
     ):
-        return "no_quantity"
+        fractional_resource = (
+            category == "structural_reinforcement"
+            and row.get("total_price_value") is not None
+            and re.search(
+                r"анкер|арматур|инъекцион|клей|смол",
+                str(name or ""),
+                re.IGNORECASE,
+            )
+        )
+        if not fractional_resource:
+            return "no_quantity"
     if row.get("total_price_value") is None:
         return "no_total"
     return None

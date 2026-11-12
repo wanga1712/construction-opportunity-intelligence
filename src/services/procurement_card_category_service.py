@@ -541,7 +541,7 @@ def build_category_cards(
                     if str(row.get("material") or row.get("product_name_raw") or "").strip()
                 }),
                 "line_count": 0,
-                "source_row_count": len(group_evidence),
+                "source_row_count": 0,
                 "evidence_line_count": len(group_evidence),
                 "evidence_materials": group_evidence,
                 "reference_rate_count": reference_rate_count,

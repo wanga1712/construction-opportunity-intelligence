@@ -1,16 +1,15 @@
 # WIP CRM COMMERCIAL LOGIC END-TO-END TESTING V1
 
-Status: TASK_READY_FOR_CODER - NOT_EXECUTED (2026-11-12).
+Status: AUTOMATED_ACCEPTANCE_PASS - MANUAL_UI_PENDING (2026-11-12).
 
 Owner: CRM commercial contour.
 
 Purpose: verify that a CURRENT procurement card reflects the commercial logic
 that was actually designed, not merely that Streamlit returns HTTP 200.
 
-This is a production acceptance task, not evidence that acceptance has already
-passed. No `PASS` or `PASS_WITH_REVIEW` result is valid until T01-T12 have been
-executed against the named production baseline and the manual UI checks have
-been completed.
+T01-T11 were executed against the explicit runtime manifest. All automated
+checks passed. T12 manual browser verification has not been performed, so the
+overall result remains `BLOCKED_UI_ACCESS`; no full `PASS` is claimed.
 
 If the coder cannot obtain approved read-only production access, stop with
 `BLOCKED_PRODUCTION_ACCESS`. If browser access for T12 is unavailable, stop
@@ -22,8 +21,15 @@ or code changes. Finding a defect produces a separate bounded fix task.
 Production baseline:
 
 ```text
-BRANCH=CRM-ANALYTICS-V2-UI-REBUILD-1
-CODE_COMMIT=324eaf6
+ACCEPTANCE_BASELINE_TYPE=EXPLICIT_RUNTIME_FILE_HASHES
+RUNTIME_MANIFEST=docs/releases/CRM_COMMERCIAL_RUNTIME_MANIFEST_20261112_V1.json
+LOCAL_REVIEW_BRANCH=CRM-ANALYTICS-V2-UI-REBUILD-1
+LOCAL_REVIEW_HEAD=18c8c18
+LOCAL_CODE_HEAD=324eaf6
+S13_GIT_BRANCH=CRM-V3-CATEGORY-OPPORTUNITY-CARDS-AND-MULTI-MEDAL-OUTPUT-1
+S13_GIT_HEAD=b5d46b8f
+S13_RUNTIME_FILE_HASH_MATCH=YES
+BRANCH_EQUALITY_REQUIRED=NO
 CRM_STREAMLIT=active
 HTTP=200
 ```
@@ -35,7 +41,7 @@ not a substitute for T01.
 
 The coder must:
 
-1. Record local and production Git/hash state.
+1. Verify every runtime-file SHA-256 in the manifest before starting T01.
 2. Execute T01-T12 in order.
 3. Keep all production database sessions read-only.
 4. Perform the manual UI checks in T12 with the deployed Streamlit application.
@@ -55,6 +61,10 @@ STREAMLIT=http://127.0.0.1:8504/
 
 Do not print credentials, environment dumps, source URLs containing secrets or
 private keys.
+
+Git branch equality is not the runtime identity for this task because S13 has a
+separate, heavily dirty working tree. A manifest hash mismatch is a blocker; a
+branch-name difference alone is not.
 
 ## 1. What must be tested
 
@@ -260,28 +270,49 @@ Do not treat quote row codes `12.1`, `12.2`, `12.3` as quantities.
 
 ## 4.1 Current execution state
 
-Only bounded local/service canaries have been observed while preparing this
-task. They do not constitute the production acceptance run.
+The read-only automated acceptance run completed against manifest SHA-256
+`b32a744285cf079cc68ef7d7469f44c55906a9689a8dcd50cf77604231551565`.
 
 ```text
-T01_STATIC_RUNTIME=PARTIAL
-T02_CATEGORY_ISOLATION=PARTIAL_SAMPLE_ONLY
-T03_POSITION_VISIBILITY=PARTIAL_SERVICE_ONLY
-T04_UNASSIGNED_HYGIENE=PARTIAL_PID_43009_ONLY
-T05_GRANDSMETA_COLUMNS=PARTIAL_CANARIES_ONLY
-T06_CATEGORY_VOLUME_COMPLETENESS=PARTIAL_CANARIES_ONLY
-T07_COMMERCIAL_OFFER_SEPARATION=PARTIAL_PID_214966_ONLY
-T08_MEDAL_LIFECYCLE=NOT_RUN
-T09_PRIORITY_AND_DAILY_LOADS=NOT_RUN
-T10_QUEUE_RESILIENCE=NOT_RUN
-T11_NEW_CARD_PATH=NOT_RUN
+T01_STATIC_RUNTIME=PASS
+T02_CATEGORY_ISOLATION=PASS
+T03_POSITION_VISIBILITY=PASS
+T04_UNASSIGNED_HYGIENE=PASS
+T05_GRANDSMETA_COLUMNS=PASS
+T06_CATEGORY_VOLUME_COMPLETENESS=PASS
+T07_COMMERCIAL_OFFER_SEPARATION=PASS
+T08_MEDAL_LIFECYCLE=PASS
+T09_PRIORITY_AND_DAILY_LOADS=PASS
+T10_QUEUE_RESILIENCE=PASS
+T11_NEW_CARD_PATH=PASS_READ_ONLY
 T12_MANUAL_UI_ACCEPTANCE=NOT_RUN
-FULL_ACCEPTANCE=NOT_RUN
+FULL_ACCEPTANCE=BLOCKED_UI_ACCESS
 ```
 
-The coder must replace every `PARTIAL`/`NOT_RUN` value with evidence-backed
-`PASS`, `FAIL`, `BLOCKED` or `INCONCLUSIVE`. Local unit canaries cannot be
-reported as production acceptance.
+The coder still must execute T12 in the deployed browser UI before any full
+`PASS` is recorded. Local code changes during remediation were limited to
+visibility and false-positive filters discovered by T02-T05.
+
+Reports:
+
+```text
+C:\Users\Lenovo\AppData\Local\Temp\crm_commercial_logic_e2e_20261112_130526.json
+C:\Users\Lenovo\AppData\Local\Temp\crm_commercial_logic_e2e_20261112_130526.md
+/tmp/crm_commercial_logic_e2e_20261112_130526.json
+/tmp/crm_commercial_logic_e2e_20261112_130526.md
+```
+
+Defects found and corrected during the run:
+
+- structural-reinforcement compounds were rejected as bulk concrete because
+  their descriptions mention installation in concrete;
+- fractional coefficient-adjusted `PCS` quantities for injection materials were
+  rejected as invalid count quantities;
+- `source_row_count` mixed confirmed source rows with evidence-only rows;
+- position details were behind a collapsed expander and are now expanded by
+  default;
+- the composite acceptance fixture was corrected for aggregated positions,
+  polymer adhesives and drainage briquette totals.
 
 ## 5. Test matrix
 

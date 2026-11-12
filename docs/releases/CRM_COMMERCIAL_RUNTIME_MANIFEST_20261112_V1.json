@@ -1,0 +1,43 @@
+{
+  "manifest_id": "crm-commercial-runtime-20261112-v1",
+  "created_at": "2026-11-12T13:00:00+03:00",
+  "purpose": "Freeze the exact files serving the CRM commercial card runtime for acceptance T01-T12.",
+  "baseline_type": "EXPLICIT_RUNTIME_FILE_HASHES",
+  "branch_equality_required": false,
+  "local_review": {
+    "branch": "CRM-ANALYTICS-V2-UI-REBUILD-1",
+    "head": "18c8c18",
+    "code_head": "324eaf6"
+  },
+  "s13_git": {
+    "branch": "CRM-V3-CATEGORY-OPPORTUNITY-CARDS-AND-MULTI-MEDAL-OUTPUT-1",
+    "head": "b5d46b8f",
+    "dirty_count": 707,
+    "used_as_runtime_identity": false
+  },
+  "service": {
+    "unit": "crm-streamlit",
+    "active": true,
+    "endpoint": "http://127.0.0.1:8504/",
+    "http_status": 200
+  },
+  "runtime_files": {
+    "src/services/good_supply_facts_service.py": "b0f1871b57cd7e212c24cabd9ce53390f504ce3ca3d5644eb4d6dc9652027d0b",
+    "src/services/procurement_card_category_service.py": "e2695092684763bcec1d8a5ae4f5baf04af10d2fec1f2579ea0d200ca1e392a8",
+    "src/services/procurement_category_presentation.py": "fcc34bb3d8f1b8e8c8eda6ab141a237c903dd5dcc230d9a2b47324209008eb34",
+    "src/ui/procurement_card_page.py": "fb1c673284fad9da6da9b98a7bdfa252969471b5a76b38c4f6087bd73b61a761",
+    "src/services/product_subcategory_composite_seed_data.py": "cebb047887a4c712825b42edd91cf6c76955f3918db89a03ef1421a5b9abfc0d",
+    "src/services/procurement_card_dossier_service.py": "c64c40183127ddea6631fe5b2d8f61ba24529e7f5564746154cc142c8af3028f",
+    "src/services/commercial_offer_evidence_service.py": "0c7029c3b7d1c477b9a0035c008a57a934aa9180321acf4f9aa659f2c4a69edf",
+    "src/services/commercial_routing_v3/post_parse_category_assessment.py": "d0efaeea0f6d1c3fd3a22e1c88e4fe9c5f8ec87493e613d0b7cfb35481df4e18",
+    "src/services/composite_visibility_service.py": "85900a67835aa6dbc4d1a780895f8fda27592fc0f8cc579ef78c83c3f5201203",
+    "/opt/tender_documents_research/document_processor/xlsx_table_reader.py": "9a1b8043988775f4e8a148d7ca0ed7e5549c521d9acf916015a0af79deb47c47"
+  },
+  "acceptance_contract": {
+    "verify_all_hashes_before_T01": true,
+    "branch_name_is_not_acceptance_identity": true,
+    "unlisted_dirty_files_are_outside_this_acceptance_scope": true,
+    "hash_mismatch_result": "BLOCKED_RUNTIME_BASELINE",
+    "tests_T01_T12_require_this_manifest": true
+  }
+}
