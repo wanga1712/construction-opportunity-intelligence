@@ -27,8 +27,8 @@ account, host, credential или key path. Запрещено пробовать
 
 | Host | Authority and purpose | Approved human/SSH access |
 |---|---|---|
-| S13 | Logical name `S13`; CRM, Candidate routing, Qwen/Ollama, document intelligence runtime, canonical CRM DB | primary operator `<S13_SSH_USER>`; connect via the **existing Host block** in local Windows SSH config that is already bound to this CRM host (User + IdentityFile from that block). There is **no** `Host S13` stanza. Do not invent aliases, users, or extra network setup. |
-| S7 | Logical name `S7`; source/history authority, source procurement data and source lifecycle/status | approved OS user `<S7_SSH_USER>`; connect via the existing Host block in the same local SSH config for this source host. |
+| S13 | Logical name `S13`; CRM, Candidate routing, Qwen/Ollama, document intelligence runtime, canonical CRM DB | primary operator `<S13_SSH_USER>`; canonical local SSH alias: `s13` (`ssh s13`). User, HostName and IdentityFile come only from that existing Host block. |
+| S7 | Logical name `S7`; source/history authority, source procurement data and source lifecycle/status | approved OS user `<S7_SSH_USER>`; canonical local SSH alias: `s7` (`ssh s7`). User, HostName and IdentityFile come only from that existing Host block. |
 
 Не вводить дополнительные canonical hosts без отдельного project decision.
 
@@ -57,18 +57,28 @@ file**, не Linux username, DB user, application user или service user. Не
 ssh -i <HOME>\.ssh\<SSH_IDENTITY> <S13_SSH_USER>@<S13_SSH_HOST>
 ```
 
-Proven local SSH config (inspected, not modified):
+Proven local SSH config (canonicalized 2026-10-30):
 
-- There is **no** `Host S13` stanza. `ssh S13` is not a configured alias
-  and will fail hostname resolution.
-- Approved S13 CRM access is the **already-existing Host block** in
-  `%USERPROFILE%\.ssh\config` whose User is `<S13_SSH_USER>` and whose
-  IdentityFile is the Windows SSH identity documented above.
-- Use that Host alias as written. Do not invent another username, host,
-  identity file, ProxyJump, or network overlay.
+- `Host s13` is the only canonical S13 entry. It retains the already-approved
+  S13 User, HostName and IdentityFile; the former `mint-lan` alias was renamed.
+- 2026-11-08: after the owner confirmed the online Tailscale peer, the existing
+  `Host s13` HostName was changed to that Tailscale address; the unavailable
+  former LAN endpoint was removed from this canonical block. User and
+  IdentityFile were preserved. `ssh s13` and the S13 Git remote were verified.
+- `Host s7` is the only canonical S7 entry. Duplicate aliases `nyx`,
+  `nyx-local` and `nyx-lan` were removed after machine-id verification.
+- Obsolete alternate-route aliases `nyx-vpn` and `mint-vpn` were removed;
+  the SSH config contains only the canonical project entries `s13` and `s7`.
+- Use `ssh s13` and `ssh s7`. Do not invent another username, host, identity
+  file, alias, ProxyJump or network overlay.
 - Do not print HostName, addresses, usernames, or key contents in reports.
 
 OPERATING_RULES_MATCH_REAL_SSH_CONFIG=YES
+
+The local Git remote named `s13` uses `ssh://s13/opt/CRM_Streamlit`; do not
+route it through the removed `mint-vpn` alias. This remote remains separate from
+the canonical GitHub `origin`; the histories must not be merged or pushed
+between one another.
 
 ## Canonical databases and technical roles
 
@@ -157,6 +167,120 @@ Read-only inventory получен через `systemctl show` 2026-08-16. Пу�
 
 Для не перечисленного unit сначала inspect actual configuration; service user
 не переносится по аналогии с соседним unit.
+
+## Approved CRM V3 application release path for reviewed hotfixes
+
+For an explicitly reviewed change limited to:
+
+```text
+src/services/commercial_routing_v3/daily_retention.py
+src/services/commercial_routing_v3/projection_writer.py
+```
+
+the approved S13 release route is the configured `ssh s13` identity and the
+existing service-user-writable directory:
+
+```text
+/opt/CRM_Streamlit/src/services/commercial_routing_v3/
+```
+
+The release must:
+
+- verify the production preimage SHA-256;
+- stage reviewed bytes as sibling temporary files;
+- create a timestamped preimage backup;
+- run the runtime virtualenv's `py_compile`;
+- atomically rename the old and staged files;
+- verify live hashes, ownership/mode and a fresh-process import;
+- automatically restore the backup on any failure.
+
+Do not overwrite a root-owned target directly and do not copy a divergent local
+branch file over runtime. Do not restart a running Python batch merely to load
+the change; the next invocation imports the replacement. A restart requires a
+separate process-model check.
+
+This path does not authorize deletion, schema changes, service configuration,
+or any file outside the two paths above.
+
+## Owner-approved medal/category pipeline release 2026-11-12
+
+The owner explicitly authorized release of the reviewed local medal and
+post-parse category implementation on 2026-11-12. This scoped route uses the
+canonical `ssh s13` identity and the existing service-owned runtime trees.
+
+Allowed files:
+
+```text
+/opt/CRM_Streamlit/src/services/commercial_routing_v3/medal_timing.py
+/opt/CRM_Streamlit/src/services/commercial_routing_v3/candidate_scoring.py
+/opt/CRM_Streamlit/src/services/commercial_routing_v3/commercial_timing.py
+/opt/CRM_Streamlit/src/services/commercial_routing_v3/daily_medal_reevaluation.py
+/opt/CRM_Streamlit/src/services/commercial_routing_v3/medal_lineage.py
+/opt/CRM_Streamlit/src/services/commercial_routing_v3/model_input.py
+/opt/CRM_Streamlit/src/services/commercial_routing_v3/post_parse_category_assessment.py
+/opt/CRM_Streamlit/src/services/procurement_card_dossier_service.py
+/opt/CRM_Streamlit/src/services/procurement_card_category_service.py
+/opt/CRM_Streamlit/src/services/category_overview_service.py
+/opt/CRM_Streamlit/src/services/analytics_table_workspace_service.py
+/opt/CRM_Streamlit/src/services/good_supply_facts_service.py
+/opt/tender_documents_research/document_processor/crm_taxonomy_loader.py
+/opt/tender_documents_research/document_processor/estimate_row_taxonomy.py
+/opt/tender_documents_research/scripts/run_post_parse_category_batches.py
+/opt/tender_documents_research/scripts/backfill_current_category_opportunities_from_rows.py
+```
+
+Release requirements:
+
+- stage reviewed bytes beside each target and normalize line endings;
+- record SHA-256 preimages and create a timestamped backup;
+- verify the runtime virtualenv can compile/import every staged file;
+- atomically replace only the allowed files;
+- verify live hashes and fresh-process imports;
+- restore every replaced file automatically if any verification fails.
+
+This route does not authorize schema changes, mass deletion, service-unit
+changes, or writes to any other path. Feature flags and live backfills remain
+separate gates.
+
+## Owner-approved GrandSmeta numeric parser hotfix 2026-11-12
+
+The owner explicitly requested an urgent production correction for the
+two-level GrandSmeta header after live PID `42971` showed normalized numeric
+fields empty and raw quantity `5,65068493`. The scoped release allows exactly:
+
+```text
+/opt/tender_documents_research/document_processor/xlsx_table_reader.py
+```
+
+The release must use `ssh s13`, verify the preimage, stage the reviewed file
+beside the target, normalize line endings, compile it with the runtime Python,
+atomically replace the target, and retain a timestamped backup. Existing-row
+numeric repair remains a separate hash-verified backfill gate. This route does
+not authorize schema changes, a broad reparse, document downloads, queue
+mutation, or service-unit changes.
+
+## Owner-approved card category and commercial-offer split 2026-11-12
+
+The owner explicitly requested that a category block show only rows assigned to
+that category, that unclassified products move to an unassigned review block,
+and that commercial offers receive a separate card tab with issuer, INN and
+quoted rate. The scoped release allows exactly:
+
+```text
+/opt/CRM_Streamlit/src/services/commercial_offer_evidence_service.py
+/opt/CRM_Streamlit/src/services/procurement_card_dossier_service.py
+/opt/CRM_Streamlit/src/services/procurement_card_category_service.py
+/opt/CRM_Streamlit/src/services/procurement_category_presentation.py
+/opt/CRM_Streamlit/src/services/good_supply_facts_service.py
+/opt/CRM_Streamlit/src/services/composite_visibility_service.py
+/opt/CRM_Streamlit/src/ui/procurement_card_page.py
+```
+
+Commercial-offer evidence must remain separate from estimate quantity and
+category value. The release uses atomic replacement, timestamped preimages,
+runtime compilation/import checks, and automatic rollback on failure. This
+route does not authorize schema changes, category/model writes, queue changes,
+document downloads, or a broad reparse.
 
 ## Mandatory access discovery order
 

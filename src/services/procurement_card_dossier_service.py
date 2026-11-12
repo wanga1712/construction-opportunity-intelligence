@@ -47,6 +47,35 @@ SUPPLY_ROWS_LIMIT = 100
 _DI_CONN: Any = None
 
 
+def _section_source_sql(*, use_estimate_rows: bool, procurement_id: int) -> str:
+    """Entity-compatible section source for dossier section templates."""
+    if not use_estimate_rows:
+        return "structured_entities se"
+    pid = int(procurement_id)
+    return f"""
+        (
+          SELECT id, procurement_id, source_document_id,
+                 name_raw AS product_name_raw,
+                 name_normalized AS product_name_normalized,
+                 quantity_value, unit_raw AS quantity_unit_raw,
+                 unit_normalized AS quantity_unit_normalized,
+                 unit_price_value, total_value AS total_price_value,
+                 source_quote, row_ref AS row_or_line, layout_status,
+                 sheet_or_page AS page_or_sheet, extractor_version,
+                 coalesce(section_code, 'RESIDUE') AS section_code,
+                 section_name,
+                 section_total_value AS section_total_price_value,
+                 section_total_raw AS section_total_price_raw,
+                 section_total_source,
+                 category_code, subcategory_code,
+                 CASE WHEN row_kind = 'GOODS'
+                      THEN 'PRODUCT' ELSE 'WORK' END AS entity_type
+            FROM structured_estimate_rows
+           WHERE procurement_id = {pid}
+        ) se
+    """
+
+
 def _di_conn() -> Any:
     """Read-only подключение к document_intelligence.
 
@@ -81,6 +110,10 @@ def _safe_di(sql: str, params: tuple = (), errors: Optional[List[str]] = None,
             return [dict(r) for r in (cur.fetchall() or [])]
     except Exception as exc:  # noqa: BLE001
         logger.warning("dossier DI query failed: %s", exc)
+        try:
+            _di_conn().rollback()
+        except Exception:
+            pass
         _record_error(errors, label, exc)
         return []
 
@@ -213,6 +246,8 @@ def load_procurement_dossier(db: Any, procurement_id: int) -> Dict[str, Any]:
         "parties": {},
         "opportunities": [],
         "documents": [],
+        "commercial_offers": [],
+        "unassigned_products": [],
         "findings": [],
         "counts": {},
         "errors": [],
@@ -294,16 +329,23 @@ def load_procurement_dossier(db: Any, procurement_id: int) -> Dict[str, Any]:
         None,
         """
         SELECT o.commercial_category_code, o.commercial_subcategory_code, o.opportunity_track,
-               o.status, o.category_confidence, o.candidate_medal, o.current_effective_medal,
+               o.status, o.routing_version, o.category_confidence, o.candidate_medal, o.current_effective_medal,
                o.commercial_priority_score, o.research_action,
                o.candidate_initial_score, o.candidate_initial_medal,
                o.confirmed_base_score, o.confirmed_base_medal,
                o.current_effective_score, o.current_effective_reason,
                (SELECT c.category_name FROM crm_product_categories c
                  WHERE c.category_code = o.commercial_category_code
-                 ORDER BY c.id LIMIT 1) AS category_name
+                 ORDER BY c.id LIMIT 1) AS category_name,
+               (SELECT s.subcategory_name
+                  FROM crm_product_subcategories s
+                  JOIN crm_product_categories c ON c.id = s.category_id
+                 WHERE c.category_code = o.commercial_category_code
+                   AND s.subcategory_code = o.commercial_subcategory_code
+                 ORDER BY s.id LIMIT 1) AS subcategory_name
         FROM crm_procurement_category_opportunities o
         WHERE o.procurement_id = %s
+          AND o.status = 'CURRENT'
         ORDER BY o.commercial_priority_score DESC NULLS LAST, o.commercial_category_code
         """,
         (int(procurement_id),),
@@ -374,6 +416,30 @@ def load_procurement_dossier(db: Any, procurement_id: int) -> Dict[str, Any]:
         (int(procurement_id),),
         errors=errors, label="documents",
     )
+
+    _commercial_offer_rows = _safe_di(
+        """
+        SELECT id, procurement_id, source_document_id, document_name, row_ref,
+               name_raw, unit_raw, quantity_raw, quantity_value,
+               category_code, subcategory_code, source_quote
+          FROM structured_estimate_rows
+         WHERE procurement_id = %s
+           AND source_quote ILIKE %s
+         ORDER BY id
+        """,
+        (int(procurement_id), "%ТЦ\\_%"),
+        errors=errors, label="commercial_offers",
+    )
+    try:
+        from src.services.commercial_offer_evidence_service import (
+            build_commercial_offer_evidence,
+        )
+
+        dossier["commercial_offers"] = build_commercial_offer_evidence(
+            _commercial_offer_rows
+        )
+    except Exception as exc:  # noqa: BLE001
+        _record_error(errors, "commercial_offer_parser", exc)
 
     dossier["findings"] = _safe_di(
         """
@@ -465,6 +531,57 @@ def load_procurement_dossier(db: Any, procurement_id: int) -> Dict[str, Any]:
         errors=errors, label="supply_candidates",
     )
 
+    # FACTUAL_VISIBILITY_ALL_CATEGORIES_V1: factual/evidence-only pairs remain
+    # visible even when the canonical opportunity row is absent.
+    factual_visibility = None
+    factual_evidence_rows: List[Dict[str, Any]] = []
+    try:
+        from src.services.composite_visibility_service import (
+            load_category_fact_visibility,
+        )
+
+        factual_visibility = load_category_fact_visibility(
+            db, procurement_id=int(procurement_id)
+        )
+        dossier["factual_visibility"] = {
+            "visible_pairs": len(factual_visibility.visible_pairs),
+            "fact_only_pairs": len(factual_visibility.fact_only_pairs),
+            "evidence_only_pairs": len(factual_visibility.evidence_only_pairs),
+            "ok": factual_visibility.ok,
+            "reason": factual_visibility.reason,
+        }
+        existing_pairs = {
+            (
+                str(row.get("commercial_category_code") or ""),
+                str(row.get("commercial_subcategory_code") or ""),
+            )
+            for row in dossier["opportunities"]
+        }
+        existing_category_codes = {
+            category_code
+            for category_code, _subcategory_code in existing_pairs
+            if category_code
+        }
+        for row in factual_visibility.synthetic_opportunities_for(int(procurement_id)):
+            category_code = str(row.get("commercial_category_code") or "")
+            if category_code in existing_category_codes:
+                continue
+            pair = (
+                category_code,
+                str(row.get("commercial_subcategory_code") or ""),
+            )
+            if pair not in existing_pairs:
+                dossier["opportunities"].append(row)
+                existing_pairs.add(pair)
+                if category_code:
+                    existing_category_codes.add(category_code)
+        factual_evidence_rows = list(
+            factual_visibility.evidence_for(int(procurement_id))
+        )
+        dossier["evidence_only_materials"] = factual_evidence_rows
+    except Exception as _exc:  # noqa: BLE001
+        _record_error(errors, "factual_visibility", _exc)
+
     # GOOD_SUPPLY_FACTS_V1: «что можно поставить» строится из чистого сервиса
     # (structured_entities + GOODS + qty/unit/total + цитата). Сырые
     # document_match_details здесь не участвуют — они остаются evidence.
@@ -473,12 +590,20 @@ def load_procurement_dossier(db: Any, procurement_id: int) -> Dict[str, Any]:
         str((o or {}).get("opportunity_track") or "").upper() == "DIRECT_SUPPLY"
         for o in (dossier.get("opportunities") or [])
     )
+    _section_source = _section_source_sql(
+        use_estimate_rows=not _direct_track,
+        procurement_id=int(procurement_id),
+    )
     dossier["supply_candidates_direct_untouched"] = bool(_direct_track)
     if not _direct_track:
         try:
             from src.services.good_supply_facts_service import build_good_supply_facts
 
-            _supply = build_good_supply_facts(int(procurement_id))
+            _supply = build_good_supply_facts(
+                int(procurement_id),
+                limit=5000,
+            )
+            dossier["category_supply_facts"] = _supply["facts"]
             dossier["supply_candidates"] = _supply["facts"][:SUPPLY_ROWS_LIMIT]
             dossier["supply_audit"] = {
                 "scanned": _supply["audit"]["scanned"],
@@ -493,13 +618,40 @@ def load_procurement_dossier(db: Any, procurement_id: int) -> Dict[str, Any]:
         except Exception as _exc:  # чистый слой не должен ломать карточку
             _record_error(errors, "good_supply_facts", _exc)
             dossier["supply_candidates"] = []
+            dossier["category_supply_facts"] = []
             dossier["supply_audit"] = {"error": str(_exc)}
+
+    if not _direct_track:
+        dossier["unassigned_products"] = _safe_di(
+            """
+            SELECT id, source_document_id, document_name, row_ref,
+                   name_raw AS material, name_normalized,
+                   quantity_raw, quantity_value AS quantity,
+                   unit_raw AS unit, unit_normalized,
+                   unit_price_raw, unit_price_value AS unit_price,
+                   total_raw, total_value AS total,
+                   source_quote, layout_status, category_code, subcategory_code
+              FROM structured_estimate_rows
+             WHERE procurement_id = %s
+               AND row_kind = 'GOODS'
+               AND (
+                    coalesce(category_code, '') IN ('', 'unknown')
+                    OR coalesce(subcategory_code, '') = ''
+               )
+               AND coalesce(source_quote, '') !~ 'ТЦ_'
+               AND coalesce(name_raw, '') !~* '^(итого|всего|стоимость|ндс|раздел|глава)'
+             ORDER BY total_value DESC NULLS LAST, id
+             LIMIT 500
+            """,
+            (int(procurement_id),),
+            errors=errors, label="unassigned_products",
+        )
 
     # SECTION_LEVEL_NORMALIZATION_V1 (Phase 3): «раздел → сумма раздела → материалы»
     # + отдельный «остаток». Число показывается только для SECTION_TOTAL/COMPUTED_SUM;
     # COMPUTED_SUM_UNRELIABLE остаётся без подтверждённой суммы.
     _section_rows = _safe_di(
-        """
+        f"""
         WITH ranked AS (
             SELECT se.section_code, se.section_name, se.page_or_sheet,
                    se.section_total_price_value, se.section_total_price_raw,
@@ -519,7 +671,7 @@ def load_procurement_dossier(db: Any, procurement_id: int) -> Dict[str, Any]:
                        PARTITION BY se.section_code
                        ORDER BY se.total_price_value DESC NULLS LAST, se.id
                    ) AS rn
-              FROM structured_entities se
+              FROM {_section_source}
              WHERE se.procurement_id = %s
                AND coalesce(se.section_code, '') <> ''
         )
@@ -529,12 +681,12 @@ def load_procurement_dossier(db: Any, procurement_id: int) -> Dict[str, Any]:
         errors=errors, label="sections",
     )
     _residue_rows = _safe_di(
-        """
+        f"""
         SELECT se.section_code, se.product_name_raw, se.product_name_normalized,
                se.quantity_value, se.quantity_unit_raw, se.unit_price_value,
                se.total_price_value, se.source_quote, se.row_or_line, se.layout_status
                , count(*) OVER () AS residue_total
-          FROM structured_entities se
+          FROM {_section_source}
          WHERE se.procurement_id = %s
            AND se.extractor_version IS NOT NULL
            AND upper(se.section_code) LIKE %s
@@ -556,10 +708,17 @@ def load_procurement_dossier(db: Any, procurement_id: int) -> Dict[str, Any]:
 
     # 2B.6.3: дорожные закупки показываем через road-projection, остальные — generic.
     # Признак дорожной формы — найденные маркеры «Итого по разделу N» / «Глава N».
-    dossier["section_projection_source"] = "embedded_extraction"
+    dossier["section_projection_authority"] = (
+        "STRUCTURED_ENTITIES"
+        if _direct_track
+        else "STRUCTURED_ESTIMATE_ROWS"
+    )
+    dossier["section_projection_source"] = (
+        "embedded_extraction" if _direct_track else "structured_estimate_rows"
+    )
     try:
         _road_rows = _safe_di(
-            """
+            f"""
             WITH preferred AS (
                 SELECT se.*,
                        row_number() OVER (
@@ -568,7 +727,7 @@ def load_procurement_dossier(db: Any, procurement_id: int) -> Dict[str, Any]:
                                         coalesce(se.product_name_raw, '')
                            ORDER BY (se.section_code IS NOT NULL) DESC, se.id DESC
                        ) AS pref_rn
-                  FROM structured_entities se
+                  FROM {_section_source}
                  WHERE se.procurement_id = %s
             )
             SELECT se.product_name_raw, se.product_name_normalized, se.entity_type,
@@ -617,7 +776,7 @@ def load_procurement_dossier(db: Any, procurement_id: int) -> Dict[str, Any]:
             )
 
             _lighting_rows = _safe_di(
-                """
+                f"""
                 WITH preferred AS (
                     SELECT se.*,
                            row_number() OVER (
@@ -626,7 +785,7 @@ def load_procurement_dossier(db: Any, procurement_id: int) -> Dict[str, Any]:
                                             coalesce(se.product_name_raw, '')
                                ORDER BY (se.section_code IS NOT NULL) DESC, se.id DESC
                            ) AS pref_rn
-                      FROM structured_entities se
+                      FROM {_section_source}
                      WHERE se.procurement_id = %s
                        AND se.category_code = 'lighting'
                 )
@@ -675,7 +834,7 @@ def load_procurement_dossier(db: Any, procurement_id: int) -> Dict[str, Any]:
             )
 
             _curb_rows = _safe_di(
-                """
+                f"""
                 WITH preferred AS (
                     SELECT se.*,
                            row_number() OVER (
@@ -684,7 +843,7 @@ def load_procurement_dossier(db: Any, procurement_id: int) -> Dict[str, Any]:
                                             coalesce(se.product_name_raw, '')
                                ORDER BY (se.section_code IS NOT NULL) DESC, se.id DESC
                            ) AS pref_rn
-                      FROM structured_entities se
+                      FROM {_section_source}
                      WHERE se.procurement_id = %s
                        AND se.category_code = 'curbstone'
                 )
@@ -733,7 +892,7 @@ def load_procurement_dossier(db: Any, procurement_id: int) -> Dict[str, Any]:
             )
 
             _dr_rows = _safe_di(
-                """
+                f"""
                 WITH preferred AS (
                     SELECT se.*,
                            row_number() OVER (
@@ -742,7 +901,7 @@ def load_procurement_dossier(db: Any, procurement_id: int) -> Dict[str, Any]:
                                             coalesce(se.product_name_raw, '')
                                ORDER BY (se.section_code IS NOT NULL) DESC, se.id DESC
                            ) AS pref_rn
-                      FROM structured_entities se
+                      FROM {_section_source}
                      WHERE se.procurement_id = %s
                        AND se.category_code = 'drainage_water_management'
                 )
@@ -791,7 +950,7 @@ def load_procurement_dossier(db: Any, procurement_id: int) -> Dict[str, Any]:
             )
 
             _fl_rows = _safe_di(
-                """
+                f"""
                 WITH preferred AS (
                     SELECT se.*,
                            row_number() OVER (
@@ -800,7 +959,7 @@ def load_procurement_dossier(db: Any, procurement_id: int) -> Dict[str, Any]:
                                             coalesce(se.product_name_raw, '')
                                ORDER BY (se.section_code IS NOT NULL) DESC, se.id DESC
                            ) AS pref_rn
-                      FROM structured_entities se
+                      FROM {_section_source}
                      WHERE se.procurement_id = %s
                        AND se.category_code = 'flooring'
                 )
@@ -850,7 +1009,7 @@ def load_procurement_dossier(db: Any, procurement_id: int) -> Dict[str, Any]:
             )
 
             _cs_rows = _safe_di(
-                """
+                f"""
                 WITH preferred AS (
                     SELECT se.*,
                            row_number() OVER (
@@ -859,7 +1018,7 @@ def load_procurement_dossier(db: Any, procurement_id: int) -> Dict[str, Any]:
                                             coalesce(se.product_name_raw, '')
                                ORDER BY (se.section_code IS NOT NULL) DESC, se.id DESC
                            ) AS pref_rn
-                      FROM structured_entities se
+                      FROM {_section_source}
                      WHERE se.procurement_id = %s
                        AND se.category_code = 'cable_support_systems'
                 )
@@ -916,12 +1075,17 @@ def load_procurement_dossier(db: Any, procurement_id: int) -> Dict[str, Any]:
             _record_error(errors, "category_extraction_outcomes", _exc)
         dossier["categories"] = build_category_cards(
             opportunities=dossier["opportunities"],
-            supply_facts=dossier.get("supply_candidates") or [],
+            supply_facts=(
+                dossier.get("category_supply_facts")
+                or dossier.get("supply_candidates")
+                or []
+            ),
             documents=dossier["documents"],
             queue_progress=_progress,
             procurement_id=int(procurement_id),
             model_counts=_model_counts,
             extraction_outcomes=_outcomes,
+            evidence_rows=factual_evidence_rows,
             procurement_title=(dossier.get("identity") or {}).get("auction_name"),
             okpd_name=(dossier.get("identity") or {}).get("okpd_name"),
             object_class=" ".join(filter(None, [
@@ -957,6 +1121,8 @@ def load_procurement_dossier(db: Any, procurement_id: int) -> Dict[str, Any]:
     finds = dossier["findings"]
     dossier["counts"] = {
         "documents": len(docs),
+        "commercial_offers": len(dossier.get("commercial_offers") or []),
+        "unassigned_products": len(dossier.get("unassigned_products") or []),
         "downloaded": sum(1 for d in docs if d.get("download_status") == "COMPLETED"),
         "downloadable": sum(
             1 for d in docs
@@ -972,7 +1138,15 @@ def load_procurement_dossier(db: Any, procurement_id: int) -> Dict[str, Any]:
         "categories": len(dossier.get("categories") or []),
         "confirmed_categories": sum(
             1 for c in (dossier.get("categories") or [])
-            if c.get("confirmed_base_medal")
+            if c.get("confirmed_base_medal") and not c.get("evidence_only")
+        ),
+        "fact_only_categories": sum(
+            1 for c in (dossier.get("categories") or [])
+            if c.get("factual_only") and not c.get("evidence_only")
+        ),
+        "evidence_only_categories": sum(
+            1 for c in (dossier.get("categories") or [])
+            if c.get("evidence_only")
         ),
         "findings_hidden_non_researchable": (
             dossier.get("findings_source_filter") or {}

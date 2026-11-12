@@ -1,3 +1,744 @@
+> **Active consolidated plan:** [PROJECT_PLAN.md](PROJECT_PLAN.md).
+> This file is retained as the historical refactoring/implementation log and
+> evidence appendix. New sequencing and WIP disposition belong in the active
+> plan; new implementation results should still be appended here when they
+> change architecture or stage status.
+
+2026-11-12 production card/read-module correction: fixed the two-level
+GrandSmeta numeric mapping so current-price columns are used instead of base
+columns, repaired affected existing rows, and split the card read model into
+strict same-category blocks, an unassigned review block, and a separate
+commercial-offer tab. Commercial offers remain evidence and are not added to
+estimate quantity/category value. Release backups:
+`/opt/CRM_Streamlit/backups/xlsx_table_reader_20261112_121426` and
+`/opt/CRM_Streamlit/backups/card_category_cp_split_20261112_122347`.
+
+2026-11-11 medal lifecycle normalization implemented locally. A new
+`medal_timing.py` clock resolves the end of the current commercial stage and
+scores farther future ends lower. Early whole-procurement card scoring and
+post-parse per-category scoring now consume the same clock; daily
+reevaluation rebuilds it from current dates while preserving the initial
+medal. The retired `DIRECT_GOODS >= 50k -> GOLD` service override was removed,
+and queue ordering now treats the commercial medal as primary. Local
+compilation and deterministic synthetic checks passed. No DB/CRM writes,
+model calls, downloads, deploy, restart, live medal backfill, or category
+projection were performed. See
+`docs/WIP/WIP_MEDAL_LIFECYCLE_NORMALIZATION_V1.md`.
+
+2026-11-12 medal/category pipeline released to S13 after explicit owner
+approval. The release used atomic replacement with backup
+`/opt/CRM_Streamlit/backups/medal_category_release_20261112_074808`. The full
+deterministic pass reevaluated 6,337 CURRENT opportunities and updated 395
+current medals/history. The CURRENT category rollout produced 592 post-parse
+category opportunities on 265 cards, all with confirmed EMBEDDED_MATERIAL
+track; 253 UNKNOWN-track results were removed fail-closed and 406 prior v3
+rows restored. The card query now filters `status='CURRENT'`; Streamlit was
+restarted once and returned HTTP 200. Current parsing continues for cards
+without normalized estimate rows.
+
+2026-11-01 new OCR strategy prepared: full-page Tesseract text -> local
+`qwen2.5:7b` row extraction, with GPU-arbiter admission, row-local literal
+evidence rejection, and a separate arithmetic-consistency count; one-page
+canary script is `tender_documents_research/scripts/canary_ocr_text_normalizer.py`.
+Execution on the same S13 scan is pending: the alias and configured key resolve,
+but TCP connection times out before authentication and the direct-link neighbor
+is unreachable. Follow-up direct checks from both the laptop and S7 show the
+same configured S13 LAN endpoint unreachable (neighbor resolution fails); S7's
+own Tailscale backend is online, while both peers report S13 offline with the
+same last-seen timestamp, 2026-11-01 16:10:02 UTC (19:10:02 Moscow). S13's
+reported Tailscale key expiry is in 2027, so key expiry is not the cause. This
+localizes the current failure to S13 or its LAN attachment/IP path; its exact
+cause requires S13 console/network and tailscaled logs. The laptop's source-
+grounding guard passed a narrow synthetic positive/negative check, not a model
+or document canary. No alternate route or model call was used. No DB writes or
+production changes.
+
+2026-11-01 readable scanned-estimate canary on S13 (14838, 5 pages) exercised
+the existing local OCR parser read-only: 13,429 chars / 268 lines, zero table
+cells, two weak rows, zero qty/rates/totals/consistent rows. A one-page OCR
+rotation shortcut was rejected because page orientation is not invariant. Qwen
+probes on the same source were also below value/parity gates; no model OCR is
+integrated. Parser quality gate remains failed; no rollout or data writes.
+
+## 2026-10-31 — UNIVERSAL_ESTIMATE_PIPELINE_CONSOLIDATION_V1 — PHASE 0 DONE / PHASE 1 LOCAL IN PROGRESS
+
+2026-11-01 kiosk metric regression found during end-to-end funnel audit:
+production combined the morning backlog snapshot with today's admissions but
+subtracted all eligible AI completions across cohorts, producing impossible
+daily progress (31 workload, 37 processed, -6 remaining, 119.4%). A local
+correction now limits daily progress to today's received+eligible cohort and
+shows the morning snapshot separately. The snapshot contains only a count, so
+an exact combined backlog-ID intersection is unavailable. Local syntax check
+and production rollout are pending; no service was restarted.
+
+2026-11-01 read-only S13 end-to-end audit: Oct 31's 812 runner successes were
+2026-11-01 consolidated operator funnel audit: production shows 440,790 total
+CRM records, 4,048 procurements with current category opportunities, 3,799 in
+the eligible OPEN/AWARDED live set, and 3 current-effective GOLD cards. The
+document-fact authority has 10,605 rows across 524 procurements, but only 257
+rows contain quantity, unit price, and line total together. Parser quality is
+not accepted: XLSX/GSFX candidates are local-only; PDF/DOCX/OCR remain below
+the source-parity gate. Current V4 queue has 1,407 pending, zero claimable
+(1,276 NO_DOCUMENT_RESEARCH; 130 missing selected-document plans), and zero
+completions in the last hour. See
+`docs/reports/operational_funnel_audit_2026-11-01.md`. Owner prioritizes parser
+repair first; no mass reparse or production mutation.
+
+2026-11-01 S13 canary continuation: current local parser package was run in a
+`/tmp` scratch environment on XLSX 152920, DOCX 152900, born-digital PDF 152903,
+scanned PDF 149626, and GSFX 149089. Results: respectively 24/17 consistent,
+152/53, 2,514/234, zero structured rows from 6,976 OCR characters, and 17 rows
+(15 quantities, 6 rates, no totals). No format family passes broadly; production
+restart remains blocked on source-row/value/provenance parity. Category-confirmed
+fully valued facts cover 23 computers, 9 lighting, 2 cable-support, and 1 each
+composite/drainage/waterproofing procurements, all built in October; intersecting
+with current same-category opportunities and live admission leaves 18 computers,
+9 lighting, 2 cable-support, and 1 each remaining category, so none reaches the
+20-card bar. Procurement 460322 is separately registered:
+CRM lifecycle fields stale since Oct 17 despite the Nov 1 sync succeeding; its
+S7 source state remains unverified due missing direct DB identity authority.
+
+2026-11-01 parser follow-up: local `parse_pdf_with_ocr` now targets PDF pages
+without embedded text rather than skipping a mixed PDF after its digital pages,
+and segments OCR columns before normalization so line metadata can retain cells.
+Narrow AST parsing passed. A later isolated S13 multi-format canary ran this
+candidate: scanned PDF 149626 produced 6,976 OCR characters / 159 lines but
+zero table-cell metadata and zero universal rows. DOCX produced 152/53
+consistent rows; born-digital PDF 2,514/234; GSFX 17 rows (15 quantities, 6
+rates, no totals); XLSX 152920 24/17. A retained `.xls` file produced zero rows
+because `ParserFactory` has no `.xls` parser. Quality gate failed; deployment,
+DB writes, and production service changes were not performed. Production restart
+remains blocked until source-row/value/provenance parity passes per format.
+Separate status-capture request is tracked in
+`docs/wip/WIP_S7_EIS_XML_PROCUREMENT_LIFECYCLE_STATUS_CAPTURE_V1.md`.
+
+2026-11-01 read-only S13 end-to-end audit: Oct 31's 812 runner successes were
+AI assessments, not proof of full document processing; assessment history has
+751 unique successes and the discrepancy is unresolved. The universal parser
+stored 304,577 rows from 422 procurements, but zero confirmed-fact rows were
+added that day. Current document queue has 1,407 pending (zero claimable) and
+416 failed. Procurement 1203 is a concrete false-completion canary: 2/12 files
+completed, 10 permanent source misses, 1,012 estimate rows with only 4 unit
+prices and no totals, and zero confirmed facts; its AI status is stale/unstable
+and no reassessment is requested. Separately, the recurring AI fetch logs 3,795
+selectable rows while drain reports zero eligible and performs no inference;
+lane-level cause remains unverified. No DB or service changes. See detailed
+counts and next gates in the WIP below.
+
+2026-11-01 continuation: typed GSFX extraction, cross-category row-level AI
+adjudication with decision audit, and textless-PDF OCR dispatch are implemented
+locally. Read-only source canaries now cover GSFX, born-digital PDF, DOCX, and
+scanned PDF OCR; PDF/DOCX are partial and scanned-PDF post-fix mapping remains
+unverified. Local syntax compilation passes. No automated tests, DB writes,
+deployment, or mass reparse. DIRECT read-model cutover remains open pending
+canonical source identity and source-row parity. Details/results:
+`docs/wip/WIP_UNIVERSAL_ESTIMATE_PIPELINE_CONSOLIDATION_V1.md`.
+
+2026-11-01 local multi-file rerun: 6 retained files were processed without DB
+writes. Quality gate did not pass: the BoQ PDF had 2,069 raw-capture rows and
+only 234 consistent rows out of 2,514; DOCX had 98 raw captures and 53
+consistent rows out of 152; one PDF was transport-heavy, one yielded no rows,
+and local scanned-PDF OCR could not start because `pdf2image` is unavailable.
+No server rollout. Next work is extractor/layout quality and OCR environment
+validation, then rerun the same cohort before any rollout.
+
+2026-11-01 owner requested server-side canaries. S13 installed-code, in-memory
+parses confirmed quality failures: XLSX 26403 yields 742 current rows / 22
+prices against 764 already persisted rows / 36 prices; PDF BoQ 152903 yields
+2,514 rows / 234 consistent, DOCX 152900 yields 152 / 53 consistent, scanned
+PDF 149626 OCR yields 103 candidates but zero quantities/rates, and GSFX
+149089's installed parser is untyped (7 goods only), while 152854 yields zero
+rows. No SQL writes or deployed-code changes. Current priority is fix the XLSX
+header/value mapping, restore typed GSFX rows, and improve OCR table mapping;
+rerun the same server canaries before rollout. Full metrics in the WIP.
+
+2026-11-01 isolated server-runtime run of the candidate parser package (scratch
+copy only) improved XLSX 26403 to 739 rows / 535 rates / 521 totals / 521
+consistent, and GSFX 149089 to 17 typed rows without inferred totals. DOCX and
+born-digital PDFs were unchanged; scanned OCR remained zero-quantity/zero-rate.
+Scratch run had zero DB writes and did not alter production code or services.
+The format-quality gate remains open; see the WIP for the exact per-file
+counts and remaining gaps.
+
+XLSX 26403 row-level parity then matched all 739 candidate rows to stored rows
+by row reference and normalized name, with zero duplicate keys and zero
+quantity mismatches. The candidate recovered 513 previously missing rates and
+499 totals; both changed stored totals were incorrect unit-rate copies and the
+candidate matches the source cells and arithmetic. This passes the value/parity
+gate for this one XLSX only; OCR and cross-format gates remain open.
+
+2026-11-01 owner reaffirmed that scanned-document OCR is intended to use the
+isolated local Qwen vision model in a deferred morning batch, not continuous
+Tesseract. The S13 model manifest/blob is still present in its isolated store;
+production Ollama does not expose it, and the previous Qwen extraction failed
+row/value quality and output-limit gates. The WIP now requires a same-source,
+same-page before/after comparison (row identity, exact quantity/rate/total,
+arithmetic, latency, peak VRAM) before OCR integration or batch orchestration.
+No model endpoint, worker, scheduler, production service, or queue was changed.
+
+An isolated one-page prompt probe on the retained scanned estimate then
+completed in 53.7 seconds at about 4.5 GiB peak VRAM without truncation, but
+misclassified page-summary/overhead text as estimate rows and assigned
+unsupported values. No data was persisted; the isolated listener was stopped
+and GPU returned to baseline. The local model OCR quality gate remains failed;
+next implementation target is document/page-aware table-row extraction and
+same-source comparison, not enabling the deferred batch yet.
+The strict prompt reduced the same page's untrusted seven rows to an empty
+array, but on page 2 it returned prose instead of the required schema; this
+prompt experiment is not integrated and does not pass scanned-value coverage.
+The raw same-file before/after outputs are retained under the S13 scratch
+directory named in the WIP for subsequent extractor work.
+
+Phase 1 follow-up: read-only DIRECT canary 467879 shows incomplete quantity/unit
+coverage and one unsupported-layout row whose raw price duplicates its item
+name; numeric price is now suppressed for that specific pattern while raw
+evidence is retained. Local `py_compile` and `git diff --check` passed. This
+does not validate parse routing or authorize a DIRECT read-model cutover;
+details and next gate are recorded in the WIP roadmap. On 2026-11-01 a
+read-only scan of current DIRECT selected NMCK files found no strong multi-line
+canary: the best bounded DOCX parse yielded one fully valued item. DIRECT
+read-model cutover remains blocked on a richer recoverable source and parity
+evidence.
+
+2026-11-01 server OCR follow-up: Qwen2.5-VL 3B was downloaded through a
+temporary, allowlisted reverse SSH proxy without changing S13 routing, then
+tested in an isolated Ollama instance on a rotated scanned estimate page. The
+model loaded and inferred, but misread row identities/quantities and omitted
+values; OCR quality gate remains failed. Temporary listener/tunnel stopped;
+no DB writes or production service changes. Separately, read-only queue counts
+show 1,407 PENDING records, but zero satisfy the full claim gate: 1,277 queue_v2
+rows are marked NO_DOCUMENT_RESEARCH (not claimable), and 130 admitted open rows
+have no selected documents. 416 more rows are FAILED. Worker idle behavior is
+consistent with the claim gate; its `pending=0` log is misleading because the
+S13 `get_queue_stats()` implementation returns an empty list. No queue state was
+changed. This is not the full awarded-procurement population: the bounded
+`awarded_recent` document-queue subset contains 2,100 distinct procurement IDs
+(557 COMPLETED, 306 FAILED, 414 NO_LINKS, 823 PENDING), and has no
+`historical_awarded` rows. `COMPLETED` here is only a document-queue status.
+Details in the universal-estimate WIP.
+
+Сводный план по незавершённым WIP вокруг универсальных строк сметы и новому
+переходу DIRECT описан в
+`docs/wip/WIP_UNIVERSAL_ESTIMATE_PIPELINE_CONSOLIDATION_V1.md`. Включает
+этапность, зависимости, критерии cutover и запрет на массовый reparse без
+отдельного approval. Это план, не разрешение начинать следующие фазы.
+
+## 2026-10-31 — UNIVERSAL_ESTIMATE_ROW_EXTRACTION_V1 — IN PROGRESS
+
+2026-11-01: the universal-estimate scope was reaffirmed: parse estimates once,
+independently of category, persist normalized product/work rows with value and
+source provenance, then mine product families/categories from that shared
+dataset. A read-only canary of procurement 26403 showed a two-row cost header
+whose `за единицу / всего` child row was not merged; historical line items had
+the source price/amount in columns E/F but no numeric values persisted.
+Generic XLSX header merging and a regression fixture are implemented locally.
+An in-memory read-only parse returned 739 rows (535 with price, 521 with total,
+521 consistent), but the exact historical cable/fastener rows were not yet
+matched in the first canary selection, so source-row parity remains open. No
+reparse, DB write, or deployment. Category mining follows normalized-row
+quality gates and counts distinct procurements to avoid duplicate-file inflation.
+Details: `docs/wip/WIP_UNIVERSAL_ESTIMATE_PIPELINE_CONSOLIDATION_V1.md`.
+
+Required final behavior clarified by owner: category normalization must be
+cross-category, not constrained to the category that first found a phrase. The
+model must be able to reject/reassign that hypothesis or return unresolved;
+category-specific views follow adjudication. Reflective/vertical road-marking
+stickers “on lighting poles” are a negative `lighting` canary. Taxonomy creation
+is a separate frequency-based proposal over distinct procurements with manual
+promotion, never an automatic consequence of one model decision. This contract
+is recorded in the universal-estimate WIP; implementation is still pending.
+
+2026-11-01 follow-up within the existing local taxonomy-projection stage:
+`lighting` now rejects explicit road-marking/sticker contexts such as
+procurement 1203's “Вертикальная разметка (наклейка) на опоры освещения”.
+The row remains unresolved; this does not create a category or alter discovery
+thresholds. Local syntax/load check only; no automated tests, database writes,
+reparse, or deployment. See
+`docs/wip/WIP_FIX_EVIDENCE_FALSE_POSITIVES_ROAD_WORKS_V1.md`.
+
+Начат отдельный этап унификации строк смет. Общий извлекатель теперь также
+сохраняет `ESTIMATE`, `BOQ` и `NMCK_JUSTIFICATION` на треке `DIRECT` в
+`structured_estimate_rows`. Категорийный DIRECT extractor пока сохранён для
+совместимости карточки и документов вне классов смет; его нельзя отключать,
+пока category/subcategory taxonomy projection не подключена к parse-time
+записи и не проверена на canary. В `xlsx_table_reader` сохраняется найденная
+цена даже при отсутствующем/несходящемся total; арифметически неподтверждённая
+строка явно помечается `INCONSISTENT_LAYOUT` или `PARTIAL_VALUES`, а rate без
+количества — `UNIT_RATE_ONLY`. Количество и итог не вычисляются из цены.
+
+Изменения локальные; миграция, массовый reparse, production deploy и изменение
+медалей/очереди не выполнялись. Автотесты не запускались согласно инструкциям.
+
+```text
+UNIVERSAL_ESTIMATE_EXTRACTION_ON_DIRECT=PARTIAL
+LEGACY_CATEGORY_PATH_PRESERVED=YES
+PRICE_PRESERVED_WITHOUT_ARITHMETIC_PROOF=YES
+MASS_REPARSE=NO
+PRODUCTION_DEPLOY=NO
+```
+
+## 2026-10-31 — AI_RUNNER_RESUME_WITHIN_AWAKE_WINDOW_V1 — DONE
+
+Explicit owner correction: S13 has one power schedule (suspend 23:00, wake
+08:30). The AI runner must repeatedly resume persisted eligible work while the
+host is awake, including after its bounded runtime cap; it must not wait for a
+separate next-day model window. Implementation: monotonic systemd timer with
+`OnBootSec=2min` and `OnUnitInactiveSec=45s`, allowing the power schedule to
+stop execution during suspend. Preserve the existing bounded batch/runtime,
+queue selection, medals, and model behavior. Verify timer activation and next
+elapse after deployment; no automated tests requested.
+
+Production result on S13: timer reloaded and active with the monotonic
+`OnBootSec=2min` + `OnUnitInactiveSec=45s` schedule; existing bounded service
+started at 20:57 MSK and was active at verification. Ollama reported
+`qwen2.5:7b` at 100% GPU placement with 4.7 GB resident on the 6 GB GPU.
+Suspend remains owned by the separate 23:00 power timer; wake remains 08:30.
+No queue, medal, scoring, or model settings changed.
+
+## 2026-10-31 — ELIGIBLE_QUEUE_AND_UNIT_RATE_NORMALIZATION_V1 — IN PROGRESS
+
+Fix the current stage without changing medal authority or the procurement-level
+queue identity. Daily reconciliation must restore CURRENT + ELIGIBLE
+procurements that are absent from the current generation or still carry the
+legacy `SKIPPED_NOT_TARGET / legacy_not_admitted` state. Completed work and
+quality/noise exclusions remain terminal. `NO_LINKS` is rechecked daily so a
+later document arrival can restore the same procurement instead of losing it.
+
+Rate-only XLSX catalogs are stored explicitly as `UNIT_RATE_ONLY`: unit and
+reference unit price are retained, while quantity and category total remain
+NULL. Category evidence shows that distinction and never promotes a reference
+rate into confirmed supply value. Broad accessory terms are being guarded from
+creating unrelated flooring/lighting category evidence.
+
+```text
+QUEUE_IDENTITY=PROCUREMENT_ID
+CURRENT_ELIGIBLE_DAILY_READMISSION=APPLIED_S13
+LEGACY_NOT_ADMITTED_REOPEN=APPLIED_S13
+MISSING_CURRENT_GENERATION_INSERT=APPLIED_S13
+NO_LINKS_DAILY_RECHECK=APPLIED_S13
+QUEUE_V2_SELECTED_DOCUMENT_PLAN=APPLIED_S13
+RATE_ONLY_ESTIMATE_FALLBACK_PROMOTION=APPLIED_S13
+COMPLETED_FAILED_NOISE_UNCHANGED=YES
+UNIT_RATE_WITHOUT_QTY_OR_TOTAL=IMPLEMENTED_LOCAL
+REFERENCE_RATE_IS_CONFIRMED_VALUE=NO
+REFERENCE_RATE_CARD_PROJECTION=IMPLEMENTED_LOCAL
+MEDAL_AUTHORITY_UNCHANGED=YES
+CATEGORY_ACCESSORY_SEMANTIC_GUARD=DEPLOYED
+PROCUREMENT_35940_REFERENCE_RATES=2563_PERSISTED_NO_QTY_NO_TOTAL
+PROCUREMENT_35940_CATEGORY_RESOLUTION=306_ROWS_UPDATED
+PROCUREMENT_35940_SELECTED_DOCUMENTS=9
+ACTIVE_QUEUE_DUPLICATES_BY_PROCUREMENT=0
+RUNTIME_SCHEMA_DDL=REMOVED
+WORKERS=ACTIVE_AND_DRAINING
+AUTOMATED_TESTS=NOT_REQUESTED
+```
+
+WIP: `docs/wip/WIP_ELIGIBLE_QUEUE_AND_UNIT_RATE_NORMALIZATION_V1.md`.
+
+31 Oct correction: the first reconciliation draft would have reopened legacy
+rows without `selected_documents` or `plan_version`, leaving them invisible to
+the document worker. The replacement builds the canonical procurement-level
+Queue V2 payload, materializes missing S7 source links, and promotes deferred
+technical/subcontract archives when a completed estimate yields no confirmed
+quantity and total. The queue correction is deployed; production queue writes
+await the final read-only reconciliation check. The actual 35940 workbook had
+a one-cell explanatory note that replaced the genuine header; multi-column
+validation fixed that. Hash-guarded reparse saved 2563 `UNIT_RATE_ONLY` rows,
+with no quantity or total. Category dry-run then exposed broad false terms
+(`фасад`, `откос`, `засыпка`, `инъекционный состав`); context guards and
+work-action detection were deployed before applying 245 category updates.
+Confirmed supply totals and medals were not changed.
+
+Production reconciliation applied at 20:36 MSK: 1323 current-generation rows
+restored, 1337 inserted, 5056 canonical links materialized; 2555 candidates
+have selected-document or pending plans and 105 have `NO_LINKS`. Procurement 35940 has
+one Queue V2 row (tier 1), nine selected documents: the completed unit-rate
+catalog, description archive, and seven subcontract archives. It remains
+`PRE_RESEARCH_WAITING` under medal/freshness scheduling, not a manual claim.
+The 20 duplicate legacy category projections from the same workbook were
+cleared while retaining source rows for audit. Final category rows on 35940
+all have unit rates and no confirmed quantity/total.
+
+A runtime bottleneck was also resolved: `ensure_estimate_row_schema` attempted
+`ALTER TABLE` on every document and queued ACCESS EXCLUSIVE locks behind a CRM
+read transaction. Runtime now checks columns only; migrations remain the DDL
+authority. One seven-minute idle read transaction was terminated to release
+the existing lock queue. Document workers were restarted with the change;
+26 planned tasks completed within the next five-minute window, 32 were in
+processing, and there were zero duplicate runnable rows per procurement.
+Targeted re-use of already downloaded files now binds their `document_files`
+row to the current queue task, preventing the observed persistence error.
+Old terminal `FAILED` rows were not globally requeued, per stage boundary.
+The existing `downloader.py`, `state_repository.py` and queue repository are
+over 450 lines; changes there are narrow identity/claim-boundary repairs.
+Splitting those established runtime modules is outside this active stage.
+
+## 2026-10-31 — PROCUREMENT_QUEUE_MEDAL_RECONCILIATION_V1 — APPLIED
+
+The daily workset is procurement-based, not category-row-based. Current
+category opportunities are collapsed to one `procurement_id` priority record:
+best `current_effective_medal` (preliminary fallback), unioned category codes,
+freshness, commercial score and stable ID. Commercial medal bands now drive
+weighted service; `research_prior_band` is fallback only.
+
+Morning order is sync 08:45, deterministic medal plus pending-queue
+reconciliation 08:50, canonical AI selector 09:00. Pending document rows are
+reprioritized without insert/delete/claim/status changes. The AI selector
+always rebuilds eligibility from CRM; the temporary JSON-backlog bypass and
+five-minute recurring timer are removed.
+
+```text
+QUEUE_IDENTITY=PROCUREMENT_ID
+MULTI_CATEGORY_ROWS_COLLAPSED=YES
+BEST_CURRENT_MEDAL_DRIVES_PRIORITY=YES
+FRESHNESS_WITHIN_MEDAL_BAND=YES
+RESEARCH_PRIOR_IS_FALLBACK_ONLY=YES
+DAILY_DB_RECONCILIATION=YES
+JSON_STATUS_IS_QUEUE_AUTHORITY=NO
+FIVE_MINUTE_AI_RECURRENCE=NO
+ADMISSION_LIFECYCLE_UNCHANGED=YES
+PARSER_UNCHANGED=YES
+DEPLOY=APPLIED_S13
+RECONCILED_PENDING_ROWS=554
+ACTIVE_PROCUREMENTS=747
+ACTIVE_DUPLICATE_PROCUREMENTS=0
+MULTI_CATEGORY_PROCUREMENTS=297
+DOCUMENT_WORKERS_RESTARTED=9_OF_9
+MORNING_TIMERS=08:45_SYNC_08:50_MEDALS_09:00_AI
+NARROW_CHECKS=AST_PARSE_DIFF_CHECK_SYSTEMD_DB_INVARIANTS
+AUTOMATED_TESTS=NOT_RUN_PER_PROJECT_INSTRUCTION
+```
+
+WIP: `docs/wip/WIP_PROCUREMENT_QUEUE_MEDAL_RECONCILIATION_V1.md`.
+
+## 2026-10-31 — AI_DAYTIME_BATCH_CONTINUATION — SUPERSEDED
+
+Superseded the same day by `PROCUREMENT_QUEUE_MEDAL_RECONCILIATION_V1` after
+owner clarification: the current database workset is authoritative, unfinished
+procurements remain eligible across days, and no JSON-tail or five-minute
+service recurrence is part of the final design. The block below is retained as
+the historical pre-clarification record only.
+
+The 09:00 AI batch completed successfully at its three-hour runtime cap
+(`400 success / 0 failed`) but the calendar-only timer then waited until the
+next day while eligible backlog remained. The timer now combines the canonical
+09:00 start with `OnUnitInactiveSec=5min`: each completed gated batch is
+followed by the next batch after five minutes. The wrapper now treats the
+persisted canonical routing backlog as an unconditional continuation signal,
+including a tail below the normal 50-candidate admission threshold. The
+canonical 23:00 suspend path still stops the timer and Ollama; after the 09:00
+start on the next wake cycle, the persisted unfinished backlog resumes before
+the gate considers newly parsed work.
+
+```text
+TODAY_BATCH_SUCCESS=400
+TODAY_BATCH_FAILED=0
+STOP_REASON=max_runtime
+DAYTIME_CONTINUATION_DELAY=5min
+NIGHTLY_23_00_STOP_UNCHANGED=YES
+RESTARTED_AT=2026-10-31_13:31_MSK
+RESTART_GATE_PARSED_CANDIDATES=365
+RESTART_ELIGIBLE=412
+GPU_UTILIZATION_VERIFIED=100_PCT
+OLLAMA_PROCESSOR=100_PCT_GPU
+PERSISTED_BACKLOG_CONTINUATION=YES
+SUB_50_TAIL_CONTINUATION=YES
+MODEL_NEW_WORK_GATE_UNCHANGED=YES
+DEPLOYED_CHECK_ONLY=PASS_PENDING_BACKLOG_412
+DEPLOYED_SHA256=f722e6307d4808cd75490903c0c78414a8856610d832df4da051b5cc107861ce
+MEDALS_UNCHANGED=YES
+DB_WRITES=ROUTING_PERSISTENCE_ONLY
+```
+
+## 2026-10-30 — CANONICAL_S13_S7_SSH_ALIASES — APPLIED
+
+The Windows SSH config now exposes exactly two project host entries: `s13`
+and `s7`. The working S13 block was renamed from `mint-lan`; the existing `s7`
+block was retained. Duplicate S7 routes (`nyx`, `nyx-local`, `nyx-lan`) and
+obsolete alternate-route aliases (`nyx-vpn`, `mint-vpn`) were removed. S7
+duplicates were verified against the same physical machine before removal.
+`docs/PROJECT_OPERATING_RULES.md` is updated as the authority for both aliases.
+
+```text
+CANONICAL_SSH_ALIASES=s13,s7
+S13_CONNECTION=PASS
+S7_CONNECTION=PASS
+EXTRA_PROJECT_HOST_BLOCKS=0
+RUNTIME_SERVICES_CHANGED=NO
+DB_WRITES=0
+```
+
+## 2026-10-30 — FIX_AI_NORMALIZER_AUTOMATIC_RUN — APPLIED
+
+The effective S13 timer was already correct (`09:00`, `Persistent=false`) and
+triggered automatically. The run processed 450 procurements, then failed during
+final advisory unlock because that process had loaded the pre-fix runner before
+the reconnect-safe file was deployed. The fixed runner was already present on
+disk afterward, so systemd was reloaded and the service was started again from
+the corrected file. The stale `03:30` timer description was aligned with the
+effective `09:00` schedule. Batch size, gate, runtime cap, model authority and
+normalization behavior are unchanged.
+
+```text
+AUTOMATIC_TIMER_WINDOW=09:00_MSK
+PERSISTENT=false
+MANUAL_START_NOT_REQUIRED=YES
+TODAY_AUTOMATIC_TRIGGER=09:00_MSK
+TODAY_PROCESSED_BEFORE_OLD_PROCESS_EXIT=450
+RESTARTED_FROM_RECONNECT_SAFE_RUNNER=YES
+RESTART_GATE_PARSED_CANDIDATES=365
+RESTART_SERVICE_STATE=ACTIVATING
+RESTART_DRAIN_ELIGIBLE=727
+RESTART_FIRST_BATCH=PROCESSING
+MODEL_BATCH_POLICY_UNCHANGED=YES
+DB_WRITES=ROUTING_PERSISTENCE_ONLY
+```
+
+## 2026-10-30 — FIX_DUPLICATE_CATEGORY_BLOCKS_AND_NORMALIZATION_456311 — APPLIED
+
+Exact subcategory product selection, canonical units, logical source-row
+deduplication and a final card-key guard remove duplicate category blocks.
+Weak 456311 evidence received a bounded 12-row reclassification.
+
+```text
+DUPLICATE_CARD_KEYS=0
+CONFIRMED_FACTS=2
+CONFIRMED_CARDS=2
+EVIDENCE_CARDS=3
+UNITS=M,PCS
+WEAK_EVIDENCE_HIDDEN=YES
+REAL_MATERIALS_VISIBLE=YES
+MEDALS_UNCHANGED=YES
+FINAL_DRY_RUN_UPDATES=0
+DB_WRITES=BOUNDED_RECLASSIFY_ONLY
+```
+
+Evidence:
+`docs/reports/fix_duplicate_category_blocks_normalization_456311/SUMMARY.md`.
+
+## 2026-10-30 — FIX_AI_RUNNER_CONNECTION_CLOSED — DEPLOYED_VERIFIED
+
+Prefetch no longer uses the singleton `CrmDatabaseManager`. It has an isolated
+read-only connection with reconnect guard, and final advisory unlock tolerates
+an already-closed session.
+
+```text
+RECONNECT_BACKEND_PID_CHANGED=YES
+BOUNDED_SUCCESS=2/2
+BOUNDED_EXIT_CODE=0
+CONNECTION_CLOSED_CRASH=NO
+PREFETCH_OPTIMIZATION_PRESERVED=YES
+SERVICE_STATE=inactive/success
+DB_WRITES=ROUTING_PERSISTENCE_ONLY
+```
+
+Evidence: `docs/reports/fix_ai_runner_connection_closed_v1/SUMMARY.md`.
+
+## 2026-10-29 — FIX_EVIDENCE_FALSE_POSITIVES_ROAD_WORKS — APPLIED
+
+Road-work evidence now requires a strong material match unless the row is an
+explicit `SPECIAL_WORK_REVIEW`. PID `35940` received a bounded 119-row
+reclassification; raw names and source quotes were preserved.
+
+```text
+WEAK_CLASSIFIED_ROWS_REMAINING=0
+EVIDENCE_ROWS_AFTER_GATE=39
+EVIDENCE_PAIRS=11
+STRONG_MATERIALS_VISIBLE=YES
+DB_WRITES=BOUNDED_RECLASSIFY_ONLY
+NO_DOWNLOAD=YES
+MEDALS_UNCHANGED=YES
+CRM_HEALTH_HTTP=200
+```
+
+Evidence:
+`docs/reports/fix_evidence_false_positives_road_works_v1/SUMMARY.md`.
+
+## 2026-10-29 — OPTIMIZE_AI_ROUTING_THROUGHPUT — DEPLOYED_MEASURED
+
+Routing drain now prepares the next candidate/batch plan concurrently with the
+current inference run. Prefetch uses an isolated CRM connection, excludes IDs
+from the batch already in flight, and falls back to a synchronous refresh after
+any failed item so retry eligibility is unchanged. `run_live` accepts the
+already allocated batch and no longer fetches a duplicate candidate pool.
+
+```text
+MODEL_BATCH_SIZE_UNCHANGED=50
+CANDIDATE_FETCH_OVERLAPS_INFERENCE=YES
+CURRENT_BATCH_IDS_EXCLUDED=YES
+FAILURE_RETRY_REFRESH=SYNC
+PY_COMPILE=PASS
+TESTS_NOT_RUN_PER_PROJECT_RULE
+DEPLOY=YES
+DB_WRITES=0_BY_AGENT; RUNTIME_ROUTING_PERSISTENCE_ONLY
+COMPLETED_ATTEMPTS=100
+THROUGHPUT=96.6/PER_HOUR
+BASELINE=84.5/PER_HOUR
+DELTA=+14.3_PCT
+BACKLOG=1381_TO_1282
+SUCCESSFUL_BATCH_INTER_GAP_SEC=1.228
+```
+
+Production live measurement is recorded in
+`docs/reports/optimize_ai_routing_throughput_v1/SUMMARY.md`.
+
+## 2026-10-29 — FACTUAL_CATEGORY_UI — DEPLOYED
+
+Confirmed-goods category amounts and confirmed/evidence category dropdowns are
+deployed to S13. Object/project counts now come from the shared factual
+visibility pairs; DIRECT mode is loaded separately.
+
+```text
+CATEGORY_SUM_IS_FACTUAL=YES
+CATEGORY_SUMMARY_TOTAL_AMOUNT=180804605.50465727
+VISIBLE_OBJECT_PAIRS=671
+DROPDOWN_CATEGORY_COUNTS_MATCH=YES
+DROPDOWN_SUBCATEGORY_COUNTS_MATCH=YES
+DIRECT_SEPARATED=YES
+CRM_HEALTH_HTTP=200
+DB_WRITES=0
+```
+
+## 2026-10-29 — FIX_DAILY_PRIORITY_AND_MEDAL_REVALUATION — APPLIED
+
+The contour snapshot timer now uses a 15-minute calendar schedule and produced
+fresh snapshot `940`. The dashboard rejects stale prior-day snapshots and now
+uses the fresh remaining backlog. Medal reevaluation paginates across the full
+CURRENT opportunity set using the existing temporal-decay rules.
+
+```text
+CONTOUR_SNAPSHOT_FRESH=YES
+PRIORITY_LOGIC_UNCHANGED=YES
+MEDAL_REVALUATION_COVERS_ALL_ROWS=YES
+MEDAL_ROWS_EVALUATED=8850
+MEDAL_HISTORY_ROWS=1807
+MEDALS_UNCHANGED_EXCEPT_AUDITED_REVALUATION=YES
+DB_WRITES=REVALUATION_AND_BACKFILL_ONLY
+```
+
+Evidence:
+`docs/reports/fix_daily_priority_and_medal_reevaluation_v1/SUMMARY.md`.
+
+## 2026-10-29 — PREVENT_QUEUE_ADMISSION_DOWNLOAD_RACE — APPLIED
+
+Queue admission now locks every planned existing queue row before changing it,
+verifies inserted and updated rows before commit, and releases the holds only
+at commit. Active workers use `FOR UPDATE SKIP LOCKED`, so they cannot enter the
+guarded admission window. Lock timeout and verification failure roll back
+without applying admission.
+
+```text
+QUEUE_ADMISSION_PREVENTS_ACTIVE_CLAIM=YES
+NO_UNINTENDED_DOWNLOADS=YES
+MEDALS_UNCHANGED=YES
+VALIDATION_DB_WRITES=0
+DB_WRITES=QUEUE_ADMISSION_ONLY
+```
+
+Evidence: `docs/reports/prevent_queue_admission_download_race_v1/SUMMARY.md`.
+
+## 2026-10-28 — FIX_223_FZ_PIPELINE_GAPS_V1 — APPLIED_WITH_DEVIATION
+
+Source-sync and queue-admission remediation for 223-FZ is applied. Current
+commission coverage is `82/82`, and all 704 authority-eligible current
+opportunity PIDs have queue rows. Agent writes were limited to CRM procurement
+projection and document queue admission.
+
+The open worker claimed two reopened queue rows immediately after the apply and
+downloaded two files. The repair scripts did not invoke the downloader, but the
+end-to-end `NO_DOWNLOAD` condition is `NO`; this is recorded as a deviation.
+
+```text
+COMMISSION_TABLE_SYNCED=YES
+COMMISSION_IDS_IN_CRM=YES
+CURRENT_OPPORTUNITY_PIDS_QUEUED=YES_FOR_ELIGIBLE
+SKIPPED_REASONS_REVIEWED=YES
+NO_DOWNLOAD=NO
+MEDALS_UNCHANGED=YES_BY_SCOPE
+FINAL_AUDIT_DB_WRITES=0
+DB_WRITES=CRM_SYNC_AND_QUEUE_ADMISSION_ONLY_BY_AGENT
+```
+
+Evidence: `docs/reports/fix_223_fz_pipeline_gaps_v1/SUMMARY.md`.
+
+## 2026-10-28 — AUDIT_223_FZ_PIPELINE_COVERAGE_V1 — AUDIT_COMPLETE
+
+Read-only source-to-card audit for 223-FZ. No writes or operational changes.
+
+```text
+SOURCE_ROWS=54235
+CURRENT_OPPORTUNITY_PIDS=719
+QUEUE_PIDS=6651
+FILE_PIDS=2495
+PROCESSING_RESULT_PIDS=1793
+MATCH_DETAIL_PIDS=1522
+STRUCTURED_ENTITY_PIDS=94
+ESTIMATE_ROW_PIDS=195
+VISIBLE_FACT_PIDS=27
+DB_WRITES=0
+```
+
+Primary gaps: zero current commission-work IDs in CRM, 189 current opportunity
+PIDs without queue rows, and 282 current opportunity PIDs marked
+`SKIPPED_NOT_TARGET`.
+
+Evidence: `docs/reports/audit_223_fz_pipeline_coverage_v1/SUMMARY.md`.
+
+## 2026-10-28 — APPLY_FULL_MINING_GAPS_TAXONOMY_V1 — APPLIED
+
+Applying only product-backed terms from the full stored mining review, then
+reclassifying affected stored estimate rows. Context-only proposals are
+rejected; no medals, scoring or queue changes.
+
+```text
+SUBCATEGORIES_CREATED=3
+TAXONOMY_TERMS_CREATED=63
+RECLASSIFIED_ROWS=1199
+RECLASSIFIED_PIDS=102
+VISIBLE_PAIRS=656
+TAXONOMY_IDEMPOTENCY=0
+RECLASSIFY_IDEMPOTENCY=0
+CRM_UI_HEALTH=OK
+DB_WRITES=TAXONOMY_AND_BOUNDED_RECLASSIFY_ONLY
+```
+
+Evidence: `docs/reports/apply_full_mining_gaps_taxonomy_v1/SUMMARY.md`.
+
+## 2026-10-28 — FULL_STORED_MINING_ALL_CATEGORIES_V1 — REVIEW_COMPLETE
+
+Review-only mining across all 13 object/project categories and all three stored
+sources. No reclassification or taxonomy writes until review.
+
+```text
+CATEGORIES=13
+DETAIL_ROWS=1115605
+SNAPSHOT_ROWS=2995
+ENTITY_ROWS=12136
+ALL_THREE_SOURCES_SCANNED=YES
+PER_CATEGORY_REPORT=YES
+RECLASSIFY=NOT_RUN
+DB_WRITES=0
+```
+
+Report: `docs/reports/full_stored_mining_all_categories_v1/SUMMARY.md`.
+
+## 2026-10-28 — OPERATIONAL_RESILIENCE_AI_BATCH_AND_WORKER_V1 — APPLIED
+
+Scope: remove the global document-runtime `PYTHONPATH`, make missing
+procurements non-fatal for the autonomous worker, and expose consecutive
+AI-batch failures through system health. No medal or scoring changes.
+
+```text
+WORKER_MISSING_PROCUREMENT_SKIP=IMPLEMENTED
+WORKER_BOUNDED_BACKOFF=IMPLEMENTED
+PYTHONPATH_ENV_FIX=APPLIED
+AI_BATCH_HEALTH=APPLIED
+DOCUMENT_WORKERS=9/9 active
+CRM_UI_HEALTH=200
+LOCAL_DEPLOYED_HASHES=MATCH
+DB_WRITES=0
+```
+
 ## WIP — 2026-10-14 (CARD_MEDAL_CURRENT_AUTHORITATIVE_V1) — DONE
 
 **CARD_MEDAL_CURRENT_AUTHORITATIVE_V1.** Прямое указание пользователя: в CRM нужна текущая
@@ -4431,6 +5172,615 @@ DB_WRITES=REPARSE_ONLY
 SCORING_MEDAL_QUEUE_UNCHANGED=YES
 ```
 
+## 2026-10-27 — UNIVERSAL_ESTIMATE_ROW_EXTRACTOR_V1 — IMPLEMENTED
+
+Added category-neutral parse-time storage for object/project estimate rows:
+
+```text
+structured_estimate_rows
+```
+
+Contract captures source document, sheet/page, row, name, raw+normalized
+quantity/unit/price/total, source quote and technical attributes. Category and
+subcategory remain NULL until a later taxonomy projection.
+
+XLSX ingestion is category-neutral: `Форма 4б` uses
+`read_estimate(..., include_all_rows=True)`, while generic tables use
+`read_tables(..., include_descriptive=True)`. Descriptive rows without numeric
+values remain stored as evidence.
+
+Row kinds:
+
+```text
+GOODS
+SPECIAL_WORK_REVIEW
+GENERIC_WORK
+AGGREGATE
+OTHER
+```
+
+Special work review families:
+
+```text
+structural_reinforcement
+waterproofing
+waterproofing_concrete_repair
+ground_stabilization
+```
+
+Object/project parse path now stops after storing universal rows and does not
+write product `structured_entities`. DIRECT supply keeps its specialized
+template extraction path.
+
+```text
+UNIVERSAL_ESTIMATE_EXTRACTOR=YES
+QUANTITY_UNIT_PRICE_TOTAL_CAPTURED=YES
+TECH_ATTRIBUTES_CAPTURED_WHEN_PRESENT=YES
+GENERIC_WORKS_NOT_PRODUCT_FACTS=YES
+SPECIAL_WORKS_STORED_FOR_REVIEW=YES
+FULL_XLSX_ROWS_STORED_WITHOUT_CATEGORY_FILTER=YES
+DESCRIPTIVE_ROWS_WITHOUT_VALUES_STORED=YES
+PRODUCT_FACT_WRITES_FROM_OBJECT_PROJECT_PATH=NONE
+METADATA_PATH_UNCHANGED=YES
+NO_DOWNLOAD=YES
+DB_WRITES=STORE_ROWS_ONLY
+TARGETED_TESTS=5_PASSED_BEFORE_FULL_STORE_FIX
+TARGETED_TESTS_AFTER_FIX=NOT_RUN_PER_AGENTS_POLICY
+PY_COMPILE=PASS
+GIT_DIFF_CHECK=PASS
+DEPLOY=NO
+COMMIT=NO
+MIGRATION_APPLIED=YES
+```
+
+WIP:
+`docs/wip/WIP_UNIVERSAL_ESTIMATE_ROW_EXTRACTOR_V1.md`.
+
+## 2026-10-27 — BACKFILL_STRUCTURED_ESTIMATE_ROWS_V1 — APPLIED
+
+Applied the universal estimate-row migration and backfilled historical stored
+evidence without download, local files or mass reparse.
+
+Backfill sources:
+
+```text
+structured_extraction_runs.source_text_snapshot
+structured_entities
+document_match_details (bounded fallback)
+```
+
+```text
+RUNS_SCANNED=2995
+SNAPSHOT_ROWS=167676
+ENTITIES_SCANNED=12136
+DETAILS_SCANNED=86205
+DUPLICATES_MERGED=36859
+PERSISTED_ROWS=170156
+PLAN_SHA256=ecd04a85142f12bbd2c6841c5802148b2447a5e67ac124f0b10e4f8d7458668d
+TABLE_OWNER=doc_worker
+STRUCTURED_ENTITIES_BEFORE=12136
+STRUCTURED_ENTITIES_AFTER=12136
+```
+
+```text
+UNIVERSAL_ESTIMATE_ROWS_MIGRATION_APPLIED=YES
+BACKFILL_FROM_STORED_RECORDS=YES
+STRUCTURED_ESTIMATE_ROWS_POPULATED=YES
+NO_DOWNLOAD=YES
+NO_LOCAL_FILES=YES
+NO_PRODUCT_FACTS_FROM_OBJECT_PROJECT_BACKFILL=YES
+MEDALS_UNCHANGED=YES
+DB_WRITES=STRUCTURED_ESTIMATE_ROWS_ONLY
+DEPLOY=NO
+COMMIT=NO
+```
+
+WIP:
+`docs/wip/WIP_BACKFILL_STRUCTURED_ESTIMATE_ROWS_V1.md`.
+
+## 2026-10-27 — CATEGORY_SEARCH_OVER_ESTIMATE_ROWS_V1 — APPLIED
+
+Resolved category/subcategory and technical attributes over stored estimate
+rows using active CRM taxonomy terms.
+
+```text
+ROWS_SCANNED=170156
+TAXONOMY_TERMS=1127
+PLANNED_UPDATES=9195
+UPDATED_ROWS=9195
+ROWS_WITH_CATEGORY=9195
+ROWS_WITH_SUBCATEGORY=8719
+PROCUREMENT_CATEGORY_SUBCATEGORY_PAIRS=1308
+PLAN_SHA256=616359b126a847f4e73f57d29d8891a6be4094b54a76db13ea539cae6df8a3a8
+NEW_SUBCATEGORIES=0
+NEW_TERMS=0
+```
+
+Resolved rows are concentrated in flooring, waterproofing, lighting,
+computers, drainage, composites and repair categories. Ambiguous/no-match rows
+fail closed; unmatched volume is dominated by resource/machine/payroll rows.
+
+`good_supply_facts_service` and factual visibility now use resolved estimate
+rows first, with `structured_entities` retained as DIRECT/legacy fallback. The
+curated report-file evidence loop was removed.
+
+```text
+PID=461729
+GOOD_SUPPLY_FACTS=17
+VISIBILITY_OK=YES
+VISIBLE_PAIRS=592
+EVIDENCE_PIDS=257
+IDEMPOTENCY_CANARY_PLANNED_UPDATES=0
+CRM_APP_SELECT_GRANT=YES
+CRM_STREAMLIT=active
+NRESTARTS=0
+HEALTH_HTTP=200
+```
+
+```text
+CATEGORY_SEARCH_OVER_STRUCTURED_ESTIMATE_ROWS=YES
+SUBcategory_RESOLUTION_WRITTEN=YES
+TECH_ATTRIBUTES_FROM_ESTIMATE_ROWS=YES
+VISIBILITY_AND_CARDS_USE_ESTIMATE_ROWS=YES
+NO_DOWNLOAD=YES
+NO_LOCAL_FILES=YES
+NO_FULL_MASS_REPARSE=YES
+MEDALS_UNCHANGED=YES
+DB_WRITES=STRUCTURED_ESTIMATE_ROWS_ONLY
+DEPLOY=YES
+COMMIT=NO
+```
+
+WIP:
+`docs/wip/WIP_CATEGORY_SEARCH_OVER_ESTIMATE_ROWS_V1.md`.
+
+## 2026-10-27 — FACTUAL_READMODEL_OVER_ESTIMATE_ROWS_V1 — APPLIED
+
+Finalized factual/evidence cards on the unified estimate-row read model:
+
+```text
+structured_estimate_rows  primary
+structured_entities      DIRECT/legacy fallback
+```
+
+Confirmed goods require quantity, unit, total and source quote. Incomplete goods
+remain evidence-only. Generic works and aggregates stay hidden.
+`SPECIAL_WORK_REVIEW` rows are visible as evidence-only without a medal.
+
+```text
+VISIBILITY_OK=YES
+VISIBLE_PAIRS=628
+FACT_ONLY_PAIRS=71
+EVIDENCE_ONLY_PAIRS=542
+EMPTY_CATEGORIES=composites,curbstone,cable_products,external_utility_networks,concrete_materials,cable_support_systems
+```
+
+Dossier verification:
+
+```text
+PID=461729
+DOSSIER_ERRORS=0
+CATEGORY_BLOCKS=21
+CONFIRMED_GOODS=17
+HIDDEN_WORKS=8
+EVIDENCE_ROWS=603
+SPECIAL_WORK_EVIDENCE_ROWS=252
+ANALYTICS_MATERIAL_SUPPLY=5654.51
+```
+
+```text
+PRIMARY_READMODEL_IS_STRUCTURED_ESTIMATE_ROWS=YES
+CONFIRMED_AND_EVIDENCE_CARDS_VISIBLE=YES
+WORKS_NOT_SHOWN_AS_GOODS=YES
+SPECIAL_WORKS_VISIBLE_FOR_REVIEW=YES
+MEDALS_UNCHANGED=YES
+NO_DOWNLOAD=YES
+DB_WRITES=0
+DEPLOY=YES
+COMMIT=NO
+```
+
+WIP:
+`docs/wip/WIP_FACTUAL_READMODEL_OVER_ESTIMATE_ROWS_V1.md`.
+
+## 2026-10-27 — SECTION_PROJECTION_OVER_ESTIMATE_ROWS_V1 — APPLIED
+
+Added section provenance to universal estimate rows:
+
+```text
+section_code
+section_name
+section_total_value
+section_total_raw
+section_total_source
+```
+
+Backfill from existing entity section context:
+
+```text
+ENTITY_SECTION_ROWS=3509
+UPDATED_ROWS=3249
+AMBIGUOUS_MATCHES=133
+WITH_SECTION_NAME=246
+WITH_SECTION_TOTAL=197
+PLAN_SHA256=8af5db41dcad2d07256d39b324d2231e4aa8ee402ba71b108c731ee375bc276f
+```
+
+Object/project dossier section projection now uses
+`STRUCTURED_ESTIMATE_ROWS`. DIRECT sample remains
+`STRUCTURED_ENTITIES`. Phase 3 factual audit before/after is byte-identical.
+
+```text
+ESTIMATE_ROWS_HAVE_SECTION_FIELDS=YES
+SECTION_PROJECTION_USES_ESTIMATE_ROWS=YES
+FACTUAL_AND_EVIDENCE_CARDS_UNCHANGED=YES
+DIRECT_PATH_UNCHANGED=YES
+MEDALS_UNCHANGED=YES
+NO_DOWNLOAD=YES
+NO_LOCAL_FILES=YES
+DB_WRITES=STRUCTURED_ESTIMATE_ROWS_SECTION_BACKFILL_ONLY
+DEPLOY=YES
+COMMIT=NO
+```
+
+WIP:
+`docs/wip/WIP_SECTION_PROJECTION_OVER_ESTIMATE_ROWS_V1.md`.
+
+## 2026-10-27 — TECH_ATTRIBUTES_EXTRACTION_V1 — APPLIED_CORRECTED
+
+Extended deterministic technical-characteristic extraction for lighting,
+flooring, composite structures and drainage, then bound stored estimate-row
+attributes to matching entities. A post-apply evidence audit rejected the
+first-pass attributes that came from unlabeled article suffixes, alternate
+product columns or an ambiguous temperature range; the corrected set is final.
+
+```text
+ESTIMATE_ROWS_SCANNED=5373
+TARGET_ENTITIES=5551
+FIRST_PASS_ATTRIBUTES_SUPERSEDED=145
+DRY_RUN_PLANNED_ATTRIBUTES=91
+FINAL_NEW_ATTRIBUTES=90
+TARGET_ATTRIBUTES=944
+TARGET_ENTITIES_WITH_ATTRIBUTES=810
+PLAN_SHA256=da65734bfecd8b5e3315d859f35bebc150f71526380ebbb2723f88266180a1b8
+IDEMPOTENCY_PLANNED_ATTRIBUTES=0
+```
+
+```text
+TECH_ATTRIBUTES_EXTRACTED_FOR_TARGET_CATEGORIES=YES
+ATTRIBUTES_BOUND_TO_ENTITIES=YES
+NO_FABRICATED_ATTRIBUTES=YES
+MEDALS_UNCHANGED=YES
+NO_DOWNLOAD=YES
+DB_WRITES=ATTRIBUTES_ONLY
+DEPLOY=YES
+WORKER_RESTART=NO
+COMMIT=NO
+```
+
+WIP:
+`docs/wip/WIP_TECH_ATTRIBUTES_EXTRACTION_V1.md`.
+
+## 2026-10-27 — LIGHTING_SOCIAL_PARKS_TARGETED_EXTRACTION_V1 — DONE
+
+Targeted stored-record audit for CURRENT lighting object/project
+opportunities in social and park/landscaping segments.
+
+```text
+CANDIDATE_PIDS=35
+SOCIAL_OBJECTS=8
+PARKS_LANDSCAPING=20
+OUTSIDE_TARGET_SEGMENTS=7
+SNAPSHOT_RUNS=17
+TEMPLATE_ROWS_PARSED=206
+LIGHTING_SECTIONS=0
+TEMPLATE_RESIDUE_ROWS=206
+DOCUMENT_MATCH_DETAIL_ROWS=215
+STRUCTURED_ENTITIES=32
+GATE_VALID_LIGHTING_FACTS=0
+```
+
+The seven outside-target PIDs were excluded because their current object
+classification is road/street/utility rather than social or
+park/landscaping.
+
+PID `177615` stores three explicit `TL-SLIM RUS 20` lighting descriptions
+(`6.1`, `6.2`, `6.3`), but they are description-only and have no quantity,
+unit or total. The goods gate correctly rejected them. Other blockers were
+aggregate-only rows, match rows without a structured quantity, or no stored
+lighting evidence.
+
+A bounded `reclassify_offline.py` dry-run found no candidate entity recategory
+and was not applied.
+
+```text
+SOCIAL_PARK_LIGHTING_PIDS_IDENTIFIED=YES
+STORED_DB_RECORDS_USED=YES
+GATE_VALID_LIGHTING_FACTS_EXTRACTED_OR_REASONED=YES
+NO_DOWNLOAD=YES
+LOCAL_FILES_READ=0
+MEDALS_UNCHANGED=YES
+DB_WRITES=BOUNDED_RECLASSIFY_ONLY (0)
+```
+
+WIP:
+`docs/wip/WIP_LIGHTING_SOCIAL_PARKS_TARGETED_EXTRACTION_V1.md`.
+
+Evidence:
+`docs/reports/lighting_social_parks_targeted_extraction/result_20261027.json`.
+
+## 2026-10-27 — FACTUAL_VISIBILITY_ALL_CATEGORIES_V1 — DONE
+
+Object/project visibility now projects three explicit card kinds:
+
+```text
+OPPORTUNITY_BACKED
+FACT_ONLY
+EVIDENCE_ONLY
+```
+
+Gate-valid material facts remain visible when the matching CURRENT
+opportunity is absent. Rows with material/attribute evidence but missing
+quantity, unit or total are visible only as evidence-only and are not
+counted as confirmed goods. Synthetic cards receive no medal, score or
+lifecycle authority.
+
+Live S13 result:
+
+```text
+VISIBLE_PAIRS=10
+FACT_ONLY_PAIRS=1
+EVIDENCE_ONLY_PAIRS=1
+450455=composite_structures/composite_guardrails_stairs/FACT_ONLY/NO_MEDAL
+177615=lighting/generic_luminaires/EVIDENCE_ONLY/NO_MEDAL
+TARGETED_TESTS=32_PASSED
+DB_WRITES=0
+DEPLOY=NO
+COMMIT=NO
+```
+
+Applied to analytics table, analytics contour, command center, filters,
+category hierarchy, dossier/category card, and queue-first projection.
+
+```text
+FACTUAL_CARDS_WITHOUT_OPPORTUNITY_VISIBLE_ALL_CATEGORIES=YES
+EVIDENCE_ONLY_CARDS_VISIBLE=YES
+CONFIRMED_GOODS_REQUIRE_QTY_UNIT_TOTAL=YES
+NO_MEDAL_INVENTED=YES
+EMPTY_CATEGORIES_HIDDEN=YES
+DB_WRITES=0
+```
+
+WIP:
+`docs/wip/WIP_FACTUAL_VISIBILITY_ALL_CATEGORIES_V1.md`.
+
+Evidence:
+`docs/reports/factual_visibility_all_categories_v1/verification_20261027.json`.
+
+## 2026-10-27 — FLOORING_OBJECT_PROJECT_CATEGORY_V1 — DONE
+
+Flooring taxonomy and stored evidence were audited. Existing 22
+subcategories cover every evidence-backed material cluster; no new
+subcategory was created.
+
+Fixed two gate defects:
+
+- flooring product rows measured in `M2`/`M` are no longer misclassified as
+  aggregate bulk material;
+- persisted RU/OCR unit aliases (`м`, `м2`, `кв.м`, `шт`, etc.) are
+  canonicalized before CRM goods classification.
+
+Work detection now rejects `Обратная засыпка`, `Ручная засыпка` and
+`Земляные работы`.
+
+Bounded reclassification wrote only `subcategory_code`:
+
+```text
+CURRENT_SCOPE_UPDATES=293
+FULL_OBJECT_SCOPE_UPDATES=263
+TOTAL_SUBCATEGORY_UPDATES=556
+CONFIRMED_ENTITY_ROWS=24
+EVIDENCE_ONLY_ENTITY_ROWS=532
+POST_APPLY_ADDITIONAL_UPDATES=0
+```
+
+Live visibility:
+
+```text
+CURRENT_FLOORING_PIDS=177
+VISIBLE_FLOORING_PAIRS=78
+VISIBLE_FLOORING_PIDS=68
+FACT_ONLY_PAIRS=19
+EVIDENCE_ONLY_PAIRS=59
+EMPTY_CURRENT_FLOORING_PIDS_HIDDEN=144
+TARGETED_TESTS=40_PASSED
+DB_WRITES=BOUNDED_RECLASSIFY_ONLY
+```
+
+Analytics table, contour, command center, filters and dossier were verified on
+S13.
+
+```text
+FLOORING_TAXONOMY_AUDITED=YES
+FLOORING_EVIDENCE_REVIEWED=YES
+MISSING_FLOORING_SUBCATEGORIES_CREATED_ONLY_IF_EVIDENCE=YES
+FLOORING_CONFIRMED_CARDS_VISIBLE=YES
+FLOORING_EMPTY_OPPORTUNITIES_HIDDEN=YES
+MEDALS_UNCHANGED=YES
+NO_DOWNLOAD=YES
+NO_FULL_MASS_REPARSE=YES
+DEPLOY=NO
+COMMIT=NO
+```
+
+WIP:
+`docs/wip/WIP_FLOORING_OBJECT_PROJECT_CATEGORY_V1.md`.
+
+Evidence:
+`docs/reports/flooring_object_project_category_v1/result_20261027.json`.
+
+## 2026-10-27 — FLOORING_INDUSTRIAL_SELFLEVELING_MINING_V1 — DONE
+
+Bounded stored-record mining found one true industrial/self-leveling material:
+
+```text
+pid=12950
+flooring / polymer_self_leveling
+Наливной пол Ucrete UD 200
+confirmed_goods=NO
+evidence_only=YES
+```
+
+The literal quote exists in 24 stored `document_match_details` rows. No matched
+row has qty + unit + total, so confirmed industrial-floor goods count is zero.
+Polyurethane primers, water-filled polymer blocks and work strings were
+excluded as false positives.
+
+Added only evidence-backed taxonomy terms:
+
+```text
+search: наливной пол ucrete
+brand:  ucrete
+brand:  ucrete ud 200
+```
+
+Post-apply taxonomy dry-run planned zero additional terms. Bounded flooring
+reclassify planned and wrote zero entity rows because PID `12950` has no
+matching flooring entity; the evidence-only card is projected from the
+immutable mining report.
+
+Live S13 visibility:
+
+```text
+EVIDENCE_ONLY_PAIR=12950/flooring/polymer_self_leveling
+DOSSIER_VISIBLE=YES
+ANALYTICS_TABLE_VISIBLE=YES
+CONFIRMED_GOODS=NO
+MEDAL=NONE
+TAXONOMY_TERMS_READBACK=3
+```
+
+```text
+INDUSTRIAL_FLOOR_TERMS_SEARCHED=YES
+CONFIRMED_INDUSTRIAL_FLOOR_FACTS_REPORTED=YES (0)
+SUBCATEGORY_TERMS_ADDED_ONLY_WITH_EVIDENCE=YES
+FLOORING_VISIBILITY_UPDATED=YES
+MEDALS_UNCHANGED=YES
+NO_DOWNLOAD=YES
+NO_FULL_MASS_REPARSE=YES
+DB_WRITES=3_TAXONOMY_TERMS_0_ENTITY_ROWS
+```
+
+WIP:
+`docs/wip/WIP_FLOORING_INDUSTRIAL_SELFLEVELING_MINING_V1.md`.
+
+Evidence:
+`docs/reports/flooring_industrial_selfleveling_mining/result_20261027.json`.
+
+## 2026-10-27 — FLOORING_INDUSTRIAL_FULL_STORED_MINING_V1 — DONE
+
+Full stored-record pass completed across:
+
+```text
+STRUCTURED_ENTITIES=12136
+SOURCE_SNAPSHOT_RUNS=2995
+DOCUMENT_MATCH_DETAILS=1115605
+```
+
+Candidate scan:
+
+```text
+ENTITY_CANDIDATES=259
+SNAPSHOT_CANDIDATES=385
+MATCH_DETAIL_CANDIDATES=44977
+```
+
+Strict classification:
+
+```text
+CONFIRMED_GOODS=0
+EVIDENCE_ONLY=16
+WORKS=4608
+FALSE_POSITIVES=45479
+```
+
+Seven evidence-backed terms were added to existing flooring subcategories;
+post-apply dry-run planned zero new terms. Bounded entity reclassify planned
+and wrote zero rows because the surviving evidence lives in
+`document_match_details`.
+
+Visibility:
+
+```text
+EXPECTED_EVIDENCE_PAIRS=16
+VISIBLE_EVIDENCE_PAIRS=13
+HIDDEN_BY_SCOPE=3
+TARGETED_VERIFICATION=PASS
+```
+
+```text
+FULL_STORED_FLOORING_MINING_COMPLETED=YES
+ALL_THREE_SOURCES_SCANNED=YES
+INDUSTRIAL_FLOOR_FACTS_CLASSIFIED=YES
+TERMS_ADDED_ONLY_WITH_EVIDENCE=YES
+MEDALS_UNCHANGED=YES
+NO_DOWNLOAD=YES
+NO_FULL_MASS_REPARSE=YES
+DB_WRITES=7_TAXONOMY_TERMS_0_ENTITY_ROWS
+```
+
+WIP:
+`docs/wip/WIP_FLOORING_INDUSTRIAL_FULL_STORED_MINING_V1.md`.
+
+Evidence:
+`docs/reports/flooring_industrial_full_stored_mining/result_20261027.json`.
+
+## 2026-10-27 — FIX_DOSSIER_EVIDENCE_ONLY_RENDERING_V1 — DONE
+
+Dossier category projection was verified for the stored evidence-only pair:
+
+```text
+pid=12950
+flooring / polymer_self_leveling
+Наливной пол Ucrete UD 200
+```
+
+The dossier now exposes the pair through a synthetic evidence-only opportunity
+and category card:
+
+```text
+render_kind=EVIDENCE_ONLY
+evidence_only=YES
+confirmed_goods=NO
+evidence_line_count=1
+candidate_initial_medal=null
+confirmed_base_medal=null
+current_effective_medal=null
+```
+
+The UI category renderer shows `EVIDENCE ONLY`, material/source quote and
+medal `—`. The source literal is present in 24 stored match-detail rows.
+
+Deployment root cause: S13 already had matching dossier/category/UI files, but
+the deployed `composite_visibility_service.py` was old and the evidence report
+was absent. Only those two artifacts were deployed. The CRM service was
+restarted and returned HTTP 200.
+
+```text
+DOSSIER_EVIDENCE_ONLY_VISIBLE=YES
+CONFIRMED_GOODS_NOT_CLAIMED=YES
+MEDALS_UNCHANGED=YES
+DB_WRITES=0
+DEPLOY=YES
+CRM_HTTP=200
+```
+
+WIP:
+`docs/wip/WIP_FIX_DOSSIER_EVIDENCE_ONLY_RENDERING_V1.md`.
+
+Evidence:
+`docs/reports/fix_dossier_evidence_only_rendering/verification_20261027.json`.
+
 ## 2026-10-25 вЂ” MODULE_CONSISTENCY_REFACTOR_V1 Phase 1 review rework вЂ” DONE
 
 Phase 1 consistency blockers РёСЃРїСЂР°РІР»РµРЅС‹ РїРѕСЃР»Рµ review. Dependency audit С‚РµРїРµСЂСЊ С‡РёС‚Р°РµС‚
@@ -4457,6 +5807,330 @@ PRODUCTION_TOP_LEVEL_IMPORT_MODE=PASS
 PHASE1_REGRESSION=NONE
 DB_WRITES=0
 PHASE_2_STARTED=NO
+```
+
+## 2026-10-26 — COMPOSITE/STRENGTHENING Phase 1/2 — DONE
+
+Implemented the repeatable taxonomy seed for the eight approved composite,
+drainage and structural-reinforcement subcategories. The target-only seed was
+applied twice on S13 with identical readback; ambiguous `композитные лотки`
+remains inactive.
+
+Phrase matching in `parse_extractors`, `product_subcategory_resolver` and
+`reclassify_offline` now uses one compiled alternation per matcher. ASCII/mixed
+tokens require strict word boundaries; Cyrillic phrases use a word-start
+boundary with bounded inflection suffixes.
+
+```text
+TAXONOMY_SEED_IDEMPOTENT=YES
+SEED_TARGET_COUNT=8
+LVTIN_NOT_LVT=YES
+MEMBRANNAYA_KOROBKA_NOT_MEMBRANE=YES
+COMPOSITE_SAMPLE_ROWS=8/8_PASS
+PHASE12_TARGETED_TESTS=22_passed
+DB_WRITES=TAXONOMY_SEED_ONLY
+PHASE3_STARTED=NO
+```
+
+## 2026-10-26 — COMPOSITE/STRENGTHENING Phase 3 — DONE
+
+Category-scoped bulk gate added for `composite_structures`,
+`structural_reinforcement` and `drainage_water_management`. Allowed units are
+`M`, `POG_M`, `KG`, `T`, `M2`; quantity, total and source quote remain required.
+COUNT-unit integer behavior is unchanged. Concrete, sand, soil and steel bulk
+rows remain excluded. Parse-time and offline reclassification call the same gate.
+
+```text
+BULK_COMPOSITE_UNITS_ALLOWED=YES
+CONCRETE_SAND_SOIL_STEEL_REJECTED=YES
+COUNT_UNIT_BEHAVIOR_UNCHANGED=YES
+PHASE3_GATE_TESTS=4_passed
+DB_WRITES=0
+DEPLOY=NO
+PHASE4_STARTED=NO
+```
+
+## 2026-10-26 — COMPOSITE/STRENGTHENING Phase 4 — BLOCKED
+
+The offline reclassification dry-run was expanded to scan source snapshots,
+`document_match_details.matched_text` and `structured_entities` with no apply.
+The composite scope query timed out at 120 seconds before report generation.
+EXPLAIN shows a parallel sequential scan over approximately 1,056,814
+`document_match_details` rows because `matched_text ILIKE` is not indexed.
+
+```text
+PHASE4_STATUS=BLOCKED_PERFORMANCE
+OFFLINE_DRYRUN_COMPLETED=NO
+REPORT_CREATED=NO
+APPLY=NO
+DB_WRITES=0
+```
+
+## 2026-10-26 — COMPOSITE Phase 4C — CLEAN BOUNDED DRY-RUN
+
+Requested-category enforcement was added to the offline reclassifier. Work
+prefixes now include `укрепительн`; fertilizer bulk is rejected before drainage
+taxonomy scoring. The same bounded run completed in 19.236 seconds with zero
+listed false positives and retained the valid CompoMax sample.
+
+```text
+ROWS_SCANNED=55532
+ELAPSED_SECONDS=19.236
+KEPT_FACTS=66
+LISTED_FALSE_POSITIVES=0
+VALID_COMPOMAX_SAMPLE=YES
+APPLY=NO
+DB_WRITES=0
+PHASE5_STARTED=NO
+```
+
+## 2026-10-26 — COMPOSITE Phase 5 — PARTIAL CANARY APPLY
+
+Applied the approved PID 148391 entity canary with a durable preimage and
+optimistic row-level guards. Updated 57 rows: 45 bridge-drainage and 12
+point-drainage. No rows were created or deleted. Opportunity updates remained
+zero because the CURRENT `composite_structures` opportunity has no
+same-category resolved subcategory; drainage evidence has two subcategories and
+must remain ambiguous.
+
+The card read-model shows 100 supply candidates and 18 CompoMax rows, but no
+subcategory label.
+
+```text
+APPLIED_PIDS=148391
+UPDATED_ENTITIES=57
+CREATED_ENTITIES=0
+DELETED_ENTITIES=0
+APPLIED_OPPORTUNITIES=0
+VALID_COMPOMAX_SAMPLE=YES
+CARD_SUBCATEGORY_VISIBLE=NO
+DB_WRITES=CANARY_ONLY
+PHASE6_BLOCKED=YES
+```
+
+## 2026-10-26 — COMPOSITE Phase 5B — CROSS-CATEGORY CANARY PASS
+
+Applied the owner-approved exception only to opportunity 13666 for PID 148391:
+`composite_structures/composite_drainage_channels` with source
+`CANARY_CROSS_CATEGORY_148391`. No entity rows or other PIDs changed. The
+dossier/card read-model now exposes the subcategory and retains the CompoMax
+sample. CRM remained active without restart.
+
+```text
+UPDATED_OPPORTUNITIES=1
+ENTITY_CHANGES=0
+OTHER_PIDS_CHANGED=0
+CARD_SUBCATEGORY_VISIBLE=YES
+VALID_COMPOMAX_SAMPLE=YES
+DB_WRITES=CANARY_OPPORTUNITY_ONLY
+CRM_RESTARTED=NO
+PHASE6_STARTED=NO
+```
+
+## 2026-10-26 — COMPOSITE Phase 5C — CARD PRODUCT CROSS-MAPPING PASS
+
+Added a PID 148391-only read-model mapping from drainage composite facts into
+the composite card. Both cards retain their own product sets; no entity row was
+changed or duplicated in the database. Supply facts now expose
+`subcategory_code` for deterministic mapping.
+
+```text
+COMPOSITE_CARD_SUBCATEGORY=composite_drainage_channels
+COMPOSITE_LINE_COUNT=18
+COMPOSITE_PRODUCT_COUNT=3
+CROSS_CATEGORY_LINE_COUNT=18
+DRAINAGE_LINE_COUNT=18
+VALID_COMPOMAX_SAMPLE=YES
+OTHER_PIDS_AFFECTED=NO
+DB_WRITES=0
+DEPLOY=NO
+```
+
+## 2026-10-26 — COMPOSITE Phase 6 — GENERAL VISIBILITY BLOCKED ON EVIDENCE
+
+Generalized the composite card cross-mapping beyond PID 148391 and retained
+source cards. Empty composite opportunities are filtered out. Production audit:
+only 1 of 1,459 current composite opportunities has valid facts; 1,458 empty
+cards are hidden.
+
+The four requested sample PIDs cannot all be made visible from existing valid
+records. `148931` is a compound work/material row, `450455` lacks a CURRENT
+composite opportunity, `12182` has only an autopavilion composite-panel
+description without a valid material total, and `149447` contains no composite
+rebar evidence. No facts or opportunities were synthesized.
+
+```text
+GENERAL_CARD_READ_MODEL=YES
+FUTURE_PARSER_CONTRACT=YES
+EMPTY_COMPOSITE_OPPORTUNITIES_HIDDEN=YES
+SAMPLE_CARDS_VISIBLE=1/4
+DB_WRITES=0
+NO_DOWNLOAD=YES
+NO_FULL_MASS_REPARSE=YES
+```
+
+## 2026-10-26 — COMPOSITE Phase 6B — SECTION TEMPLATE + BOUNDED EVIDENCE DONE
+
+Added the dedicated composite row/section template and a bounded raw-match
+recovery path. A 3,111-row dry-run produced two facts. Apply used the exact
+preimage SHA256 and wrote only the two planned entities plus their subcategory
+values.
+
+```text
+COMPOSITE_SECTION_TEMPLATE_CREATED=YES
+SAMPLE_PIDS_REPROCESSED=YES
+CREATED_ENTITIES=2
+SUBCATEGORY_UPDATED_ENTITIES=2
+VISIBLE_COMPOSITE_CARDS=2
+VISIBLE_PIDS=148391,148931
+BLOCKED_PIDS_REPORTED_WITH_REASON=YES
+DB_WRITES=BOUNDED_EVIDENCE_ONLY
+CARD_BULK_GATE_ALIGNED=YES
+NO_DOWNLOAD=YES
+NO_FULL_MASS_REPARSE=YES
+SCORING_MEDAL_QUEUE_UNCHANGED=YES
+DEPLOY=NO
+COMMIT=NO
+```
+
+External blockers remain: `450455` has no CURRENT composite opportunity;
+`12182` is autopavilion characteristic prose; `149447` has only a composite
+rebar WORK row.
+
+## 2026-10-26 — COMPOSITE Phase 7 — CONFIRMED-ONLY VISIBILITY DONE
+
+Added one shared read-only visibility model for composite opportunities and
+applied it to analytics table/filter/drill-down views, category overview,
+command-center counts, queue-first summaries/details and dashboard category
+medal projection.
+
+```text
+RAW_CURRENT_COMPOSITE_ROWS=1471
+VISIBLE_COMPOSITE_ROWS=2
+VISIBLE_PIDS=148391,148931
+HIDDEN_COMPOSITE_ROWS=1469
+ANALYTICS_TABLE_ROWS=2
+FILTER_OPTION_COUNT=2
+CATEGORY_OVERVIEW_COUNT=2
+COMMAND_CENTER_COMPOSITE_COUNT=2
+EMPTY_COMPOSITE_OPPORTUNITIES_HIDDEN=YES
+MEDALS_UNCHANGED=YES
+DB_WRITES=0
+DEPLOY=NO
+COMMIT=NO
+```
+
+Evidence:
+`docs/reports/composite_taxonomy_phase7/visibility_audit_20261026.json`.
+
+## 2026-10-26 — COMPOSITE Phase 7B — ALL 46 RAW PIDS DONE
+
+Reconstructed the 46-PID raw composite-evidence scope from stored match text
+and ran the section template over DMD rows and stored extraction snapshots.
+Three new gate-valid facts were applied; one existing logical fact was skipped.
+
+```text
+SCANNED_PIDS=46
+RAW_EVIDENCE_ROWS=930
+SNAPSHOT_RUNS=85
+SNAPSHOT_ROWS=5201
+RECLASSIFY_MATCH_DETAIL_ROWS=62375
+RECLASSIFY_SNAPSHOT_RUNS=4
+RECLASSIFY_SNAPSHOT_LINES=620
+TEMPLATE_MATCH_FACTS=2
+TEMPLATE_ENTITY_FACTS=5
+TEMPLATE_SNAPSHOT_FACTS=4
+CREATED_ENTITIES=3
+CREATED_EXTRACTION_RUNS=1
+SUBCATEGORY_UPDATED_ENTITIES=3
+PIDS_WITH_GATE_VALID_FACTS=148931,450455
+GLOBAL_VISIBLE_COMPOSITE_PIDS=148391
+VISIBLE_PIDS_WITHIN_46=NONE
+BLOCKED_PIDS_REASONED=YES
+MEDALS_UNCHANGED=YES
+DB_WRITES=BOUNDED_EVIDENCE_ONLY
+NO_DOWNLOAD=YES
+NO_FULL_MASS_REPARSE=YES
+DEPLOY=NO
+COMMIT=NO
+```
+
+`148931` is now ambiguous because valid facts span drainage and guardrails while
+the CURRENT opportunity subcategory is NULL; no primary subcategory was
+invented.
+
+Evidence:
+`docs/reports/composite_taxonomy_phase7b/result_20261026.json`.
+
+## 2026-10-26 — Phase 7D — ALL FACTUAL CATEGORY/SUBCATEGORY PAIRS
+
+Replaced confirmed-only composite visibility with a general factual pair
+projection. Multiple categories and multiple subcategories per procurement are
+now rendered independently; empty object/project pairs are suppressed.
+
+```text
+VISIBLE_FACT_PAIRS=5
+VISIBLE_PIDS=148391,148931
+148391_PAIRS=3
+148931_PAIRS=2
+ANALYTICS_TABLE_COMPOSITE_ROWS=3
+COMPOSITE_FILTER_OPTION_COUNT=3
+DOSSIER_148391_CARDS=3
+DOSSIER_148931_CARDS=2
+RENDERED_CATEGORIES=6_OF_15
+EMPTY_CATEGORIES_NOT_RENDERED=YES
+MEDALS_UNCHANGED=YES
+DB_WRITES=0
+DEPLOY=NO
+COMMIT=NO
+```
+
+Evidence:
+`docs/reports/composite_taxonomy_phase7d/visibility_audit_20261026.json`.
+
+## 2026-10-26 — LIGHTING_OBJECT_PROJECT_CATEGORY_V1 — DONE
+
+Audited stored lighting facts and added only evidence-supported taxonomy gaps.
+Created `lighting_mounting_hardware`, added explicit lighting terms to existing
+subcategories/negative guards, and applied 46 bounded entity updates across six
+procurement IDs. A post-apply dry-run produced zero additional updates.
+
+```text
+ACTIVE_SUBCATEGORIES=21 -> 22
+RECLASSIFIED_ENTITIES=46
+PREIMAGE_SHA256=03a0a899766c5f6d9c0d46c0edd7a47ad081d212118850c84ef28da51353214c
+RAW_CURRENT_LIGHTING_OPPORTUNITIES=1748
+RAW_OBJECT_PROJECT_OPPORTUNITIES=1523
+VISIBLE_OBJECT_LIGHTING_PAIRS=3
+VISIBLE_OBJECT_LIGHTING_PIDS=148391
+DIRECT_OPPORTUNITIES_PRESERVED=191
+EMPTY_OBJECT_PROJECT_ROWS_HIDDEN=1520
+MEDALS_UNCHANGED=YES
+NO_DOWNLOAD=YES
+NO_FULL_MASS_REPARSE=YES
+DEPLOY=NO
+COMMIT=NO
+```
+
+Evidence:
+`docs/reports/lighting_object_project_category_v1/audit_20261026.json`.
+
+## 2026-10-26 — COMPOSITE Phase 4B — BLOCKED ON FALSE POSITIVES
+
+The scope query was bounded through category indexes and row caps. The dry-run
+completed in 18.685 seconds over 5,000 candidate pids and 55,532 source rows.
+The report is not clean: work and non-drainage bulk rows were retained, and one
+row resolved outside the requested category set. No apply path exists and no
+database write was performed.
+
+```text
+PHASE4B_STATUS=BLOCKED_FALSE_POSITIVES
+OFFLINE_DRYRUN_COMPLETED=YES
+REPORT_CREATED=YES
+KEPT_FACTS=82
+REJECTED_FACTS=4918
+APPLY=NO
+DB_WRITES=0
 ```
 
 ## 2026-10-25 — MODULE_CONSISTENCY_REFACTOR_V1 Phase 2 — DONE
@@ -4789,6 +6463,19 @@ Screenshot:
 Daily-work screenshot:
 `docs/reports/s13_kiosk_command_center_v2/kiosk.daily_work_progress.1920x1080.png`.
 WIP: `docs/wip/WIP_S13_KIOSK_METRIC_SEMANTICS_FIX_V1.md`.
+
+2026-11-09 follow-up — kiosk intake/queue presentation **ROLLED BACK** at the
+owner's request. The new intake/queue fields did not match the operator's
+requested screen and caused the running Firefox kiosk to show zeros/`n/d`
+until its page was refreshed. The production script was restored byte-for-byte
+from `/usr/local/bin/s13_dashboard3.py.bak-20261109-intake`; both dashboard and
+graphical kiosk services were restarted and verified active. The local
+`deploy/s13_dashboard3.py` was restored from its pre-change copy. No intake
+policy or S7 parser change was made. The read-only audit remains relevant:
+the last sync saw 7 changed OPEN rows, held 5 new OPEN rows as `UNKNOWN`,
+created 0 CRM cards; 181 document tasks were pending while active workers
+reported no claimable tasks. Diagnose that claim gate separately without
+changing the kiosk's established fields.
 
 ## 2026-10-21 — PIPELINE_BATCH_PARALLEL_EXECUTION_V1 (P15) — DONE
 
@@ -5198,3 +6885,328 @@ WORKS_RESOURCE_ROWS_EXCLUDED=YES
 DB_WRITES=REPARSE_ONLY
 SCORING_MEDAL_QUEUE_UNCHANGED=YES
 ```
+
+## 2026-11-01 — UNIVERSAL_ESTIMATE_PIPELINE format + adjudication contract — IN PROGRESS
+
+Owner clarification recorded in `docs/wip/WIP_UNIVERSAL_ESTIMATE_PIPELINE_CONSOLIDATION_V1.md`:
+the shared estimate-row contract must cover every supported estimate-bearing
+format (XLSX/XLSM, born-digital/scanned PDF, DOC/DOCX, GSFX, and other supported
+formats), then pass rows through category-agnostic AI adjudication. Parser
+factory support is not proof of estimate-row parity: current universal table
+reader is structured for XLSX/XLSM; other formats rely on extracted text and
+generic heuristics, scanned-PDF OCR is conditional, and GSFX parity is open.
+First local GSFX correction: stop writing `quantity * unit_price` as an observed
+line total when the XML total has not been mapped. Preserve source quantity and
+unit price and leave total empty. Added a focused regression fixture (not run per
+workspace instruction); `py_compile` and `git diff --check` passed. This is a
+value-integrity fix, not a GSFX parity claim. Production state is unchanged.
+
+```text
+ONE_NORMALIZED_ROW_CONTRACT_ACROSS_FORMATS=REQUIRED
+CROSS_CATEGORY_MODEL_CAN_REJECT_FALSE_CATEGORY=REQUIRED
+FORMAT_PARITY_CANARIES=OPEN
+GSFX_TOTAL_FROM_UNOBSERVED_ARITHMETIC=REMOVED_LOCAL
+GSFX_REGRESSION_FIXTURE=ADDED_NOT_RUN
+CROSS_CATEGORY_AI_NORMALIZER=IMPLEMENTED_LOCAL
+ROW_DECISION_AUDIT_MIGRATION=ADDED_NOT_APPLIED
+DB_WRITES=0
+DEPLOY=NO
+MASS_REPARSE=NO
+```
+
+The parse hook now sends eligible goods rows in small batches to the local AI
+normalizer with the active cross-category taxonomy and source context. Model
+choices are validated against active category/subcategory pairs, verbatim
+source evidence, negative terms, semantic guards, and a confidence floor;
+unresolved answers clear a keyword hypothesis while model failures retain the
+deterministic fallback. Per-row decision audit persistence is backed by the new
+`20261101_estimate_row_category_decisions.sql` migration, which is not yet
+applied. Fixture files are present but were not run per workspace rules.
+
+2026-11-01 Phase 2 OCR canaries continued on S13 in-memory only. The first
+scanned PDF produced readable text at 270 degrees, but the existing first-page
+probe had already selected the same rotation; independent per-page rotation
+did not improve this uniformly oriented file. An isolated coordinate-based OCR
+cell-reconstruction experiment retained source cell boundaries, but yielded 94
+rows with zero quantities, zero unit prices, and 31 totals (previous candidate:
+102 / 0 / 0 / 39), so it was not kept as an accepted fix. A second textless PDF
+also failed commercial-value extraction. OCR coverage remains explicitly
+unaccepted; next work must improve multi-level header/column mapping and compare
+values to visually verified source cells. No production files, database rows,
+or services changed. Details in the universal-estimate consolidation WIP.
+
+2026-11-01 Qwen vision OCR follow-up: the initial direct pull hit TLS timeout;
+the model was then downloaded through the temporary, allowlisted reverse SSH
+tunnel and tested on one scanned estimate page in an isolated Ollama instance.
+Inference succeeded, but row identity/quantity/value extraction failed quality
+review. Do not enable unattended OCR with this configuration. S13 routing,
+production Ollama, database, and document workers were not changed. See the
+universal-estimate consolidation WIP for the exact scope and result.
+
+Owner runtime requirement for a future Qwen OCR worker: do not run vision OCR
+continuously or overlap it with the regular normalizer on the shared GPU. Keep
+the current 23:00 sleep / 08:30 wake schedule. After wake, drain the previous
+day's eligible scan backlog first (retaining older unfinished work); then
+release the vision model/GPU and start the regular normalizer. Late arrivals
+remain queued for the next morning. At 23:00, checkpoint unfinished items and
+leave them pending for morning resume. Measure VRAM/runtime on the canary before
+setting concurrency or batch limits. This orchestration is not implemented and
+does not alter procurement queue, medal logic, or sleep schedule; details are
+in the universal-estimate consolidation WIP.
+
+2026-11-01 same-source canary rerun after parser routing changes: XLSX 152920
+24/17 consistent, DOCX 152900 152/53, born-digital PDF 152903 2,514/234,
+scanned PDF 149626 6,976 OCR characters but 0 universal rows, and GSFX 149089
+17 rows (15 quantities, 6 unit prices, 0 totals); results match the prior
+candidate. `.xls` routing through `LegacyExcelParser` is now present locally;
+the retained file yields 11 rows with 3 prices and 3 totals but no quantities
+or consistent rows. No `.xlsm` sample was retained on S13.
+
+A valid textless scan with a real estimate table was then identified
+(`/data/tender-documents/downloads-open/14838/смета.pdf`). Qwen2.5VL 3B probes
+on the same page returned an empty JSON list at 160 dpi, a truncated response
+with incorrect row codes/values at 240 dpi, and `{}` for a crop. The 240 dpi
+probe took ~95 s and peaked at 5.6 GiB VRAM of 6 GiB. No model output was
+persisted; each isolated listener was stopped and GPU returned to baseline.
+OCR quality gate remains failed. All activity used S13 scratch files only:
+zero DB writes, no deployed parser changes, no queue/service/schedule changes.
+## 2026-11-04 — LIVE MEDAL / FRESHNESS / DIRECT SUPPLY PRIORITY — IMPLEMENTED LOCALLY
+
+Current stage only. Audit found that daily reevaluation existed, but the
+stored `commercial_timing_value` could be reused as a snapshot and queue
+freshness was only a tie-break within a medal band. The current implementation
+now rebuilds timing from source dates on every daily pass, gives direct supply
+a bounded shorter-cycle boost, and aggregates queue priority from the live
+category score. The full S13 dry-run and apply passed on 2026-11-04; no next
+architecture phase is started.
+
+2026-11-06 category-normalization canary update (current phase):
+lighting was tested read-only on 50 distinct procurement IDs selected from
+normalized estimate GOODS rows by direct lighting-product phrases. Local
+qwen2.5:7b accepted 20/50 rows across 20 procurements and assigned
+16 generic_luminaires, 2 street_luminaires, 1 emergency_evac, and 1 floodlights.
+It rejected/unresolved 30 (14 malformed outputs, 4 literal-evidence failures,
+12 valid unresolved). Only 2 accepted rows had quantity + unit price + line
+total together; 8 had any total. Available accepted totals sum to 528459.26 RUB
+but is NOT an accepted lighting value due missing/inconsistent commercial
+fields. Full prompt and decisions are in
+`docs/reports/lighting_50_procurements_canary_20261106.json`. No DB writes or
+category/medal projection. Daemons and runner timer paused for the sweep.
+
+
+## 2026-11-06 lighting canary workflow correction
+
+The earlier local-AI 50-row lighting canary preceded the owner's intended human review step and is diagnostic only; its decisions/totals are not accepted category results. A read-only selector has now prepared 50 distinct procurements with parsed estimate evidence and a manual triage report. Name-level triage is 33 product-like rows, 5 support/infrastructure rows, 10 obvious noise/work rows and 2 ambiguous rows; source-page verification is still outstanding. The earlier premature AI canary used the same 50 procurement IDs, verified by ID-set comparison; it ran before manual review and remains diagnostic only. No second/post-review model call or CRM writes have occurred. Follow the owner order: manually verify candidate estimate rows and exclusions first, then send only the reviewed allowlist to the local model. Evidence: `docs/reports/lighting_first50_candidates_20261106.json` and `docs/reports/lighting_first50_manual_review_20261106.md`.
+
+
+## 2026-11-06 full-database lighting proposal
+
+Read-only scan of all `structured_estimate_rows` (1,167,038 rows / 2,111 procurements with parsed rows) found lighting keyword mentions in 534 procurements. Conservative line-level filtering proposes **198 procurements** with **307 category-subcategory memberships** across 13 lighting subcategories; 72 procurements have multiple memberships. This is a candidate proposal, not accepted source-page verification. No DB writes or model calls. Full report: `docs/reports/lighting_full_db_proposed_categories_20261106.md` / `.json`. Owner's updated order: complete proposals for all active categories first; review/show them before writes; next phase only then normalize approved estimate rows in AI batches of 20. AI does not download documents or infer absent values; missing evidence routes to the document acquisition/reparse process.
+
+
+2026-11-06 owner requested procurement hierarchy in the later category-model
+input. Read-only join of the 188 lighting proposals to CRM found 170 cards / 18
+missing; 100 are `torgi` with closed submission awaiting award and 70 awarded.
+Only 17 have a current resolved canonical object classification (9 ROAD, 3
+BRIDGE, 1 INTERCHANGE, 2 SOCIAL/SCHOOL, 1 EMBANKMENT, 1 other urban); 171 have
+no current canonical hierarchy. Existing 133 successful AI assessments contain
+noncanonical free-text object labels and are not trusted hierarchy. Snapshot:
+`docs/reports/lighting_candidates_hierarchy_context_20261106.json`. Added an
+optional allowlisted procurement-context block to the estimate-row normalizer;
+line evidence remains the sole basis for category membership. Narrow
+`py_compile` passed; no AI or DB writes. All-category match quality and a
+read-only-reviewed 20-procurement batch runner remain pending.
+
+
+2026-11-06 ? post-parse classification wiring (user-directed)
+- New parsed estimate rows continue through row-level taxonomy normalization; parser now supplies lifecycle/source/object-hierarchy context to that normalizer.
+- After successful persistence of parsed estimate rows, parser requests CRM reassessment so the existing V3 queue can reconsider the card with saved estimate evidence.
+- V3 model input now contains bounded parsed GOODS evidence and current canonical object hierarchy; prompt explicitly requires row evidence for product category claims and preserves unknown hierarchy/evidence as unknown. Legacy free-text category/object labels are excluded as proof.
+- Narrow syntax check: `python -m py_compile` on the seven touched Python modules passed. No tests, model calls, DB writes, service restarts, or historical batch were run.
+- Historical reclassification still needs a controlled backfill/20-card canary and review before enabling any bulk model processing.
+
+
+2026-11-06 ? reviewed lighting canary result
+- Added exact-row allowlist mode to `canary_estimate_row_category_ai.py` (procurement + source document + row ref + exact name); syntax check passed.
+- Ran 33 manually selected lighting rows through S13 Qwen 2.5 7B, batch size 4. Read-only; report at `docs/reports/lighting_reviewed_33_canary_20261106.json`.
+- Gate failed: 17/33 classified; 16 unresolved including malformed outputs, evidence quote mismatches and clear fixture false negatives. Accepted rows have partial line totals for 8/17 and only 5/17 unit prices. No mass reclassification or DB write. Fix adjudication/prompt and repeat canary before bulk work.
+
+
+2026-11-06 ? architecture audit correction
+- The initial CRM V3 assessment owns procurement form/object hypotheses and the primary card medal; document acquisition has its own DIRECT_SUPPLY/OBJECT_PROJECT plan. The older CRM match queue also has a separate date/OKPD/match-score path.
+- Removed the erroneous local wiring that sent parsed rows back through the primary card assessment and could change the card medal. Parse-time row adjudication remains.
+- Do not duplicate opportunity/medal storage: implement the missing post-parse batch projection through existing category-opportunity persistence, scoring and freshness. Canonical object hierarchy remains incomplete; legacy free-text hypotheses are not canonical.
+- Narrow `py_compile` passed. No writes, model runs beyond the recorded read-only canary, or service restarts.
+
+## 2026-11-07 — post-parse category assessment module (current phase)
+
+- Added `src/services/commercial_routing_v3/post_parse_category_assessment.py` (312 lines): separate post-parse category assessment contract for batches of procurement cards, exact category/subcategory and estimate-row ID validation, fail-closed `REVIEW_REQUIRED` handling, and adaptation into the existing deterministic candidate scorer.
+- Category projection emits only model-confirmed commercially significant categories with cited parsed rows. It uses routing version `post_parse_rows_v1` through existing `crm_procurement_category_opportunities` persistence; it does not write the initial card assessment/medal. No parallel category store was introduced.
+- Prevented whole-procurement NMCK/final price from inflating category scoring. Category subtotal is supplied only when every cited row has an extracted line total; otherwise the amount remains unknown and the direct-value scorer fails low.
+- Narrow `python -m py_compile src/services/commercial_routing_v3/post_parse_category_assessment.py` passed. No tests, model calls, DB writes, migrations, or code deployment were run.
+- S13 state: document worker units were already inactive; stopped `crm-ai-assessment-runner.service` and its timer to prioritize this work. `ollama.service` remains active. No other queue/sync or user-facing service was changed.
+- Remaining in this phase: connect saved row decisions to a retryable 20-procurement batch runner, run a read-only canary, and only then project through existing persistence. Production `structured_estimate_row_category_decisions` was absent in the prior live DB check; verify the approved migration path before using row-decision persistence. The prior 33-row lighting canary failed and is not a passing bulk-run gate.
+
+## 2026-11-07 — post-parse category batch runner and canary (current phase)
+
+- Added `tender_documents_research/scripts/run_post_parse_category_batches.py`: reads durable accepted row decisions only; default pass size is 20 procurements with stable ID cursor/retry selection; local-model inference is split into subbatches of 4. Read-only by default. Optional apply routes through existing `persist_category_opportunities` under `post_parse_rows_v1` and respects expert locks and Qwen shadow mode.
+- It loads lifecycle and current canonical object hierarchy, keeps unresolved hierarchy unknown, carries row IDs/source evidence, and marks estimate value complete only when all GOODS rows have decisions, all category rows are sent, and every cited row has a source line total.
+- Read-only model canary used 17 manually reviewed lighting rows from the prior 33-row diagnostic, one sampled row per procurement. The 17-card 8k-context call returned the wrong output shape and was stopped after monitoring showed 12% GPU / 88% CPU. The 4-card 4k-context call returned parseable JSON but all 4 decisions were downgraded to `REVIEW_REQUIRED` (confidence 0; model interpreted single sampled line as incidental). No score or CRM write.
+- Reports: `docs/reports/post_parse_lighting_17_module_canary_input_20261107.json`, `docs/reports/post_parse_lighting_17_module_canary_result_20261107.json` (the aborted call), and `docs/reports/post_parse_lighting_4_module_canary_result_20261107.json`.
+- `python -m py_compile` passed for the assessment module and batch runner. No automated tests, DDL migration, category opportunity writes, or code deployment.
+- Production state: document workers and CRM assessment runner/timer inactive; Ollama active. `structured_estimate_row_category_decisions` remains absent in DI and an idle-in-transaction DI session remains; do not apply migration or run `--apply` until the full-evidence canary and approved writer/lock path are ready.
+
+2026-11-07 runner refinement: persisted evidence now includes source document/row coordinates and missing quantity/unit/unit-price/line-total counts. Automatic scanning resumes with `--after-procurement-id`; explicit procurement IDs provide deterministic retries. Narrow `py_compile` passed for both changed modules. No additional inference or DB write.
+
+2026-11-07 initial-route handoff refinement: `CrmTaxonomyLoader` now supplies the
+pre-download AI assessment's route profile, procurement form, analysis mode,
+status, and confidence alongside the canonical object hierarchy. The post-parse
+prompt now includes `resolved_opportunity_track`, deterministically derived
+from those saved fields, and directs Qwen to copy it instead of reclassifying
+DIRECT vs OBJECT/PROJECT from the tender title or estimate lines. The response
+validator continues to enforce the saved hierarchy and records the model's
+track separately for audit; conflicting or missing saved signals remain
+UNKNOWN. Prompt version bumped to `post_parse_category_assessment_v3`. Narrow
+`py_compile` passed for loader, assessment module, and runner. No DB writes,
+production deployment, or bulk inference. This confirms route classification
+is context handed off from the pre-download stage; it does not yet resolve
+unclassified or conflicting initial cards.
+
+
+2026-11-07 Qwen 7B v3 read-only canary: replayed the same four sampled lighting procurements with current saved route context. The model echoed the authoritative track for all 3 records with usable initial hierarchy (EMBEDDED_MATERIAL) and left the one record without hierarchy UNKNOWN/REVIEW_REQUIRED (used luminaire; model cited ambiguity). This differs from the earlier long prompt, which called all four DIRECT_SUPPLY; the concise hierarchy-isolation probe and v3 result indicate the model can follow the route when the prompt makes the saved value authoritative. The run made no database writes. Report: `docs/reports/post_parse_lighting_4_hierarchy_v3_canary_result_20261107.json`.
+
+Commercial-value boundary from this canary: the records provide procurement NMCK/contract amounts from CRM, but the model prompt had only one reviewed row per procurement (SAMPLED), so it cannot establish full category material value. Visible sample line totals: PID 146 RUB 399,774.21; PID 13465 RUB 99,619.50; PID 209 has no parsed quantity/price/total; PID 14443 has no price/total and the used item remains for review. A local, non-persisted scoring preview yielded BRONZE for the three COMMERCIALLY_SIGNIFICANT decisions and no medal for PID 14443. These are sample-scope previews, not accepted CRM medals or complete category subtotals; never use them as category-level financial totals.
+
+
+2026-11-07 read-only deep dive, procurement 209 (Samara road lighting + traffic management): the source `????? _15_15368.docx` states the calculation method is estimated and gives ?maximum contract price? RUB 67,300,485.44; the same table separately gives initial sum of unit-work prices RUB 3,017,212.88. CRM initial price is RUB 67,300,485.44, final price also RUB 67,300,485.44. Thus 67.3M is the whole-procurement maximum price, not the luminaire materials subtotal. Current DI rows have 138 GOODS, 14 tagged lighting (13 `generic_luminaires`, one lighting row without subcategory); all 14 lack parsed unit price and line total. The OO? and unit-price workbooks list seven LED outdoor luminaire types (50?140 W) with reference unit prices RUB 5,036.81?13,207.58, but they are one-unit price bases, not purchased quantities. No full lighting material amount can be derived; the 67.3M procurement includes the wider road-lighting/traffic-control work scope. No DB writes.
+
+2026-11-07 category-by-category read-only canary: added a one-category prompt path for estimate rows, with exact prompt/response traces and zero DB writes. `estimate_row_category_canary_v2` was run on waterproofing and flooring. Waterproofing: the 7B model rejected two visibly unrelated lines and mapped bitumen-polymer roofing mastic to polymer coatings; initial report contains a duplicate imported row, so dedupe was corrected and that report must be regenerated. Flooring: all four samples were rejected; the model emitted an invalid decision token for one sample and validation failed closed. Search/tag candidates included road backfill and a cable lug. These results show taxonomy/candidate noise and a model response-contract issue; they do not show parser value-field gaps because the selected rows already contain quantity, unit, unit price, and total. Local syntax check passed. No tests, production writes, DDL, or daemon changes. Continue with one active category per canary and source-audit unresolved rows.
+
+2026-11-07 prompt/validator calibration continuation: owner clarified that deformation joints are in-scope waterproofing. The active taxonomy already maps the phrase to `waterproofing/parking_basement`; the semantic guard lacked the phrase, causing a correct AI category proposal to fail validation. Added the Russian phrase form to the waterproofing guard and explicit hierarchy guidance. Same-row S13 canary passed as `waterproofing/parking_basement` (v4, confidence 1.0, zero writes). Drainage's four-row sample included three unrelated earthworks and one cast-iron rainwater-inlet grate. The model initially put subcategory `point_drainage` in the top-level category field; validator rejected it. Added strict category/subcategory field guidance plus an explicit category-scoped code-pair hint. Same-row rerun passed as `drainage_water_management/point_drainage` (v7, confidence 1.0, zero writes). The rainwater-grate row already has quantity 14, unit price RUB 4,224.09 and total RUB 59,137.26; no parser gap evidenced here. Narrow `py_compile` passed. No tests, production writes, DDL, or daemon changes.
+
+2026-11-07 structured-output gate: S13 Ollama 0.32.1 accepted a strict JSON Schema on `/api/generate`. Added schema-constrained output in both the production parse-time caller and category canary. The schema requires all decision fields and exactly one decision per input row (`minItems=maxItems` parsed from the prompt). Prompt version `estimate_row_category_v14`. Same-run canaries: deformation joint 1/1 -> `waterproofing/parking_basement`; rainwater-inlet grate 1/1 -> `drainage_water_management/point_drainage`; curbstone BR rows 4/4 -> `curbstone/road_curbstone`; flooring negative samples 4/4 -> `OTHER_OR_UNRESOLVED`. All canaries were read-only. This fixes response shape/count failures, while flooring's anomalous mastic amount still needs original-source comparison. Narrow `py_compile` passed; no tests, DB writes, DDL, or daemon changes.
+
+2026-11-07 composite structures canary: category-only one-row inference under strict Ollama JSON Schema v19 accepted 3 composite railing/guardrail rows as `composite_structures/composite_guardrails_stairs` and rejected a fiberglass insulation roll. Four-row inference showed cross-row evidence leakage and contradictory NEW_CATEGORY outputs; single-row inference was stable. Production caller still batches rows, so measure/resolve that tradeoff before using it for bulk classification. Two selected rows have category/value evidence but lack unit price while a line total exists; audit source-vs-normalized values for the railing row. No writes. Narrow syntax compilation passed.
+
+
+## 2026-11-08 ? category prompt calibration checkpoint
+
+Current stage only: read-only flooring/waterproofing candidate audit and local prompt/semantic-guard calibration. V22 batch canary yielded 1/20 validator-approved classifications; do not treat the result as bulk-ready. Linoleum inventory produced 69 deduplicated procurement candidates; strict roof-mastic search produced 18 candidates. Dynamic prompt taxonomy narrowing and contextual waterproofing mastic guard are implemented locally; narrow `py_compile` passed. Exact trace and candidate inventory are documented in `docs/reports/category_candidates_and_prompt_audit_20261108.md`. No production deployment, database writes, or next-stage bulk run performed.
+
+2026-11-08 supplemental inventory: composite broad-match data has 388 source rows / 92 procurements; targeted text yields two tray lines in one procurement and railing/guardrail text in 15 procurements. Candidate rows need product-vs-work validation; drainage, pipes, and couplings are excluded.
+
+2026-11-08 v23 canary gate passed for row identity: singleton mode classified all 20 canary rows into valid existing pairs; group mode showed cross-row quote leakage. AI normalizer and parse-time default now use one row per inference. A read-only all-candidate flooring classification is in progress (278 source-coordinate-deduplicated rows across 73 procurements). No persistence/deploy. Full results will determine next stage; do not begin other categories yet.
+
+2026-11-08 flooring stage complete: 278 deduplicated source-coordinate candidate rows across 73 procurement IDs processed one row per model call. After local validator re-run with work/accessory/generic-specification/long-unatomized-text guards, 170 product rows across 66 procurement IDs remain supported; 108 were unresolved/rejected. Full qty+unit+rate+total coverage exists on 23 accepted rows across 18 PIDs. Proposal CSV, exact prompt trace, and raw/final JSON are documented in `docs/reports/category_candidates_and_prompt_audit_20261108.md`. No DB writes/deploy. Next requested target families are roof/below-grade waterproofing and composite trays/railings.
+
+
+2026-11-08 targeted category normalization continuation: full read-only singleton passes completed for flooring, roofing mastic, and composite railings; separate temporary-taxonomy canary confirmed two non-drainage composite trays. Results, per-procurement manifests, and exact prompt texts are in `docs/reports/category_candidates_and_prompt_audit_20261108.md`. Revalidation found and locally repaired Cyrillic normalization in the waterproofing semantic guard; the guard rejects work-like coating while accepting roof/foundation mastic examples, and the 28-row roof set revalidates to 26 rows / 18 PIDs. Below-grade material inventory currently has zero confirmed itemized product rows. `composite_trays` is a local proposal only; no DB seed, CRM projection, production deploy, or writes. Narrow syntax compilation passed, no automated tests. This remains the current stage; do not start the next stage without an explicit request.
+
+
+2026-11-08 code-path audit for parse, category medal, and reparse:
+
+- Local parse caller invokes taxonomy/rule projection plus AI normalization (default env `ESTIMATE_ROW_AI_NORMALIZATION=1`, singleton row calls), then `estimate_row_persistence.persist_estimate_rows` stores parsed row raw/numeric quantity, unit, unit price, line total, source quote, category/subcategory and a separate row decision record. Live S13 configuration/deployment was not verified; approved `s13` SSH timed out again. Existing category canaries in reports had `db_writes=0`.
+- Category-level scoring/projection is separate from the initial card medal. `run_post_parse_category_batches.py` is a manual batch runner, read-only unless `--apply`; `--apply` calls canonical `persist_category_opportunities`. The WIP claim that the projector is missing should be read as missing automatic durable invocation: a manual runner exists, but no parse-triggered category-opportunity/medal write was verified.
+- The batch runner selects only `GOODS` with accepted AI row decisions; `SPECIAL_WORK_REVIEW` is rule-fallback only at parse time and is excluded from the post-parse category batch. Thus reinforcement/repair works are not yet part of the requested category opportunity output. Its default maximum is 40 rows per category; larger sets are labeled `SAMPLED`.
+- Parsed partial fields can be stored as evidence, but category value is emitted only for `FULL_CATEGORY_ROWS` with parsed total on every cited row. Quantity or unit price alone does not become category spend; the code does not infer a missing total. Category opportunity evidence includes source row IDs, names/quotes, quantity/unit/rate/total.
+- Reparse is unsafe as-is for corrected values: `_fingerprint` includes `quantity_raw`, `unit_raw`, `unit_price_raw`, `total_raw`, and `source_quote`, while the unique key/upsert uses the fingerprint. If a reparse recovers a missing rate/total, the fingerprint changes and can insert another row instead of updating the old one. Design a stable source-row identity/reconciliation and duplicate handling before any historical reparse.
+- Next safe sequence: repair identity/upsert and work-row routing; validate same-source rows against source documents; run a small read-only post-parse canary; then apply a reviewed bounded cohort; only after that schedule historical retries and use the same path on new documents. No code changes, test runs, model runs, or data writes in this audit.
+
+Additional finding in the same audit: local `crm_ai_assessment_runner.py` still has two pre-download V3 paths calling `persist_category_opportunities`; the deterministic initial-accept branch applies with `dry_run=False`, and the model branch can apply when its environment dry-run is disabled. These inputs are pre-parse routing hypotheses, so this write path conflicts with the owner's rule that product category/subcategory medals become visible only after parsed-row evidence. Preserve the initial procurement/card assessment, but gate category-opportunity writes to post-parse row evidence. Live deployment behavior remains unverified.
+
+2026-11-08 owner correction: pre-parse category-medal projection removed locally
+from both deterministic and model V3 initial assessment paths in
+`src/services/crm_ai_assessment_runner.py`. Pre-parse still handles only the
+overall procurement/card assessment. Narrow `py_compile` passed. Post-parse
+category projection is not yet automatic; stable row identity for recovered
+reparse fields, work-row inclusion, full-category coverage, and an end-to-end
+post-parse invocation remain open in
+`docs/wip/WIP_CATEGORY_NORMALIZATION_AUDIT_ALL_V1.md`. No DB writes or deploy.
+
+2026-11-08 implementation continuation — post-parse category projection stage:
+
+- Removed both pre-download V3 category-opportunity persistence calls; overall card assessment remains intact.
+- Reparse persistence now reconciles a unique legacy source row by document/source + page/sheet + row reference + normalized name, retaining the old fingerprint to avoid conflicting with legacy uniqueness. Ambiguous matches fail closed.
+- Scoped `structural_reinforcement` work rows are sent through estimate-row AI as work evidence and constrained to that category; other work kinds remain excluded. Post-parse batch coverage includes this family.
+- Category monetary value uses all rows in full accepted category scope and stays unknown when any line total is missing.
+- Narrow syntax compilation passed. No automated tests, model calls, production DB/CRM writes, migration, deployment, or live canary.
+- This stage is not complete: automatic invocation still needs a reliable all-documents-terminal gate; historical work rows need re-adjudication. See `docs/wip/WIP_CATEGORY_NORMALIZATION_AUDIT_ALL_V1.md`.
+
+2026-11-08 completion signal implementation — current post-parse stage:
+
+- Added a durable DI category-job repository and migration. Enqueue gate requires every nonempty selected S13 plan for one procurement to be COMPLETED, at least one persisted result per plan, and zero non-COMPLETED file results; at least one accepted estimate-row category decision is also required.
+- S13 daemon now enqueues on successful parse completion and, when `POST_PARSE_CATEGORY_PROJECTION_ENABLED=1`, prioritizes/retries the post-parse runner. Feature defaults off until migration/config are verified. This prevents early/partial category-medal projection.
+- Reparse reconciliation, scoped structural-reinforcement work classification, and complete-scope category value behavior are implemented locally as described in the active WIP.
+- Syntax compilation passed for ten touched modules. No tests, model/DB calls, migration apply, deployment, or production configuration change. Production enablement and historical completed-procurement backfill remain open; current stage is not complete.
+
+2026-11-08 Tailscale access and schema preparation:
+
+- Corrected local canonical SSH Host `s13` to the user-confirmed active Tailscale route and removed the old endpoint from the block. Repointed the local `s13` Git remote from removed alias `mint-vpn` to `ssh://s13/opt/CRM_Streamlit`. SSH and read-only `git ls-remote` both succeeded. No Git push/merge or code deployment.
+- Production DI was missing row-category decisions and post-parse jobs. Applied both additive migrations via approved postgres DDL route, as `doc_worker`, in one transaction with a 5s lock timeout. Owners verified as `doc_worker`; PostgreSQL remained active.
+- Runtime code/config is not deployed or enabled; no backfill, CRM category projection, service restart, or canary. Full details and exact gate are recorded in the active WIP.
+
+2026-11-08 category-scoped lighting canary and NULL subcategory handling:
+
+- Read-only S13 inference on procurement 405961 classified four reviewed luminaire rows as `lighting`; two mapped to `generic_luminaires`, two retained the top-level category with NULL subcategory. The review UI can expose NULL-subcategory rows for taxonomy curation.
+- A model output initially used an unlisted subcategory or misplaced a subcategory code into `category_code`. The local normalizer now preserves a semantically verified valid top-level category with a NULL subcategory, and remaps a uniquely identifiable active subcategory code to its parent. Category-value scoring remains separate and must not treat these four rows as complete value evidence.
+- All four stored rows have NULL normalized quantity, unit, unit price, and line total. Source quotes include quantity/price-like text on some rows; meaning and source parity are unresolved. No category subtotal/medal can be computed. Report: `docs/reports/post_parse_lighting_canary_405961_v28.json`; no database writes, deployment, or daemon changes.
+- Current stage remains canary/reconciliation: trace source fields, then evaluate the reviewed 50-procurement cohort. Do not enable the daemon or claim full-category value until the completion and source-total gates pass.
+Field-level follow-up from lighting canary PID 405961 (four rows): `quantity_raw`, `unit_raw`, `unit_price_raw`, and `total_raw` are NULL on every row. Two source quotes visibly contain unit `шт.` and quantities 17 and 6, despite all raw and normalized columns being NULL; both rows also have NULL `source_document_id`. Two technical-spec quotes include `19 700,00`, whose meaning is unverified and not stored in rate/total columns. This is a parser/source-provenance gap to investigate before category scoring. No values or totals were inferred.
+2026-11-08 cohort continuation status: prepared 50 unique lighting procurement IDs (25 existing lighting-tagged rows plus 25 unassigned search-phrase rows; 2,096 tagged source rows and 11,688 phrase-match source rows). Manifest is `docs/reports/post_parse_lighting_50_cohort_manifest_20261108.json`. The inference run did not start because S13 went offline before staging; Tailscale showed the peer offline and SSH timed out. Resume with the frozen PID set, one inference per row, after S13 returns. No CRM writes or deployment.
+
+2026-11-09 composite-card continuation: direct S13 read-only comparison found 11 PIDs with persisted composite_structures/composite_guardrails_stairs rows, only 3 with existing parent opportunities (all with missing/NULL subcategory), 8 without current composite opportunities, and 3 duplicated category-opportunity rows for PID 148931. Added a procurement-scoped factual visibility path to the dossier to avoid loading all CRM opportunities and estimate facts on every card open; syntax compilation passed. Rollout is pending: S13 SSH identity cannot overwrite some application files, and the canonical deployment privilege/path is not specified. Partial file copies were restored, backups removed, CRM service not restarted, DB not written. The S7 forward parser is active and S13 sync succeeded Nov 9 06:52 MSK (2 open 44-FZ, 5 open 223-FZ, 0 inserts), while S7 logs show repeated EIS attachment 404s and one recouped source row blocked for missing OKPD/title. See docs/WIP/WIP_COMPOSITE_AUTOMATED_SUBCATEGORY_ASSIGNMENT_V1.md.
+
+
+2026-11-10 PDF extraction WIP review fix (local only): gated the 116597 fixed-column reader behind explicit `estimate_116597_v1` header recognition; unmatched layouts now use existing text/OCR output or return explicit `UNSUPPORTED_TEMPLATE`; textless scans return `PDF_OCR_REQUIRED` for the caller's OCR path; page count comes from bbox XML rather than optional `pdfinfo`. Isolated temp overlay canary preserved 1,501 rows / 1,240 normalized quartets on 116597 and synthetic routing checks passed. Only this template was exercised against a real file; second-template and real scanned-PDF canaries remain open. `py_compile` passed; no automated tests, writes, reparse, deploy, or restart. Stop for review; do not start integration or historical replay.
+
+## 2026-11-10 — DOCX quantity mapping local fix
+
+`WIP_ESTIMATE_DOCX_QUANTITY_MAPPING_FIX_V1` completed its local-only phase.
+The `.docx` branch in `universal_estimate_rows.py` now routes to the native
+OOXML structural reader; the focused 113481 canary restored `table_2/row31`
+quantity `4` and unit `шт` while leaving blank rate/total unset. The temp-copy
+SHA-256 matched the retained source. Two changed modules passed `py_compile`,
+one synthetic mapping check passed, and all 171 returned rows retained
+coordinates. No DB/CRM writes, persistence, model calls, deployment, or restart.
+Broader DOCX parity and integration remain open for review. The dispatcher
+module remains >450 lines; the local addition is a small cohesive format route,
+while OOXML parsing stays in the dedicated structural module. See
+`docs/reports/estimate_docx_quantity_mapping_fix_20261110/`.
+2026-11-10 CRM daily retention guard local implementation: extracted the
+date/scope decision into `src/services/commercial_routing_v3/daily_retention.py`
+and added the projector gate for new and existing cards. Fifteen focused
+predicate cases and a synthetic in-memory projector dry-run passed; both
+changed modules passed `py_compile` and portable imports. Canonical `ssh s13`
+timed out twice, so frozen-manifest PID parity and live projector dry-run are
+blocked and explicitly not claimed. No DB/CRM/S7 writes, queue mutation,
+model calls, purge, deploy, or restart. Stop for review; production release
+and purge remain separate gates. Evidence:
+`docs/reports/crm_daily_retention_guard_20261110/`.
+
+Superseding fix-review, 2026-11-11: awarded OBJECT/PROJECT records now
+evaluate execution/delivery end before tender end; DIRECT_GOODS remains on
+tender end. Twenty-one focused cases passed. A single CRM `crm_app`
+read-only snapshot (160,118 rows) produced a new V3 retention manifest;
+independent snapshot-to-manifest PID parity is exact (KEEP=21,759,
+REMOVE=132,993, AMBIGUOUS=5,366; all diffs zero). Live V3 dry-run with local
+temporary overlay planned 16,890 updates, zero inserts/errors, and zero DB
+writes with CRM write methods blocked and S7 read-only. `DEPLOY=NO`,
+`PURGE=NO`; stop for separate review. Evidence:
+`docs/reports/crm_daily_retention_guard_fix_review_20261111/`.
+
+Runtime-base rebase follow-up, 2026-11-11: ported onto the exact current S13
+writer file (HEAD `b5d46b8f`, runtime file was dirty; captured SHA
+`3956F32C29F94444D5C0B1B1006C062B8E3EAE5D41F1CB0EFE48AB1FA4738464`).
+Preserved terminal source pulls, dynamic date-column mapping, factual dedupe,
+and existing upsert path unchanged; AST audit found zero regressions. Fresh
+single-snapshot manifest v4 parity passed 0/0/0 for 160,118 PIDs. Runtime-base
+candidate dry-run planned 16,884 updates, zero inserts/errors/writes; an
+additional synthetic gate check confirmed existing ambiguous preservation.
+Atomic replacement plan is documented but not executed; release authority is
+not documented. `DEPLOY=NO`, `PURGE=NO`, `DB_WRITES=0`. Evidence:
+`docs/reports/crm_daily_retention_guard_fix_review_20261111/`.
+
+
+## 2026-11-12 — WIP_HYDRO_KANBAN_INLINE_SIDECAR_V1
+
+Этап начат локально от HEAD 8b639e271b6c08f03df50b935542299ec9d367cf. Bootstrap выявил незакоммиченные изменения в целевых UI-файлах; сохранены. Первое изменение заменило primary-action УК-card на отдельную зону drag handle. Узкая проверка: py_compile src/ui/hydro_cards.py — PASS. Полный sidecar, Chrome/Edge canary и Full HD screenshot пока PENDING; schema/data/scoring/funnel без изменений.

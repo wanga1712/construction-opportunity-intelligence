@@ -22,6 +22,18 @@ TRUST_GROUPS = {
 }
 
 _PENDING_VALIDATION = ("UNKNOWN", "RAW", "PENDING")
+_UNCLASSIFIED_SENTINEL = "SUBCATEGORY_NOT_ASSIGNED"
+_EMBEDDED_TRACK = "EMBEDDED_MATERIAL"
+COMPOSITE_CARD_SOURCES = {
+    ("composite_structures", "pultruded_composite_profiles"),
+    ("composite_structures", "frp_gratings"),
+    ("composite_structures", "composite_guardrails_stairs"),
+    ("composite_structures", "composite_trays"),
+    ("composite_structures", "composite_drainage_channels"),
+    ("structural_reinforcement", "composite_rebar"),
+    ("structural_reinforcement", "composite_fiber"),
+    ("structural_reinforcement", "external_carbon_reinforcement"),
+}
 
 
 def _di_conn():
@@ -169,6 +181,80 @@ def _products_for_category(
     ]
 
 
+def _is_composite_drainage_material(fact: Dict[str, Any]) -> bool:
+    name = str(
+        fact.get("material")
+        or fact.get("product_name_normalized")
+        or fact.get("product_name_raw")
+        or ""
+    ).lower()
+    if "compomax" in name:
+        return True
+    has_composite = "композит" in name or "полимербетон" in name
+    has_drainage = "водоотвод" in name or "лоток" in name
+    return has_composite and has_drainage
+
+
+def _products_for_opportunity(
+    supply_facts: Iterable[Dict[str, Any]],
+    *,
+    category_code: str,
+    subcategory_code: str,
+) -> List[Dict[str, Any]]:
+    selected_subcategory = (
+        subcategory_code
+        if subcategory_code and subcategory_code != _UNCLASSIFIED_SENTINEL
+        else None
+    )
+    products = _products_for_category(supply_facts, category_code)
+    if selected_subcategory:
+        products = [
+            product
+            for product in products
+            if str(product.get("subcategory_code") or "") == selected_subcategory
+        ]
+    return products
+
+
+def _factual_product_subcategory(
+    product: Dict[str, Any],
+    *,
+    category_code: str,
+    opportunity_subcategory: str,
+) -> Optional[str]:
+    source_category = str(product.get("category_code") or "").strip()
+    source_subcategory = str(product.get("subcategory_code") or "").strip()
+    if not source_subcategory:
+        return None
+    selected = (
+        opportunity_subcategory
+        if opportunity_subcategory
+        and opportunity_subcategory != _UNCLASSIFIED_SENTINEL
+        else None
+    )
+    if source_category != category_code and selected:
+        return selected
+    return source_subcategory
+
+
+def _factual_product_groups(
+    products: Iterable[Dict[str, Any]],
+    *,
+    category_code: str,
+    opportunity_subcategory: str,
+) -> Dict[str, List[Dict[str, Any]]]:
+    groups: Dict[str, List[Dict[str, Any]]] = {}
+    for product in products:
+        subcategory = _factual_product_subcategory(
+            product,
+            category_code=category_code,
+            opportunity_subcategory=opportunity_subcategory,
+        )
+        if subcategory:
+            groups.setdefault(subcategory, []).append(product)
+    return groups
+
+
 def build_category_cards(
     *,
     opportunities: Iterable[Dict[str, Any]],
@@ -178,6 +264,7 @@ def build_category_cards(
     procurement_id: int,
     model_counts: Dict[str, Dict[str, Any]],
     extraction_outcomes: Dict[str, Dict[str, Any]],
+    evidence_rows: Iterable[Dict[str, Any]] = (),
     procurement_title: Any = None,
     okpd_name: Any = None,
     object_class: Any = None,
@@ -187,6 +274,7 @@ def build_category_cards(
     from src.services.object_section_match_service import compare_section_to_procurement
 
     facts = list(supply_facts or [])
+    evidence = list(evidence_rows or [])
     docs = list(documents or [])
     latest = (queue_progress.get("latest") or {}).get(int(procurement_id))
     queue_status = latest[0] if latest else None
@@ -210,7 +298,16 @@ def build_category_cards(
             continue
         seen.add(key)
 
-        products = _products_for_category(facts, code)
+        products = _products_for_opportunity(
+            facts,
+            category_code=code,
+            subcategory_code=sub,
+        )
+        cross_products = [
+            product
+            for product in products
+            if str(product.get("category_code") or "") != code
+        ]
         # EMBEDDED_ESTIMATE_PARSE_FIRST_V1: категория подтверждена разделом,
         # только если найденные товары лежат в разделе, а не в RESIDUE.
         _section_codes = sorted({
@@ -234,19 +331,43 @@ def build_category_cards(
         ) if products else None
         model = model_counts.get(code)
         outcome = extraction_outcomes.get(code)
-        cards.append({
+        routing_version = str(opp.get("routing_version") or "").strip()
+        medal_authoritative = (
+            track.upper() == "DIRECT_SUPPLY"
+            or routing_version == "post_parse_rows_v1"
+        )
+        card = {
             "category_code": code,
             "category_name": opp.get("category_name") or code,
-            "subcategory_code": sub or None,
+            "subcategory_name": opp.get("subcategory_name") or sub or None,
+            "subcategory_code": None,
             "track": track or None,
             "status": opp.get("status"),
-            "candidate_initial_score": _number(opp.get("candidate_initial_score")),
-            "candidate_initial_medal": opp.get("candidate_initial_medal"),
-            "confirmed_base_score": _number(opp.get("confirmed_base_score")),
-            "confirmed_base_medal": opp.get("confirmed_base_medal"),
-            "current_effective_score": _number(opp.get("current_effective_score")),
-            "current_effective_medal": opp.get("current_effective_medal"),
-            "current_effective_reason": opp.get("current_effective_reason"),
+            "candidate_initial_score": (
+                _number(opp.get("candidate_initial_score"))
+                if medal_authoritative else None
+            ),
+            "candidate_initial_medal": (
+                opp.get("candidate_initial_medal") if medal_authoritative else None
+            ),
+            "confirmed_base_score": (
+                _number(opp.get("confirmed_base_score"))
+                if medal_authoritative else None
+            ),
+            "confirmed_base_medal": (
+                opp.get("confirmed_base_medal") if medal_authoritative else None
+            ),
+            "current_effective_score": (
+                _number(opp.get("current_effective_score"))
+                if medal_authoritative else None
+            ),
+            "current_effective_medal": (
+                opp.get("current_effective_medal")
+                if medal_authoritative else None
+            ),
+            "current_effective_reason": (
+                opp.get("current_effective_reason") if medal_authoritative else None
+            ),
             "section_confirmed": bool(_section_codes),
             "section_codes": _section_codes,
             "object_match": _object_match,
@@ -272,10 +393,183 @@ def build_category_cards(
             "line_count": len(products),
             "material_value": material_value,
             "quantities_by_unit": _quantities_by_unit(products),
-        })
+            "cross_category_from": (
+                ["drainage_water_management"] if cross_products else []
+            ),
+            "cross_category_line_count": len(cross_products),
+            "evidence_only": False,
+            "confirmed_goods": True,
+            "factual_only": bool(opp.get("factual_only")),
+            "render_kind": (
+                "FACT_ONLY_GOODS"
+                if opp.get("factual_only")
+                else "CONFIRMED_GOODS"
+            ),
+            "evidence_line_count": 0,
+            "evidence_materials": [],
+        }
+        for factual_subcategory, group_products in _factual_product_groups(
+            products,
+            category_code=code,
+            opportunity_subcategory=sub,
+        ).items():
+            group_evidence = [
+                dict(row)
+                for row in evidence
+                if str(row.get("category_code") or "") == code
+                and str(row.get("subcategory_code") or "") == factual_subcategory
+            ]
+            group_cross = [
+                product
+                for product in group_products
+                if str(product.get("category_code") or "") != code
+            ]
+            group_card = dict(card)
+            group_card.update({
+                "subcategory_code": factual_subcategory,
+                "subcategory_name": (
+                    opp.get("subcategory_name") or factual_subcategory
+                ),
+                "products": group_products,
+                "product_count": len({
+                    str(product.get("material") or "").strip().lower()
+                    for product in group_products
+                    if product.get("material")
+                }),
+                "line_count": len(group_products),
+                "material_value": round(
+                    sum(
+                        _number(product.get("total")) or 0.0
+                        for product in group_products
+                    ),
+                    2,
+                ),
+                "quantities_by_unit": _quantities_by_unit(group_products),
+                "evidence_line_count": len(group_evidence),
+                "evidence_materials": group_evidence,
+                "cross_category_from": (
+                    ["drainage_water_management"] if group_cross else []
+                ),
+                "cross_category_line_count": len(group_cross),
+            })
+            cards.append(group_card)
+    for evidence_row in evidence:
+        code = str(evidence_row.get("category_code") or "").strip()
+        sub = str(evidence_row.get("subcategory_code") or "").strip()
+        if not code or not sub:
+            continue
+        key = (code, sub)
+        if any(
+            (
+                str(card.get("category_code") or ""),
+                str(card.get("subcategory_code") or ""),
+            ) == key
+            for card in cards
+        ):
+            continue
+        opp = next(
+            (
+                row for row in opportunities or []
+                if str(row.get("commercial_category_code") or "") == code
+            ),
+            {},
+        )
+        group_evidence = [
+            dict(row) for row in evidence
+            if str(row.get("category_code") or "") == code
+            and str(row.get("subcategory_code") or "") == sub
+        ]
+        reference_rate_count = sum(
+            1
+            for row in group_evidence
+            if str(row.get("layout_status") or "").upper()
+            == "UNIT_RATE_ONLY"
+            and _number(
+                row.get("unit_price")
+                if row.get("unit_price") is not None
+                else row.get("unit_price_value")
+            ) is not None
+        )
+        cards.append(
+            {
+                "category_code": code,
+                "category_name": opp.get("category_name") or code,
+                "subcategory_code": sub,
+                "track": _EMBEDDED_TRACK,
+                "status": "CURRENT",
+                "candidate_initial_score": None,
+                "candidate_initial_medal": None,
+                "confirmed_base_score": None,
+                "confirmed_base_medal": None,
+                "current_effective_score": None,
+                "current_effective_medal": None,
+                "current_effective_reason": None,
+                "section_confirmed": False,
+                "section_codes": [],
+                "object_match": {},
+                "document_stage": _document_stage(
+                    queue_status, extraction_outcomes.get(code)
+                ),
+                "document_progress": {
+                    "done": done_docs,
+                    "total": total_docs,
+                    "scope": "procurement",
+                },
+                "document_eta_seconds": eta,
+                "model_stage": _model_stage(model_counts.get(code)),
+                "model_pending": None,
+                "model_confirmed": None,
+                "model_rejected": None,
+                "model_unknown": None,
+                "model_eta_seconds": None,
+                "model_completed_at": None,
+                "model_document_requests_count": None,
+                "products": [],
+                "product_count": len({
+                    str(row.get("material") or row.get("product_name_raw") or "")
+                    .strip()
+                    .lower()
+                    for row in group_evidence
+                    if str(row.get("material") or row.get("product_name_raw") or "").strip()
+                }),
+                "line_count": 0,
+                "evidence_line_count": len(group_evidence),
+                "evidence_materials": group_evidence,
+                "reference_rate_count": reference_rate_count,
+                "material_value": None,
+                "quantities_by_unit": {},
+                "cross_category_from": [],
+                "cross_category_line_count": 0,
+                "evidence_only": True,
+                "confirmed_goods": False,
+                "factual_only": True,
+                "render_kind": "EVIDENCE_ONLY",
+            }
+        )
     # EMBEDDED_CATEGORY_DISCOVERY_CONFIRMATION_V1: empty model categories are
     # not shown; only categories with real countable goods survive.
-    return [card for card in cards if int(card.get("line_count") or 0) > 0]
+    unique_cards: List[Dict[str, Any]] = []
+    seen_cards: set[tuple[str, str]] = set()
+    for card in cards:
+        if (
+            int(card.get("line_count") or 0) <= 0
+            and int(card.get("evidence_line_count") or 0) <= 0
+        ):
+            continue
+        if (
+            str(card.get("track") or "").upper() != "DIRECT_SUPPLY"
+            and not str(card.get("subcategory_code") or "").strip()
+        ):
+            continue
+        key = (
+            str(card.get("category_code") or ""),
+            str(card.get("subcategory_code") or ""),
+        )
+        if key in seen_cards:
+            continue
+        seen_cards.add(key)
+        unique_cards.append(card)
+    return unique_cards
 
 
 def group_products_by_trust(products: Iterable[Dict[str, Any]]) -> List[Tuple[str, List[Dict[str, Any]]]]:
@@ -285,8 +579,8 @@ def group_products_by_trust(products: Iterable[Dict[str, Any]]) -> List[Tuple[st
         state = str(p.get("trust_state") or "").upper() or "UNKNOWN"
         buckets.setdefault(state, []).append(p)
     order = [
-        "TRUSTED_PRODUCTION", "SECTION_CONFIRMED", "MANUAL_PROOF_QUARANTINE",
-        "DEV_EXPOSED", "QUALITY_REJECTED",
+        "TRUSTED_PRODUCTION", "ESTIMATE_ROW_RESOLVED", "SECTION_CONFIRMED",
+        "MANUAL_PROOF_QUARANTINE", "DEV_EXPOSED", "QUALITY_REJECTED",
     ]
     ordered = [(s, buckets.pop(s)) for s in order if s in buckets]
     ordered += [(s, buckets[s]) for s in sorted(buckets)]
