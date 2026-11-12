@@ -391,6 +391,10 @@ def build_category_cards(
                 for p in products if p.get("material")
             }),
             "line_count": len(products),
+            "source_row_count": sum(
+                int(product.get("occurrence_count") or 1)
+                for product in products
+            ),
             "material_value": material_value,
             "quantities_by_unit": _quantities_by_unit(products),
             "cross_category_from": (
@@ -437,6 +441,10 @@ def build_category_cards(
                     if product.get("material")
                 }),
                 "line_count": len(group_products),
+                "source_row_count": sum(
+                    int(product.get("occurrence_count") or 1)
+                    for product in group_products
+                ),
                 "material_value": round(
                     sum(
                         _number(product.get("total")) or 0.0
@@ -533,6 +541,7 @@ def build_category_cards(
                     if str(row.get("material") or row.get("product_name_raw") or "").strip()
                 }),
                 "line_count": 0,
+                "source_row_count": len(group_evidence),
                 "evidence_line_count": len(group_evidence),
                 "evidence_materials": group_evidence,
                 "reference_rate_count": reference_rate_count,

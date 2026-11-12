@@ -487,6 +487,70 @@ def to_flat_fact(row: Dict[str, Any]) -> Dict[str, Any]:
     }
 
 
+def _aggregate_commercial_positions(
+    facts: List[Dict[str, Any]],
+) -> List[Dict[str, Any]]:
+    """Aggregate repeated use of one commercial position across estimate rows."""
+    out: List[Dict[str, Any]] = []
+    seen: dict[tuple, int] = {}
+    for source in facts:
+        fact = dict(source)
+        name = str(
+            fact.get("product_name_normalized")
+            or fact.get("material")
+            or fact.get("product_name_raw")
+            or ""
+        ).strip().casefold()
+        unit = str(
+            fact.get("unit")
+            or fact.get("quantity_unit_normalized")
+            or fact.get("quantity_unit_raw")
+            or ""
+        ).strip().upper()
+        try:
+            price_key: Any = round(float(fact.get("unit_price")), 8)
+        except (TypeError, ValueError):
+            price_key = None
+        key = (
+            name,
+            unit,
+            price_key,
+            str(fact.get("category_code") or ""),
+            str(fact.get("subcategory_code") or ""),
+        )
+        if key in seen and price_key is not None:
+            target = out[seen[key]]
+            try:
+                target["quantity"] = float(target.get("quantity") or 0) + float(
+                    fact.get("quantity") or 0
+                )
+                target["quantity_value"] = target["quantity"]
+            except (TypeError, ValueError):
+                pass
+            try:
+                target["total"] = round(
+                    float(target.get("total") or 0) + float(fact.get("total") or 0),
+                    2,
+                )
+                target["total_price_value"] = target["total"]
+            except (TypeError, ValueError):
+                pass
+            target["occurrence_count"] = int(
+                target.get("occurrence_count") or 1
+            ) + int(fact.get("occurrence_count") or 1)
+            target.setdefault("source_row_refs", []).append(fact.get("row_or_line"))
+            target.setdefault("source_document_ids", []).append(
+                fact.get("source_document_id")
+            )
+            continue
+        fact["occurrence_count"] = int(fact.get("occurrence_count") or 1)
+        fact["source_row_refs"] = [fact.get("row_or_line")]
+        fact["source_document_ids"] = [fact.get("source_document_id")]
+        seen[key] = len(out)
+        out.append(fact)
+    return out
+
+
 def build_good_supply_facts(
     procurement_id: int, *, limit: int = DEFAULT_LIMIT, conn: Any = None
 ) -> Dict[str, Any]:
@@ -517,6 +581,7 @@ def build_good_supply_facts(
             residue += 1
         facts.append(flat)
 
+    facts = _aggregate_commercial_positions(facts)
     return {
         "facts": facts,
         "hidden_works": hidden["work"],

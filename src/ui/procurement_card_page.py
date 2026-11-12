@@ -769,13 +769,15 @@ def _render_dossier(d: Dict[str, Any], db: Any = None) -> None:
                     if _duplicate_count:
                         _subtext += f" | duplicate source copies collapsed: {_duplicate_count}"
                     st.markdown(
-                        '<div class="pc-card"><b>%s</b> | %s | %s | rows %s | evidence %s | %s<br>'
+                        '<div class="pc-card"><b>%s</b> | %s | %s | positions %s | '
+                        'source rows %s | evidence %s | %s<br>'
                         '<span class="pc-muted">%s</span></div>'
                         % (
                             escape(str(_summary.get("category_name") or "")),
                             escape(str(_summary.get("category_code") or "")),
                             escape(str(_summary.get("track") or "unknown")),
                             _fmt(_summary.get("line_count")),
+                            _fmt(_summary.get("source_row_count")),
                             _fmt(_summary.get("evidence_line_count")),
                             _money(_summary.get("material_value")),
                             escape(_subtext),
@@ -896,7 +898,13 @@ def _render_dossier(d: Dict[str, Any], db: Any = None) -> None:
                                  "Характеристики", "Цитата", "Раздел"],
                                 [
                                     [
-                                        escape(str(p.get("material") or "")),
+                                        escape(str(p.get("material") or ""))
+                                        + (
+                                            ' <span class="pc-note">×%s</span>'
+                                            % _fmt(p.get("occurrence_count"))
+                                            if int(p.get("occurrence_count") or 1) > 1
+                                            else ""
+                                        ),
                                         _fmt(p.get("quantity")),
                                         escape(str(p.get("unit") or "—")),
                                         _money(p.get("unit_price")),
@@ -972,7 +980,13 @@ def _render_dossier(d: Dict[str, Any], db: Any = None) -> None:
                     total = m.get("total") if m.get("total") is not None else m.get("total_price_value")
                     out.append([
                         escape(str(m.get("material") or m.get("product_name_normalized")
-                                   or m.get("product_name_raw") or "")),
+                                   or m.get("product_name_raw") or ""))
+                        + (
+                            ' <span class="pc-note">×%s</span>'
+                            % _fmt(m.get("occurrence_count"))
+                            if int(m.get("occurrence_count") or 1) > 1
+                            else ""
+                        ),
                         _fmt(qty),
                         escape(str(unit or "—")),
                         _money(price),

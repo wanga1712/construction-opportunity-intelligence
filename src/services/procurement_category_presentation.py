@@ -72,6 +72,10 @@ def summarize_category_cards(cards: Iterable[Dict[str, Any]]) -> list[dict[str, 
         summary["track"] = " / ".join(sorted(summary.pop("tracks"))) or None
         value = [float(row["total"]) for row in rows if row.get("total") is not None]
         summary["line_count"] = len(rows)
+        summary["source_row_count"] = sum(
+            int(row.get("occurrence_count") or 1)
+            for row in rows
+        )
         summary["evidence_line_count"] = len(summary.pop("evidence"))
         summary["product_count"] = len({
             str(row.get("material") or row.get("product_name_raw") or "").strip().casefold()
@@ -94,6 +98,10 @@ def summarize_category_cards(cards: Iterable[Dict[str, Any]]) -> list[dict[str, 
                 "subcategory_code": code,
                 "subcategory_name": item.get("subcategory_name") or code,
                 "line_count": len(sub_rows),
+                "source_row_count": sum(
+                    int(row.get("occurrence_count") or 1)
+                    for row in sub_rows
+                ),
                 "evidence_line_count": len(evidence_rows),
                 "product_count": len({
                     str(row.get("material") or row.get("product_name_raw") or "").strip().casefold()
