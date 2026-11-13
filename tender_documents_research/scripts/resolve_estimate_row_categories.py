@@ -21,15 +21,19 @@ import psycopg2.extras
 from dotenv import load_dotenv
 
 from document_processor.embedded_extraction import normalize_name
+from document_processor.estimate_row_normalization_authority import (
+    NORMALIZER_VERSION,
+    finish_run,
+    rowset_signature,
+    start_run,
+    upsert_coverage,
+)
 from document_processor.estimate_row_taxonomy import load_taxonomy
 from document_processor.parse_extractors import _connect
 from document_processor.universal_estimate_rows import (
     _technical_attributes,
     classify_estimate_row,
 )
-
-NORMALIZATION_VERSION = "estimate_row_taxonomy_resolver_v1"
-
 
 def _positive_int(value: str) -> int:
     number = int(value)
@@ -131,6 +135,8 @@ def main() -> int:
     parser.add_argument("--expected-plan-sha256")
     parser.add_argument("--procurement-ids")
     parser.add_argument("--max-rows", type=_positive_int, default=250000)
+    parser.add_argument("--run-kind", default="LIVE_RUN")
+    parser.add_argument("--proof-source", default="LIVE_RUN")
     parser.add_argument("--sample-categories", action="store_true")
     parser.add_argument(
         "--report",
@@ -148,6 +154,7 @@ def main() -> int:
     load_dotenv("/opt/CRM_Streamlit/.env", override=True)
     di = _connect()
     crm = _crm_connect()
+    run_id = None
     try:
         taxonomy = load_taxonomy(crm)
         params: list[Any] = []
@@ -167,6 +174,42 @@ def main() -> int:
         with di.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
             cur.execute(sql, tuple(params))
             rows = [dict(row) for row in cur.fetchall()]
+            if pids:
+                cur.execute(
+                    """
+                    SELECT id, procurement_id, source_document_id, row_ref, name_raw
+                      FROM structured_estimate_rows
+                     WHERE procurement_id = ANY(%s)
+                     ORDER BY id
+                    """,
+                    (pids,),
+                )
+                expected_rows = [dict(row) for row in cur.fetchall()]
+            else:
+                expected_rows = rows
+
+        expected_rows_by_pid: dict[int, list[dict[str, Any]]] = {}
+        for row in expected_rows:
+            expected_rows_by_pid.setdefault(int(row["procurement_id"]), []).append(row)
+        expected_by_pid = {
+            pid: rowset_signature(pid_rows)
+            for pid, pid_rows in expected_rows_by_pid.items()
+        }
+        run_signature = rowset_signature(expected_rows)
+        run_id = start_run(
+            di,
+            input_signature=run_signature,
+            procurement_count=len(expected_by_pid) or len(
+                {int(row["procurement_id"]) for row in rows}
+            ),
+            run_kind=args.run_kind,
+            proof_source=args.proof_source,
+            details={
+                "max_rows": args.max_rows,
+                "procurement_ids": pids,
+                "apply_requested": bool(args.apply),
+            },
+        )
 
         priced_source_lines = {
             _source_line_key(row)
@@ -176,9 +219,15 @@ def main() -> int:
         plan: list[dict[str, Any]] = []
         unmatched: Counter[str] = Counter()
         reasons: Counter[str] = Counter()
+        examined_ids: set[int] = set()
+        matched_ids: set[int] = set()
+        updated_ids: set[int] = set()
         for row in rows:
+            row_id = int(row["id"])
+            examined_ids.add(row_id)
             name = str(row.get("name_raw") or "").strip()
             if not name:
+                reasons["empty_text"] += 1
                 continue
             row_kind, _family = classify_estimate_row(name)
             attributes = row.get("technical_attributes")
@@ -205,6 +254,7 @@ def main() -> int:
                 if resolution.category_code:
                     category = resolution.category_code
                     subcategory = resolution.subcategory_code
+                    matched_ids.add(row_id)
                 else:
                     # A previous broad match is not authority: on re-resolution
                     # stale categories must be cleared when the current semantic
@@ -236,6 +286,7 @@ def main() -> int:
                         "technical_attributes": attributes,
                     }
                 )
+                updated_ids.add(row_id)
 
         digest = _plan_hash(plan)
         planned_by_category = Counter(
@@ -248,13 +299,52 @@ def main() -> int:
             for item in plan
             if item.get("category_code") and item.get("subcategory_code")
         )
+        rows_by_pid: dict[int, list[dict[str, Any]]] = {}
+        for row in rows:
+            rows_by_pid.setdefault(int(row["procurement_id"]), []).append(row)
+        all_pids = sorted(set(expected_by_pid) | set(rows_by_pid))
+        coverage_rows: list[dict[str, Any]] = []
+        for pid in all_pids:
+            expected = expected_by_pid.get(
+                pid, rowset_signature(rows_by_pid.get(pid, []))
+            )
+            pid_row_ids = {
+                int(row["id"]) for row in rows_by_pid.get(pid, [])
+            }
+            examined_count = len(pid_row_ids)
+            matched_count = len(pid_row_ids & matched_ids)
+            updated_count = len(pid_row_ids & updated_ids)
+            coverage_rows.append(
+                {
+                    "procurement_id": pid,
+                    "expected": expected,
+                    "examined": examined_count,
+                    "matched": matched_count,
+                    "unmatched": examined_count - matched_count,
+                    "updated": updated_count,
+                }
+            )
+            upsert_coverage(
+                di,
+                run_id=run_id,
+                procurement_id=pid,
+                expected=expected,
+                examined_rows=examined_count,
+                matched_rows=matched_count,
+                unmatched_rows=examined_count - matched_count,
+                updated_rows=updated_count,
+                status="DRY_RUN",
+                proof_source=args.proof_source,
+                committed=False,
+            )
+        di.commit()
         unmatched_rows = [
             {"material": name, "lines": count}
             for name, count in unmatched.most_common(100)
         ]
         result = {
             "status": "DRY_RUN",
-            "normalization_version": NORMALIZATION_VERSION,
+            "normalization_version": NORMALIZER_VERSION,
             "plan_sha256": digest,
             "rows_scanned": len(rows),
             "planned_updates": len(plan),
@@ -308,6 +398,17 @@ def main() -> int:
         if not args.apply:
             print("DRY_RUN=YES")
             print("DB_WRITES=0")
+            finish_run(
+                di,
+                run_id=run_id,
+                status="COMPLETED",
+                plan_sha256=digest,
+                examined_rows=len(rows),
+                matched_rows=len(matched_ids),
+                unmatched_rows=len(rows) - len(matched_ids),
+                updated_rows=0,
+                details={"dry_run": True, "coverage_rows": len(coverage_rows)},
+            )
             return 0
         if digest != args.expected_plan_sha256:
             raise SystemExit(
@@ -342,6 +443,44 @@ def main() -> int:
                 page_size=500,
             )
         di.commit()
+        completed_procurements = 0
+        for coverage in coverage_rows:
+            complete = coverage["expected"].row_count == coverage["examined"]
+            if complete:
+                completed_procurements += 1
+            upsert_coverage(
+                di,
+                run_id=run_id,
+                procurement_id=coverage["procurement_id"],
+                expected=coverage["expected"],
+                examined_rows=coverage["examined"],
+                matched_rows=coverage["matched"],
+                unmatched_rows=coverage["unmatched"],
+                updated_rows=coverage["updated"],
+                status="COMPLETED" if complete else "PARTIAL",
+                proof_source=args.proof_source,
+                committed=False,
+            )
+        di.commit()
+        finish_run(
+            di,
+            run_id=run_id,
+            status=(
+                "COMPLETED"
+                if completed_procurements == len(coverage_rows)
+                else "PARTIAL"
+            ),
+            plan_sha256=digest,
+            examined_rows=len(rows),
+            matched_rows=len(matched_ids),
+            unmatched_rows=len(rows) - len(matched_ids),
+            updated_rows=len(plan),
+            details={
+                "dry_run": False,
+                "coverage_rows": len(coverage_rows),
+                "completed_procurements": completed_procurements,
+            },
+        )
         result.update(
             {
                 "status": "APPLIED",
@@ -366,8 +505,24 @@ def main() -> int:
         print(f"REPORT={report_path}")
         print("DB_WRITES=STRUCTURED_ESTIMATE_ROWS_ONLY")
         return 0
-    except Exception:
+    except Exception as exc:
         di.rollback()
+        if run_id is not None:
+            try:
+                finish_run(
+                    di,
+                    run_id=run_id,
+                    status="FAILED",
+                    plan_sha256=None,
+                    examined_rows=0,
+                    matched_rows=0,
+                    unmatched_rows=0,
+                    updated_rows=0,
+                    error_count=1,
+                    details={"error": f"{type(exc).__name__}: {exc}"[:2000]},
+                )
+            except Exception:
+                di.rollback()
         raise
     finally:
         crm.close()

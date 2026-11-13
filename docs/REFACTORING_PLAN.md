@@ -7279,3 +7279,17 @@ post-parse jobs, so full normalization was not attempted: Z6=105 and
 `TRUE_ZERO_AFTER_FULL_NORMALIZATION` remains uncomputed. Thirteen targeted
 tests pass. No mass normalization, reparse, redownload or taxonomy change was
 run.
+
+2026-11-13 full normalization authority completed. Added durable
+`estimate_row_normalization_runs` and
+`estimate_row_normalization_procurements` tables with rowset fingerprints and
+STALE detection, imported 991 proven historical cards, and repaired the frozen
+77-card target through a 10-card canary followed by the remaining 67. One
+additional historical card became STALE after 90 new rows appeared and was
+repaired separately. Final frozen baseline state is `1068/1068 COMPLETED`.
+Dossier category positions now read canonical `structured_estimate_rows`; DB
+and dossier tuple parity passed `10/10`. A 50-card/100-row ZERO_MATCH sample
+found two obvious waterproofing mastic misses, so resolver quality is
+`NEEDS_REPAIR` and business ZERO_MATCH is not confirmed. The Firefox kiosk page
+was reloaded and visually passed with `38/17/21/17/0`. Twenty-six targeted tests
+pass. See `docs/reports/full_normalization_durable_marker_20261113/SUMMARY.md`.

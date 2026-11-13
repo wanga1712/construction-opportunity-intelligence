@@ -402,6 +402,28 @@ automatically restore all preimages on failure. This route authorizes no schema
 migration, mass reparse, document redownload, normalization backfill,
 taxonomy/medal logic change, or mass queue rewrite.
 
+## Owner-authorized full row-normalization authority release 2026-11-13
+
+The owner explicitly requested
+`WIP_FULL_POST_PARSE_NORMALIZATION_DURABLE_MARKER_AND_77_CARD_REPAIR_V1`.
+This scoped route authorizes:
+
+```text
+document_intelligence additive migration
+/opt/tender_documents_research/document_processor/estimate_row_normalization_authority.py
+/opt/tender_documents_research/scripts/resolve_estimate_row_categories.py
+/opt/tender_documents_research/scripts/backfill_normalization_authority.py
+/opt/CRM_Streamlit/src/services/procurement_card_dossier_service.py
+/opt/CRM_Streamlit/src/services/procurement_card_category_service.py
+```
+
+The DDL must use the approved `document_intelligence` postgres route. Runtime
+files must use timestamped preimages, runtime compilation/import checks,
+atomic replacement and rollback on failure. Normalization may write only
+taxonomy fields on `structured_estimate_rows` plus the run/coverage authority
+tables. It may not write medals, opportunities or category values. Dossier
+read-model release may include one CRM Streamlit restart and health check.
+
 ## Documentation consolidation record
 
 На 2026-08-16 conflicting/stale access statements были найдены в

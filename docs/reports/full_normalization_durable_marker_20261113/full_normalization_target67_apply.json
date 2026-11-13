@@ -1,0 +1,512 @@
+{
+  "status": "APPLIED",
+  "normalization_version": "estimate_row_taxonomy_resolver_v1",
+  "plan_sha256": "7cddfc0de84ba30bcaf2a5146754047a65ffb11f3de22d6615acbf198c544a31",
+  "rows_scanned": 394121,
+  "planned_updates": 1679,
+  "taxonomy_terms": 1211,
+  "resolution_reasons": {
+    "ambiguous_subcategory": 394,
+    "empty_text": 213,
+    "no_match": 293897,
+    "row_kind:AGGREGATE": 67160,
+    "row_kind:GENERIC_WORK": 25196,
+    "semantic_guard_rejected": 5419,
+    "single_best": 1803,
+    "superseded_by_priced_source_line": 39
+  },
+  "planned_by_category": {
+    "cable_products": 624,
+    "composite_structures": 101,
+    "computers": 189,
+    "curbstone": 33,
+    "drainage_water_management": 15,
+    "flooring": 20,
+    "lighting": 360,
+    "structural_reinforcement": 12,
+    "waterproofing": 323,
+    "waterproofing_concrete_repair": 1
+  },
+  "planned_by_subcategory": {
+    "cable_products::generic_cables": 601,
+    "cable_products::power_cables": 23,
+    "composite_structures::composite_drainage_channels": 4,
+    "composite_structures::composite_guardrails_stairs": 23,
+    "composite_structures::polymer_adhesives_binders": 2,
+    "composite_structures::polymer_cords_twines": 72,
+    "computers::computer_peripherals": 1,
+    "computers::hdd_storage": 2,
+    "computers::monitors": 4,
+    "computers::network_equipment": 43,
+    "computers::pc_components": 120,
+    "computers::servers": 2,
+    "computers::ups_power_protection": 3,
+    "curbstone::road_curbstone": 33,
+    "drainage_water_management::composite_bridge_drainage": 8,
+    "drainage_water_management::point_drainage": 5,
+    "drainage_water_management::slope_culvert_drainage": 2,
+    "flooring::carpet_tile": 14,
+    "flooring::commercial_homogeneous": 2,
+    "flooring::generic_flooring": 1,
+    "flooring::linoleum_pvc": 3,
+    "lighting::floodlights": 2,
+    "lighting::generic_luminaires": 301,
+    "lighting::housing_public": 2,
+    "lighting::road_street": 31,
+    "structural_reinforcement::injection_repair_materials": 12,
+    "waterproofing::joints_inputs": 44,
+    "waterproofing_concrete_repair::non_shrink_repair_mortars": 1
+  },
+  "unmatched_top": [
+    {
+      "material": "ФОТ",
+      "lines": 15073
+    },
+    {
+      "material": "ЭМ",
+      "lines": 11110
+    },
+    {
+      "material": "ОТ(ЗТ)",
+      "lines": 9856
+    },
+    {
+      "material": "М",
+      "lines": 9094
+    },
+    {
+      "material": "ОТм(ЗТм)",
+      "lines": 8596
+    },
+    {
+      "material": "ОТм(Зтм) Средний разряд машинистов 4",
+      "lines": 7513
+    },
+    {
+      "material": "ОТм(Зтм) Средний разряд машинистов 6",
+      "lines": 6726
+    },
+    {
+      "material": "Автомобили бортовые, грузоподъемность до 5 т",
+      "lines": 5749
+    },
+    {
+      "material": "Производство работ осуществляется в стесненных условиях населенных пунктов ОЗП=1,15; ЭМ=1,15 к расх.; ЗПМ=1,15; ТЗ=1,15; ТЗМ=1,15",
+      "lines": 5104
+    },
+    {
+      "material": "Краны на автомобильном ходу, грузоподъемность 16 т",
+      "lines": 3476
+    },
+    {
+      "material": "ОТм(Зтм) Средний разряд машинистов 5",
+      "lines": 3248
+    },
+    {
+      "material": "в том числе:",
+      "lines": 3140
+    },
+    {
+      "material": "ОТ",
+      "lines": 2651
+    },
+    {
+      "material": "эксплуатация машин и механизмов",
+      "lines": 2286
+    },
+    {
+      "material": "Вспомогательные ненормируемые материальные ресурсы",
+      "lines": 2266
+    },
+    {
+      "material": "ЗТ",
+      "lines": 2165
+    },
+    {
+      "material": "в т.ч. ОТм",
+      "lines": 2028
+    },
+    {
+      "material": "накладные расходы",
+      "lines": 2000
+    },
+    {
+      "material": "сметная прибыль",
+      "lines": 2000
+    },
+    {
+      "material": "ЗТм",
+      "lines": 1999
+    },
+    {
+      "material": "Электроэнергия",
+      "lines": 1961
+    },
+    {
+      "material": "НР Электротехнические установки на других объектах",
+      "lines": 1947
+    },
+    {
+      "material": "СП Электротехнические установки на других объектах",
+      "lines": 1947
+    },
+    {
+      "material": "СП Автомобильные дороги",
+      "lines": 1766
+    },
+    {
+      "material": "НР Автомобильные дороги",
+      "lines": 1724
+    },
+    {
+      "material": "Строительные работы",
+      "lines": 1559
+    },
+    {
+      "material": "Вода",
+      "lines": 1533
+    },
+    {
+      "material": "Погрузчики одноковшовые универсальные фронтальные пневмоколесные, номинальная вместимость основного ковша 2,6 м3, грузоподъемность 5 т",
+      "lines": 1467
+    },
+    {
+      "material": "[должность, подпись (инициалы, фамилия)]",
+      "lines": 1450
+    },
+    {
+      "material": "оплата труда",
+      "lines": 1402
+    },
+    {
+      "material": "Электроды сварочные для сварки низколегированных и углеродистых сталей УОНИ 13/45, Э42А, диаметр 4-5 мм",
+      "lines": 1323
+    },
+    {
+      "material": "Аппараты сварочные для ручной дуговой сварки, сварочный ток до 350 А",
+      "lines": 1318
+    },
+    {
+      "material": "материалы",
+      "lines": 1299
+    },
+    {
+      "material": "ОТм(Зтм) Средний разряд машинистов 3",
+      "lines": 1258
+    },
+    {
+      "material": "Средний разряд работы 3,8",
+      "lines": 1238
+    },
+    {
+      "material": "НР Земляные работы, выполняемые механизированным способом",
+      "lines": 1215
+    },
+    {
+      "material": "СП Земляные работы, выполняемые механизированным способом",
+      "lines": 1215
+    },
+    {
+      "material": "в том числе",
+      "lines": 1157
+    },
+    {
+      "material": "Оплата труда рабочих",
+      "lines": 1149
+    },
+    {
+      "material": "Средний разряд работы 3,0",
+      "lines": 1113
+    },
+    {
+      "material": "материальные ресурсы",
+      "lines": 1070
+    },
+    {
+      "material": "оплата труда (ОТ)",
+      "lines": 1049
+    },
+    {
+      "material": "оплата труда машинистов (ОТм)",
+      "lines": 1044
+    },
+    {
+      "material": "Эксплуатация машин",
+      "lines": 1029
+    },
+    {
+      "material": "справочно:",
+      "lines": 1027
+    },
+    {
+      "material": "Затраты труда рабочих",
+      "lines": 1021
+    },
+    {
+      "material": "Болты с гайками и шайбами строительные",
+      "lines": 1019
+    },
+    {
+      "material": "Материалы",
+      "lines": 1017
+    },
+    {
+      "material": "Машины поливомоечные, вместимость цистерны 6 м3",
+      "lines": 918
+    },
+    {
+      "material": "Затраты труда машинистов",
+      "lines": 892
+    },
+    {
+      "material": "Подъемники одномачтовые, грузоподъемность до 500 кг, высота подъема 45 м",
+      "lines": 862
+    },
+    {
+      "material": "НР Мосты и трубы",
+      "lines": 860
+    },
+    {
+      "material": "СП Мосты и трубы",
+      "lines": 860
+    },
+    {
+      "material": "Средний разряд работы 4,0",
+      "lines": 860
+    },
+    {
+      "material": "оплата труда машинистов (Отм)",
+      "lines": 819
+    },
+    {
+      "material": "3",
+      "lines": 805
+    },
+    {
+      "material": "ОТм(Зтм) Средний разряд машинистов 7",
+      "lines": 769
+    },
+    {
+      "material": "Средний разряд работы 3,2",
+      "lines": 732
+    },
+    {
+      "material": "Итоги по смете:",
+      "lines": 716
+    },
+    {
+      "material": "НР Отделочные работы",
+      "lines": 715
+    },
+    {
+      "material": "СП Отделочные работы",
+      "lines": 715
+    },
+    {
+      "material": "Средний разряд работы 2,0",
+      "lines": 691
+    },
+    {
+      "material": "Рабочий 2 разряда",
+      "lines": 671
+    },
+    {
+      "material": "обнуление ст-ти МАТ МАТ=0 к расх.",
+      "lines": 649
+    },
+    {
+      "material": "Оплата труда машинистов (Отм)",
+      "lines": 635
+    },
+    {
+      "material": "Краны башенные, грузоподъемность 8 т",
+      "lines": 610
+    },
+    {
+      "material": "прямые затраты",
+      "lines": 590
+    },
+    {
+      "material": "Рабочий 3 разряда",
+      "lines": 586
+    },
+    {
+      "material": "Рабочий 4 разряда",
+      "lines": 574
+    },
+    {
+      "material": "СП Сантехнические работы - внутренние (трубопроводы, водопровод, канализация, отопление, газоснабжение, вентиляция и кондиционирование воздуха)",
+      "lines": 567
+    },
+    {
+      "material": "НР Кровли",
+      "lines": 563
+    },
+    {
+      "material": "СП Кровли",
+      "lines": 563
+    },
+    {
+      "material": "Средний разряд работы 3,5",
+      "lines": 544
+    },
+    {
+      "material": "ГИП",
+      "lines": 533
+    },
+    {
+      "material": "НР Сантехнические работы - внутренние (трубопроводы, водопровод, канализация, отопление, газоснабжение, вентиляция и кондиционирование воздуха)",
+      "lines": 531
+    },
+    {
+      "material": "0",
+      "lines": 519
+    },
+    {
+      "material": "НР Строительные металлические конструкции",
+      "lines": 511
+    },
+    {
+      "material": "СП Строительные металлические конструкции",
+      "lines": 511
+    },
+    {
+      "material": "Автогрейдеры среднего типа, мощность 99 кВт (135 л.с.)",
+      "lines": 503
+    },
+    {
+      "material": "Гвозди строительные",
+      "lines": 500
+    },
+    {
+      "material": "Домкраты гидравлические, грузоподъемность 63-100 т",
+      "lines": 494
+    },
+    {
+      "material": "Бульдозеры, мощность 79 кВт (108 л.с.)",
+      "lines": 485
+    },
+    {
+      "material": "материальные ресурсы, отсутствующие в ФРСН",
+      "lines": 483
+    },
+    {
+      "material": "При применении сметных норм, включенных в сборники ГЭСН (ФЕР, ТЕР), аналогичных технологическим процессам в новом строительстве, в том числе по возведению новых конструктивных элементов ОЗП=1,15; ЭМ=1,25 к расх.; ЗПМ=1,25; ТЗ=1,15; ТЗМ=1,25",
+      "lines": 483
+    },
+    {
+      "material": "Ленты монтажные из пластмассы для бандажирования проводов, скрепляются пластмассовыми кнопками, ширина 10 мм",
+      "lines": 478
+    },
+    {
+      "material": "Краска масляная МА-0115, мумия, сурик железный",
+      "lines": 461
+    },
+    {
+      "material": "Лак битумный БТ-123",
+      "lines": 447
+    },
+    {
+      "material": "Компрессоры винтовые передвижные с двигателем внутреннего сгорания, давление до 0,7 МПа (7 атм), производительность до 5,4 м3/мин",
+      "lines": 440
+    },
+    {
+      "material": "Средний разряд работы 4,2",
+      "lines": 434
+    },
+    {
+      "material": "оборудование, отсутствующее в ФРСН",
+      "lines": 424
+    },
+    {
+      "material": "затраты труда рабочих",
+      "lines": 424
+    },
+    {
+      "material": "затраты труда машинистов",
+      "lines": 424
+    },
+    {
+      "material": "НР Земляные работы, выполняемые ручным способом",
+      "lines": 423
+    },
+    {
+      "material": "СП Земляные работы, выполняемые ручным способом",
+      "lines": 423
+    },
+    {
+      "material": "Болты анкерные",
+      "lines": 420
+    },
+    {
+      "material": "в том числе оплата труда машинистов (ОТм)",
+      "lines": 419
+    },
+    {
+      "material": "Материальные ресурсы, отсутствующие в ФРСН",
+      "lines": 405
+    },
+    {
+      "material": "Справочно",
+      "lines": 399
+    },
+    {
+      "material": "2",
+      "lines": 398
+    },
+    {
+      "material": "Средний разряд машиниста 4,0",
+      "lines": 398
+    }
+  ],
+  "before": {
+    "total": 1819559,
+    "with_category": 12454,
+    "with_subcategory": 11555,
+    "with_technical_attributes": 236266,
+    "by_category": {
+      "bridge_road_infrastructure": 52,
+      "cable_products": 2593,
+      "composite_structures": 501,
+      "computers": 1674,
+      "curbstone": 365,
+      "drainage_water_management": 542,
+      "flooring": 1752,
+      "lighting": 3173,
+      "structural_reinforcement": 10,
+      "unknown": 12,
+      "waterproofing": 1763,
+      "waterproofing_concrete_repair": 17
+    }
+  },
+  "after": {
+    "total": 1819559,
+    "with_category": 14131,
+    "with_subcategory": 12915,
+    "with_technical_attributes": 236266,
+    "by_category": {
+      "bridge_road_infrastructure": 52,
+      "cable_products": 3217,
+      "composite_structures": 602,
+      "computers": 1862,
+      "curbstone": 398,
+      "drainage_water_management": 557,
+      "flooring": 1772,
+      "lighting": 3533,
+      "structural_reinforcement": 22,
+      "unknown": 12,
+      "waterproofing": 2086,
+      "waterproofing_concrete_repair": 18
+    }
+  },
+  "acceptance": {
+    "CATEGORY_SEARCH_OVER_STRUCTURED_ESTIMATE_ROWS": "YES",
+    "SUBCATEGORY_RESOLUTION_WRITTEN": "YES",
+    "TECH_ATTRIBUTES_FROM_ESTIMATE_ROWS": "YES",
+    "NO_DOWNLOAD": "YES",
+    "NO_LOCAL_FILES": "YES",
+    "NO_FULL_MASS_REPARSE": "YES",
+    "MEDALS_UNCHANGED": "YES_BY_DB_SCOPE",
+    "DB_WRITES": "STRUCTURED_ESTIMATE_ROWS_ONLY"
+  }
+}

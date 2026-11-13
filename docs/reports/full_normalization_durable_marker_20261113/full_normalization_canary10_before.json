@@ -1,0 +1,138 @@
+{
+  "pids": [
+    784,
+    1325,
+    6703,
+    32746,
+    37165,
+    785,
+    791,
+    794,
+    869,
+    1203
+  ],
+  "rows": [
+    {
+      "procurement_id": 784,
+      "rows": 118,
+      "category_rows": 1,
+      "subcategory_rows": 1
+    },
+    {
+      "procurement_id": 785,
+      "rows": 200,
+      "category_rows": 2,
+      "subcategory_rows": 2
+    },
+    {
+      "procurement_id": 791,
+      "rows": 200,
+      "category_rows": 2,
+      "subcategory_rows": 2
+    },
+    {
+      "procurement_id": 794,
+      "rows": 200,
+      "category_rows": 2,
+      "subcategory_rows": 2
+    },
+    {
+      "procurement_id": 869,
+      "rows": 5462,
+      "category_rows": 3,
+      "subcategory_rows": 3
+    },
+    {
+      "procurement_id": 1203,
+      "rows": 1019,
+      "category_rows": 12,
+      "subcategory_rows": 12
+    },
+    {
+      "procurement_id": 1325,
+      "rows": 877,
+      "category_rows": 2,
+      "subcategory_rows": 2
+    },
+    {
+      "procurement_id": 6703,
+      "rows": 24,
+      "category_rows": 1,
+      "subcategory_rows": 1
+    },
+    {
+      "procurement_id": 32746,
+      "rows": 93,
+      "category_rows": 1,
+      "subcategory_rows": 1
+    },
+    {
+      "procurement_id": 37165,
+      "rows": 3190,
+      "category_rows": 86,
+      "subcategory_rows": 30
+    }
+  ],
+  "baseline_coverage": [
+    {
+      "procurement_id": 784,
+      "baseline_status": "NOT_ATTEMPTED",
+      "rows_expected": 118,
+      "rows_examined": 0
+    },
+    {
+      "procurement_id": 785,
+      "baseline_status": "PARTIAL",
+      "rows_expected": 200,
+      "rows_examined": 4
+    },
+    {
+      "procurement_id": 791,
+      "baseline_status": "PARTIAL",
+      "rows_expected": 200,
+      "rows_examined": 4
+    },
+    {
+      "procurement_id": 794,
+      "baseline_status": "PARTIAL",
+      "rows_expected": 200,
+      "rows_examined": 4
+    },
+    {
+      "procurement_id": 869,
+      "baseline_status": "PARTIAL",
+      "rows_expected": 5462,
+      "rows_examined": 2
+    },
+    {
+      "procurement_id": 1203,
+      "baseline_status": "PARTIAL",
+      "rows_expected": 1019,
+      "rows_examined": 24
+    },
+    {
+      "procurement_id": 1325,
+      "baseline_status": "NOT_ATTEMPTED",
+      "rows_expected": 877,
+      "rows_examined": 0
+    },
+    {
+      "procurement_id": 6703,
+      "baseline_status": "NOT_ATTEMPTED",
+      "rows_expected": 24,
+      "rows_examined": 0
+    },
+    {
+      "procurement_id": 32746,
+      "baseline_status": "NOT_ATTEMPTED",
+      "rows_expected": 93,
+      "rows_examined": 0
+    },
+    {
+      "procurement_id": 37165,
+      "baseline_status": "NOT_ATTEMPTED",
+      "rows_expected": 3190,
+      "rows_examined": 0
+    }
+  ]
+}

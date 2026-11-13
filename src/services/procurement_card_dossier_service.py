@@ -176,59 +176,56 @@ def load_category_positions(
         """
         WITH preferred AS (
             SELECT se.*,
-                   r.document_name,
                    row_number() OVER (
                        PARTITION BY se.procurement_id, se.source_document_id,
-                                    coalesce(se.row_or_line, ''),
-                                    coalesce(se.product_name_raw, '')
+                                    coalesce(se.row_ref, ''),
+                                    coalesce(se.name_raw, '')
                        ORDER BY (se.section_code IS NOT NULL) DESC, se.id DESC
                    ) AS pref_rn,
                    count(*) OVER (
                        PARTITION BY se.procurement_id, se.source_document_id,
-                                    coalesce(se.row_or_line, ''),
-                                    coalesce(se.product_name_raw, '')
+                                    coalesce(se.row_ref, ''),
+                                    coalesce(se.name_raw, '')
                    ) AS physical_version_count,
                    count(*) FILTER (
                        WHERE se.quantity_value IS NOT NULL
-                         AND coalesce(se.quantity_unit_normalized, se.quantity_unit_raw, '') <> ''
+                         AND coalesce(se.unit_normalized, se.unit_raw, '') <> ''
                          AND se.unit_price_value IS NOT NULL
-                         AND se.total_price_value IS NOT NULL
+                         AND se.total_value IS NOT NULL
                    ) OVER (
                        PARTITION BY se.procurement_id, se.source_document_id,
-                                    coalesce(se.row_or_line, ''),
-                                    coalesce(se.product_name_raw, '')
+                                    coalesce(se.row_ref, ''),
+                                    coalesce(se.name_raw, '')
                    ) AS physical_full_quartet_count
-              FROM structured_entities se
-              LEFT JOIN structured_extraction_runs r ON r.id = se.run_id
+              FROM structured_estimate_rows se
              WHERE se.procurement_id = %s
-               AND se.entity_type = 'PRODUCT'
         )
         SELECT id AS structured_entity_id, procurement_id,
                category_code, subcategory_code,
-               product_name_raw, product_name_normalized,
+               name_raw AS product_name_raw, name_normalized AS product_name_normalized,
                quantity_value AS quantity,
-               coalesce(quantity_unit_normalized, quantity_unit_raw) AS unit,
-               unit_price_value AS unit_price, total_price_value AS total,
+               coalesce(unit_normalized, unit_raw) AS unit,
+               unit_price_value AS unit_price, total_value AS total,
                coalesce(section_code, 'RESIDUE') AS section_code,
                section_name, source_document_id, document_name,
-               page_or_sheet, row_or_line,
-               structured_fact_trust_state AS trust_state,
+               sheet_or_page AS page_or_sheet, row_ref AS row_or_line,
+               'ESTIMATE_ROW_RESOLVED' AS trust_state,
                extractor_version,
                quantity_value IS NOT NULL AS has_quantity,
-               coalesce(quantity_unit_normalized, quantity_unit_raw, '') <> '' AS has_unit,
+               coalesce(unit_normalized, unit_raw, '') <> '' AS has_unit,
                unit_price_value IS NOT NULL AS has_unit_price,
-               total_price_value IS NOT NULL AS has_total,
+               total_value IS NOT NULL AS has_total,
                (quantity_value IS NOT NULL
-                AND coalesce(quantity_unit_normalized, quantity_unit_raw, '') <> ''
+                AND coalesce(unit_normalized, unit_raw, '') <> ''
                 AND unit_price_value IS NOT NULL
-                AND total_price_value IS NOT NULL) AS full_quartet,
+                AND total_value IS NOT NULL) AS full_quartet,
                physical_version_count,
                greatest(physical_version_count - 1, 0) AS stale_duplicate_count,
                greatest(physical_full_quartet_count -
                         CASE WHEN quantity_value IS NOT NULL
-                                  AND coalesce(quantity_unit_normalized, quantity_unit_raw, '') <> ''
+                                  AND coalesce(unit_normalized, unit_raw, '') <> ''
                                   AND unit_price_value IS NOT NULL
-                                  AND total_price_value IS NOT NULL
+                                  AND total_value IS NOT NULL
                              THEN 1 ELSE 0 END, 0) AS suppressed_full_quartet_count,
                physical_full_quartet_count,
                source_quote
