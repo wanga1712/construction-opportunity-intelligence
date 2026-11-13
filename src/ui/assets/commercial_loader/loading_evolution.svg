@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 210" role="img" aria-label="Commercial evolution">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#101416"/><stop offset="1" stop-color="#25221c"/></linearGradient>
+    <linearGradient id="helix" x1="0" y1="0" x2="1" y2="0"><stop stop-color="#7ca5a3"/><stop offset=".5" stop-color="#d8c7a3"/><stop offset="1" stop-color="#b76d4d"/></linearGradient>
+  </defs>
+  <rect width="320" height="210" rx="18" fill="url(#bg)"/>
+  <g stroke="#6e756f" opacity=".35"><path d="M18 36h284M18 174h284M44 18v174M276 18v174"/></g>
+  <g fill="none" stroke="url(#helix)" stroke-width="3">
+    <path d="M92 34c94 24 42 50 136 72-94 22-42 48-136 70"/>
+    <path d="M228 34c-94 24-42 50-136 72 94 22 42 48 136 70"/>
+  </g>
+  <g stroke="#d8c7a3" opacity=".65">
+    <path d="M112 53h96M102 78h116M102 132h116M112 157h96"/>
+  </g>
+  <g fill="#b76d4d"><circle cx="112" cy="53" r="4"/><circle cx="218" cy="78" r="4"/><circle cx="102" cy="132" r="4"/><circle cx="208" cy="157" r="4"/></g>
+  <g fill="#7ca5a3"><circle cx="208" cy="53" r="3"/><circle cx="102" cy="78" r="3"/><circle cx="218" cy="132" r="3"/><circle cx="112" cy="157" r="3"/></g>
+  <g fill="#d8c7a3" opacity=".6"><circle cx="56" cy="64" r="2"/><circle cx="270" cy="94" r="2"/><circle cx="52" cy="150" r="2"/><circle cx="262" cy="45" r="2"/></g>
+</svg>

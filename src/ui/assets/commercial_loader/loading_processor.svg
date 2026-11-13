@@ -1,0 +1,24 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 210" role="img" aria-label="Quantum processor">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#101315"/><stop offset="1" stop-color="#26221c"/></linearGradient>
+    <pattern id="grid" width="16" height="16" patternUnits="userSpaceOnUse"><path d="M16 0H0v16" fill="none" stroke="#6c736f" stroke-opacity=".2"/></pattern>
+  </defs>
+  <rect width="320" height="210" rx="18" fill="url(#bg)"/>
+  <rect x="18" y="18" width="284" height="174" rx="12" fill="url(#grid)"/>
+  <g stroke="#d8c7a3" fill="#181c1e">
+    <rect x="104" y="48" width="112" height="112" rx="8" stroke-width="2"/>
+    <rect x="126" y="70" width="68" height="68" rx="4"/>
+  </g>
+  <g stroke="#b76d4d" stroke-width="2">
+    <path d="M72 72h32M72 94h32M72 116h32M72 138h32M216 72h32M216 94h32M216 116h32M216 138h32"/>
+    <path d="M128 24v24M152 24v24M176 24v24M200 24v24M128 160v26M152 160v26M176 160v26M200 160v26"/>
+  </g>
+  <g fill="#7ca5a3">
+    <circle cx="72" cy="72" r="3"/><circle cx="72" cy="94" r="3"/><circle cx="72" cy="116" r="3"/><circle cx="72" cy="138" r="3"/>
+    <circle cx="248" cy="72" r="3"/><circle cx="248" cy="94" r="3"/><circle cx="248" cy="116" r="3"/><circle cx="248" cy="138" r="3"/>
+  </g>
+  <g fill="none" stroke="#d8c7a3">
+    <circle cx="160" cy="104" r="18"/><path d="M160 86v36M142 104h36"/>
+  </g>
+  <g fill="#b76d4d"><circle cx="160" cy="104" r="4"/><circle cx="160" cy="24" r="2"/><circle cx="160" cy="186" r="2"/></g>
+</svg>

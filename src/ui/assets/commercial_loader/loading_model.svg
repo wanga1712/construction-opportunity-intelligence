@@ -1,0 +1,27 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 210" role="img" aria-label="Object model">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#101416"/><stop offset="1" stop-color="#24211d"/></linearGradient>
+    <filter id="soft"><feGaussianBlur stdDeviation="4"/></filter>
+  </defs>
+  <rect width="320" height="210" rx="18" fill="url(#bg)"/>
+  <g fill="none" stroke="#7f8179" opacity=".45">
+    <path d="M28 42h264M28 168h264M44 26v158M276 26v158"/>
+    <path d="M44 42l232 126M276 42L44 168"/>
+  </g>
+  <circle cx="160" cy="105" r="54" fill="#b76d4d" opacity=".13" filter="url(#soft)"/>
+  <g stroke="#d8c7a3" stroke-width="2" fill="#171b1d">
+    <path d="M160 54l46 27v54l-46 27-46-27V81z"/>
+    <path d="M160 54v54l46 27M160 108l-46 27"/>
+  </g>
+  <g fill="#d8c7a3">
+    <circle cx="160" cy="54" r="5"/><circle cx="206" cy="81" r="5"/><circle cx="206" cy="135" r="5"/>
+    <circle cx="160" cy="162" r="5"/><circle cx="114" cy="135" r="5"/><circle cx="114" cy="81" r="5"/>
+  </g>
+  <g stroke="#7ca5a3" fill="none">
+    <circle cx="160" cy="107" r="16"/><circle cx="160" cy="107" r="27" stroke-dasharray="4 5"/>
+    <path d="M160 80v54M133 107h54"/>
+  </g>
+  <g fill="#b76d4d">
+    <circle cx="52" cy="62" r="3"/><circle cx="268" cy="149" r="3"/><circle cx="248" cy="51" r="2"/><circle cx="72" cy="155" r="2"/>
+  </g>
+</svg>

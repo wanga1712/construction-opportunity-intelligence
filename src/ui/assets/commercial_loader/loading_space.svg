@@ -1,0 +1,24 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 210" role="img" aria-label="Estimate universe">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#0c1013"/><stop offset="1" stop-color="#24201a"/></linearGradient>
+    <radialGradient id="planet"><stop stop-color="#d8c7a3"/><stop offset=".5" stop-color="#9b805e"/><stop offset="1" stop-color="#3b3025"/></radialGradient>
+  </defs>
+  <rect width="320" height="210" rx="18" fill="url(#bg)"/>
+  <g fill="#d8c7a3" opacity=".7">
+    <circle cx="34" cy="42" r="1.5"/><circle cx="76" cy="22" r="1"/><circle cx="112" cy="48" r="1.3"/><circle cx="256" cy="28" r="1.7"/>
+    <circle cx="288" cy="70" r="1"/><circle cx="48" cy="160" r="1.4"/><circle cx="282" cy="174" r="1.2"/><circle cx="220" cy="186" r="1"/>
+  </g>
+  <g fill="none" stroke="#7ca5a3" opacity=".5">
+    <path d="M26 92c54-38 105-47 157-20 36 19 72 18 111-10"/>
+    <path d="M22 126c68 21 128 20 180-2 40-17 71-14 97 5"/>
+  </g>
+  <circle cx="174" cy="104" r="56" fill="url(#planet)"/>
+  <circle cx="174" cy="104" r="72" fill="none" stroke="#b76d4d" stroke-opacity=".75" transform="rotate(-18 174 104)"/>
+  <ellipse cx="174" cy="104" rx="94" ry="22" fill="none" stroke="#d8c7a3" stroke-opacity=".5" transform="rotate(-16 174 104)"/>
+  <g fill="#171b1d" opacity=".55">
+    <ellipse cx="151" cy="79" rx="17" ry="7" transform="rotate(-24 151 79)"/>
+    <ellipse cx="196" cy="126" rx="22" ry="8" transform="rotate(18 196 126)"/>
+  </g>
+  <circle cx="244" cy="62" r="7" fill="#b76d4d"/>
+  <circle cx="70" cy="132" r="4" fill="#d8c7a3"/>
+</svg>
