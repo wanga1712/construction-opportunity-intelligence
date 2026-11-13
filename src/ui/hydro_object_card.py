@@ -21,6 +21,7 @@ from src.services.hydro import card_fields as cf
 from src.services.hydro.card_repository import HydroCardRepository, as_text, effective
 from src.ui import hydro_source_status as hydro_status
 from src.ui import system_health_slds as slds
+from src.ui.hydro_uk_workspace import render_object_photo_fixation
 
 
 def _section_title(text: str) -> str:
@@ -110,7 +111,7 @@ def _edit_form(repo: HydroCardRepository, row: Mapping[str, Any]) -> None:
             values: dict[str, Any] = {}
             columns = st.columns(2)
             for index, field in enumerate(editable):
-                if field.key in ("inspection_notes",):
+                if field.key in ("inspection_notes", "inspection_photos"):
                     continue
                 current, _ = effective(row, field.key)
                 with columns[index % 2]:
@@ -155,6 +156,8 @@ def _render_card(repo: HydroCardRepository, row: Mapping[str, Any]) -> None:
         for group in cf.SOURCE_SECTION.groups:
             st.markdown(_group_html(group, row), unsafe_allow_html=True)
     _edit_form(repo, row)
+    st.markdown("### Фото / обследование")
+    render_object_photo_fixation(repo.db, dict(row))
 
 
 def _render_kpis(repo: HydroCardRepository) -> None:

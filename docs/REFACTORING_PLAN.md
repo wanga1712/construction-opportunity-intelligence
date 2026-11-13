@@ -4,6 +4,26 @@
 > plan; new implementation results should still be appended here when they
 > change architecture or stage status.
 
+2026-11-14 hydro UK card workspace implementation started in the existing
+Kanban-opened card. Contacts remain in `company_contacts`, weekly reception
+patterns remain in `management_companies.reception_schedule`, activities
+remain in `company_activities`, Hydro objects remain in
+`parking_prefunnel_objects`, and photo metadata is stored in the existing
+`manual_overrides.inspection_photos` JSONB authority. The card gained editable
+contacts, recurring weekly slots/current-week calendar, object and contact
+links for activities, per-object filters, and a reusable photo gallery/upload
+panel in both the UK workspace and existing object card. Additive activity
+columns were applied to CRM after confirming table owner and approved DDL
+route; baseline counts remained 217 companies, 6,810 objects, 332 links, and 0
+activities. Python compilation, focused imports, and photo/weekday contract
+checks passed. The focused call-readiness and stage-move tests passed (14
+tests). Production files were released to S13 with timestamped backups; runtime
+compilation/fresh imports and HTTP health passed after one restart. The broader UK CRM test cannot collect because the
+`modules.crm.analytics` package is missing in this checkout. Browser acceptance and screenshots are blocked because the
+browser host is unavailable and the computer-use tool could not determine the
+active Chrome URL. WIP remains PARTIAL pending browser acceptance and
+screenshots.
+
 2026-11-12 production card/read-module correction: fixed the two-level
 GrandSmeta numeric mapping so current-price columns are used instead of base
 columns, repaired affected existing rows, and split the card read model into

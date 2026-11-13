@@ -75,6 +75,8 @@ ONE_SQL = _LIST_SQL.replace(
 def normalize_value(key: str, value: Any) -> Any:
     """Строка из формы -> значение jsonb. Пустое -> None (снять правку)."""
     if isinstance(value, (list, tuple)):
+        if key == "inspection_photos":
+            return [dict(item) for item in value if isinstance(item, Mapping)] or None
         items = [str(item).strip() for item in value if str(item).strip()]
         return items or None
     if isinstance(value, bool):

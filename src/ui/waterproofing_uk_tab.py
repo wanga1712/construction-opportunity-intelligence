@@ -1,7 +1,7 @@
 ﻿"""Detailed УК card for the waterproofing CRM, opened from the kanban board."""
 from __future__ import annotations
 
-from datetime import date
+from datetime import date, time
 from typing import Any
 
 import streamlit as st
@@ -39,27 +39,38 @@ def _planned_date(state: dict[str, Any]) -> date:
     )
 
 
-def _render_summary(card: dict[str, Any], tenders_615: dict[str, Any]) -> None:
+def _planned_time(state: dict[str, Any]) -> time | None:
+    text = str(state.get("next_action_time") or "").strip()[:5]
+    try:
+        return time.fromisoformat(text)
+    except ValueError:
+        return None
+
+
+def _render_summary(card: dict[str, Any], tenders_615: dict[str, Any],
+                    object_rows: list[dict[str, Any]]) -> None:
     st.markdown(f"## {card['uk_name_short']}")
     caption = f"ИНН {card['uk_inn']} · ☎ {card['phone'] or '—'}"
     if card.get("uk_address"):
         caption += f" · 📍 {card['uk_address']}"
     st.caption(caption)
-    values = (
-        ("Объектов", card["object_count"]),
-        ("Паркингов", card["parking_count"]),
-        ("Подземных этажей", card["total_underground_floors"]),
-        ("Потенциал", card["potential_amount_label"]),
-        ("Приоритет", f"{card['priority_icon']} {card['priority']}"),
-        ("Этап", card.get("stage_label") or card["stage"]),
-    )
-    for column, (label, value) in zip(st.columns(len(values)), values):
-        column.metric(label, value)
-    st.caption(f"Приоритет по объёму работ: {card['priority_reason']}")
+    match_count = len(tenders_615.get("matches") or [])
+    counters = st.columns(4)
+    counters[0].caption(f"**Объектов:** {len(object_rows)}")
+    counters[1].caption(f"**Паркингов:** {sum(1 for row in object_rows if row.get('parking_type'))}")
+    counters[2].caption(f"**615-ПП:** {match_count}")
+    counters[3].caption(f"**Закупок 615-ПП:** {tenders_615.get('history_tenders', 0)}")
+    st.caption(f"Подземных этажей: {card['total_underground_floors']} · "
+               f"Потенциал: {card['potential_amount_label']} · "
+               f"Приоритет: {card['priority_icon']} {card['priority']} · "
+               f"Этап: {card.get('stage_label') or card['stage']}")
     badges = [
         "✅ тех. контакт найден" if card["tech_contact"] else "⛔ тех. контакта нет",
         f"👤 ответственный: {card['responsible']}",
-        f"📅 следующее касание: {card['next_action_date'] or 'не назначено'}",
+        (
+            f"📅 следующее касание: {card['next_action_date'] or 'не назначено'}"
+            f"{(' ' + card['next_action_time']) if card.get('next_action_time') else ''}"
+        ),
     ]
     if card["overdue"]:
         badges.append(f"🔴 просрочка {card['overdue_days']} дн.")
@@ -160,7 +171,19 @@ def _render_status_form(key: str, card: dict[str, Any], state: dict[str, Any]) -
             key=f"uk_next_{key}",
         )
         st.caption(CRM_STAGE_DESCRIPTIONS.get(stage, STAGE_DEFAULT_ACTIONS.get(stage, "—")))
-        next_date = st.date_input("Дата следующего касания", value=_planned_date(state), key=f"uk_date_{key}")
+        date_column, time_column = st.columns(2)
+        with date_column:
+            next_date = st.date_input(
+                "Дата следующего касания",
+                value=_planned_date(state),
+                key=f"uk_date_{key}",
+            )
+        with time_column:
+            next_time = st.time_input(
+                "Время звонка",
+                value=_planned_time(state),
+                key=f"uk_time_{key}",
+            )
         responsible = st.text_input("Ответственный", value=state.get("responsible") or "", key=f"uk_resp_{key}")
     with right:
         priority = st.selectbox(
@@ -199,6 +222,7 @@ def _render_status_form(key: str, card: dict[str, Any], state: dict[str, Any]) -
             "max_underground_floors": card["max_underground_floors"],
             "ge1_floors": card["ge1_floors"], "ge2_floors": card["ge2_floors"],
             "stage": stage, "next_action": next_action, "next_action_date": next_date.isoformat(),
+            "next_action_time": next_time.strftime("%H:%M") if next_time else "",
             "responsible": responsible, "priority": priority, "potential_amount": amount,
             "exploitation_contact": tech_contact, "tech_contact_phone": tech_phone,
             "secretary_phone": secretary_phone, "note": note,
@@ -251,11 +275,12 @@ def render_uk_card(service: ObjectsService, key: str) -> None:
             parking_db, MapFilters(min_floors=0, uk_status="DONE", uk_ogrn=ogrn, limit=2000)
         )
     tenders_615 = read_uk_summary(getattr(service, "crm_db", None), key)
-    _render_summary(card, tenders_615)
+    _render_summary(card, tenders_615, object_rows)
     _render_status_form(key, card, state)
     _render_contacts(card, state)
     render_uk_crm_panel(getattr(service, "crm_db", None),
                         row.get("uk_inn") or card.get("uk_inn"),
-                        card.get("uk_name") or card.get("uk_name_short"))
+                        card.get("uk_name") or card.get("uk_name_short"),
+                        tenders_615=tenders_615)
     _render_615(tenders_615)
     render_uk_activity(key, card, state, object_rows, ogrn or None)

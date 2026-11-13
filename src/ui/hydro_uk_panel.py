@@ -16,6 +16,7 @@ import streamlit as st
 from src.services.hydro import company_repository as cr
 from src.services.hydro.company_repository import HydroCompanyRepository
 from src.ui import system_health_slds as slds
+from src.ui.hydro_uk_workspace import render_uk_workspace
 
 
 def _section_title(text: str) -> str:
@@ -185,7 +186,8 @@ def _fallback_crm_db() -> Any:
         return None
 
 
-def render_uk_crm_panel(crm_db: Any, uk_inn: Any, uk_name: Any) -> None:
+def render_uk_crm_panel(crm_db: Any, uk_inn: Any, uk_name: Any,
+                        tenders_615: dict[str, Any] | None = None) -> None:
     """Найти УК по ИНН, при необходимости завести, и показать блоки CRM."""
     if crm_db is None:
         crm_db = _fallback_crm_db()
@@ -213,5 +215,4 @@ def render_uk_crm_panel(crm_db: Any, uk_inn: Any, uk_name: Any) -> None:
                 st.error("Не удалось создать УК: проверьте ИНН.")
         return
     render_uk_params(repo, company)
-    render_uk_contacts(repo, int(company["id"]))
-    render_uk_activities(repo, int(company["id"]))
+    render_uk_workspace(repo, company, tenders_615)

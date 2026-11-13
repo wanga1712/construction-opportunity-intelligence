@@ -46,7 +46,7 @@ COMPANY_COLUMNS = ("id, name, inn, phone:skip, website, reception_type, receptio
                    " manual_overrides")
 
 _SELECT = """
-SELECT c.id, c.name, c.inn, c.website, c.reception_type, c.reception_schedule, c.stage,
+SELECT c.id, c.name, c.inn, c.phone, c.website, c.reception_type, c.reception_schedule, c.stage,
        c.city, c.actual_address, c.legal_address, c.updated_at, c.manual_overrides,
        (SELECT count(*)::int FROM company_contacts k WHERE k.company_id = c.id) AS contacts_count,
        (SELECT count(*)::int FROM company_activities a WHERE a.company_id = c.id) AS activities_count,
@@ -86,7 +86,7 @@ def schedule_text(value: Any) -> str:
         return ""
     if isinstance(value, str):
         return value
-    parts = [f"{day}: {slot}" for day, slot in value.items() if slot]
+    parts = [f"{day}: {slot}" for day, slot in value.items() if slot and str(day).lower() not in ("_role", "role")]
     return "; ".join(parts)
 
 
@@ -215,9 +215,20 @@ class HydroCompanyRepository:
                               " comment, created_at FROM company_contacts WHERE company_id = %s"
                               " ORDER BY is_primary DESC, id", (company_id,))
 
+    def list_objects(self, company_id: int | str) -> list[dict[str, Any]]:
+        return _rows(self.db, """
+            SELECT DISTINCT o.id, o.address, o.cadastral_number, o.floors_underground,
+                   o.parking_type, o.inspection_photos, o.inspection_date, o.leak_types,
+                   o.tender_number, o.tender_nmck, o.tender_end_date, o.manual_overrides
+              FROM parking_prefunnel_objects o
+              JOIN mc_parking_links l ON l.parking_object_id = o.id
+             WHERE l.mc_id = %s
+             ORDER BY o.address, o.id
+        """, (company_id,))
+
     def add_contact(self, company_id: int | str, values: Mapping[str, Any]) -> int | None:
         name = str(values.get("full_name") or "").strip()
-        if not name:
+        if not name or not str(values.get("role") or "").strip():
             return None
         is_primary = bool(values.get("is_primary"))
         if is_primary:
@@ -234,9 +245,30 @@ class HydroCompanyRepository:
               is_primary, values.get("comment") or None))
         return int(rows[0]["id"]) if rows else None
 
+    def update_contact(self, contact_id: int | str, values: Mapping[str, Any]) -> bool:
+        name = str(values.get("full_name") or "").strip()
+        phone = str(values.get("phone") or "").strip()
+        if (not name and not phone) or not str(values.get("role") or "").strip():
+            return False
+        is_primary = bool(values.get("is_primary"))
+        if is_primary:
+            _rows(self.db, "UPDATE company_contacts SET is_primary = FALSE"
+                           " WHERE company_id = %s AND is_primary",
+                  (values.get("company_id"),))
+        rows = _rows(self.db, """
+            UPDATE company_contacts
+               SET full_name = %s, role = %s, phone = %s, phone_ext = %s,
+                   email = %s, comment = %s, is_primary = %s, updated_at = now()
+             WHERE id = %s AND company_id = %s RETURNING id
+        """, (name or None, values.get("role") or None, phone or None,
+              values.get("phone_ext") or None, values.get("email") or None,
+              values.get("comment") or None, is_primary, contact_id,
+              values.get("company_id")))
+        return bool(rows)
+
     def list_activities(self, company_id: int | str) -> list[dict[str, Any]]:
         return _rows(self.db, "SELECT id, activity_type, title, description, start_time, end_time,"
-                              " status, created_at FROM company_activities WHERE company_id = %s"
+                              " status, object_id, contact_id, created_at FROM company_activities WHERE company_id = %s"
                               " ORDER BY start_time DESC NULLS LAST, id DESC", (company_id,))
 
     def add_activity(self, company_id: int | str, values: Mapping[str, Any]) -> int | None:
@@ -248,9 +280,9 @@ class HydroCompanyRepository:
         end = values.get("end_time") or (start + ACTIVITY_DEFAULT_DURATION)
         rows = _rows(self.db, """
             INSERT INTO company_activities (company_id, activity_type, title, description,
-                                            start_time, end_time, status)
-            VALUES (%s, %s, %s, %s, %s, %s, %s) RETURNING id
+                                            start_time, end_time, status, object_id, contact_id)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s) RETURNING id
         """, (company_id, kind, str(values.get("title") or ACTIVITY_TYPE_LABELS[kind]),
               values.get("description") or None, start, end,
-              str(values.get("status") or "planned")))
+              str(values.get("status") or "planned"), values.get("object_id"), values.get("contact_id")))
         return int(rows[0]["id"]) if rows else None

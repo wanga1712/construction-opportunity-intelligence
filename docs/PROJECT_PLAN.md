@@ -703,6 +703,7 @@ from the active queue.
 | `WIP_FIX_EVIDENCE_FALSE_POSITIVES_ROAD_WORKS_V1` | Bounded reclassify applied; later lighting guard is local only. | P1/P4 rollout |
 | `WIP_COMPOSITE_STRENGTHENING_OFFLINE_RECLASSIFY_V1` | Core phases and explicit external-blocker closure recorded. Re-open only for concrete taxonomy items. | Closed with follow-ups |
 | `WIP_CONFIRMED_BASE_COHORT_STABILITY_V1` | Affected-only fingerprint guard is implemented and accepted; header is stale. | Closure check |
+| `WIP_UK_WORKSPACE_LIGHT_CONTACTS_CALENDAR_OBJECTS_615PP_PHOTOFIX_1` | Hydro card workspace deployed to S13; additive activity object/contact columns applied after owner/route check, service active and HTTP health passed. Compilation/import and photo/weekday contracts passed; 14 focused tests passed. Broader UK CRM collection lacks `modules.crm.analytics`; browser host unavailable, so browser gates/screenshots remain open. | P6; current hydro card only |
 
 ## 11. Working rules for this plan
 
