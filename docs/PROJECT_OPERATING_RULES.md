@@ -283,6 +283,34 @@ runtime compilation/import checks, and automatic rollback on failure. This
 route does not authorize schema changes, category/model writes, queue changes,
 document downloads, or a broad reparse.
 
+## Owner-authorized Hydro Kanban sidecar release 2026-11-12
+
+The owner explicitly authorized a one-time release of
+`WIP_HYDRO_KANBAN_INLINE_SIDECAR_V1` after the active S13 CRM was confirmed to
+serve the previous UI. This scoped route allows only:
+
+```text
+/opt/CRM_Streamlit/src/ui/waterproofing_kanban_tab.py
+/opt/CRM_Streamlit/src/ui/hydro_inline_sidecar.py
+/opt/CRM_Streamlit/src/ui/components/hydro_drag_drop/__init__.py
+/opt/CRM_Streamlit/src/ui/components/hydro_drag_drop/index.html
+```
+
+The Kanban file on S13 is an existing untracked runtime file; preserve its
+captured preimage and port the sidecar into that runtime version. Do not replace
+it with a divergent working-tree version. Before release, verify the existing
+CRM schema/read sources and stage all reviewed files beside their targets.
+Record preimage SHA-256 values and timestamped backups, compile/import the
+staged Python files with the runtime virtualenv, atomically replace only the
+four listed paths, verify hashes and the CRM HTTP response, then perform one
+service restart and confirm active state. Restore all preimages automatically
+if any verification fails. This scoped authorization includes no DDL, DB
+write, source-data change, scoring/funnel change, or release of any other file.
+Store existing preimages and a checksum manifest only under
+`/opt/CRM_Streamlit/backups/hydro_kanban_inline_sidecar_20261112_<HHMMSS>/`;
+record absent-file preimages in the manifest. Sibling staging files must be
+removed after successful verification.
+
 ## Mandatory access discovery order
 
 1. полностью прочитать `AGENTS.md` и этот authoritative file;
@@ -350,6 +378,29 @@ deploy, либо если появился признак изменения с�
 Используй bounded logs: конкретный unit, ограниченное число строк и нужный
 временной диапазон. Не читай весь journal без причины. Сначала ищи нужную
 ошибку или событие, расширяй окно только при недостаточности первого среза.
+
+## Owner-authorized post-parse, queue and kiosk repair release 2026-11-13
+
+The owner explicitly requested `WIP_POST_PARSE_PERSISTENCE_QUEUE_AND_KIOSK_REPAIR_V1`
+and the release of working queue/category corrections. This scoped route allows
+only:
+
+```text
+/opt/tender_documents_research/document_processor/parse_extractors.py
+/opt/tender_documents_research/document_processor/embedded_persistence.py
+/opt/CRM_Streamlit/src/services/commercial_routing_v3/document_queue_reconciliation.py
+/opt/CRM_Streamlit/src/services/commercial_routing_v3/reconciliation_document_plan.py
+/opt/CRM_Streamlit/src/services/commercial_routing_v3/reconciliation_queue_writer.py
+/usr/local/bin/s13_dashboard3.py
+```
+
+The release must preserve divergent production preimages, record timestamped
+backups and SHA-256 preimages, compile each staged Python file with its runtime
+interpreter, use atomic replacement, verify live hashes and fresh-process
+imports, restart the affected document workers and kiosk service once, and
+automatically restore all preimages on failure. This route authorizes no schema
+migration, mass reparse, document redownload, normalization backfill,
+taxonomy/medal logic change, or mass queue rewrite.
 
 ## Documentation consolidation record
 

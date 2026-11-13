@@ -40,7 +40,7 @@ def main() -> int:
     try:
         with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
             sql = """
-                SELECT id, category_code, entity_type, product_name_raw,
+                SELECT id, run_id, source_document_id, category_code, entity_type, product_name_raw,
                        product_name_normalized, quantity_value,
                        quantity_unit_normalized
                   FROM structured_entities
@@ -52,6 +52,8 @@ def main() -> int:
             else:
                 cur.execute(sql)
             delete_ids = []
+            affected_runs = set()
+            affected_documents = set()
             update_rows = []
             scanned = 0
             while True:
@@ -68,6 +70,10 @@ def main() -> int:
                     ) == "GOODS"
                     if not is_goods or category in ("", "unknown") or resolved is None:
                         delete_ids.append(int(r["id"]))
+                        if r.get("run_id") is not None:
+                            affected_runs.add(int(r["run_id"]))
+                        if r.get("source_document_id") is not None:
+                            affected_documents.add(int(r["source_document_id"]))
                     elif resolved != category:
                         update_rows.append((resolved, int(r["id"])))
         print(f"SCANNED={scanned}")
@@ -91,6 +97,34 @@ def main() -> int:
                 cur.execute(
                     "DELETE FROM structured_entities WHERE id = ANY(%s)",
                     (batch,),
+                )
+            if affected_runs:
+                cur.execute(
+                    """
+                    UPDATE structured_extraction_runs r
+                       SET status='FAILED', completed_at=NULL
+                     WHERE r.id = ANY(%s)
+                       AND NOT EXISTS (
+                           SELECT 1 FROM structured_entities e WHERE e.run_id=r.id
+                       )
+                    """,
+                    (list(affected_runs),),
+                )
+            if affected_documents:
+                cur.execute(
+                    """
+                    UPDATE document_extraction_outcomes o
+                       SET outcome='PERSISTENCE_FAILED',
+                           facts_found=0,
+                           reason='cleanup_deleted_entities',
+                           updated_at=NOW()
+                     WHERE o.source_document_id = ANY(%s)
+                       AND NOT EXISTS (
+                           SELECT 1 FROM structured_entities e
+                            WHERE e.source_document_id=o.source_document_id
+                       )
+                    """,
+                    (list(affected_documents),),
                 )
         conn.commit()
         print(f"APPLIED DELETE={len(delete_ids)} UPDATE={len(update_rows)}")

@@ -3,7 +3,8 @@
 Retention deletes raw files after 3 days, so everything we may ever need must be
 extracted while the file is still on disk. This hook runs right after a document
 is parsed and persists:
-  * estimate material rows  -> structured_entities (MANUAL_PROOF_QUARANTINE)
+  * universal estimate rows -> structured_estimate_rows
+  * DIRECT compatibility facts -> structured_entities (legacy read fallback)
   * project organizations / people -> project_metadata_* (raw + source_quote)
 Fail-safe by design: any error is logged and never breaks parsing.
 """
@@ -13,6 +14,7 @@ import hashlib
 import json
 import logging
 import os
+import re
 from pathlib import Path
 from typing import Any, Dict, Optional
 
@@ -20,6 +22,229 @@ logger = logging.getLogger("parse_extractors")
 
 _TAXONOMY_INDEX_CACHE: Dict[str, Any] | None = None
 _CATEGORY_SIGNAL_INDEX_CACHE: Dict[str, set] | None = None
+_TAXONOMY_PATTERN_CACHE: tuple[Dict[str, Any], re.Pattern[str]] | None = None
+_CATEGORY_PATTERN_CACHE: tuple[Dict[str, set], re.Pattern[str]] | None = None
+_ESTIMATE_TAXONOMY_CACHE: Any = None
+_ESTIMATE_TAXONOMY_SNAPSHOT: Any = None
+
+
+def _call_estimate_row_ai(prompt: str) -> str:
+    """Run one bounded row batch through the shared local Ollama GPU arbiter."""
+    import urllib.request
+    from document_processor.estimate_row_ai_normalizer import (
+        response_schema_for_prompt,
+    )
+
+    model = os.getenv("ESTIMATE_ROW_NORMALIZER_MODEL", "qwen2.5:7b")
+    url = os.getenv("OLLAMA_GENERATE_URL", "http://localhost:11434/api/generate")
+    body = json.dumps(
+        {
+            "model": model,
+            "prompt": prompt,
+            "stream": False,
+            "format": response_schema_for_prompt(prompt),
+            "options": {"temperature": 0, "num_predict": 1800},
+        }
+    ).encode("utf-8")
+    request = urllib.request.Request(
+        url, data=body, headers={"Content-Type": "application/json"}
+    )
+    from document_processor.docs_gpu_arbiter_lock import acquire_document_gpu
+
+    with acquire_document_gpu(
+        defer_when_routing=True,
+        max_wait_sec=float(os.getenv("ESTIMATE_ROW_AI_GPU_MAX_WAIT_SEC", "120")),
+    ):
+        with urllib.request.urlopen(request, timeout=180) as response:
+            payload = json.loads(response.read())
+    return str(payload.get("response") or "")
+
+
+def _project_estimate_row_categories(rows: list[Any]) -> None:
+    """Resolve universal rows with the active CRM taxonomy; ambiguous stays NULL."""
+    global _ESTIMATE_TAXONOMY_CACHE, _ESTIMATE_TAXONOMY_SNAPSHOT
+    if not rows:
+        return
+    if _ESTIMATE_TAXONOMY_CACHE is None:
+        from document_processor.crm_taxonomy_loader import CrmTaxonomyLoader
+        from document_processor.estimate_row_taxonomy import EstimateTaxonomy
+
+        snapshot = CrmTaxonomyLoader(contour_code="procurement").load_snapshot()
+        _ESTIMATE_TAXONOMY_SNAPSHOT = snapshot
+        terms = [
+            (
+                term.category_code,
+                term.subcategory_code,
+                term.term_type,
+                term.phrase,
+                term.weight,
+            )
+            for term in snapshot.terms
+            if term.term_type in {"search", "negative"}
+        ]
+        _ESTIMATE_TAXONOMY_CACHE = EstimateTaxonomy.from_rows(terms)
+
+    try:
+        from document_processor.crm_taxonomy_loader import CrmTaxonomyLoader
+
+        procurement_contexts = CrmTaxonomyLoader(
+            contour_code="procurement"
+        ).load_procurement_contexts(
+            [int(row.procurement_id) for row in rows if getattr(row, "procurement_id", None) is not None]
+        )
+    except Exception as exc:  # noqa: BLE001 - category extraction must remain available
+        logger.warning("procurement context unavailable for estimate rows: %s", exc)
+        procurement_contexts = {}
+
+    projected = []
+    for row in rows:
+        if row.row_kind not in {"GOODS", "SPECIAL_WORK_REVIEW"}:
+            projected.append((None, None))
+            continue
+        attribute_terms = []
+        for attribute in row.technical_attributes or []:
+            if not isinstance(attribute, dict):
+                continue
+            attribute_terms.extend(
+                str(attribute.get(key) or "").strip()
+                for key in ("raw_value", "normalized_value", "attribute_name")
+            )
+        resolution = _ESTIMATE_TAXONOMY_CACHE.resolve(
+            " ".join([row.name_raw, *attribute_terms])
+        )
+        projected.append((resolution.category_code, resolution.subcategory_code))
+    for row, (category_code, subcategory_code) in zip(rows, projected):
+        row.category_code = category_code
+        row.subcategory_code = subcategory_code
+        row.category_resolution_attempted = True
+        row.category_decision = {
+            "decision_code": (
+                "NOT_A_GOOD" if row.row_kind not in {"GOODS", "SPECIAL_WORK_REVIEW"}
+                else ("RULE_FALLBACK" if category_code else "RULE_UNRESOLVED")
+            ),
+            "category_code": category_code,
+            "subcategory_code": subcategory_code,
+            "confidence": None,
+            "reason": "active_taxonomy_rule_fallback",
+            "evidence_quote": row.source_quote or row.name_raw,
+            "model_name": None,
+            "prompt_version": "estimate_row_rule_v1",
+        }
+
+    if os.getenv("ESTIMATE_ROW_AI_NORMALIZATION", "1").strip().lower() in {
+        "0", "false", "no", "off"
+    }:
+        return
+    eligible = [
+        (index, row) for index, row in enumerate(rows)
+        if row.row_kind == "GOODS"
+        or (
+            row.row_kind == "SPECIAL_WORK_REVIEW"
+            and row.special_work_family == "structural_reinforcement"
+        )
+    ]
+    if not eligible:
+        return
+    try:
+        from document_processor.estimate_row_ai_normalizer import (
+            PROMPT_VERSION,
+            adjudicate_rows,
+        )
+
+        model = os.getenv("ESTIMATE_ROW_NORMALIZER_MODEL", "qwen2.5:7b")
+        candidates = [row for _, row in eligible]
+        decisions = adjudicate_rows(
+            candidates,
+            _ESTIMATE_TAXONOMY_SNAPSHOT,
+            ai_caller=_call_estimate_row_ai,
+            model_name=model,
+            # Small local models showed cross-row evidence leakage in 4-row
+            # canaries. Keep row identity reliable unless explicitly overridden.
+            batch_size=int(os.getenv("ESTIMATE_ROW_AI_BATCH_SIZE", "1")),
+            procurement_contexts=procurement_contexts,
+        )
+        terms_payload = [
+            (term.category_code, term.subcategory_code, term.term_type, term.phrase)
+            for term in _ESTIMATE_TAXONOMY_SNAPSHOT.terms
+        ]
+        taxonomy_hash = hashlib.sha256(
+            json.dumps(terms_payload, ensure_ascii=False, sort_keys=True).encode("utf-8")
+        ).hexdigest()
+        for candidate_index, (_row_index, row) in enumerate(eligible):
+            decision = decisions[candidate_index]
+            # Malformed/unavailable model output preserves the auditable rule
+            # fallback; a valid unresolved answer explicitly clears the guess.
+            if decision.reason == "invalid_model_item":
+                continue
+            row.category_code = decision.category_code
+            row.subcategory_code = decision.subcategory_code
+            row.category_decision = {
+                "decision_code": {
+                    "EXISTING_CATEGORY": "AI_EXISTING_CATEGORY",
+                    "OTHER_OR_UNRESOLVED": "AI_OTHER_OR_UNRESOLVED",
+                    "NEW_CATEGORY_CANDIDATE": "AI_NEW_CATEGORY_CANDIDATE",
+                }[decision.decision],
+                "category_code": decision.category_code,
+                "subcategory_code": decision.subcategory_code,
+                "confidence": decision.confidence,
+                "reason": decision.reason,
+                "evidence_quote": decision.evidence_quote,
+                "proposed_category_name": decision.new_category_name,
+                "model_name": model,
+                "prompt_version": PROMPT_VERSION,
+                "taxonomy_snapshot_hash": taxonomy_hash,
+            }
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("estimate-row AI normalization unavailable: %s", exc)
+
+
+def _normalize_phrase(value: object) -> str:
+    return re.sub(r"\s+", " ", str(value or "").lower()).strip()
+
+
+def _compile_phrase_pattern(phrases) -> re.Pattern[str]:
+    ordered = sorted(
+        {_normalize_phrase(phrase) for phrase in phrases if _normalize_phrase(phrase)},
+        key=lambda phrase: (-len(phrase), phrase),
+    )
+    if not ordered:
+        return re.compile(r"(?!x)x")
+    strict = []
+    adjective = []
+    inflected = []
+    for phrase in ordered:
+        escaped = re.escape(phrase)
+        if re.search(r"[a-z0-9]", phrase):
+            strict.append(escaped)
+        elif phrase.endswith(("ый", "ий", "ой")):
+            adjective.append(escaped)
+        else:
+            inflected.append(escaped)
+    branches = []
+    if strict:
+        branches.append(r"(?P<strict_phrase>" + "|".join(strict) + r")(?!\w)")
+    if adjective:
+        branches.append(
+            r"(?P<adjective_phrase>" + "|".join(adjective) + r")"
+            r"(?:ая|яя|ое|ее|ые|ие|ого|его|ому|ему|ым|им|ом|ем|"
+            r"ую|юю|ых|их|ыми|ими|ой|ей)?(?!\w)"
+        )
+    if inflected:
+        branches.append(
+            r"(?P<inflected_phrase>" + "|".join(inflected) + r")"
+            r"(?:а|я|у|ю|ом|ем|е|ы|и|ов|ев|ей|ам|ям|ами|ями|ах|ях)?(?!\w)"
+        )
+    return re.compile(r"(?<!\w)(?:" + "|".join(branches) + r")")
+
+
+def _matched_phrases(pattern: re.Pattern[str], text: str) -> set[str]:
+    matched = set()
+    for match in pattern.finditer(text):
+        for name in ("strict_phrase", "adjective_phrase", "inflected_phrase"):
+            if name in pattern.groupindex and match.group(name):
+                matched.add(match.group(name))
+                break
+    return matched
 
 
 def _taxonomy_index() -> Dict[str, Any]:
@@ -27,7 +252,27 @@ def _taxonomy_index() -> Dict[str, Any]:
     if _TAXONOMY_INDEX_CACHE is None:
         from document_processor.crm_taxonomy_loader import load_keyword_index
 
-        _TAXONOMY_INDEX_CACHE = load_keyword_index()
+        normalized: Dict[str, Any] = {}
+        for phrase, bucket in load_keyword_index().items():
+            normalized_phrase = _normalize_phrase(phrase)
+            if not normalized_phrase:
+                continue
+            target = normalized.setdefault(
+                normalized_phrase,
+                {
+                    **bucket,
+                    "keyword": normalized_phrase,
+                    "category_codes": [],
+                },
+            )
+            for category in bucket.get("category_codes") or []:
+                if category not in target["category_codes"]:
+                    target["category_codes"].append(category)
+            target["weight"] = max(
+                int(target.get("weight") or 100),
+                int(bucket.get("weight") or 100),
+            )
+        _TAXONOMY_INDEX_CACHE = normalized
     return _TAXONOMY_INDEX_CACHE
 
 
@@ -42,7 +287,7 @@ def _category_signal_index() -> Dict[str, set]:
             phrases = list(category.get("positive_signals") or [])
             phrases += list(category.get("aliases") or [])
             for phrase in phrases:
-                phrase = str(phrase).strip().lower()
+                phrase = _normalize_phrase(phrase)
                 if phrase:
                     index.setdefault(phrase, set()).add(code)
         _CATEGORY_SIGNAL_INDEX_CACHE = index
@@ -51,20 +296,44 @@ def _category_signal_index() -> Dict[str, set]:
 
 def _resolve_embedded_category(name: str, fallback: str) -> Optional[str]:
     """Return the best registry category for a row, or None."""
-    low = str(name or "").lower()
+    global _TAXONOMY_PATTERN_CACHE, _CATEGORY_PATTERN_CACHE
+
+    from document_processor.estimate_row_taxonomy import (
+        category_semantic_guard,
+    )
+
+    low = _normalize_phrase(name)
     if not low:
         return None
     scores: Dict[str, int] = {}
-    for phrase, bucket in _taxonomy_index().items():
-        if phrase in low:
-            weight = int(bucket.get("weight") or 100)
-            for category in bucket.get("category_codes") or []:
-                scores[category] = scores.get(category, 0) + weight
+    taxonomy = _taxonomy_index()
+    if _TAXONOMY_PATTERN_CACHE is None or _TAXONOMY_PATTERN_CACHE[0] is not taxonomy:
+        _TAXONOMY_PATTERN_CACHE = (taxonomy, _compile_phrase_pattern(taxonomy))
+    for phrase in _matched_phrases(_TAXONOMY_PATTERN_CACHE[1], low):
+        bucket = taxonomy[phrase]
+        weight = int(bucket.get("weight") or 100)
+        for category in bucket.get("category_codes") or []:
+            scores[category] = scores.get(category, 0) + weight
     if not scores:
-        for phrase, categories in _category_signal_index().items():
-            if phrase in low:
-                for category in categories:
-                    scores[category] = scores.get(category, 0) + 100
+        category_index = _category_signal_index()
+        if (
+            _CATEGORY_PATTERN_CACHE is None
+            or _CATEGORY_PATTERN_CACHE[0] is not category_index
+        ):
+            _CATEGORY_PATTERN_CACHE = (
+                category_index,
+                _compile_phrase_pattern(category_index),
+            )
+        for phrase in _matched_phrases(_CATEGORY_PATTERN_CACHE[1], low):
+            for category in category_index[phrase]:
+                scores[category] = scores.get(category, 0) + 100
+    if not scores:
+        return None
+    scores = {
+        category: score
+        for category, score in scores.items()
+        if category_semantic_guard(category, low)
+    }
     if not scores:
         return None
     return max(scores, key=lambda k: (scores[k], k))
@@ -89,6 +358,9 @@ def _section_cells(quote: str) -> list:
 
 def _estimate_layout(fact) -> str:
     """Value-provenance for an estimate row (mirrors the embedded contract)."""
+    explicit = str(getattr(fact, "layout_status", "") or "").upper()
+    if explicit == "UNIT_RATE_ONLY":
+        return explicit
     qty = getattr(fact, "quantity_value", None)
     price = getattr(fact, "unit_price_value", None)
     total = getattr(fact, "total_price_value", None)
@@ -306,11 +578,22 @@ def extract_and_persist(
 ) -> Dict[str, int]:
     """Best-effort parse-time extraction; never raises.
 
-    `category_code` (from the Queue V3 payload) enables EMBEDDED_EXTRACTOR_V1 +
-    UNIT_NORMALIZER_V1 while the file is still on disk. Category is never
-    re-derived from the text.
+    Estimate-like rows use one universal extractor and the active CRM taxonomy.
+    DIRECT compatibility extraction remains enabled until its read-model canary
+    is accepted. Ambiguous taxonomy matches are kept unresolved.
     """
-    result = {"facts": 0, "metadata": 0, "embedded": 0}
+    result = {
+        "facts": 0,
+        "metadata": 0,
+        "embedded": 0,
+        "estimate_rows": 0,
+    }
+    universal_attempted = False
+    universal_extracted = 0
+    universal_goods = 0
+    universal_categorized = 0
+    universal_normalized = False
+    universal_error = None
     if procurement_id is None:
         return result
     try:
@@ -321,28 +604,91 @@ def extract_and_persist(
             conn.cursor().execute("SELECT 1")
             for statement in _DDL:
                 conn.cursor().execute(statement)
+            from document_processor.estimate_row_persistence import (
+                ensure_estimate_row_schema,
+            )
+
+            ensure_estimate_row_schema(conn)
             conn.commit()
             # Each extractor is isolated: one failing must not block the others.
-            # When a Queue V3 category context is present the new extractor
-            # supersedes the legacy estimate reader (avoids reading big xlsx twice).
-            if path.suffix.lower() in (".xlsx", ".xlsm") and not category_code:
+            track_upper = str(track or "").upper()
+            direct_track = track_upper in {"DIRECT", "DIRECT_SUPPLY"}
+            # Extract estimate rows into the shared contract on all tracks.
+            # DIRECT's category-bound writer remains a compatibility source
+            # until the card/read-model canary is accepted.
+            estimate_classes = {"ESTIMATE", "BOQ", "NMCK_JUSTIFICATION"}
+            universal_estimate = (
+                not direct_track
+                or str(document_class or "").upper() in estimate_classes
+            )
+            if universal_estimate:
+                universal_attempted = True
+                if source_document_id is None:
+                    logger.warning(
+                        "estimate-row source identity unavailable; retaining name fallback only: procurement=%s document=%s",
+                        procurement_id,
+                        name,
+                    )
                 try:
-                    result["facts"] = _persist_estimate(conn, path, int(procurement_id), name)
+                    from document_processor.estimate_row_persistence import (
+                        persist_estimate_rows,
+                    )
+                    from document_processor.universal_estimate_rows import (
+                        extract_universal_estimate_rows,
+                    )
+
+                    estimate_rows = extract_universal_estimate_rows(
+                        path,
+                        procurement_id=int(procurement_id),
+                        document_name=name,
+                        source_document_id=source_document_id,
+                        text=text,
+                        line_meta=line_meta,
+                    )
+                    universal_extracted = len(estimate_rows)
+                    universal_goods = sum(
+                        str(getattr(row, "row_kind", "")).upper() == "GOODS"
+                        for row in estimate_rows
+                    )
+                    try:
+                        _project_estimate_row_categories(estimate_rows)
+                        universal_normalized = True
+                    except Exception as exc:  # noqa: BLE001
+                        logger.warning(
+                            "estimate-row taxonomy projection failed for %s: %s",
+                            name,
+                            exc,
+                        )
+                    result["estimate_rows"] = persist_estimate_rows(
+                        conn, estimate_rows
+                    )
+                    universal_categorized = sum(
+                        bool(getattr(row, "category_code", None))
+                        for row in estimate_rows
+                    )
                 except Exception as exc:  # noqa: BLE001
                     conn.rollback()
-                    logger.warning("estimate extraction failed for %s: %s", name, exc)
+                    universal_error = f"{type(exc).__name__}: {exc}"
+                    logger.warning(
+                        "universal estimate extraction failed for %s: %s",
+                        name,
+                        exc,
+                    )
             if text:
                 try:
                     result["metadata"] = _persist_metadata(conn, text, int(procurement_id), name)
                 except Exception as exc:  # noqa: BLE001
                     conn.rollback()
                     logger.warning("metadata extraction failed for %s: %s", name, exc)
-            if category_code:
-                result["embedded"] = _persist_embedded(
+            if category_code and direct_track:
+                persistence = _persist_embedded(
                     conn, path, text, line_meta, int(procurement_id), name,
-                    category_code, source_document_id, physical_key, track,
+                    category_code, source_document_id, physical_key, "DIRECT",
                     document_class, allowed_categories,
                 )
+                result["embedded"] = persistence.persisted_facts
+                if persistence.error:
+                    conn.rollback()
                 try:
                     from document_processor.embedded_persistence import record_outcome
 
@@ -353,20 +699,81 @@ def extract_and_persist(
                         category_code=category_code,
                         track=track,
                         document_name=name,
-                        outcome="FACTS_FOUND" if result.get("embedded") else "NO_FACTS",
-                        facts_found=int(result.get("embedded") or 0),
-                        reason="parse_time_hook",
+                        outcome=persistence.outcome,
+                        facts_found=persistence.extracted_facts,
+                        reason=persistence.reason("parse_time_hook"),
                         files_parsed=1,
                     )
-                except Exception:
-                    pass
+                except Exception as exc:  # noqa: BLE001
+                    conn.rollback()
+                    logger.exception(
+                        "extraction outcome persistence failed for %s: %s",
+                        name,
+                        exc,
+                    )
+            elif universal_attempted and category_code:
+                from document_processor.embedded_persistence import (
+                    CATEGORY_FACTS_NOT_RESOLVED,
+                    FACTS_FOUND,
+                    NO_RAW_FACTS,
+                    PERSISTENCE_FAILED,
+                    UNIVERSAL_ROWS_PERSISTED_NOT_NORMALIZED,
+                    record_outcome,
+                )
+
+                persisted = int(result.get("estimate_rows") or 0)
+                if universal_error:
+                    outcome = PERSISTENCE_FAILED
+                elif universal_extracted == 0:
+                    outcome = NO_RAW_FACTS
+                elif persisted == 0:
+                    outcome = PERSISTENCE_FAILED
+                elif universal_normalized and universal_categorized == 0:
+                    outcome = CATEGORY_FACTS_NOT_RESOLVED
+                elif universal_normalized:
+                    outcome = FACTS_FOUND
+                else:
+                    outcome = UNIVERSAL_ROWS_PERSISTED_NOT_NORMALIZED
+                reason = (
+                    "parse_time_universal; "
+                    f"extracted={universal_extracted}; "
+                    f"goods={universal_goods}; "
+                    f"category_resolved={universal_categorized}; "
+                    f"persisted={persisted}; "
+                    f"full_normalization={'YES' if universal_normalized else 'NO'}"
+                )
+                if universal_error:
+                    reason += f"; error={universal_error}"
+                try:
+                    record_outcome(
+                        conn,
+                        source_document_id=source_document_id,
+                        procurement_id=int(procurement_id),
+                        category_code=category_code,
+                        track=track,
+                        document_name=name,
+                        outcome=outcome,
+                        facts_found=universal_extracted,
+                        reason=reason,
+                        files_parsed=1,
+                    )
+                except Exception:  # noqa: BLE001
+                    conn.rollback()
+                    raise
             conn.commit()
         finally:
             conn.close()
-        if result["facts"] or result["metadata"] or result.get("embedded"):
+        if (
+            result["facts"]
+            or result["metadata"]
+            or result.get("embedded")
+            or result.get("estimate_rows")
+        ):
             logger.info(
-                "parse-time extraction: facts=%d metadata=%d embedded=%d doc=%s",
-                result["facts"], result["metadata"], result.get("embedded", 0), name,
+                "parse-time extraction: estimate_rows=%d facts=%d metadata=%d "
+                "embedded=%d doc=%s",
+                result.get("estimate_rows", 0), result["facts"],
+                result["metadata"], result.get("embedded", 0), name,
             )
     except Exception as exc:
         logger.warning("parse-time extraction failed for %s: %s", document_name, exc)
@@ -386,11 +793,22 @@ def _persist_embedded(
     track: Optional[str] = None,
     document_class: Optional[str] = None,
     allowed_categories: Optional[set] = None,
-) -> int:
+    persist: bool = True,
+) -> Any:
     """Run the category-bound extractor during parsing (file still on disk)."""
+    extracted_facts = 0
+    goods_accepted_facts = 0
+    category_resolved_facts = 0
+    allowed_rejected_facts = 0
+    accepted_facts = 0
+    total_created = 0
+    total_reused = 0
     try:
         from document_processor.embedded_extraction import extract_facts, facts_from_table_rows
-        from document_processor.embedded_persistence import persist_facts
+        from document_processor.embedded_persistence import (
+            PersistenceResult,
+            persist_facts,
+        )
 
         # DIRECT (прямые поставки) uses the previously built template extractor;
         # EMBEDDED (проекты/объекты) uses the table-row extractor.
@@ -404,8 +822,20 @@ def _persist_embedded(
                 text=text, line_meta=line_meta,
                 document_class=document_class,
             )
+            extracted_facts = len(facts)
+            goods_accepted_facts = extracted_facts
+            category_resolved_facts = extracted_facts
+            accepted_facts = len(facts)
             if not facts:
-                return 0
+                return PersistenceResult()
+            if not persist:
+                return PersistenceResult(
+                    extracted_facts=extracted_facts,
+                    goods_accepted_facts=goods_accepted_facts,
+                    category_resolved_facts=category_resolved_facts,
+                    accepted_facts=accepted_facts,
+                    persistence_attempted=False,
+                )
             # DIRECT facts are built from template/table row cells. Their exact
             # row texts are the provenance snapshot used by strict quote checks;
             # the generic parser text can use a different cell layout.
@@ -418,7 +848,12 @@ def _persist_embedded(
                 source_text=direct_snapshot,
                 source_document_id=source_document_id,
             )
-            return created
+            return PersistenceResult(
+                extracted_facts=extracted_facts,
+                accepted_facts=accepted_facts,
+                created=int(created or 0),
+                reused=int(_reused or 0),
+            )
 
         # Bounded work: one pathological workbook must not stall the batch.
         max_xlsx_bytes = int(os.getenv("EMBEDDED_MAX_XLSX_BYTES", str(8 * 1024 * 1024)))
@@ -426,7 +861,7 @@ def _persist_embedded(
             logger.warning(
                 "embedded extraction skipped (xlsx over %d bytes): %s", max_xlsx_bytes, document_name
             )
-            return 0
+            return PersistenceResult(error=f"xlsx_over_limit:{path.stat().st_size}")
         snapshot_text = text or ""
         if path.suffix.lower() in (".xlsx", ".xlsm"):
             try:
@@ -457,31 +892,53 @@ def _persist_embedded(
                 document_name=document_name, text=text, line_meta=line_meta,
                 source_document_id=source_document_id, physical_key=physical_key,
             )
+        extracted_facts = len(facts)
         if not facts:
-            return 0
+            return PersistenceResult()
         from collections import defaultdict
 
         from document_processor.goods_fact_gate import is_confident_count_goods
 
         grouped = defaultdict(list)
         for fact in facts:
-            if not is_confident_count_goods(fact):
-                continue
             fact_name = (
                 getattr(fact, "product_name_raw", "")
                 or getattr(fact, "product_name_normalized", "")
                 or ""
             )
             resolved = _resolve_embedded_category(fact_name, category_code)
+            if not is_confident_count_goods(
+                fact, category_code=resolved or category_code
+            ):
+                continue
+            goods_accepted_facts += 1
             if resolved is None:
                 continue
+            category_resolved_facts += 1
             if allowed_categories is not None and resolved not in allowed_categories:
+                allowed_rejected_facts += 1
                 continue
             fact.category_code = resolved
             grouped[resolved].append(fact)
+        accepted_facts = sum(len(group) for group in grouped.values())
         if not grouped:
-            return 0
-        total_created = 0
+            return PersistenceResult(
+                extracted_facts=extracted_facts,
+                goods_accepted_facts=goods_accepted_facts,
+                category_resolved_facts=category_resolved_facts,
+                accepted_facts=accepted_facts,
+                allowed_rejected_facts=allowed_rejected_facts,
+                persistence_attempted=persist,
+            )
+        if not persist:
+            return PersistenceResult(
+                extracted_facts=extracted_facts,
+                goods_accepted_facts=goods_accepted_facts,
+                category_resolved_facts=category_resolved_facts,
+                accepted_facts=accepted_facts,
+                allowed_rejected_facts=allowed_rejected_facts,
+                persistence_attempted=False,
+            )
         for resolved_category, group in grouped.items():
             group_snapshot = "\n".join(
                 str(getattr(f, "source_quote", "") or "") for f in group
@@ -496,7 +953,27 @@ def _persist_embedded(
                 source_document_id=source_document_id,
             )
             total_created += int(created or 0)
-        return total_created
-    except Exception as exc:  # never break parsing
+            total_reused += int(_reused or 0)
+        return PersistenceResult(
+            extracted_facts=extracted_facts,
+            goods_accepted_facts=goods_accepted_facts,
+            category_resolved_facts=category_resolved_facts,
+            accepted_facts=accepted_facts,
+            allowed_rejected_facts=allowed_rejected_facts,
+            created=total_created,
+            reused=total_reused,
+        )
+    except Exception as exc:  # keep parsing alive, but expose a failed outcome
         logger.warning("embedded extraction failed for %s: %s", document_name, exc)
-        return 0
+        from document_processor.embedded_persistence import PersistenceResult
+
+        return PersistenceResult(
+            extracted_facts=extracted_facts,
+            goods_accepted_facts=goods_accepted_facts,
+            category_resolved_facts=category_resolved_facts,
+            accepted_facts=accepted_facts,
+            allowed_rejected_facts=allowed_rejected_facts,
+            created=total_created,
+            reused=total_reused,
+            error=f"{type(exc).__name__}: {exc}",
+        )

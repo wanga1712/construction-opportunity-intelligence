@@ -5,10 +5,78 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+from dataclasses import dataclass
 from typing import Any, Dict, Iterable, Optional, Tuple
 
 from document_processor.embedded_extraction import EXTRACTOR_VERSION
 from document_processor.embedded_extraction import NORMALIZER_VERSION
+
+
+FACTS_FOUND = "FACTS_FOUND"
+NO_FACTS = "NO_FACTS"
+PERSISTENCE_FAILED = "PERSISTENCE_FAILED"
+NO_RAW_FACTS = "NO_RAW_FACTS"
+RAW_FACTS_FILTERED = "RAW_FACTS_FILTERED"
+CATEGORY_FACTS_NOT_RESOLVED = "CATEGORY_FACTS_NOT_RESOLVED"
+CATEGORY_FACTS_FOUND = "CATEGORY_FACTS_FOUND"
+FACTS_OUTSIDE_ALLOWED_SCOPE = "FACTS_OUTSIDE_ALLOWED_SCOPE"
+UNIVERSAL_ROWS_PERSISTED_NOT_NORMALIZED = "UNIVERSAL_ROWS_PERSISTED_NOT_NORMALIZED"
+
+
+@dataclass(frozen=True)
+class PersistenceResult:
+    """Counts and terminal outcome for one document persistence attempt."""
+
+    extracted_facts: int = 0
+    goods_accepted_facts: Optional[int] = None
+    category_resolved_facts: Optional[int] = None
+    accepted_facts: int = 0
+    allowed_rejected_facts: int = 0
+    created: int = 0
+    reused: int = 0
+    error: Optional[str] = None
+    persistence_attempted: bool = True
+
+    @property
+    def persisted_facts(self) -> int:
+        if self.error:
+            # The caller rolls back a failed transaction, so pre-error inserts
+            # are not committed facts.
+            return 0
+        return max(0, int(self.created)) + max(0, int(self.reused))
+
+    @property
+    def outcome(self) -> str:
+        if self.extracted_facts <= 0:
+            return NO_RAW_FACTS
+        if self.error:
+            return PERSISTENCE_FAILED
+        if self.accepted_facts > 0:
+            if not self.persistence_attempted:
+                return CATEGORY_FACTS_FOUND
+            if self.persisted_facts > 0:
+                return FACTS_FOUND
+            return PERSISTENCE_FAILED
+        if self.goods_accepted_facts == 0:
+            return RAW_FACTS_FILTERED
+        if self.category_resolved_facts == 0:
+            return CATEGORY_FACTS_NOT_RESOLVED
+        if self.allowed_rejected_facts > 0:
+            return FACTS_OUTSIDE_ALLOWED_SCOPE
+        return RAW_FACTS_FILTERED
+
+    def reason(self, prefix: str = "parse_time_hook") -> str:
+        detail = (
+            f"{prefix}; extracted={self.extracted_facts}; "
+            f"goods_accepted={self.goods_accepted_facts}; "
+            f"category_resolved={self.category_resolved_facts}; "
+            f"allowed_rejected={self.allowed_rejected_facts}; "
+            f"accepted={self.accepted_facts}; created={self.created}; "
+            f"reused={self.reused}; persisted={self.persisted_facts}"
+        )
+        if self.error:
+            detail += f"; error={self.error}"
+        return detail[:400]
 
 
 def record_outcome(
@@ -28,42 +96,39 @@ def record_outcome(
     bytes_value=None,
     artifact_class=None,
 ) -> None:
-    """Version-scoped per-document extraction outcome (no-findings memory)."""
+    """Version-scoped per-document outcome in the caller's transaction.
+
+    Outcome and facts must commit atomically. Exceptions intentionally propagate
+    so the caller can roll back and avoid a success marker without facts.
+    """
     if source_document_id is None:
         return
-    try:
-        cur = conn.cursor()
-        cur.execute(
-            """
-            INSERT INTO document_extraction_outcomes
-                (source_document_id, procurement_id, category_code, track, document_name,
-                 artifact_class, extractor_version, normalizer_version, outcome, facts_found,
-                 member_count, bytes, reason, files_parsed, files_failed, updated_at, created_at)
-            VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,NOW(),NOW())
-            ON CONFLICT (source_document_id, extractor_version, COALESCE(category_code, ''))
-            DO UPDATE SET
-                outcome = EXCLUDED.outcome,
-                facts_found = EXCLUDED.facts_found,
-                reason = EXCLUDED.reason,
-                files_parsed = EXCLUDED.files_parsed,
-                files_failed = EXCLUDED.files_failed,
-                member_count = COALESCE(EXCLUDED.member_count, document_extraction_outcomes.member_count),
-                bytes = COALESCE(EXCLUDED.bytes, document_extraction_outcomes.bytes),
-                artifact_class = COALESCE(EXCLUDED.artifact_class, document_extraction_outcomes.artifact_class),
-                updated_at = NOW()
-            """,
-            (
-                int(source_document_id), procurement_id, category_code, track, document_name,
-                artifact_class, EXTRACTOR_VERSION, NORMALIZER_VERSION, outcome, int(facts_found),
-                member_count, bytes_value, (reason or "")[:400], files_parsed, files_failed,
-            ),
-        )
-        conn.commit()
-    except Exception:
-        try:
-            conn.rollback()
-        except Exception:
-            pass
+    cur = conn.cursor()
+    cur.execute(
+        """
+        INSERT INTO document_extraction_outcomes
+            (source_document_id, procurement_id, category_code, track, document_name,
+             artifact_class, extractor_version, normalizer_version, outcome, facts_found,
+             member_count, bytes, reason, files_parsed, files_failed, updated_at, created_at)
+        VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,NOW(),NOW())
+        ON CONFLICT (source_document_id, extractor_version, COALESCE(category_code, ''))
+        DO UPDATE SET
+            outcome = EXCLUDED.outcome,
+            facts_found = EXCLUDED.facts_found,
+            reason = EXCLUDED.reason,
+            files_parsed = EXCLUDED.files_parsed,
+            files_failed = EXCLUDED.files_failed,
+            member_count = COALESCE(EXCLUDED.member_count, document_extraction_outcomes.member_count),
+            bytes = COALESCE(EXCLUDED.bytes, document_extraction_outcomes.bytes),
+            artifact_class = COALESCE(EXCLUDED.artifact_class, document_extraction_outcomes.artifact_class),
+            updated_at = NOW()
+        """,
+        (
+            int(source_document_id), procurement_id, category_code, track, document_name,
+            artifact_class, EXTRACTOR_VERSION, NORMALIZER_VERSION, outcome, int(facts_found),
+            member_count, bytes_value, (reason or "")[:400], files_parsed, files_failed,
+        ),
+    )
 
 
 def persist_facts(

@@ -1,0 +1,5786 @@
+{
+  "cohort": 105,
+  "bucket_counts": {
+    "Z6_FULL_NORMALIZATION_NOT_ATTEMPTED": 105
+  },
+  "full_normalization_attempted": 0,
+  "true_zero_after_full_normalization": null,
+  "cards": [
+    {
+      "procurement_id": 631,
+      "material_document_count": 2,
+      "local_document_count": 2,
+      "parse_attempted": true,
+      "embedded_extraction_attempted": true,
+      "raw_extracted_fact_count": 0,
+      "goods_gate_accepted_count": 0,
+      "category_resolved_count": 0,
+      "allowed_category_rejected_count": 0,
+      "persist_created_count": 0,
+      "persist_reused_count": 0,
+      "persistence_error": null,
+      "full_normalization_attempted": false,
+      "full_normalization_version": null,
+      "full_normalization_result": null,
+      "structured_estimate_rows": 0,
+      "post_parse_normalized_count": 0,
+      "parse_status_counts": {
+        "EMPTY_TEXT": 1,
+        "PARSED": 1
+      },
+      "documents": [
+        {
+          "parse_status": "EMPTY_TEXT",
+          "raw_extracted": 0,
+          "goods_accepted": null,
+          "category_resolved": null,
+          "allowed_rejected": 0,
+          "persisted_created": 0,
+          "persisted_reused": 0,
+          "error": null
+        },
+        {
+          "parse_status": "PARSED",
+          "raw_extracted": 0,
+          "goods_accepted": null,
+          "category_resolved": null,
+          "allowed_rejected": 0,
+          "persisted_created": 0,
+          "persisted_reused": 0,
+          "error": null
+        }
+      ],
+      "bucket": "Z6_FULL_NORMALIZATION_NOT_ATTEMPTED"
+    },
+    {
+      "procurement_id": 6354,
+      "material_document_count": 3,
+      "local_document_count": 3,
+      "parse_attempted": true,
+      "embedded_extraction_attempted": true,
+      "raw_extracted_fact_count": 0,
+      "goods_gate_accepted_count": 0,
+      "category_resolved_count": 0,
+      "allowed_category_rejected_count": 0,
+      "persist_created_count": 0,
+      "persist_reused_count": 0,
+      "persistence_error": null,
+      "full_normalization_attempted": false,
+      "full_normalization_version": null,
+      "full_normalization_result": null,
+      "structured_estimate_rows": 0,
+      "post_parse_normalized_count": 0,
+      "parse_status_counts": {
+        "EMPTY_TEXT": 1,
+        "PARSED": 2
+      },
+      "documents": [
+        {
+          "parse_status": "EMPTY_TEXT",
+          "raw_extracted": 0,
+          "goods_accepted": null,
+          "category_resolved": null,
+          "allowed_rejected": 0,
+          "persisted_created": 0,
+          "persisted_reused": 0,
+          "error": null
+        },
+        {
+          "parse_status": "PARSED",
+          "raw_extracted": 0,
+          "goods_accepted": null,
+          "category_resolved": null,
+          "allowed_rejected": 0,
+          "persisted_created": 0,
+          "persisted_reused": 0,
+          "error": null
+        },
+        {
+          "parse_status": "PARSED",
+          "raw_extracted": 0,
+          "goods_accepted": null,
+          "category_resolved": null,
+          "allowed_rejected": 0,
+          "persisted_created": 0,
+          "persisted_reused": 0,
+          "error": null
+        }
+      ],
+      "bucket": "Z6_FULL_NORMALIZATION_NOT_ATTEMPTED"
+    },
+    {
+      "procurement_id": 9659,
+      "material_document_count": 2,
+      "local_document_count": 2,
+      "parse_attempted": true,
+      "embedded_extraction_attempted": true,
+      "raw_extracted_fact_count": 0,
+      "goods_gate_accepted_count": 0,
+      "category_resolved_count": 0,
+      "allowed_category_rejected_count": 0,
+      "persist_created_count": 0,
+      "persist_reused_count": 0,
+      "persistence_error": null,
+      "full_normalization_attempted": false,
+      "full_normalization_version": null,
+      "full_normalization_result": null,
+      "structured_estimate_rows": 0,
+      "post_parse_normalized_count": 0,
+      "parse_status_counts": {
+        "PARSED": 2
+      },
+      "documents": [
+        {
+          "parse_status": "PARSED",
+          "raw_extracted": 0,
+          "goods_accepted": null,
+          "category_resolved": null,
+          "allowed_rejected": 0,
+          "persisted_created": 0,
+          "persisted_reused": 0,
+          "error": null
+        },
+        {
+          "parse_status": "PARSED",
+          "raw_extracted": 0,
+          "goods_accepted": null,
+          "category_resolved": null,
+          "allowed_rejected": 0,
+          "persisted_created": 0,
+          "persisted_reused": 0,
+          "error": null
+        }
+      ],
+      "bucket": "Z6_FULL_NORMALIZATION_NOT_ATTEMPTED"
+    },
+    {
+      "procurement_id": 9994,
+      "material_document_count": 2,
+      "local_document_count": 2,
+      "parse_attempted": true,
+      "embedded_extraction_attempted": true,
+      "raw_extracted_fact_count": 0,
+      "goods_gate_accepted_count": 0,
+      "category_resolved_count": 0,
+      "allowed_category_rejected_count": 0,
+      "persist_created_count": 0,
+      "persist_reused_count": 0,
+      "persistence_error": null,
+      "full_normalization_attempted": false,
+      "full_normalization_version": null,
+      "full_normalization_result": null,
+      "structured_estimate_rows": 0,
+      "post_parse_normalized_count": 0,
+      "parse_status_counts": {
+        "EMPTY_TEXT": 1,
+        "PARSED": 1
+      },
+      "documents": [
+        {
+          "parse_status": "EMPTY_TEXT",
+          "raw_extracted": 0,
+          "goods_accepted": null,
+          "category_resolved": null,
+          "allowed_rejected": 0,
+          "persisted_created": 0,
+          "persisted_reused": 0,
+          "error": null
+        },
+        {
+          "parse_status": "PARSED",
+          "raw_extracted": 0,
+          "goods_accepted": null,
+          "category_resolved": null,
+          "allowed_rejected": 0,
+          "persisted_created": 0,
+          "persisted_reused": 0,
+          "error": null
+        }
+      ],
+      "bucket": "Z6_FULL_NORMALIZATION_NOT_ATTEMPTED"
+    },
+    {
+      "procurement_id": 11013,
+      "material_document_count": 8,
+      "local_document_count": 8,
+      "parse_attempted": true,
+      "embedded_extraction_attempted": true,
+      "raw_extracted_fact_count": 0,
+      "goods_gate_accepted_count": 0,
+      "category_resolved_count": 0,
+      "allowed_category_rejected_count": 0,
+      "persist_created_count": 0,
+      "persist_reused_count": 0,
+      "persistence_error": null,
+      "full_normalization_attempted": false,
+      "full_normalization_version": null,
+      "full_normalization_result": null,
+      "structured_estimate_rows": 0,
+      "post_parse_normalized_count": 0,
+      "parse_status_counts": {
+        "EMPTY_TEXT": 5,
+        "PARSED": 3
+      },
+      "documents": [
+        {
+          "parse_status": "EMPTY_TEXT",
+          "raw_extracted": 0,
+          "goods_accepted": null,
+          "category_resolved": null,
+          "allowed_rejected": 0,
+          "persisted_created": 0,
+          "persisted_reused": 0,
+          "error": null
+        },
+        {
+          "parse_status": "PARSED",
+          "raw_extracted": 0,
+          "goods_accepted": null,
+          "category_resolved": null,
+          "allowed_rejected": 0,
+          "persisted_created": 0,
+          "persisted_reused": 0,
+          "error": null
+        },
+        {
+          "parse_status": "EMPTY_TEXT",
+          "raw_extracted": 0,
+          "goods_accepted": null,
+          "category_resolved": null,
+          "allowed_rejected": 0,
+          "persisted_created": 0,
+          "persisted_reused": 0,
+          "error": null
+        },
+        {
+          "parse_status": "EMPTY_TEXT",
+          "raw_extracted": 0,
+          "goods_accepted": null,
+          "category_resolved": null,
+          "allowed_rejected": 0,
+          "persisted_created": 0,
+          "persisted_reused": 0,
+          "error": null
+        },
+        {
+          "parse_status": "PARSED",
+          "raw_extracted": 0,
+          "goods_accepted": null,
+          "category_resolved": null,
+          "allowed_rejected": 0,
+          "persisted_created": 0,
+          "persisted_reused": 0,
+          "error": null
+        },
+        {
+          "parse_status": "PARSED",
+          "raw_extracted": 0,
+          "goods_accepted": null,
+          "category_resolved": null,
+          "allowed_rejected": 0,
+          "persisted_created": 0,
+          "persisted_reused": 0,
+          "error": null
+        },
+        {
+          "parse_status": "EMPTY_TEXT",
+          "raw_extracted": 0,
+          "goods_accepted": null,
+          "category_resolved": null,
+          "allowed_rejected": 0,
+          "persisted_created": 0,
+          "persisted_reused": 0,
+          "error": null
+        },
+        {
+          "parse_status": "EMPTY_TEXT",
+          "raw_extracted": 0,
+          "goods_accepted": null,
+          "category_resolved": null,
+          "allowed_rejected": 0,
+          "persisted_created": 0,
+          "persisted_reused": 0,
+          "error": null
+        }
+      ],
+      "bucket": "Z6_FULL_NORMALIZATION_NOT_ATTEMPTED"
+    },
+    {
+      "procurement_id": 11459,
+      "material_document_count": 3,
+      "local_document_count": 3,
+      "parse_attempted": true,
+      "embedded_extraction_attempted": true,
+      "raw_extracted_fact_count": 0,
+      "goods_gate_accepted_count": 0,
+      "category_resolved_count": 0,
+      "allowed_category_rejected_count": 0,
+      "persist_created_count": 0,
+      "persist_reused_count": 0,
+      "persistence_error": null,
+      "full_normalization_attempted": false,
+      "full_normalization_version": null,
+      "full_normalization_result": null,
+      "structured_estimate_rows": 0,
+      "post_parse_normalized_count": 0,
+      "parse_status_counts": {
+        "PARSED": 3
+      },
+      "documents": [
+        {
+          "parse_status": "PARSED",
+          "raw_extracted": 0,
+          "goods_accepted": null,
+          "category_resolved": null,
+          "allowed_rejected": 0,
+          "persisted_created": 0,
+          "persisted_reused": 0,
+          "error": null
+        },
+        {
+          "parse_status": "PARSED",
+          "raw_extracted": 0,
+          "goods_accepted": null,
+          "category_resolved": null,
+          "allowed_rejected": 0,
+          "persisted_created": 0,
+          "persisted_reused": 0,
+          "error": null
+        },
+        {
+          "parse_status": "PARSED",
+          "raw_extracted": 0,
+          "goods_accepted": null,
+          "category_resolved": null,
+          "allowed_rejected": 0,
+          "persisted_created": 0,
+          "persisted_reused": 0,
+          "error": null
+        }
+      ],
+      "bucket": "Z6_FULL_NORMALIZATION_NOT_ATTEMPTED"
+    },
+    {
+      "procurement_id": 12077,
+      "material_document_count": 2,
+      "local_document_count": 2,
+      "parse_attempted": true,
+      "embedded_extraction_attempted": true,
+      "raw_extracted_fact_count": 0,
+      "goods_gate_accepted_count": 0,
+      "category_resolved_count": 0,
+      "allowed_category_rejected_count": 0,
+      "persist_created_count": 0,
+      "persist_reused_count": 0,
+      "persistence_error": null,
+      "full_normalization_attempted": false,
+      "full_normalization_version": null,
+      "full_normalization_result": null,
+      "structured_estimate_rows": 0,
+      "post_parse_normalized_count": 0,
+      "parse_status_counts": {
+        "PARSED": 2
+      },
+      "documents": [
+        {
+          "parse_status": "PARSED",
+          "raw_extracted": 0,
+          "goods_accepted": null,
+          "category_resolved": null,
+          "allowed_rejected": 0,
+          "persisted_created": 0,
+          "persisted_reused": 0,
+          "error": null
+        },
+        {
+          "parse_status": "PARSED",
+          "raw_extracted": 0,
+          "goods_accepted": null,
+          "category_resolved": null,
+          "allowed_rejected": 0,
+          "persisted_created": 0,
+          "persisted_reused": 0,
+          "error": null
+        }
+      ],
+      "bucket": "Z6_FULL_NORMALIZATION_NOT_ATTEMPTED"
+    },
+    {
+      "procurement_id": 14568,
+      "material_document_count": 5,
+      "local_document_count": 5,
+      "parse_attempted": true,
+      "embedded_extraction_attempted": true,
+      "raw_extracted_fact_count": 0,
+      "goods_gate_accepted_count": 0,
+      "category_resolved_count": 0,
+      "allowed_category_rejected_count": 0,
+      "persist_created_count": 0,
+      "persist_reused_count": 0,
+      "persistence_error": null,
+      "full_normalization_attempted": false,
+      "full_normalization_version": null,
+      "full_normalization_result": null,
+      "structured_estimate_rows": 0,
+      "post_parse_normalized_count": 0,
+      "parse_status_counts": {
+        "PARSED": 5
+      },
+      "documents": [
+        {
+          "parse_status": "PARSED",
+          "raw_extracted": 0,
+          "goods_accepted": null,
+          "category_resolved": null,
+          "allowed_rejected": 0,
+          "persisted_created": 0,
+          "persisted_reused": 0,
+          "error": null
+        },
+        {
+          "parse_status": "PARSED",
+          "raw_extracted": 0,
+          "goods_accepted": null,
+          "category_resolved": null,
+          "allowed_rejected": 0,
+          "persisted_created": 0,
+          "persisted_reused": 0,
+          "error": null
+        },
+        {
+          "parse_status": "PARSED",
+          "raw_extracted": 0,
+          "goods_accepted": null,
+          "category_resolved": null,
+          "allowed_rejected": 0,
+          "persisted_created": 0,
+          "persisted_reused": 0,
+          "error": null
+        },
+        {
+          "parse_status": "PARSED",
+          "raw_extracted": 0,
+          "goods_accepted": null,
+          "category_resolved": null,
+          "allowed_rejected": 0,
+          "persisted_created": 0,
+          "persisted_reused": 0,
+          "error": null
+        },
+        {
+          "parse_status": "PARSED",
+          "raw_extracted": 0,
+          "goods_accepted": null,
+          "category_resolved": null,
+          "allowed_rejected": 0,
+          "persisted_created": 0,
+          "persisted_reused": 0,
+          "error": null
+        }
+      ],
+      "bucket": "Z6_FULL_NORMALIZATION_NOT_ATTEMPTED"
+    },
+    {
+      "procurement_id": 14591,
+      "material_document_count": 3,
+      "local_document_count": 3,
+      "parse_attempted": true,
+      "embedded_extraction_attempted": true,
+      "raw_extracted_fact_count": 0,
+      "goods_gate_accepted_count": 0,
+      "category_resolved_count": 0,
+      "allowed_category_rejected_count": 0,
+      "persist_created_count": 0,
+      "persist_reused_count": 0,
+      "persistence_error": null,
+      "full_normalization_attempted": false,
+      "full_normalization_version": null,
+      "full_normalization_result": null,
+      "structured_estimate_rows": 0,
+      "post_parse_normalized_count": 0,
+      "parse_status_counts": {
+        "PARSED": 3
+      },
+      "documents": [
+        {
+          "parse_status": "PARSED",
+          "raw_extracted": 0,
+          "goods_accepted": null,
+          "category_resolved": null,
+          "allowed_rejected": 0,
+          "persisted_created": 0,
+          "persisted_reused": 0,
+          "error": null
+        },
+        {
+          "parse_status": "PARSED",
+          "raw_extracted": 0,
+          "goods_accepted": null,
+          "category_resolved": null,
+          "allowed_rejected": 0,
+          "persisted_created": 0,
+          "persisted_reused": 0,
+          "error": null
+        },
+        {
+          "parse_status": "PARSED",
+          "raw_extracted": 0,
+          "goods_accepted": null,
+          "category_resolved": null,
+          "allowed_rejected": 0,
+          "persisted_created": 0,
+          "persisted_reused": 0,
+          "error": null
+        }
+      ],
+      "bucket": "Z6_FULL_NORMALIZATION_NOT_ATTEMPTED"
+    },
+    {
+      "procurement_id": 16556,
+      "material_document_count": 2,
+      "local_document_count": 2,
+      "parse_attempted": true,
+      "embedded_extraction_attempted": true,
+      "raw_extracted_fact_count": 0,
+      "goods_gate_accepted_count": 0,
+      "category_resolved_count": 0,
+      "allowed_category_rejected_count": 0,
+      "persist_created_count": 0,
+      "persist_reused_count": 0,
+      "persistence_error": null,
+      "full_normalization_attempted": false,
+      "full_normalization_version": null,
+      "full_normalization_result": null,
+      "structured_estimate_rows": 0,
+      "post_parse_normalized_count": 0,
+      "parse_status_counts": {
+        "PARSED": 2
+      },
+      "documents": [
+        {
+          "parse_status": "PARSED",
+          "raw_extracted": 0,
+          "goods_accepted": null,
+          "category_resolved": null,
+          "allowed_rejected": 0,
+          "persisted_created": 0,
+          "persisted_reused": 0,
+          "error": null
+        },
+        {
+          "parse_status": "PARSED",
+          "raw_extracted": 0,
+          "goods_accepted": null,
+          "category_resolved": null,
+          "allowed_rejected": 0,
+          "persisted_created": 0,
+          "persisted_reused": 0,
+          "error": null
+        }
+      ],
+      "bucket": "Z6_FULL_NORMALIZATION_NOT_ATTEMPTED"
+    },
+    {
+      "procurement_id": 22877,
+      "material_document_count": 2,
+      "local_document_count": 2,
+      "parse_attempted": true,
+      "embedded_extraction_attempted": true,
+      "raw_extracted_fact_count": 0,
+      "goods_gate_accepted_count": 0,
+      "category_resolved_count": 0,
+      "allowed_category_rejected_count": 0,
+      "persist_created_count": 0,
+      "persist_reused_count": 0,
+      "persistence_error": null,
+      "full_normalization_attempted": false,
+      "full_normalization_version": null,
+      "full_normalization_result": null,
+      "structured_estimate_rows": 0,
+      "post_parse_normalized_count": 0,
+      "parse_status_counts": {
+        "PARSED": 2
+      },
+      "documents": [
+        {
+          "parse_status": "PARSED",
+          "raw_extracted": 0,
+          "goods_accepted": null,
+          "category_resolved": null,
+          "allowed_rejected": 0,
+          "persisted_created": 0,
+          "persisted_reused": 0,
+          "error": null
+        },
+        {
+          "parse_status": "PARSED",
+          "raw_extracted": 0,
+          "goods_accepted": null,
+          "category_resolved": null,
+          "allowed_rejected": 0,
+          "persisted_created": 0,
+          "persisted_reused": 0,
+          "error": null
+        }
+      ],
+      "bucket": "Z6_FULL_NORMALIZATION_NOT_ATTEMPTED"
+    },
+    {
+      "procurement_id": 25006,
+      "material_document_count": 2,
+      "local_document_count": 2,
+      "parse_attempted": true,
+      "embedded_extraction_attempted": true,
+      "raw_extracted_fact_count": 0,
+      "goods_gate_accepted_count": 0,
+      "category_resolved_count": 0,
+      "allowed_category_rejected_count": 0,
+      "persist_created_count": 0,
+      "persist_reused_count": 0,
+      "persistence_error": null,
+      "full_normalization_attempted": false,
+      "full_normalization_version": null,
+      "full_normalization_result": null,
+      "structured_estimate_rows": 0,
+      "post_parse_normalized_count": 0,
+      "parse_status_counts": {
+        "PARSED": 1,
+        "EMPTY_TEXT": 1
+      },
+      "documents": [
+        {
+          "parse_status": "PARSED",
+          "raw_extracted": 0,
+          "goods_accepted": null,
+          "category_resolved": null,
+          "allowed_rejected": 0,
+          "persisted_created": 0,
+          "persisted_reused": 0,
+          "error": null
+        },
+        {
+          "parse_status": "EMPTY_TEXT",
+          "raw_extracted": 0,
+          "goods_accepted": null,
+          "category_resolved": null,
+          "allowed_rejected": 0,
+          "persisted_created": 0,
+          "persisted_reused": 0,
+          "error": null
+        }
+      ],
+      "bucket": "Z6_FULL_NORMALIZATION_NOT_ATTEMPTED"
+    },
+    {
+      "procurement_id": 25063,
+      "material_document_count": 5,
+      "local_document_count": 5,
+      "parse_attempted": true,
+      "embedded_extraction_attempted": true,
+      "raw_extracted_fact_count": 0,
+      "goods_gate_accepted_count": 0,
+      "category_resolved_count": 0,
+      "allowed_category_rejected_count": 0,
+      "persist_created_count": 0,
+      "persist_reused_count": 0,
+      "persistence_error": null,
+      "full_normalization_attempted": false,
+      "full_normalization_version": null,
+      "full_normalization_result": null,
+      "structured_estimate_rows": 0,
+      "post_parse_normalized_count": 0,
+      "parse_status_counts": {
+        "PARSED": 4,
+        "EMPTY_TEXT": 1
+      },
+      "documents": [
+        {
+          "parse_status": "PARSED",
+          "raw_extracted": 0,
+          "goods_accepted": null,
+          "category_resolved": null,
+          "allowed_rejected": 0,
+          "persisted_created": 0,
+          "persisted_reused": 0,
+          "error": null
+        },
+        {
+          "parse_status": "PARSED",
+          "raw_extracted": 0,
+          "goods_accepted": null,
+          "category_resolved": null,
+          "allowed_rejected": 0,
+          "persisted_created": 0,
+          "persisted_reused": 0,
+          "error": null
+        },
+        {
+          "parse_status": "PARSED",
+          "raw_extracted": 0,
+          "goods_accepted": null,
+          "category_resolved": null,
+          "allowed_rejected": 0,
+          "persisted_created": 0,
+          "persisted_reused": 0,
+          "error": null
+        },
+        {
+          "parse_status": "PARSED",
+          "raw_extracted": 0,
+          "goods_accepted": null,
+          "category_resolved": null,
+          "allowed_rejected": 0,
+          "persisted_created": 0,
+          "persisted_reused": 0,
+          "error": null
+        },
+        {
+          "parse_status": "EMPTY_TEXT",
+          "raw_extracted": 0,
+          "goods_accepted": null,
+          "category_resolved": null,
+          "allowed_rejected": 0,
+          "persisted_created": 0,
+          "persisted_reused": 0,
+          "error": null
+        }
+      ],
+      "bucket": "Z6_FULL_NORMALIZATION_NOT_ATTEMPTED"
+    },
+    {
+      "procurement_id": 25064,
+      "material_document_count": 4,
+      "local_document_count": 4,
+      "parse_attempted": true,
+      "embedded_extraction_attempted": true,
+      "raw_extracted_fact_count": 0,
+      "goods_gate_accepted_count": 0,
+      "category_resolved_count": 0,
+      "allowed_category_rejected_count": 0,
+      "persist_created_count": 0,
+      "persist_reused_count": 0,
+      "persistence_error": null,
+      "full_normalization_attempted": false,
+      "full_normalization_version": null,
+      "full_normalization_result": null,
+      "structured_estimate_rows": 0,
+      "post_parse_normalized_count": 0,
+      "parse_status_counts": {
+        "PARSED": 3,
+        "EMPTY_TEXT": 1
+      },
+      "documents": [
+        {
+          "parse_status": "PARSED",
+          "raw_extracted": 0,
+          "goods_accepted": null,
+          "category_resolved": null,
+          "allowed_rejected": 0,
+          "persisted_created": 0,
+          "persisted_reused": 0,
+          "error": null
+        },
+        {
+          "parse_status": "PARSED",
+          "raw_extracted": 0,
+          "goods_accepted": null,
+          "category_resolved": null,
+          "allowed_rejected": 0,
+          "persisted_created": 0,
+          "persisted_reused": 0,
+          "error": null
+        },
+        {
+          "parse_status": "PARSED",
+          "raw_extracted": 0,
+          "goods_accepted": null,
+          "category_resolved": null,
+          "allowed_rejected": 0,
+          "persisted_created": 0,
+          "persisted_reused": 0,
+          "error": null
+        },
+        {
+          "parse_status": "EMPTY_TEXT",
+          "raw_extracted": 0,
+          "goods_accepted": null,
+          "category_resolved": null,
+          "allowed_rejected": 0,
+          "persisted_created": 0,
+          "persisted_reused": 0,
+          "error": null
+        }
+      ],
+      "bucket": "Z6_FULL_NORMALIZATION_NOT_ATTEMPTED"
+    },
+    {
+      "procurement_id": 26129,
+      "material_document_count": 3,
+      "local_document_count": 3,
+      "parse_attempted": true,
+      "embedded_extraction_attempted": true,
+      "raw_extracted_fact_count": 0,
+      "goods_gate_accepted_count": 0,
+      "category_resolved_count": 0,
+      "allowed_category_rejected_count": 0,
+      "persist_created_count": 0,
+      "persist_reused_count": 0,
+      "persistence_error": null,
+      "full_normalization_attempted": false,
+      "full_normalization_version": null,
+      "full_normalization_result": null,
+      "structured_estimate_rows": 0,
+      "post_parse_normalized_count": 0,
+      "parse_status_counts": {
+        "PARSED": 3
+      },
+      "documents": [
+        {
+          "parse_status": "PARSED",
+          "raw_extracted": 0,
+          "goods_accepted": null,
+          "category_resolved": null,
+          "allowed_rejected": 0,
+          "persisted_created": 0,
+          "persisted_reused": 0,
+          "error": null
+        },
+        {
+          "parse_status": "PARSED",
+          "raw_extracted": 0,
+          "goods_accepted": null,
+          "category_resolved": null,
+          "allowed_rejected": 0,
+          "persisted_created": 0,
+          "persisted_reused": 0,
+          "error": null
+        },
+        {
+          "parse_status": "PARSED",
+          "raw_extracted": 0,
+          "goods_accepted": null,
+          "category_resolved": null,
+          "allowed_rejected": 0,
+          "persisted_created": 0,
+          "persisted_reused": 0,
+          "error": null
+        }
+      ],
+      "bucket": "Z6_FULL_NORMALIZATION_NOT_ATTEMPTED"
+    },
+    {
+      "procurement_id": 26131,
+      "material_document_count": 3,
+      "local_document_count": 3,
+      "parse_attempted": true,
+      "embedded_extraction_attempted": true,
+      "raw_extracted_fact_count": 0,
+      "goods_gate_accepted_count": 0,
+      "category_resolved_count": 0,
+      "allowed_category_rejected_count": 0,
+      "persist_created_count": 0,
+      "persist_reused_count": 0,
+      "persistence_error": null,
+      "full_normalization_attempted": false,
+      "full_normalization_version": null,
+      "full_normalization_result": null,
+      "structured_estimate_rows": 0,
+      "post_parse_normalized_count": 0,
+      "parse_status_counts": {
+        "PARSED": 3
+      },
+      "documents": [
+        {
+          "parse_status": "PARSED",
+          "raw_extracted": 0,
+          "goods_accepted": null,
+          "category_resolved": null,
+          "allowed_rejected": 0,
+          "persisted_created": 0,
+          "persisted_reused": 0,
+          "error": null
+        },
+        {
+          "parse_status": "PARSED",
+          "raw_extracted": 0,
+          "goods_accepted": null,
+          "category_resolved": null,
+          "allowed_rejected": 0,
+          "persisted_created": 0,
+          "persisted_reused": 0,
+          "error": null
+        },
+        {
+          "parse_status": "PARSED",
+          "raw_extracted": 0,
+          "goods_accepted": null,
+          "category_resolved": null,
+          "allowed_rejected": 0,
+          "persisted_created": 0,
+          "persisted_reused": 0,
+          "error": null
+        }
+      ],
+      "bucket": "Z6_FULL_NORMALIZATION_NOT_ATTEMPTED"
+    },
+    {
+      "procurement_id": 29301,
+      "material_document_count": 3,
+      "local_document_count": 3,
+      "parse_attempted": true,
+      "embedded_extraction_attempted": true,
+      "raw_extracted_fact_count": 0,
+      "goods_gate_accepted_count": 0,
+      "category_resolved_count": 0,
+      "allowed_category_rejected_count": 0,
+      "persist_created_count": 0,
+      "persist_reused_count": 0,
+      "persistence_error": null,
+      "full_normalization_attempted": false,
+      "full_normalization_version": null,
+      "full_normalization_result": null,
+      "structured_estimate_rows": 0,
+      "post_parse_normalized_count": 0,
+      "parse_status_counts": {
+        "EMPTY_TEXT": 1,
+        "PARSED": 2
+      },
+      "documents": [
+        {
+          "parse_status": "EMPTY_TEXT",
+          "raw_extracted": 0,
+          "goods_accepted": null,
+          "category_resolved": null,
+          "allowed_rejected": 0,
+          "persisted_created": 0,
+          "persisted_reused": 0,
+          "error": null
+        },
+        {
+          "parse_status": "PARSED",
+          "raw_extracted": 0,
+          "goods_accepted": null,
+          "category_resolved": null,
+          "allowed_rejected": 0,
+          "persisted_created": 0,
+          "persisted_reused": 0,
+          "error": null
+        },
+        {
+          "parse_status": "PARSED",
+          "raw_extracted": 0,
+          "goods_accepted": null,
+          "category_resolved": null,
+          "allowed_rejected": 0,
+          "persisted_created": 0,
+          "persisted_reused": 0,
+          "error": null
+        }
+      ],
+      "bucket": "Z6_FULL_NORMALIZATION_NOT_ATTEMPTED"
+    },
+    {
+      "procurement_id": 29993,
+      "material_document_count": 5,
+      "local_document_count": 5,
+      "parse_attempted": true,
+      "embedded_extraction_attempted": true,
+      "raw_extracted_fact_count": 0,
+      "goods_gate_accepted_count": 0,
+      "category_resolved_count": 0,
+      "allowed_category_rejected_count": 0,
+      "persist_created_count": 0,
+      "persist_reused_count": 0,
+      "persistence_error": null,
+      "full_normalization_attempted": false,
+      "full_normalization_version": null,
+      "full_normalization_result": null,
+      "structured_estimate_rows": 0,
+      "post_parse_normalized_count": 0,
+      "parse_status_counts": {
+        "PARSED": 2,
+        "EMPTY_TEXT": 3
+      },
+      "documents": [
+        {
+          "parse_status": "PARSED",
+          "raw_extracted": 0,
+          "goods_accepted": null,
+          "category_resolved": null,
+          "allowed_rejected": 0,
+          "persisted_created": 0,
+          "persisted_reused": 0,
+          "error": null
+        },
+        {
+          "parse_status": "PARSED",
+          "raw_extracted": 0,
+          "goods_accepted": null,
+          "category_resolved": null,
+          "allowed_rejected": 0,
+          "persisted_created": 0,
+          "persisted_reused": 0,
+          "error": null
+        },
+        {
+          "parse_status": "EMPTY_TEXT",
+          "raw_extracted": 0,
+          "goods_accepted": null,
+          "category_resolved": null,
+          "allowed_rejected": 0,
+          "persisted_created": 0,
+          "persisted_reused": 0,
+          "error": null
+        },
+        {
+          "parse_status": "EMPTY_TEXT",
+          "raw_extracted": 0,
+          "goods_accepted": null,
+          "category_resolved": null,
+          "allowed_rejected": 0,
+          "persisted_created": 0,
+          "persisted_reused": 0,
+          "error": null
+        },
+        {
+          "parse_status": "EMPTY_TEXT",
+          "raw_extracted": 0,
+          "goods_accepted": null,
+          "category_resolved": null,
+          "allowed_rejected": 0,
+          "persisted_created": 0,
+          "persisted_reused": 0,
+          "error": null
+        }
+      ],
+      "bucket": "Z6_FULL_NORMALIZATION_NOT_ATTEMPTED"
+    },
+    {
+      "procurement_id": 32784,
+      "material_document_count": 3,
+      "local_document_count": 3,
+      "parse_attempted": true,
+      "embedded_extraction_attempted": true,
+      "raw_extracted_fact_count": 0,
+      "goods_gate_accepted_count": 0,
+      "category_resolved_count": 0,
+      "allowed_category_rejected_count": 0,
+      "persist_created_count": 0,
+      "persist_reused_count": 0,
+      "persistence_error": null,
+      "full_normalization_attempted": false,
+      "full_normalization_version": null,
+      "full_normalization_result": null,
+      "structured_estimate_rows": 0,
+      "post_parse_normalized_count": 0,
+      "parse_status_counts": {
+        "PARSED": 1,
+        "EMPTY_TEXT": 2
+      },
+      "documents": [
+        {
+          "parse_status": "PARSED",
+          "raw_extracted": 0,
+          "goods_accepted": null,
+          "category_resolved": null,
+          "allowed_rejected": 0,
+          "persisted_created": 0,
+          "persisted_reused": 0,
+          "error": null
+        },
+        {
+          "parse_status": "EMPTY_TEXT",
+          "raw_extracted": 0,
+          "goods_accepted": null,
+          "category_resolved": null,
+          "allowed_rejected": 0,
+          "persisted_created": 0,
+          "persisted_reused": 0,
+          "error": null
+        },
+        {
+          "parse_status": "EMPTY_TEXT",
+          "raw_extracted": 0,
+          "goods_accepted": null,
+          "category_resolved": null,
+          "allowed_rejected": 0,
+          "persisted_created": 0,
+          "persisted_reused": 0,
+          "error": null
+        }
+      ],
+      "bucket": "Z6_FULL_NORMALIZATION_NOT_ATTEMPTED"
+    },
+    {
+      "procurement_id": 35037,
+      "material_document_count": 3,
+      "local_document_count": 3,
+      "parse_attempted": true,
+      "embedded_extraction_attempted": true,
+      "raw_extracted_fact_count": 0,
+      "goods_gate_accepted_count": 0,
+      "category_resolved_count": 0,
+      "allowed_category_rejected_count": 0,
+      "persist_created_count": 0,
+      "persist_reused_count": 0,
+      "persistence_error": null,
+      "full_normalization_attempted": false,
+      "full_normalization_version": null,
+      "full_normalization_result": null,
+      "structured_estimate_rows": 0,
+      "post_parse_normalized_count": 0,
+      "parse_status_counts": {
+        "PARSED": 3
+      },
+      "documents": [
+        {
+          "parse_status": "PARSED",
+          "raw_extracted": 0,
+          "goods_accepted": null,
+          "category_resolved": null,
+          "allowed_rejected": 0,
+          "persisted_created": 0,
+          "persisted_reused": 0,
+          "error": null
+        },
+        {
+          "parse_status": "PARSED",
+          "raw_extracted": 0,
+          "goods_accepted": null,
+          "category_resolved": null,
+          "allowed_rejected": 0,
+          "persisted_created": 0,
+          "persisted_reused": 0,
+          "error": null
+        },
+        {
+          "parse_status": "PARSED",
+          "raw_extracted": 0,
+          "goods_accepted": null,
+          "category_resolved": null,
+          "allowed_rejected": 0,
+          "persisted_created": 0,
+          "persisted_reused": 0,
+          "error": null
+        }
+      ],
+      "bucket": "Z6_FULL_NORMALIZATION_NOT_ATTEMPTED"
+    },
+    {
+      "procurement_id": 35038,
+      "material_document_count": 1,
+      "local_document_count": 1,
+      "parse_attempted": true,
+      "embedded_extraction_attempted": true,
+      "raw_extracted_fact_count": 0,
+      "goods_gate_accepted_count": 0,
+      "category_resolved_count": 0,
+      "allowed_category_rejected_count": 0,
+      "persist_created_count": 0,
+      "persist_reused_count": 0,
+      "persistence_error": null,
+      "full_normalization_attempted": false,
+      "full_normalization_version": null,
+      "full_normalization_result": null,
+      "structured_estimate_rows": 0,
+      "post_parse_normalized_count": 0,
+      "parse_status_counts": {
+        "PARSED": 1
+      },
+      "documents": [
+        {
+          "parse_status": "PARSED",
+          "raw_extracted": 0,
+          "goods_accepted": null,
+          "category_resolved": null,
+          "allowed_rejected": 0,
+          "persisted_created": 0,
+          "persisted_reused": 0,
+          "error": null
+        }
+      ],
+      "bucket": "Z6_FULL_NORMALIZATION_NOT_ATTEMPTED"
+    },
+    {
+      "procurement_id": 35039,
+      "material_document_count": 4,
+      "local_document_count": 4,
+      "parse_attempted": true,
+      "embedded_extraction_attempted": true,
+      "raw_extracted_fact_count": 0,
+      "goods_gate_accepted_count": 0,
+      "category_resolved_count": 0,
+      "allowed_category_rejected_count": 0,
+      "persist_created_count": 0,
+      "persist_reused_count": 0,
+      "persistence_error": null,
+      "full_normalization_attempted": false,
+      "full_normalization_version": null,
+      "full_normalization_result": null,
+      "structured_estimate_rows": 0,
+      "post_parse_normalized_count": 0,
+      "parse_status_counts": {
+        "PARSED": 4
+      },
+      "documents": [
+        {
+          "parse_status": "PARSED",
+          "raw_extracted": 0,
+          "goods_accepted": null,
+          "category_resolved": null,
+          "allowed_rejected": 0,
+          "persisted_created": 0,
+          "persisted_reused": 0,
+          "error": null
+        },
+        {
+          "parse_status": "PARSED",
+          "raw_extracted": 0,
+          "goods_accepted": null,
+          "category_resolved": null,
+          "allowed_rejected": 0,
+          "persisted_created": 0,
+          "persisted_reused": 0,
+          "error": null
+        },
+        {
+          "parse_status": "PARSED",
+          "raw_extracted": 0,
+          "goods_accepted": null,
+          "category_resolved": null,
+          "allowed_rejected": 0,
+          "persisted_created": 0,
+          "persisted_reused": 0,
+          "error": null
+        },
+        {
+          "parse_status": "PARSED",
+          "raw_extracted": 0,
+          "goods_accepted": null,
+          "category_resolved": null,
+          "allowed_rejected": 0,
+          "persisted_created": 0,
+          "persisted_reused": 0,
+          "error": null
+        }
+      ],
+      "bucket": "Z6_FULL_NORMALIZATION_NOT_ATTEMPTED"
+    },
+    {
+      "procurement_id": 35442,
+      "material_document_count": 6,
+      "local_document_count": 6,
+      "parse_attempted": true,
+      "embedded_extraction_attempted": true,
+      "raw_extracted_fact_count": 0,
+      "goods_gate_accepted_count": 0,
+      "category_resolved_count": 0,
+      "allowed_category_rejected_count": 0,
+      "persist_created_count": 0,
+      "persist_reused_count": 0,
+      "persistence_error": null,
+      "full_normalization_attempted": false,
+      "full_normalization_version": null,
+      "full_normalization_result": null,
+      "structured_estimate_rows": 0,
+      "post_parse_normalized_count": 0,
+      "parse_status_counts": {
+        "EMPTY_TEXT": 2,
+        "PARSED": 4
+      },
+      "documents": [
+        {
+          "parse_status": "EMPTY_TEXT",
+          "raw_extracted": 0,
+          "goods_accepted": null,
+          "category_resolved": null,
+          "allowed_rejected": 0,
+          "persisted_created": 0,
+          "persisted_reused": 0,
+          "error": null
+        },
+        {
+          "parse_status": "PARSED",
+          "raw_extracted": 0,
+          "goods_accepted": null,
+          "category_resolved": null,
+          "allowed_rejected": 0,
+          "persisted_created": 0,
+          "persisted_reused": 0,
+          "error": null
+        },
+        {
+          "parse_status": "EMPTY_TEXT",
+          "raw_extracted": 0,
+          "goods_accepted": null,
+          "category_resolved": null,
+          "allowed_rejected": 0,
+          "persisted_created": 0,
+          "persisted_reused": 0,
+          "error": null
+        },
+        {
+          "parse_status": "PARSED",
+          "raw_extracted": 0,
+          "goods_accepted": null,
+          "category_resolved": null,
+          "allowed_rejected": 0,
+          "persisted_created": 0,
+          "persisted_reused": 0,
+          "error": null
+        },
+        {
+          "parse_status": "PARSED",
+          "raw_extracted": 0,
+          "goods_accepted": null,
+          "category_resolved": null,
+          "allowed_rejected": 0,
+          "persisted_created": 0,
+          "persisted_reused": 0,
+          "error": null
+        },
+        {
+          "parse_status": "PARSED",
+          "raw_extracted": 0,
+          "goods_accepted": null,
+          "category_resolved": null,
+          "allowed_rejected": 0,
+          "persisted_created": 0,
+          "persisted_reused": 0,
+          "error": null
+        }
+      ],
+      "bucket": "Z6_FULL_NORMALIZATION_NOT_ATTEMPTED"
+    },
+    {
+      "procurement_id": 35992,
+      "material_document_count": 2,
+      "local_document_count": 2,
+      "parse_attempted": true,
+      "embedded_extraction_attempted": true,
+      "raw_extracted_fact_count": 0,
+      "goods_gate_accepted_count": 0,
+      "category_resolved_count": 0,
+      "allowed_category_rejected_count": 0,
+      "persist_created_count": 0,
+      "persist_reused_count": 0,
+      "persistence_error": null,
+      "full_normalization_attempted": false,
+      "full_normalization_version": null,
+      "full_normalization_result": null,
+      "structured_estimate_rows": 0,
+      "post_parse_normalized_count": 0,
+      "parse_status_counts": {
+        "PARSED": 2
+      },
+      "documents": [
+        {
+          "parse_status": "PARSED",
+          "raw_extracted": 0,
+          "goods_accepted": null,
+          "category_resolved": null,
+          "allowed_rejected": 0,
+          "persisted_created": 0,
+          "persisted_reused": 0,
+          "error": null
+        },
+        {
+          "parse_status": "PARSED",
+          "raw_extracted": 0,
+          "goods_accepted": null,
+          "category_resolved": null,
+          "allowed_rejected": 0,
+          "persisted_created": 0,
+          "persisted_reused": 0,
+          "error": null
+        }
+      ],
+      "bucket": "Z6_FULL_NORMALIZATION_NOT_ATTEMPTED"
+    },
+    {
+      "procurement_id": 37680,
+      "material_document_count": 4,
+      "local_document_count": 4,
+      "parse_attempted": true,
+      "embedded_extraction_attempted": true,
+      "raw_extracted_fact_count": 0,
+      "goods_gate_accepted_count": 0,
+      "category_resolved_count": 0,
+      "allowed_category_rejected_count": 0,
+      "persist_created_count": 0,
+      "persist_reused_count": 0,
+      "persistence_error": null,
+      "full_normalization_attempted": false,
+      "full_normalization_version": null,
+      "full_normalization_result": null,
+      "structured_estimate_rows": 0,
+      "post_parse_normalized_count": 0,
+      "parse_status_counts": {
+        "EMPTY_TEXT": 1,
+        "PARSED": 3
+      },
+      "documents": [
+        {
+          "parse_status": "EMPTY_TEXT",
+          "raw_extracted": 0,
+          "goods_accepted": null,
+          "category_resolved": null,
+          "allowed_rejected": 0,
+          "persisted_created": 0,
+          "persisted_reused": 0,
+          "error": null
+        },
+        {
+          "parse_status": "PARSED",
+          "raw_extracted": 0,
+          "goods_accepted": null,
+          "category_resolved": null,
+          "allowed_rejected": 0,
+          "persisted_created": 0,
+          "persisted_reused": 0,
+          "error": null
+        },
+        {
+          "parse_status": "PARSED",
+          "raw_extracted": 0,
+          "goods_accepted": null,
+          "category_resolved": null,
+          "allowed_rejected": 0,
+          "persisted_created": 0,
+          "persisted_reused": 0,
+          "error": null
+        },
+        {
+          "parse_status": "PARSED",
+          "raw_extracted": 0,
+          "goods_accepted": null,
+          "category_resolved": null,
+          "allowed_rejected": 0,
+          "persisted_created": 0,
+          "persisted_reused": 0,
+          "error": null
+        }
+      ],
+      "bucket": "Z6_FULL_NORMALIZATION_NOT_ATTEMPTED"
+    },
+    {
+      "procurement_id": 37822,
+      "material_document_count": 3,
+      "local_document_count": 3,
+      "parse_attempted": true,
+      "embedded_extraction_attempted": true,
+      "raw_extracted_fact_count": 0,
+      "goods_gate_accepted_count": 0,
+      "category_resolved_count": 0,
+      "allowed_category_rejected_count": 0,
+      "persist_created_count": 0,
+      "persist_reused_count": 0,
+      "persistence_error": null,
+      "full_normalization_attempted": false,
+      "full_normalization_version": null,
+      "full_normalization_result": null,
+      "structured_estimate_rows": 0,
+      "post_parse_normalized_count": 0,
+      "parse_status_counts": {
+        "PARSED": 3
+      },
+      "documents": [
+        {
+          "parse_status": "PARSED",
+          "raw_extracted": 0,
+          "goods_accepted": null,
+          "category_resolved": null,
+          "allowed_rejected": 0,
+          "persisted_created": 0,
+          "persisted_reused": 0,
+          "error": null
+        },
+        {
+          "parse_status": "PARSED",
+          "raw_extracted": 0,
+          "goods_accepted": null,
+          "category_resolved": null,
+          "allowed_rejected": 0,
+          "persisted_created": 0,
+          "persisted_reused": 0,
+          "error": null
+        },
+        {
+          "parse_status": "PARSED",
+          "raw_extracted": 0,
+          "goods_accepted": null,
+          "category_resolved": null,
+          "allowed_rejected": 0,
+          "persisted_created": 0,
+          "persisted_reused": 0,
+          "error": null
+        }
+      ],
+      "bucket": "Z6_FULL_NORMALIZATION_NOT_ATTEMPTED"
+    },
+    {
+      "procurement_id": 38239,
+      "material_document_count": 4,
+      "local_document_count": 4,
+      "parse_attempted": true,
+      "embedded_extraction_attempted": true,
+      "raw_extracted_fact_count": 0,
+      "goods_gate_accepted_count": 0,
+      "category_resolved_count": 0,
+      "allowed_category_rejected_count": 0,
+      "persist_created_count": 0,
+      "persist_reused_count": 0,
+      "persistence_error": null,
+      "full_normalization_attempted": false,
+      "full_normalization_version": null,
+      "full_normalization_result": null,
+      "structured_estimate_rows": 0,
+      "post_parse_normalized_count": 0,
+      "parse_status_counts": {
+        "PARSED": 3,
+        "EMPTY_TEXT": 1
+      },
+      "documents": [
+        {
+          "parse_status": "PARSED",
+          "raw_extracted": 0,
+          "goods_accepted": null,
+          "category_resolved": null,
+          "allowed_rejected": 0,
+          "persisted_created": 0,
+          "persisted_reused": 0,
+          "error": null
+        },
+        {
+          "parse_status": "PARSED",
+          "raw_extracted": 0,
+          "goods_accepted": null,
+          "category_resolved": null,
+          "allowed_rejected": 0,
+          "persisted_created": 0,
+          "persisted_reused": 0,
+          "error": null
+        },
+        {
+          "parse_status": "PARSED",
+          "raw_extracted": 0,
+          "goods_accepted": null,
+          "category_resolved": null,
+          "allowed_rejected": 0,
+          "persisted_created": 0,
+          "persisted_reused": 0,
+          "error": null
+        },
+        {
+          "parse_status": "EMPTY_TEXT",
+          "raw_extracted": 0,
+          "goods_accepted": null,
+          "category_resolved": null,
+          "allowed_rejected": 0,
+          "persisted_created": 0,
+          "persisted_reused": 0,
+          "error": null
+        }
+      ],
+      "bucket": "Z6_FULL_NORMALIZATION_NOT_ATTEMPTED"
+    },
+    {
+      "procurement_id": 40020,
+      "material_document_count": 1,
+      "local_document_count": 1,
+      "parse_attempted": true,
+      "embedded_extraction_attempted": true,
+      "raw_extracted_fact_count": 0,
+      "goods_gate_accepted_count": 0,
+      "category_resolved_count": 0,
+      "allowed_category_rejected_count": 0,
+      "persist_created_count": 0,
+      "persist_reused_count": 0,
+      "persistence_error": null,
+      "full_normalization_attempted": false,
+      "full_normalization_version": null,
+      "full_normalization_result": null,
+      "structured_estimate_rows": 0,
+      "post_parse_normalized_count": 0,
+      "parse_status_counts": {
+        "EMPTY_TEXT": 1
+      },
+      "documents": [
+        {
+          "parse_status": "EMPTY_TEXT",
+          "raw_extracted": 0,
+          "goods_accepted": null,
+          "category_resolved": null,
+          "allowed_rejected": 0,
+          "persisted_created": 0,
+          "persisted_reused": 0,
+          "error": null
+        }
+      ],
+      "bucket": "Z6_FULL_NORMALIZATION_NOT_ATTEMPTED"
+    },
+    {
+      "procurement_id": 40710,
+      "material_document_count": 2,
+      "local_document_count": 2,
+      "parse_attempted": true,
+      "embedded_extraction_attempted": true,
+      "raw_extracted_fact_count": 0,
+      "goods_gate_accepted_count": 0,
+      "category_resolved_count": 0,
+      "allowed_category_rejected_count": 0,
+      "persist_created_count": 0,
+      "persist_reused_count": 0,
+      "persistence_error": null,
+      "full_normalization_attempted": false,
+      "full_normalization_version": null,
+      "full_normalization_result": null,
+      "structured_estimate_rows": 0,
+      "post_parse_normalized_count": 0,
+      "parse_status_counts": {
+        "PARSED": 1,
+        "EMPTY_TEXT": 1
+      },
+      "documents": [
+        {
+          "parse_status": "PARSED",
+          "raw_extracted": 0,
+          "goods_accepted": null,
+          "category_resolved": null,
+          "allowed_rejected": 0,
+          "persisted_created": 0,
+          "persisted_reused": 0,
+          "error": null
+        },
+        {
+          "parse_status": "EMPTY_TEXT",
+          "raw_extracted": 0,
+          "goods_accepted": null,
+          "category_resolved": null,
+          "allowed_rejected": 0,
+          "persisted_created": 0,
+          "persisted_reused": 0,
+          "error": null
+        }
+      ],
+      "bucket": "Z6_FULL_NORMALIZATION_NOT_ATTEMPTED"
+    },
+    {
+      "procurement_id": 42598,
+      "material_document_count": 6,
+      "local_document_count": 2,
+      "parse_attempted": true,
+      "embedded_extraction_attempted": true,
+      "raw_extracted_fact_count": 0,
+      "goods_gate_accepted_count": 0,
+      "category_resolved_count": 0,
+      "allowed_category_rejected_count": 0,
+      "persist_created_count": 0,
+      "persist_reused_count": 0,
+      "persistence_error": null,
+      "full_normalization_attempted": false,
+      "full_normalization_version": null,
+      "full_normalization_result": null,
+      "structured_estimate_rows": 0,
+      "post_parse_normalized_count": 0,
+      "parse_status_counts": {
+        "FILE_NOT_LOCAL": 4,
+        "PARSED": 2
+      },
+      "documents": [
+        {
+          "parse_status": "FILE_NOT_LOCAL",
+          "raw_extracted": null,
+          "goods_accepted": null,
+          "category_resolved": null,
+          "allowed_rejected": null,
+          "persisted_created": 0,
+          "persisted_reused": 0,
+          "error": null
+        },
+        {
+          "parse_status": "FILE_NOT_LOCAL",
+          "raw_extracted": null,
+          "goods_accepted": null,
+          "category_resolved": null,
+          "allowed_rejected": null,
+          "persisted_created": 0,
+          "persisted_reused": 0,
+          "error": null
+        },
+        {
+          "parse_status": "FILE_NOT_LOCAL",
+          "raw_extracted": null,
+          "goods_accepted": null,
+          "category_resolved": null,
+          "allowed_rejected": null,
+          "persisted_created": 0,
+          "persisted_reused": 0,
+          "error": null
+        },
+        {
+          "parse_status": "PARSED",
+          "raw_extracted": 0,
+          "goods_accepted": null,
+          "category_resolved": null,
+          "allowed_rejected": 0,
+          "persisted_created": 0,
+          "persisted_reused": 0,
+          "error": null
+        },
+        {
+          "parse_status": "PARSED",
+          "raw_extracted": 0,
+          "goods_accepted": null,
+          "category_resolved": null,
+          "allowed_rejected": 0,
+          "persisted_created": 0,
+          "persisted_reused": 0,
+          "error": null
+        },
+        {
+          "parse_status": "FILE_NOT_LOCAL",
+          "raw_extracted": null,
+          "goods_accepted": null,
+          "category_resolved": null,
+          "allowed_rejected": null,
+          "persisted_created": 0,
+          "persisted_reused": 0,
+          "error": null
+        }
+      ],
+      "bucket": "Z6_FULL_NORMALIZATION_NOT_ATTEMPTED"
+    },
+    {
+      "procurement_id": 43943,
+      "material_document_count": 3,
+      "local_document_count": 3,
+      "parse_attempted": true,
+      "embedded_extraction_attempted": true,
+      "raw_extracted_fact_count": 54,
+      "goods_gate_accepted_count": 0,
+      "category_resolved_count": 0,
+      "allowed_category_rejected_count": 0,
+      "persist_created_count": 0,
+      "persist_reused_count": 0,
+      "persistence_error": null,
+      "full_normalization_attempted": false,
+      "full_normalization_version": null,
+      "full_normalization_result": null,
+      "structured_estimate_rows": 0,
+      "post_parse_normalized_count": 0,
+      "parse_status_counts": {
+        "PARSED": 3
+      },
+      "documents": [
+        {
+          "parse_status": "PARSED",
+          "raw_extracted": 27,
+          "goods_accepted": 0,
+          "category_resolved": 0,
+          "allowed_rejected": 0,
+          "persisted_created": 0,
+          "persisted_reused": 0,
+          "error": null
+        },
+        {
+          "parse_status": "PARSED",
+          "raw_extracted": 27,
+          "goods_accepted": 0,
+          "category_resolved": 0,
+          "allowed_rejected": 0,
+          "persisted_created": 0,
+          "persisted_reused": 0,
+          "error": null
+        },
+        {
+          "parse_status": "PARSED",
+          "raw_extracted": 0,
+          "goods_accepted": null,
+          "category_resolved": null,
+          "allowed_rejected": 0,
+          "persisted_created": 0,
+          "persisted_reused": 0,
+          "error": null
+        }
+      ],
+      "bucket": "Z6_FULL_NORMALIZATION_NOT_ATTEMPTED"
+    },
+    {
+      "procurement_id": 46714,
+      "material_document_count": 3,
+      "local_document_count": 2,
+      "parse_attempted": true,
+      "embedded_extraction_attempted": true,
+      "raw_extracted_fact_count": 0,
+      "goods_gate_accepted_count": 0,
+      "category_resolved_count": 0,
+      "allowed_category_rejected_count": 0,
+      "persist_created_count": 0,
+      "persist_reused_count": 0,
+      "persistence_error": null,
+      "full_normalization_attempted": false,
+      "full_normalization_version": null,
+      "full_normalization_result": null,
+      "structured_estimate_rows": 0,
+      "post_parse_normalized_count": 0,
+      "parse_status_counts": {
+        "PARSED": 2,
+        "FILE_NOT_LOCAL": 1
+      },
+      "documents": [
+        {
+          "parse_status": "PARSED",
+          "raw_extracted": 0,
+          "goods_accepted": null,
+          "category_resolved": null,
+          "allowed_rejected": 0,
+          "persisted_created": 0,
+          "persisted_reused": 0,
+          "error": null
+        },
+        {
+          "parse_status": "FILE_NOT_LOCAL",
+          "raw_extracted": null,
+          "goods_accepted": null,
+          "category_resolved": null,
+          "allowed_rejected": null,
+          "persisted_created": 0,
+          "persisted_reused": 0,
+          "error": null
+        },
+        {
+          "parse_status": "PARSED",
+          "raw_extracted": 0,
+          "goods_accepted": null,
+          "category_resolved": null,
+          "allowed_rejected": 0,
+          "persisted_created": 0,
+          "persisted_reused": 0,
+          "error": null
+        }
+      ],
+      "bucket": "Z6_FULL_NORMALIZATION_NOT_ATTEMPTED"
+    },
+    {
+      "procurement_id": 47259,
+      "material_document_count": 2,
+      "local_document_count": 2,
+      "parse_attempted": true,
+      "embedded_extraction_attempted": true,
+      "raw_extracted_fact_count": 0,
+      "goods_gate_accepted_count": 0,
+      "category_resolved_count": 0,
+      "allowed_category_rejected_count": 0,
+      "persist_created_count": 0,
+      "persist_reused_count": 0,
+      "persistence_error": null,
+      "full_normalization_attempted": false,
+      "full_normalization_version": null,
+      "full_normalization_result": null,
+      "structured_estimate_rows": 0,
+      "post_parse_normalized_count": 0,
+      "parse_status_counts": {
+        "PARSED": 2
+      },
+      "documents": [
+        {
+          "parse_status": "PARSED",
+          "raw_extracted": 0,
+          "goods_accepted": null,
+          "category_resolved": null,
+          "allowed_rejected": 0,
+          "persisted_created": 0,
+          "persisted_reused": 0,
+          "error": null
+        },
+        {
+          "parse_status": "PARSED",
+          "raw_extracted": 0,
+          "goods_accepted": null,
+          "category_resolved": null,
+          "allowed_rejected": 0,
+          "persisted_created": 0,
+          "persisted_reused": 0,
+          "error": null
+        }
+      ],
+      "bucket": "Z6_FULL_NORMALIZATION_NOT_ATTEMPTED"
+    },
+    {
+      "procurement_id": 47266,
+      "material_document_count": 2,
+      "local_document_count": 2,
+      "parse_attempted": true,
+      "embedded_extraction_attempted": true,
+      "raw_extracted_fact_count": 0,
+      "goods_gate_accepted_count": 0,
+      "category_resolved_count": 0,
+      "allowed_category_rejected_count": 0,
+      "persist_created_count": 0,
+      "persist_reused_count": 0,
+      "persistence_error": null,
+      "full_normalization_attempted": false,
+      "full_normalization_version": null,
+      "full_normalization_result": null,
+      "structured_estimate_rows": 0,
+      "post_parse_normalized_count": 0,
+      "parse_status_counts": {
+        "EMPTY_TEXT": 1,
+        "PARSED": 1
+      },
+      "documents": [
+        {
+          "parse_status": "EMPTY_TEXT",
+          "raw_extracted": 0,
+          "goods_accepted": null,
+          "category_resolved": null,
+          "allowed_rejected": 0,
+          "persisted_created": 0,
+          "persisted_reused": 0,
+          "error": null
+        },
+        {
+          "parse_status": "PARSED",
+          "raw_extracted": 0,
+          "goods_accepted": null,
+          "category_resolved": null,
+          "allowed_rejected": 0,
+          "persisted_created": 0,
+          "persisted_reused": 0,
+          "error": null
+        }
+      ],
+      "bucket": "Z6_FULL_NORMALIZATION_NOT_ATTEMPTED"
+    },
+    {
+      "procurement_id": 49875,
+      "material_document_count": 2,
+      "local_document_count": 2,
+      "parse_attempted": true,
+      "embedded_extraction_attempted": true,
+      "raw_extracted_fact_count": 0,
+      "goods_gate_accepted_count": 0,
+      "category_resolved_count": 0,
+      "allowed_category_rejected_count": 0,
+      "persist_created_count": 0,
+      "persist_reused_count": 0,
+      "persistence_error": null,
+      "full_normalization_attempted": false,
+      "full_normalization_version": null,
+      "full_normalization_result": null,
+      "structured_estimate_rows": 0,
+      "post_parse_normalized_count": 0,
+      "parse_status_counts": {
+        "EMPTY_TEXT": 1,
+        "PARSED": 1
+      },
+      "documents": [
+        {
+          "parse_status": "EMPTY_TEXT",
+          "raw_extracted": 0,
+          "goods_accepted": null,
+          "category_resolved": null,
+          "allowed_rejected": 0,
+          "persisted_created": 0,
+          "persisted_reused": 0,
+          "error": null
+        },
+        {
+          "parse_status": "PARSED",
+          "raw_extracted": 0,
+          "goods_accepted": null,
+          "category_resolved": null,
+          "allowed_rejected": 0,
+          "persisted_created": 0,
+          "persisted_reused": 0,
+          "error": null
+        }
+      ],
+      "bucket": "Z6_FULL_NORMALIZATION_NOT_ATTEMPTED"
+    },
+    {
+      "procurement_id": 51424,
+      "material_document_count": 2,
+      "local_document_count": 2,
+      "parse_attempted": true,
+      "embedded_extraction_attempted": true,
+      "raw_extracted_fact_count": 0,
+      "goods_gate_accepted_count": 0,
+      "category_resolved_count": 0,
+      "allowed_category_rejected_count": 0,
+      "persist_created_count": 0,
+      "persist_reused_count": 0,
+      "persistence_error": null,
+      "full_normalization_attempted": false,
+      "full_normalization_version": null,
+      "full_normalization_result": null,
+      "structured_estimate_rows": 0,
+      "post_parse_normalized_count": 0,
+      "parse_status_counts": {
+        "PARSED": 2
+      },
+      "documents": [
+        {
+          "parse_status": "PARSED",
+          "raw_extracted": 0,
+          "goods_accepted": null,
+          "category_resolved": null,
+          "allowed_rejected": 0,
+          "persisted_created": 0,
+          "persisted_reused": 0,
+          "error": null
+        },
+        {
+          "parse_status": "PARSED",
+          "raw_extracted": 0,
+          "goods_accepted": null,
+          "category_resolved": null,
+          "allowed_rejected": 0,
+          "persisted_created": 0,
+          "persisted_reused": 0,
+          "error": null
+        }
+      ],
+      "bucket": "Z6_FULL_NORMALIZATION_NOT_ATTEMPTED"
+    },
+    {
+      "procurement_id": 51428,
+      "material_document_count": 2,
+      "local_document_count": 2,
+      "parse_attempted": true,
+      "embedded_extraction_attempted": true,
+      "raw_extracted_fact_count": 0,
+      "goods_gate_accepted_count": 0,
+      "category_resolved_count": 0,
+      "allowed_category_rejected_count": 0,
+      "persist_created_count": 0,
+      "persist_reused_count": 0,
+      "persistence_error": null,
+      "full_normalization_attempted": false,
+      "full_normalization_version": null,
+      "full_normalization_result": null,
+      "structured_estimate_rows": 0,
+      "post_parse_normalized_count": 0,
+      "parse_status_counts": {
+        "PARSED": 2
+      },
+      "documents": [
+        {
+          "parse_status": "PARSED",
+          "raw_extracted": 0,
+          "goods_accepted": null,
+          "category_resolved": null,
+          "allowed_rejected": 0,
+          "persisted_created": 0,
+          "persisted_reused": 0,
+          "error": null
+        },
+        {
+          "parse_status": "PARSED",
+          "raw_extracted": 0,
+          "goods_accepted": null,
+          "category_resolved": null,
+          "allowed_rejected": 0,
+          "persisted_created": 0,
+          "persisted_reused": 0,
+          "error": null
+        }
+      ],
+      "bucket": "Z6_FULL_NORMALIZATION_NOT_ATTEMPTED"
+    },
+    {
+      "procurement_id": 51431,
+      "material_document_count": 2,
+      "local_document_count": 2,
+      "parse_attempted": true,
+      "embedded_extraction_attempted": true,
+      "raw_extracted_fact_count": 0,
+      "goods_gate_accepted_count": 0,
+      "category_resolved_count": 0,
+      "allowed_category_rejected_count": 0,
+      "persist_created_count": 0,
+      "persist_reused_count": 0,
+      "persistence_error": null,
+      "full_normalization_attempted": false,
+      "full_normalization_version": null,
+      "full_normalization_result": null,
+      "structured_estimate_rows": 0,
+      "post_parse_normalized_count": 0,
+      "parse_status_counts": {
+        "PARSED": 2
+      },
+      "documents": [
+        {
+          "parse_status": "PARSED",
+          "raw_extracted": 0,
+          "goods_accepted": null,
+          "category_resolved": null,
+          "allowed_rejected": 0,
+          "persisted_created": 0,
+          "persisted_reused": 0,
+          "error": null
+        },
+        {
+          "parse_status": "PARSED",
+          "raw_extracted": 0,
+          "goods_accepted": null,
+          "category_resolved": null,
+          "allowed_rejected": 0,
+          "persisted_created": 0,
+          "persisted_reused": 0,
+          "error": null
+        }
+      ],
+      "bucket": "Z6_FULL_NORMALIZATION_NOT_ATTEMPTED"
+    },
+    {
+      "procurement_id": 51432,
+      "material_document_count": 2,
+      "local_document_count": 2,
+      "parse_attempted": true,
+      "embedded_extraction_attempted": true,
+      "raw_extracted_fact_count": 0,
+      "goods_gate_accepted_count": 0,
+      "category_resolved_count": 0,
+      "allowed_category_rejected_count": 0,
+      "persist_created_count": 0,
+      "persist_reused_count": 0,
+      "persistence_error": null,
+      "full_normalization_attempted": false,
+      "full_normalization_version": null,
+      "full_normalization_result": null,
+      "structured_estimate_rows": 0,
+      "post_parse_normalized_count": 0,
+      "parse_status_counts": {
+        "EMPTY_TEXT": 1,
+        "PARSED": 1
+      },
+      "documents": [
+        {
+          "parse_status": "EMPTY_TEXT",
+          "raw_extracted": 0,
+          "goods_accepted": null,
+          "category_resolved": null,
+          "allowed_rejected": 0,
+          "persisted_created": 0,
+          "persisted_reused": 0,
+          "error": null
+        },
+        {
+          "parse_status": "PARSED",
+          "raw_extracted": 0,
+          "goods_accepted": null,
+          "category_resolved": null,
+          "allowed_rejected": 0,
+          "persisted_created": 0,
+          "persisted_reused": 0,
+          "error": null
+        }
+      ],
+      "bucket": "Z6_FULL_NORMALIZATION_NOT_ATTEMPTED"
+    },
+    {
+      "procurement_id": 51433,
+      "material_document_count": 2,
+      "local_document_count": 2,
+      "parse_attempted": true,
+      "embedded_extraction_attempted": true,
+      "raw_extracted_fact_count": 0,
+      "goods_gate_accepted_count": 0,
+      "category_resolved_count": 0,
+      "allowed_category_rejected_count": 0,
+      "persist_created_count": 0,
+      "persist_reused_count": 0,
+      "persistence_error": null,
+      "full_normalization_attempted": false,
+      "full_normalization_version": null,
+      "full_normalization_result": null,
+      "structured_estimate_rows": 0,
+      "post_parse_normalized_count": 0,
+      "parse_status_counts": {
+        "PARSED": 2
+      },
+      "documents": [
+        {
+          "parse_status": "PARSED",
+          "raw_extracted": 0,
+          "goods_accepted": null,
+          "category_resolved": null,
+          "allowed_rejected": 0,
+          "persisted_created": 0,
+          "persisted_reused": 0,
+          "error": null
+        },
+        {
+          "parse_status": "PARSED",
+          "raw_extracted": 0,
+          "goods_accepted": null,
+          "category_resolved": null,
+          "allowed_rejected": 0,
+          "persisted_created": 0,
+          "persisted_reused": 0,
+          "error": null
+        }
+      ],
+      "bucket": "Z6_FULL_NORMALIZATION_NOT_ATTEMPTED"
+    },
+    {
+      "procurement_id": 63232,
+      "material_document_count": 5,
+      "local_document_count": 5,
+      "parse_attempted": true,
+      "embedded_extraction_attempted": true,
+      "raw_extracted_fact_count": 0,
+      "goods_gate_accepted_count": 0,
+      "category_resolved_count": 0,
+      "allowed_category_rejected_count": 0,
+      "persist_created_count": 0,
+      "persist_reused_count": 0,
+      "persistence_error": null,
+      "full_normalization_attempted": false,
+      "full_normalization_version": null,
+      "full_normalization_result": null,
+      "structured_estimate_rows": 0,
+      "post_parse_normalized_count": 0,
+      "parse_status_counts": {
+        "EMPTY_TEXT": 1,
+        "PARSED": 4
+      },
+      "documents": [
+        {
+          "parse_status": "EMPTY_TEXT",
+          "raw_extracted": 0,
+          "goods_accepted": null,
+          "category_resolved": null,
+          "allowed_rejected": 0,
+          "persisted_created": 0,
+          "persisted_reused": 0,
+          "error": null
+        },
+        {
+          "parse_status": "PARSED",
+          "raw_extracted": 0,
+          "goods_accepted": null,
+          "category_resolved": null,
+          "allowed_rejected": 0,
+          "persisted_created": 0,
+          "persisted_reused": 0,
+          "error": null
+        },
+        {
+          "parse_status": "PARSED",
+          "raw_extracted": 0,
+          "goods_accepted": null,
+          "category_resolved": null,
+          "allowed_rejected": 0,
+          "persisted_created": 0,
+          "persisted_reused": 0,
+          "error": null
+        },
+        {
+          "parse_status": "PARSED",
+          "raw_extracted": 0,
+          "goods_accepted": null,
+          "category_resolved": null,
+          "allowed_rejected": 0,
+          "persisted_created": 0,
+          "persisted_reused": 0,
+          "error": null
+        },
+        {
+          "parse_status": "PARSED",
+          "raw_extracted": 0,
+          "goods_accepted": null,
+          "category_resolved": null,
+          "allowed_rejected": 0,
+          "persisted_created": 0,
+          "persisted_reused": 0,
+          "error": null
+        }
+      ],
+      "bucket": "Z6_FULL_NORMALIZATION_NOT_ATTEMPTED"
+    },
+    {
+      "procurement_id": 64108,
+      "material_document_count": 2,
+      "local_document_count": 2,
+      "parse_attempted": true,
+      "embedded_extraction_attempted": true,
+      "raw_extracted_fact_count": 0,
+      "goods_gate_accepted_count": 0,
+      "category_resolved_count": 0,
+      "allowed_category_rejected_count": 0,
+      "persist_created_count": 0,
+      "persist_reused_count": 0,
+      "persistence_error": null,
+      "full_normalization_attempted": false,
+      "full_normalization_version": null,
+      "full_normalization_result": null,
+      "structured_estimate_rows": 0,
+      "post_parse_normalized_count": 0,
+      "parse_status_counts": {
+        "PARSED": 2
+      },
+      "documents": [
+        {
+          "parse_status": "PARSED",
+          "raw_extracted": 0,
+          "goods_accepted": null,
+          "category_resolved": null,
+          "allowed_rejected": 0,
+          "persisted_created": 0,
+          "persisted_reused": 0,
+          "error": null
+        },
+        {
+          "parse_status": "PARSED",
+          "raw_extracted": 0,
+          "goods_accepted": null,
+          "category_resolved": null,
+          "allowed_rejected": 0,
+          "persisted_created": 0,
+          "persisted_reused": 0,
+          "error": null
+        }
+      ],
+      "bucket": "Z6_FULL_NORMALIZATION_NOT_ATTEMPTED"
+    },
+    {
+      "procurement_id": 102795,
+      "material_document_count": 1,
+      "local_document_count": 1,
+      "parse_attempted": true,
+      "embedded_extraction_attempted": true,
+      "raw_extracted_fact_count": 0,
+      "goods_gate_accepted_count": 0,
+      "category_resolved_count": 0,
+      "allowed_category_rejected_count": 0,
+      "persist_created_count": 0,
+      "persist_reused_count": 0,
+      "persistence_error": "IndexError: no such group",
+      "full_normalization_attempted": false,
+      "full_normalization_version": null,
+      "full_normalization_result": null,
+      "structured_estimate_rows": 0,
+      "post_parse_normalized_count": 0,
+      "parse_status_counts": {
+        "PARSED": 1
+      },
+      "documents": [
+        {
+          "parse_status": "PARSED",
+          "raw_extracted": 0,
+          "goods_accepted": 0,
+          "category_resolved": 0,
+          "allowed_rejected": 0,
+          "persisted_created": 0,
+          "persisted_reused": 0,
+          "error": "IndexError: no such group"
+        }
+      ],
+      "bucket": "Z6_FULL_NORMALIZATION_NOT_ATTEMPTED"
+    },
+    {
+      "procurement_id": 114477,
+      "material_document_count": 2,
+      "local_document_count": 2,
+      "parse_attempted": true,
+      "embedded_extraction_attempted": true,
+      "raw_extracted_fact_count": 0,
+      "goods_gate_accepted_count": 0,
+      "category_resolved_count": 0,
+      "allowed_category_rejected_count": 0,
+      "persist_created_count": 0,
+      "persist_reused_count": 0,
+      "persistence_error": null,
+      "full_normalization_attempted": false,
+      "full_normalization_version": null,
+      "full_normalization_result": null,
+      "structured_estimate_rows": 0,
+      "post_parse_normalized_count": 0,
+      "parse_status_counts": {
+        "PARSED": 2
+      },
+      "documents": [
+        {
+          "parse_status": "PARSED",
+          "raw_extracted": 0,
+          "goods_accepted": null,
+          "category_resolved": null,
+          "allowed_rejected": 0,
+          "persisted_created": 0,
+          "persisted_reused": 0,
+          "error": null
+        },
+        {
+          "parse_status": "PARSED",
+          "raw_extracted": 0,
+          "goods_accepted": null,
+          "category_resolved": null,
+          "allowed_rejected": 0,
+          "persisted_created": 0,
+          "persisted_reused": 0,
+          "error": null
+        }
+      ],
+      "bucket": "Z6_FULL_NORMALIZATION_NOT_ATTEMPTED"
+    },
+    {
+      "procurement_id": 116192,
+      "material_document_count": 3,
+      "local_document_count": 3,
+      "parse_attempted": true,
+      "embedded_extraction_attempted": true,
+      "raw_extracted_fact_count": 0,
+      "goods_gate_accepted_count": 0,
+      "category_resolved_count": 0,
+      "allowed_category_rejected_count": 0,
+      "persist_created_count": 0,
+      "persist_reused_count": 0,
+      "persistence_error": null,
+      "full_normalization_attempted": false,
+      "full_normalization_version": null,
+      "full_normalization_result": null,
+      "structured_estimate_rows": 0,
+      "post_parse_normalized_count": 0,
+      "parse_status_counts": {
+        "PARSED": 3
+      },
+      "documents": [
+        {
+          "parse_status": "PARSED",
+          "raw_extracted": 0,
+          "goods_accepted": null,
+          "category_resolved": null,
+          "allowed_rejected": 0,
+          "persisted_created": 0,
+          "persisted_reused": 0,
+          "error": null
+        },
+        {
+          "parse_status": "PARSED",
+          "raw_extracted": 0,
+          "goods_accepted": null,
+          "category_resolved": null,
+          "allowed_rejected": 0,
+          "persisted_created": 0,
+          "persisted_reused": 0,
+          "error": null
+        },
+        {
+          "parse_status": "PARSED",
+          "raw_extracted": 0,
+          "goods_accepted": null,
+          "category_resolved": null,
+          "allowed_rejected": 0,
+          "persisted_created": 0,
+          "persisted_reused": 0,
+          "error": null
+        }
+      ],
+      "bucket": "Z6_FULL_NORMALIZATION_NOT_ATTEMPTED"
+    },
+    {
+      "procurement_id": 116236,
+      "material_document_count": 2,
+      "local_document_count": 2,
+      "parse_attempted": true,
+      "embedded_extraction_attempted": true,
+      "raw_extracted_fact_count": 0,
+      "goods_gate_accepted_count": 0,
+      "category_resolved_count": 0,
+      "allowed_category_rejected_count": 0,
+      "persist_created_count": 0,
+      "persist_reused_count": 0,
+      "persistence_error": null,
+      "full_normalization_attempted": false,
+      "full_normalization_version": null,
+      "full_normalization_result": null,
+      "structured_estimate_rows": 0,
+      "post_parse_normalized_count": 0,
+      "parse_status_counts": {
+        "PARSED": 2
+      },
+      "documents": [
+        {
+          "parse_status": "PARSED",
+          "raw_extracted": 0,
+          "goods_accepted": null,
+          "category_resolved": null,
+          "allowed_rejected": 0,
+          "persisted_created": 0,
+          "persisted_reused": 0,
+          "error": null
+        },
+        {
+          "parse_status": "PARSED",
+          "raw_extracted": 0,
+          "goods_accepted": null,
+          "category_resolved": null,
+          "allowed_rejected": 0,
+          "persisted_created": 0,
+          "persisted_reused": 0,
+          "error": null
+        }
+      ],
+      "bucket": "Z6_FULL_NORMALIZATION_NOT_ATTEMPTED"
+    },
+    {
+      "procurement_id": 116971,
+      "material_document_count": 2,
+      "local_document_count": 2,
+      "parse_attempted": true,
+      "embedded_extraction_attempted": true,
+      "raw_extracted_fact_count": 0,
+      "goods_gate_accepted_count": 0,
+      "category_resolved_count": 0,
+      "allowed_category_rejected_count": 0,
+      "persist_created_count": 0,
+      "persist_reused_count": 0,
+      "persistence_error": null,
+      "full_normalization_attempted": false,
+      "full_normalization_version": null,
+      "full_normalization_result": null,
+      "structured_estimate_rows": 0,
+      "post_parse_normalized_count": 0,
+      "parse_status_counts": {
+        "PARSED": 2
+      },
+      "documents": [
+        {
+          "parse_status": "PARSED",
+          "raw_extracted": 0,
+          "goods_accepted": null,
+          "category_resolved": null,
+          "allowed_rejected": 0,
+          "persisted_created": 0,
+          "persisted_reused": 0,
+          "error": null
+        },
+        {
+          "parse_status": "PARSED",
+          "raw_extracted": 0,
+          "goods_accepted": null,
+          "category_resolved": null,
+          "allowed_rejected": 0,
+          "persisted_created": 0,
+          "persisted_reused": 0,
+          "error": null
+        }
+      ],
+      "bucket": "Z6_FULL_NORMALIZATION_NOT_ATTEMPTED"
+    },
+    {
+      "procurement_id": 117442,
+      "material_document_count": 2,
+      "local_document_count": 2,
+      "parse_attempted": true,
+      "embedded_extraction_attempted": true,
+      "raw_extracted_fact_count": 0,
+      "goods_gate_accepted_count": 0,
+      "category_resolved_count": 0,
+      "allowed_category_rejected_count": 0,
+      "persist_created_count": 0,
+      "persist_reused_count": 0,
+      "persistence_error": null,
+      "full_normalization_attempted": false,
+      "full_normalization_version": null,
+      "full_normalization_result": null,
+      "structured_estimate_rows": 0,
+      "post_parse_normalized_count": 0,
+      "parse_status_counts": {
+        "PARSED": 2
+      },
+      "documents": [
+        {
+          "parse_status": "PARSED",
+          "raw_extracted": 0,
+          "goods_accepted": null,
+          "category_resolved": null,
+          "allowed_rejected": 0,
+          "persisted_created": 0,
+          "persisted_reused": 0,
+          "error": null
+        },
+        {
+          "parse_status": "PARSED",
+          "raw_extracted": 0,
+          "goods_accepted": null,
+          "category_resolved": null,
+          "allowed_rejected": 0,
+          "persisted_created": 0,
+          "persisted_reused": 0,
+          "error": null
+        }
+      ],
+      "bucket": "Z6_FULL_NORMALIZATION_NOT_ATTEMPTED"
+    },
+    {
+      "procurement_id": 118005,
+      "material_document_count": 3,
+      "local_document_count": 3,
+      "parse_attempted": true,
+      "embedded_extraction_attempted": true,
+      "raw_extracted_fact_count": 0,
+      "goods_gate_accepted_count": 0,
+      "category_resolved_count": 0,
+      "allowed_category_rejected_count": 0,
+      "persist_created_count": 0,
+      "persist_reused_count": 0,
+      "persistence_error": null,
+      "full_normalization_attempted": false,
+      "full_normalization_version": null,
+      "full_normalization_result": null,
+      "structured_estimate_rows": 0,
+      "post_parse_normalized_count": 0,
+      "parse_status_counts": {
+        "PARSED": 3
+      },
+      "documents": [
+        {
+          "parse_status": "PARSED",
+          "raw_extracted": 0,
+          "goods_accepted": null,
+          "category_resolved": null,
+          "allowed_rejected": 0,
+          "persisted_created": 0,
+          "persisted_reused": 0,
+          "error": null
+        },
+        {
+          "parse_status": "PARSED",
+          "raw_extracted": 0,
+          "goods_accepted": null,
+          "category_resolved": null,
+          "allowed_rejected": 0,
+          "persisted_created": 0,
+          "persisted_reused": 0,
+          "error": null
+        },
+        {
+          "parse_status": "PARSED",
+          "raw_extracted": 0,
+          "goods_accepted": null,
+          "category_resolved": null,
+          "allowed_rejected": 0,
+          "persisted_created": 0,
+          "persisted_reused": 0,
+          "error": null
+        }
+      ],
+      "bucket": "Z6_FULL_NORMALIZATION_NOT_ATTEMPTED"
+    },
+    {
+      "procurement_id": 130044,
+      "material_document_count": 1,
+      "local_document_count": 1,
+      "parse_attempted": true,
+      "embedded_extraction_attempted": true,
+      "raw_extracted_fact_count": 0,
+      "goods_gate_accepted_count": 0,
+      "category_resolved_count": 0,
+      "allowed_category_rejected_count": 0,
+      "persist_created_count": 0,
+      "persist_reused_count": 0,
+      "persistence_error": null,
+      "full_normalization_attempted": false,
+      "full_normalization_version": null,
+      "full_normalization_result": null,
+      "structured_estimate_rows": 0,
+      "post_parse_normalized_count": 0,
+      "parse_status_counts": {
+        "PARSED": 1
+      },
+      "documents": [
+        {
+          "parse_status": "PARSED",
+          "raw_extracted": 0,
+          "goods_accepted": null,
+          "category_resolved": null,
+          "allowed_rejected": 0,
+          "persisted_created": 0,
+          "persisted_reused": 0,
+          "error": null
+        }
+      ],
+      "bucket": "Z6_FULL_NORMALIZATION_NOT_ATTEMPTED"
+    },
+    {
+      "procurement_id": 145353,
+      "material_document_count": 2,
+      "local_document_count": 2,
+      "parse_attempted": true,
+      "embedded_extraction_attempted": true,
+      "raw_extracted_fact_count": 0,
+      "goods_gate_accepted_count": 0,
+      "category_resolved_count": 0,
+      "allowed_category_rejected_count": 0,
+      "persist_created_count": 0,
+      "persist_reused_count": 0,
+      "persistence_error": null,
+      "full_normalization_attempted": false,
+      "full_normalization_version": null,
+      "full_normalization_result": null,
+      "structured_estimate_rows": 0,
+      "post_parse_normalized_count": 0,
+      "parse_status_counts": {
+        "PARSED": 2
+      },
+      "documents": [
+        {
+          "parse_status": "PARSED",
+          "raw_extracted": 0,
+          "goods_accepted": null,
+          "category_resolved": null,
+          "allowed_rejected": 0,
+          "persisted_created": 0,
+          "persisted_reused": 0,
+          "error": null
+        },
+        {
+          "parse_status": "PARSED",
+          "raw_extracted": 0,
+          "goods_accepted": null,
+          "category_resolved": null,
+          "allowed_rejected": 0,
+          "persisted_created": 0,
+          "persisted_reused": 0,
+          "error": null
+        }
+      ],
+      "bucket": "Z6_FULL_NORMALIZATION_NOT_ATTEMPTED"
+    },
+    {
+      "procurement_id": 149160,
+      "material_document_count": 1,
+      "local_document_count": 1,
+      "parse_attempted": true,
+      "embedded_extraction_attempted": true,
+      "raw_extracted_fact_count": 0,
+      "goods_gate_accepted_count": 0,
+      "category_resolved_count": 0,
+      "allowed_category_rejected_count": 0,
+      "persist_created_count": 0,
+      "persist_reused_count": 0,
+      "persistence_error": null,
+      "full_normalization_attempted": false,
+      "full_normalization_version": null,
+      "full_normalization_result": null,
+      "structured_estimate_rows": 0,
+      "post_parse_normalized_count": 0,
+      "parse_status_counts": {
+        "PARSED": 1
+      },
+      "documents": [
+        {
+          "parse_status": "PARSED",
+          "raw_extracted": 0,
+          "goods_accepted": null,
+          "category_resolved": null,
+          "allowed_rejected": 0,
+          "persisted_created": 0,
+          "persisted_reused": 0,
+          "error": null
+        }
+      ],
+      "bucket": "Z6_FULL_NORMALIZATION_NOT_ATTEMPTED"
+    },
+    {
+      "procurement_id": 149802,
+      "material_document_count": 2,
+      "local_document_count": 2,
+      "parse_attempted": true,
+      "embedded_extraction_attempted": true,
+      "raw_extracted_fact_count": 0,
+      "goods_gate_accepted_count": 0,
+      "category_resolved_count": 0,
+      "allowed_category_rejected_count": 0,
+      "persist_created_count": 0,
+      "persist_reused_count": 0,
+      "persistence_error": null,
+      "full_normalization_attempted": false,
+      "full_normalization_version": null,
+      "full_normalization_result": null,
+      "structured_estimate_rows": 0,
+      "post_parse_normalized_count": 0,
+      "parse_status_counts": {
+        "PARSED": 2
+      },
+      "documents": [
+        {
+          "parse_status": "PARSED",
+          "raw_extracted": 0,
+          "goods_accepted": null,
+          "category_resolved": null,
+          "allowed_rejected": 0,
+          "persisted_created": 0,
+          "persisted_reused": 0,
+          "error": null
+        },
+        {
+          "parse_status": "PARSED",
+          "raw_extracted": 0,
+          "goods_accepted": null,
+          "category_resolved": null,
+          "allowed_rejected": 0,
+          "persisted_created": 0,
+          "persisted_reused": 0,
+          "error": null
+        }
+      ],
+      "bucket": "Z6_FULL_NORMALIZATION_NOT_ATTEMPTED"
+    },
+    {
+      "procurement_id": 166239,
+      "material_document_count": 1,
+      "local_document_count": 1,
+      "parse_attempted": true,
+      "embedded_extraction_attempted": true,
+      "raw_extracted_fact_count": 0,
+      "goods_gate_accepted_count": 0,
+      "category_resolved_count": 0,
+      "allowed_category_rejected_count": 0,
+      "persist_created_count": 0,
+      "persist_reused_count": 0,
+      "persistence_error": null,
+      "full_normalization_attempted": false,
+      "full_normalization_version": null,
+      "full_normalization_result": null,
+      "structured_estimate_rows": 0,
+      "post_parse_normalized_count": 0,
+      "parse_status_counts": {
+        "PARSED": 1
+      },
+      "documents": [
+        {
+          "parse_status": "PARSED",
+          "raw_extracted": 0,
+          "goods_accepted": null,
+          "category_resolved": null,
+          "allowed_rejected": 0,
+          "persisted_created": 0,
+          "persisted_reused": 0,
+          "error": null
+        }
+      ],
+      "bucket": "Z6_FULL_NORMALIZATION_NOT_ATTEMPTED"
+    },
+    {
+      "procurement_id": 166248,
+      "material_document_count": 1,
+      "local_document_count": 1,
+      "parse_attempted": true,
+      "embedded_extraction_attempted": true,
+      "raw_extracted_fact_count": 0,
+      "goods_gate_accepted_count": 0,
+      "category_resolved_count": 0,
+      "allowed_category_rejected_count": 0,
+      "persist_created_count": 0,
+      "persist_reused_count": 0,
+      "persistence_error": null,
+      "full_normalization_attempted": false,
+      "full_normalization_version": null,
+      "full_normalization_result": null,
+      "structured_estimate_rows": 0,
+      "post_parse_normalized_count": 0,
+      "parse_status_counts": {
+        "PARSED": 1
+      },
+      "documents": [
+        {
+          "parse_status": "PARSED",
+          "raw_extracted": 0,
+          "goods_accepted": null,
+          "category_resolved": null,
+          "allowed_rejected": 0,
+          "persisted_created": 0,
+          "persisted_reused": 0,
+          "error": null
+        }
+      ],
+      "bucket": "Z6_FULL_NORMALIZATION_NOT_ATTEMPTED"
+    },
+    {
+      "procurement_id": 173345,
+      "material_document_count": 2,
+      "local_document_count": 2,
+      "parse_attempted": true,
+      "embedded_extraction_attempted": true,
+      "raw_extracted_fact_count": 0,
+      "goods_gate_accepted_count": 0,
+      "category_resolved_count": 0,
+      "allowed_category_rejected_count": 0,
+      "persist_created_count": 0,
+      "persist_reused_count": 0,
+      "persistence_error": null,
+      "full_normalization_attempted": false,
+      "full_normalization_version": null,
+      "full_normalization_result": null,
+      "structured_estimate_rows": 0,
+      "post_parse_normalized_count": 0,
+      "parse_status_counts": {
+        "PARSED": 2
+      },
+      "documents": [
+        {
+          "parse_status": "PARSED",
+          "raw_extracted": 0,
+          "goods_accepted": null,
+          "category_resolved": null,
+          "allowed_rejected": 0,
+          "persisted_created": 0,
+          "persisted_reused": 0,
+          "error": null
+        },
+        {
+          "parse_status": "PARSED",
+          "raw_extracted": 0,
+          "goods_accepted": null,
+          "category_resolved": null,
+          "allowed_rejected": 0,
+          "persisted_created": 0,
+          "persisted_reused": 0,
+          "error": null
+        }
+      ],
+      "bucket": "Z6_FULL_NORMALIZATION_NOT_ATTEMPTED"
+    },
+    {
+      "procurement_id": 173347,
+      "material_document_count": 2,
+      "local_document_count": 2,
+      "parse_attempted": true,
+      "embedded_extraction_attempted": true,
+      "raw_extracted_fact_count": 0,
+      "goods_gate_accepted_count": 0,
+      "category_resolved_count": 0,
+      "allowed_category_rejected_count": 0,
+      "persist_created_count": 0,
+      "persist_reused_count": 0,
+      "persistence_error": null,
+      "full_normalization_attempted": false,
+      "full_normalization_version": null,
+      "full_normalization_result": null,
+      "structured_estimate_rows": 0,
+      "post_parse_normalized_count": 0,
+      "parse_status_counts": {
+        "PARSED": 2
+      },
+      "documents": [
+        {
+          "parse_status": "PARSED",
+          "raw_extracted": 0,
+          "goods_accepted": null,
+          "category_resolved": null,
+          "allowed_rejected": 0,
+          "persisted_created": 0,
+          "persisted_reused": 0,
+          "error": null
+        },
+        {
+          "parse_status": "PARSED",
+          "raw_extracted": 0,
+          "goods_accepted": null,
+          "category_resolved": null,
+          "allowed_rejected": 0,
+          "persisted_created": 0,
+          "persisted_reused": 0,
+          "error": null
+        }
+      ],
+      "bucket": "Z6_FULL_NORMALIZATION_NOT_ATTEMPTED"
+    },
+    {
+      "procurement_id": 173349,
+      "material_document_count": 2,
+      "local_document_count": 2,
+      "parse_attempted": true,
+      "embedded_extraction_attempted": true,
+      "raw_extracted_fact_count": 0,
+      "goods_gate_accepted_count": 0,
+      "category_resolved_count": 0,
+      "allowed_category_rejected_count": 0,
+      "persist_created_count": 0,
+      "persist_reused_count": 0,
+      "persistence_error": null,
+      "full_normalization_attempted": false,
+      "full_normalization_version": null,
+      "full_normalization_result": null,
+      "structured_estimate_rows": 0,
+      "post_parse_normalized_count": 0,
+      "parse_status_counts": {
+        "PARSED": 2
+      },
+      "documents": [
+        {
+          "parse_status": "PARSED",
+          "raw_extracted": 0,
+          "goods_accepted": null,
+          "category_resolved": null,
+          "allowed_rejected": 0,
+          "persisted_created": 0,
+          "persisted_reused": 0,
+          "error": null
+        },
+        {
+          "parse_status": "PARSED",
+          "raw_extracted": 0,
+          "goods_accepted": null,
+          "category_resolved": null,
+          "allowed_rejected": 0,
+          "persisted_created": 0,
+          "persisted_reused": 0,
+          "error": null
+        }
+      ],
+      "bucket": "Z6_FULL_NORMALIZATION_NOT_ATTEMPTED"
+    },
+    {
+      "procurement_id": 173350,
+      "material_document_count": 2,
+      "local_document_count": 2,
+      "parse_attempted": true,
+      "embedded_extraction_attempted": true,
+      "raw_extracted_fact_count": 0,
+      "goods_gate_accepted_count": 0,
+      "category_resolved_count": 0,
+      "allowed_category_rejected_count": 0,
+      "persist_created_count": 0,
+      "persist_reused_count": 0,
+      "persistence_error": null,
+      "full_normalization_attempted": false,
+      "full_normalization_version": null,
+      "full_normalization_result": null,
+      "structured_estimate_rows": 0,
+      "post_parse_normalized_count": 0,
+      "parse_status_counts": {
+        "PARSED": 2
+      },
+      "documents": [
+        {
+          "parse_status": "PARSED",
+          "raw_extracted": 0,
+          "goods_accepted": null,
+          "category_resolved": null,
+          "allowed_rejected": 0,
+          "persisted_created": 0,
+          "persisted_reused": 0,
+          "error": null
+        },
+        {
+          "parse_status": "PARSED",
+          "raw_extracted": 0,
+          "goods_accepted": null,
+          "category_resolved": null,
+          "allowed_rejected": 0,
+          "persisted_created": 0,
+          "persisted_reused": 0,
+          "error": null
+        }
+      ],
+      "bucket": "Z6_FULL_NORMALIZATION_NOT_ATTEMPTED"
+    },
+    {
+      "procurement_id": 173351,
+      "material_document_count": 2,
+      "local_document_count": 2,
+      "parse_attempted": true,
+      "embedded_extraction_attempted": true,
+      "raw_extracted_fact_count": 0,
+      "goods_gate_accepted_count": 0,
+      "category_resolved_count": 0,
+      "allowed_category_rejected_count": 0,
+      "persist_created_count": 0,
+      "persist_reused_count": 0,
+      "persistence_error": null,
+      "full_normalization_attempted": false,
+      "full_normalization_version": null,
+      "full_normalization_result": null,
+      "structured_estimate_rows": 0,
+      "post_parse_normalized_count": 0,
+      "parse_status_counts": {
+        "PARSED": 2
+      },
+      "documents": [
+        {
+          "parse_status": "PARSED",
+          "raw_extracted": 0,
+          "goods_accepted": null,
+          "category_resolved": null,
+          "allowed_rejected": 0,
+          "persisted_created": 0,
+          "persisted_reused": 0,
+          "error": null
+        },
+        {
+          "parse_status": "PARSED",
+          "raw_extracted": 0,
+          "goods_accepted": null,
+          "category_resolved": null,
+          "allowed_rejected": 0,
+          "persisted_created": 0,
+          "persisted_reused": 0,
+          "error": null
+        }
+      ],
+      "bucket": "Z6_FULL_NORMALIZATION_NOT_ATTEMPTED"
+    },
+    {
+      "procurement_id": 173353,
+      "material_document_count": 2,
+      "local_document_count": 2,
+      "parse_attempted": true,
+      "embedded_extraction_attempted": true,
+      "raw_extracted_fact_count": 0,
+      "goods_gate_accepted_count": 0,
+      "category_resolved_count": 0,
+      "allowed_category_rejected_count": 0,
+      "persist_created_count": 0,
+      "persist_reused_count": 0,
+      "persistence_error": null,
+      "full_normalization_attempted": false,
+      "full_normalization_version": null,
+      "full_normalization_result": null,
+      "structured_estimate_rows": 0,
+      "post_parse_normalized_count": 0,
+      "parse_status_counts": {
+        "PARSED": 2
+      },
+      "documents": [
+        {
+          "parse_status": "PARSED",
+          "raw_extracted": 0,
+          "goods_accepted": null,
+          "category_resolved": null,
+          "allowed_rejected": 0,
+          "persisted_created": 0,
+          "persisted_reused": 0,
+          "error": null
+        },
+        {
+          "parse_status": "PARSED",
+          "raw_extracted": 0,
+          "goods_accepted": null,
+          "category_resolved": null,
+          "allowed_rejected": 0,
+          "persisted_created": 0,
+          "persisted_reused": 0,
+          "error": null
+        }
+      ],
+      "bucket": "Z6_FULL_NORMALIZATION_NOT_ATTEMPTED"
+    },
+    {
+      "procurement_id": 175973,
+      "material_document_count": 1,
+      "local_document_count": 1,
+      "parse_attempted": true,
+      "embedded_extraction_attempted": true,
+      "raw_extracted_fact_count": 3,
+      "goods_gate_accepted_count": 0,
+      "category_resolved_count": 0,
+      "allowed_category_rejected_count": 0,
+      "persist_created_count": 0,
+      "persist_reused_count": 0,
+      "persistence_error": null,
+      "full_normalization_attempted": false,
+      "full_normalization_version": null,
+      "full_normalization_result": null,
+      "structured_estimate_rows": 0,
+      "post_parse_normalized_count": 0,
+      "parse_status_counts": {
+        "PARSED": 1
+      },
+      "documents": [
+        {
+          "parse_status": "PARSED",
+          "raw_extracted": 3,
+          "goods_accepted": 0,
+          "category_resolved": 0,
+          "allowed_rejected": 0,
+          "persisted_created": 0,
+          "persisted_reused": 0,
+          "error": null
+        }
+      ],
+      "bucket": "Z6_FULL_NORMALIZATION_NOT_ATTEMPTED"
+    },
+    {
+      "procurement_id": 177309,
+      "material_document_count": 1,
+      "local_document_count": 1,
+      "parse_attempted": true,
+      "embedded_extraction_attempted": true,
+      "raw_extracted_fact_count": 0,
+      "goods_gate_accepted_count": 0,
+      "category_resolved_count": 0,
+      "allowed_category_rejected_count": 0,
+      "persist_created_count": 0,
+      "persist_reused_count": 0,
+      "persistence_error": null,
+      "full_normalization_attempted": false,
+      "full_normalization_version": null,
+      "full_normalization_result": null,
+      "structured_estimate_rows": 0,
+      "post_parse_normalized_count": 0,
+      "parse_status_counts": {
+        "EMPTY_TEXT": 1
+      },
+      "documents": [
+        {
+          "parse_status": "EMPTY_TEXT",
+          "raw_extracted": 0,
+          "goods_accepted": null,
+          "category_resolved": null,
+          "allowed_rejected": 0,
+          "persisted_created": 0,
+          "persisted_reused": 0,
+          "error": null
+        }
+      ],
+      "bucket": "Z6_FULL_NORMALIZATION_NOT_ATTEMPTED"
+    },
+    {
+      "procurement_id": 178788,
+      "material_document_count": 2,
+      "local_document_count": 2,
+      "parse_attempted": true,
+      "embedded_extraction_attempted": true,
+      "raw_extracted_fact_count": 0,
+      "goods_gate_accepted_count": 0,
+      "category_resolved_count": 0,
+      "allowed_category_rejected_count": 0,
+      "persist_created_count": 0,
+      "persist_reused_count": 0,
+      "persistence_error": null,
+      "full_normalization_attempted": false,
+      "full_normalization_version": null,
+      "full_normalization_result": null,
+      "structured_estimate_rows": 0,
+      "post_parse_normalized_count": 0,
+      "parse_status_counts": {
+        "PARSED": 2
+      },
+      "documents": [
+        {
+          "parse_status": "PARSED",
+          "raw_extracted": 0,
+          "goods_accepted": null,
+          "category_resolved": null,
+          "allowed_rejected": 0,
+          "persisted_created": 0,
+          "persisted_reused": 0,
+          "error": null
+        },
+        {
+          "parse_status": "PARSED",
+          "raw_extracted": 0,
+          "goods_accepted": null,
+          "category_resolved": null,
+          "allowed_rejected": 0,
+          "persisted_created": 0,
+          "persisted_reused": 0,
+          "error": null
+        }
+      ],
+      "bucket": "Z6_FULL_NORMALIZATION_NOT_ATTEMPTED"
+    },
+    {
+      "procurement_id": 188330,
+      "material_document_count": 1,
+      "local_document_count": 1,
+      "parse_attempted": true,
+      "embedded_extraction_attempted": true,
+      "raw_extracted_fact_count": 0,
+      "goods_gate_accepted_count": 0,
+      "category_resolved_count": 0,
+      "allowed_category_rejected_count": 0,
+      "persist_created_count": 0,
+      "persist_reused_count": 0,
+      "persistence_error": null,
+      "full_normalization_attempted": false,
+      "full_normalization_version": null,
+      "full_normalization_result": null,
+      "structured_estimate_rows": 0,
+      "post_parse_normalized_count": 0,
+      "parse_status_counts": {
+        "PARSED": 1
+      },
+      "documents": [
+        {
+          "parse_status": "PARSED",
+          "raw_extracted": 0,
+          "goods_accepted": null,
+          "category_resolved": null,
+          "allowed_rejected": 0,
+          "persisted_created": 0,
+          "persisted_reused": 0,
+          "error": null
+        }
+      ],
+      "bucket": "Z6_FULL_NORMALIZATION_NOT_ATTEMPTED"
+    },
+    {
+      "procurement_id": 209309,
+      "material_document_count": 3,
+      "local_document_count": 3,
+      "parse_attempted": true,
+      "embedded_extraction_attempted": true,
+      "raw_extracted_fact_count": 2373,
+      "goods_gate_accepted_count": 0,
+      "category_resolved_count": 0,
+      "allowed_category_rejected_count": 0,
+      "persist_created_count": 0,
+      "persist_reused_count": 0,
+      "persistence_error": null,
+      "full_normalization_attempted": false,
+      "full_normalization_version": null,
+      "full_normalization_result": null,
+      "structured_estimate_rows": 0,
+      "post_parse_normalized_count": 0,
+      "parse_status_counts": {
+        "PARSED": 3
+      },
+      "documents": [
+        {
+          "parse_status": "PARSED",
+          "raw_extracted": 0,
+          "goods_accepted": null,
+          "category_resolved": null,
+          "allowed_rejected": 0,
+          "persisted_created": 0,
+          "persisted_reused": 0,
+          "error": null
+        },
+        {
+          "parse_status": "PARSED",
+          "raw_extracted": 2373,
+          "goods_accepted": 0,
+          "category_resolved": 0,
+          "allowed_rejected": 0,
+          "persisted_created": 0,
+          "persisted_reused": 0,
+          "error": null
+        },
+        {
+          "parse_status": "PARSED",
+          "raw_extracted": 0,
+          "goods_accepted": null,
+          "category_resolved": null,
+          "allowed_rejected": 0,
+          "persisted_created": 0,
+          "persisted_reused": 0,
+          "error": null
+        }
+      ],
+      "bucket": "Z6_FULL_NORMALIZATION_NOT_ATTEMPTED"
+    },
+    {
+      "procurement_id": 209427,
+      "material_document_count": 2,
+      "local_document_count": 2,
+      "parse_attempted": true,
+      "embedded_extraction_attempted": true,
+      "raw_extracted_fact_count": 0,
+      "goods_gate_accepted_count": 0,
+      "category_resolved_count": 0,
+      "allowed_category_rejected_count": 0,
+      "persist_created_count": 0,
+      "persist_reused_count": 0,
+      "persistence_error": null,
+      "full_normalization_attempted": false,
+      "full_normalization_version": null,
+      "full_normalization_result": null,
+      "structured_estimate_rows": 0,
+      "post_parse_normalized_count": 0,
+      "parse_status_counts": {
+        "PARSED": 2
+      },
+      "documents": [
+        {
+          "parse_status": "PARSED",
+          "raw_extracted": 0,
+          "goods_accepted": null,
+          "category_resolved": null,
+          "allowed_rejected": 0,
+          "persisted_created": 0,
+          "persisted_reused": 0,
+          "error": null
+        },
+        {
+          "parse_status": "PARSED",
+          "raw_extracted": 0,
+          "goods_accepted": null,
+          "category_resolved": null,
+          "allowed_rejected": 0,
+          "persisted_created": 0,
+          "persisted_reused": 0,
+          "error": null
+        }
+      ],
+      "bucket": "Z6_FULL_NORMALIZATION_NOT_ATTEMPTED"
+    },
+    {
+      "procurement_id": 213012,
+      "material_document_count": 1,
+      "local_document_count": 1,
+      "parse_attempted": true,
+      "embedded_extraction_attempted": true,
+      "raw_extracted_fact_count": 0,
+      "goods_gate_accepted_count": 0,
+      "category_resolved_count": 0,
+      "allowed_category_rejected_count": 0,
+      "persist_created_count": 0,
+      "persist_reused_count": 0,
+      "persistence_error": null,
+      "full_normalization_attempted": false,
+      "full_normalization_version": null,
+      "full_normalization_result": null,
+      "structured_estimate_rows": 0,
+      "post_parse_normalized_count": 0,
+      "parse_status_counts": {
+        "PARSED": 1
+      },
+      "documents": [
+        {
+          "parse_status": "PARSED",
+          "raw_extracted": 0,
+          "goods_accepted": null,
+          "category_resolved": null,
+          "allowed_rejected": 0,
+          "persisted_created": 0,
+          "persisted_reused": 0,
+          "error": null
+        }
+      ],
+      "bucket": "Z6_FULL_NORMALIZATION_NOT_ATTEMPTED"
+    },
+    {
+      "procurement_id": 213013,
+      "material_document_count": 1,
+      "local_document_count": 1,
+      "parse_attempted": true,
+      "embedded_extraction_attempted": true,
+      "raw_extracted_fact_count": 0,
+      "goods_gate_accepted_count": 0,
+      "category_resolved_count": 0,
+      "allowed_category_rejected_count": 0,
+      "persist_created_count": 0,
+      "persist_reused_count": 0,
+      "persistence_error": null,
+      "full_normalization_attempted": false,
+      "full_normalization_version": null,
+      "full_normalization_result": null,
+      "structured_estimate_rows": 0,
+      "post_parse_normalized_count": 0,
+      "parse_status_counts": {
+        "PARSED": 1
+      },
+      "documents": [
+        {
+          "parse_status": "PARSED",
+          "raw_extracted": 0,
+          "goods_accepted": null,
+          "category_resolved": null,
+          "allowed_rejected": 0,
+          "persisted_created": 0,
+          "persisted_reused": 0,
+          "error": null
+        }
+      ],
+      "bucket": "Z6_FULL_NORMALIZATION_NOT_ATTEMPTED"
+    },
+    {
+      "procurement_id": 214585,
+      "material_document_count": 1,
+      "local_document_count": 1,
+      "parse_attempted": true,
+      "embedded_extraction_attempted": true,
+      "raw_extracted_fact_count": 0,
+      "goods_gate_accepted_count": 0,
+      "category_resolved_count": 0,
+      "allowed_category_rejected_count": 0,
+      "persist_created_count": 0,
+      "persist_reused_count": 0,
+      "persistence_error": null,
+      "full_normalization_attempted": false,
+      "full_normalization_version": null,
+      "full_normalization_result": null,
+      "structured_estimate_rows": 0,
+      "post_parse_normalized_count": 0,
+      "parse_status_counts": {
+        "PARSED": 1
+      },
+      "documents": [
+        {
+          "parse_status": "PARSED",
+          "raw_extracted": 0,
+          "goods_accepted": null,
+          "category_resolved": null,
+          "allowed_rejected": 0,
+          "persisted_created": 0,
+          "persisted_reused": 0,
+          "error": null
+        }
+      ],
+      "bucket": "Z6_FULL_NORMALIZATION_NOT_ATTEMPTED"
+    },
+    {
+      "procurement_id": 326613,
+      "material_document_count": 6,
+      "local_document_count": 6,
+      "parse_attempted": true,
+      "embedded_extraction_attempted": true,
+      "raw_extracted_fact_count": 0,
+      "goods_gate_accepted_count": 0,
+      "category_resolved_count": 0,
+      "allowed_category_rejected_count": 0,
+      "persist_created_count": 0,
+      "persist_reused_count": 0,
+      "persistence_error": null,
+      "full_normalization_attempted": false,
+      "full_normalization_version": null,
+      "full_normalization_result": null,
+      "structured_estimate_rows": 0,
+      "post_parse_normalized_count": 0,
+      "parse_status_counts": {
+        "PARSED": 6
+      },
+      "documents": [
+        {
+          "parse_status": "PARSED",
+          "raw_extracted": 0,
+          "goods_accepted": null,
+          "category_resolved": null,
+          "allowed_rejected": 0,
+          "persisted_created": 0,
+          "persisted_reused": 0,
+          "error": null
+        },
+        {
+          "parse_status": "PARSED",
+          "raw_extracted": 0,
+          "goods_accepted": null,
+          "category_resolved": null,
+          "allowed_rejected": 0,
+          "persisted_created": 0,
+          "persisted_reused": 0,
+          "error": null
+        },
+        {
+          "parse_status": "PARSED",
+          "raw_extracted": 0,
+          "goods_accepted": null,
+          "category_resolved": null,
+          "allowed_rejected": 0,
+          "persisted_created": 0,
+          "persisted_reused": 0,
+          "error": null
+        },
+        {
+          "parse_status": "PARSED",
+          "raw_extracted": 0,
+          "goods_accepted": null,
+          "category_resolved": null,
+          "allowed_rejected": 0,
+          "persisted_created": 0,
+          "persisted_reused": 0,
+          "error": null
+        },
+        {
+          "parse_status": "PARSED",
+          "raw_extracted": 0,
+          "goods_accepted": null,
+          "category_resolved": null,
+          "allowed_rejected": 0,
+          "persisted_created": 0,
+          "persisted_reused": 0,
+          "error": null
+        },
+        {
+          "parse_status": "PARSED",
+          "raw_extracted": 0,
+          "goods_accepted": null,
+          "category_resolved": null,
+          "allowed_rejected": 0,
+          "persisted_created": 0,
+          "persisted_reused": 0,
+          "error": null
+        }
+      ],
+      "bucket": "Z6_FULL_NORMALIZATION_NOT_ATTEMPTED"
+    },
+    {
+      "procurement_id": 327915,
+      "material_document_count": 2,
+      "local_document_count": 2,
+      "parse_attempted": true,
+      "embedded_extraction_attempted": true,
+      "raw_extracted_fact_count": 0,
+      "goods_gate_accepted_count": 0,
+      "category_resolved_count": 0,
+      "allowed_category_rejected_count": 0,
+      "persist_created_count": 0,
+      "persist_reused_count": 0,
+      "persistence_error": null,
+      "full_normalization_attempted": false,
+      "full_normalization_version": null,
+      "full_normalization_result": null,
+      "structured_estimate_rows": 0,
+      "post_parse_normalized_count": 0,
+      "parse_status_counts": {
+        "PARSED": 2
+      },
+      "documents": [
+        {
+          "parse_status": "PARSED",
+          "raw_extracted": 0,
+          "goods_accepted": null,
+          "category_resolved": null,
+          "allowed_rejected": 0,
+          "persisted_created": 0,
+          "persisted_reused": 0,
+          "error": null
+        },
+        {
+          "parse_status": "PARSED",
+          "raw_extracted": 0,
+          "goods_accepted": null,
+          "category_resolved": null,
+          "allowed_rejected": 0,
+          "persisted_created": 0,
+          "persisted_reused": 0,
+          "error": null
+        }
+      ],
+      "bucket": "Z6_FULL_NORMALIZATION_NOT_ATTEMPTED"
+    },
+    {
+      "procurement_id": 328659,
+      "material_document_count": 1,
+      "local_document_count": 1,
+      "parse_attempted": true,
+      "embedded_extraction_attempted": true,
+      "raw_extracted_fact_count": 0,
+      "goods_gate_accepted_count": 0,
+      "category_resolved_count": 0,
+      "allowed_category_rejected_count": 0,
+      "persist_created_count": 0,
+      "persist_reused_count": 0,
+      "persistence_error": null,
+      "full_normalization_attempted": false,
+      "full_normalization_version": null,
+      "full_normalization_result": null,
+      "structured_estimate_rows": 0,
+      "post_parse_normalized_count": 0,
+      "parse_status_counts": {
+        "PARSED": 1
+      },
+      "documents": [
+        {
+          "parse_status": "PARSED",
+          "raw_extracted": 0,
+          "goods_accepted": null,
+          "category_resolved": null,
+          "allowed_rejected": 0,
+          "persisted_created": 0,
+          "persisted_reused": 0,
+          "error": null
+        }
+      ],
+      "bucket": "Z6_FULL_NORMALIZATION_NOT_ATTEMPTED"
+    },
+    {
+      "procurement_id": 333680,
+      "material_document_count": 8,
+      "local_document_count": 8,
+      "parse_attempted": true,
+      "embedded_extraction_attempted": true,
+      "raw_extracted_fact_count": 0,
+      "goods_gate_accepted_count": 0,
+      "category_resolved_count": 0,
+      "allowed_category_rejected_count": 0,
+      "persist_created_count": 0,
+      "persist_reused_count": 0,
+      "persistence_error": null,
+      "full_normalization_attempted": false,
+      "full_normalization_version": null,
+      "full_normalization_result": null,
+      "structured_estimate_rows": 0,
+      "post_parse_normalized_count": 0,
+      "parse_status_counts": {
+        "PARSED": 8
+      },
+      "documents": [
+        {
+          "parse_status": "PARSED",
+          "raw_extracted": 0,
+          "goods_accepted": null,
+          "category_resolved": null,
+          "allowed_rejected": 0,
+          "persisted_created": 0,
+          "persisted_reused": 0,
+          "error": null
+        },
+        {
+          "parse_status": "PARSED",
+          "raw_extracted": 0,
+          "goods_accepted": null,
+          "category_resolved": null,
+          "allowed_rejected": 0,
+          "persisted_created": 0,
+          "persisted_reused": 0,
+          "error": null
+        },
+        {
+          "parse_status": "PARSED",
+          "raw_extracted": 0,
+          "goods_accepted": null,
+          "category_resolved": null,
+          "allowed_rejected": 0,
+          "persisted_created": 0,
+          "persisted_reused": 0,
+          "error": null
+        },
+        {
+          "parse_status": "PARSED",
+          "raw_extracted": 0,
+          "goods_accepted": null,
+          "category_resolved": null,
+          "allowed_rejected": 0,
+          "persisted_created": 0,
+          "persisted_reused": 0,
+          "error": null
+        },
+        {
+          "parse_status": "PARSED",
+          "raw_extracted": 0,
+          "goods_accepted": null,
+          "category_resolved": null,
+          "allowed_rejected": 0,
+          "persisted_created": 0,
+          "persisted_reused": 0,
+          "error": null
+        },
+        {
+          "parse_status": "PARSED",
+          "raw_extracted": 0,
+          "goods_accepted": null,
+          "category_resolved": null,
+          "allowed_rejected": 0,
+          "persisted_created": 0,
+          "persisted_reused": 0,
+          "error": null
+        },
+        {
+          "parse_status": "PARSED",
+          "raw_extracted": 0,
+          "goods_accepted": null,
+          "category_resolved": null,
+          "allowed_rejected": 0,
+          "persisted_created": 0,
+          "persisted_reused": 0,
+          "error": null
+        },
+        {
+          "parse_status": "PARSED",
+          "raw_extracted": 0,
+          "goods_accepted": null,
+          "category_resolved": null,
+          "allowed_rejected": 0,
+          "persisted_created": 0,
+          "persisted_reused": 0,
+          "error": null
+        }
+      ],
+      "bucket": "Z6_FULL_NORMALIZATION_NOT_ATTEMPTED"
+    },
+    {
+      "procurement_id": 336974,
+      "material_document_count": 3,
+      "local_document_count": 1,
+      "parse_attempted": true,
+      "embedded_extraction_attempted": true,
+      "raw_extracted_fact_count": 0,
+      "goods_gate_accepted_count": 0,
+      "category_resolved_count": 0,
+      "allowed_category_rejected_count": 0,
+      "persist_created_count": 0,
+      "persist_reused_count": 0,
+      "persistence_error": null,
+      "full_normalization_attempted": false,
+      "full_normalization_version": null,
+      "full_normalization_result": null,
+      "structured_estimate_rows": 0,
+      "post_parse_normalized_count": 0,
+      "parse_status_counts": {
+        "FILE_NOT_LOCAL": 1,
+        "PARSED": 1,
+        "UNSUPPORTED_FORMAT": 1
+      },
+      "documents": [
+        {
+          "parse_status": "FILE_NOT_LOCAL",
+          "raw_extracted": null,
+          "goods_accepted": null,
+          "category_resolved": null,
+          "allowed_rejected": null,
+          "persisted_created": 0,
+          "persisted_reused": 0,
+          "error": null
+        },
+        {
+          "parse_status": "PARSED",
+          "raw_extracted": 0,
+          "goods_accepted": null,
+          "category_resolved": null,
+          "allowed_rejected": 0,
+          "persisted_created": 0,
+          "persisted_reused": 0,
+          "error": null
+        },
+        {
+          "parse_status": "UNSUPPORTED_FORMAT",
+          "raw_extracted": null,
+          "goods_accepted": null,
+          "category_resolved": null,
+          "allowed_rejected": null,
+          "persisted_created": 0,
+          "persisted_reused": 0,
+          "error": null
+        }
+      ],
+      "bucket": "Z6_FULL_NORMALIZATION_NOT_ATTEMPTED"
+    },
+    {
+      "procurement_id": 410275,
+      "material_document_count": 2,
+      "local_document_count": 1,
+      "parse_attempted": true,
+      "embedded_extraction_attempted": true,
+      "raw_extracted_fact_count": 0,
+      "goods_gate_accepted_count": 0,
+      "category_resolved_count": 0,
+      "allowed_category_rejected_count": 0,
+      "persist_created_count": 0,
+      "persist_reused_count": 0,
+      "persistence_error": null,
+      "full_normalization_attempted": false,
+      "full_normalization_version": null,
+      "full_normalization_result": null,
+      "structured_estimate_rows": 0,
+      "post_parse_normalized_count": 0,
+      "parse_status_counts": {
+        "FILE_NOT_LOCAL": 1,
+        "PARSED": 1
+      },
+      "documents": [
+        {
+          "parse_status": "FILE_NOT_LOCAL",
+          "raw_extracted": null,
+          "goods_accepted": null,
+          "category_resolved": null,
+          "allowed_rejected": null,
+          "persisted_created": 0,
+          "persisted_reused": 0,
+          "error": null
+        },
+        {
+          "parse_status": "PARSED",
+          "raw_extracted": 0,
+          "goods_accepted": null,
+          "category_resolved": null,
+          "allowed_rejected": 0,
+          "persisted_created": 0,
+          "persisted_reused": 0,
+          "error": null
+        }
+      ],
+      "bucket": "Z6_FULL_NORMALIZATION_NOT_ATTEMPTED"
+    },
+    {
+      "procurement_id": 412620,
+      "material_document_count": 2,
+      "local_document_count": 2,
+      "parse_attempted": true,
+      "embedded_extraction_attempted": true,
+      "raw_extracted_fact_count": 0,
+      "goods_gate_accepted_count": 0,
+      "category_resolved_count": 0,
+      "allowed_category_rejected_count": 0,
+      "persist_created_count": 0,
+      "persist_reused_count": 0,
+      "persistence_error": null,
+      "full_normalization_attempted": false,
+      "full_normalization_version": null,
+      "full_normalization_result": null,
+      "structured_estimate_rows": 0,
+      "post_parse_normalized_count": 0,
+      "parse_status_counts": {
+        "PARSED": 2
+      },
+      "documents": [
+        {
+          "parse_status": "PARSED",
+          "raw_extracted": 0,
+          "goods_accepted": null,
+          "category_resolved": null,
+          "allowed_rejected": 0,
+          "persisted_created": 0,
+          "persisted_reused": 0,
+          "error": null
+        },
+        {
+          "parse_status": "PARSED",
+          "raw_extracted": 0,
+          "goods_accepted": null,
+          "category_resolved": null,
+          "allowed_rejected": 0,
+          "persisted_created": 0,
+          "persisted_reused": 0,
+          "error": null
+        }
+      ],
+      "bucket": "Z6_FULL_NORMALIZATION_NOT_ATTEMPTED"
+    },
+    {
+      "procurement_id": 425303,
+      "material_document_count": 2,
+      "local_document_count": 2,
+      "parse_attempted": true,
+      "embedded_extraction_attempted": true,
+      "raw_extracted_fact_count": 0,
+      "goods_gate_accepted_count": 0,
+      "category_resolved_count": 0,
+      "allowed_category_rejected_count": 0,
+      "persist_created_count": 0,
+      "persist_reused_count": 0,
+      "persistence_error": null,
+      "full_normalization_attempted": false,
+      "full_normalization_version": null,
+      "full_normalization_result": null,
+      "structured_estimate_rows": 0,
+      "post_parse_normalized_count": 0,
+      "parse_status_counts": {
+        "PARSED": 2
+      },
+      "documents": [
+        {
+          "parse_status": "PARSED",
+          "raw_extracted": 0,
+          "goods_accepted": null,
+          "category_resolved": null,
+          "allowed_rejected": 0,
+          "persisted_created": 0,
+          "persisted_reused": 0,
+          "error": null
+        },
+        {
+          "parse_status": "PARSED",
+          "raw_extracted": 0,
+          "goods_accepted": null,
+          "category_resolved": null,
+          "allowed_rejected": 0,
+          "persisted_created": 0,
+          "persisted_reused": 0,
+          "error": null
+        }
+      ],
+      "bucket": "Z6_FULL_NORMALIZATION_NOT_ATTEMPTED"
+    },
+    {
+      "procurement_id": 449594,
+      "material_document_count": 4,
+      "local_document_count": 1,
+      "parse_attempted": true,
+      "embedded_extraction_attempted": true,
+      "raw_extracted_fact_count": 0,
+      "goods_gate_accepted_count": 0,
+      "category_resolved_count": 0,
+      "allowed_category_rejected_count": 0,
+      "persist_created_count": 0,
+      "persist_reused_count": 0,
+      "persistence_error": null,
+      "full_normalization_attempted": false,
+      "full_normalization_version": null,
+      "full_normalization_result": null,
+      "structured_estimate_rows": 0,
+      "post_parse_normalized_count": 0,
+      "parse_status_counts": {
+        "FILE_NOT_LOCAL": 3,
+        "PARSED": 1
+      },
+      "documents": [
+        {
+          "parse_status": "FILE_NOT_LOCAL",
+          "raw_extracted": null,
+          "goods_accepted": null,
+          "category_resolved": null,
+          "allowed_rejected": null,
+          "persisted_created": 0,
+          "persisted_reused": 0,
+          "error": null
+        },
+        {
+          "parse_status": "PARSED",
+          "raw_extracted": 0,
+          "goods_accepted": null,
+          "category_resolved": null,
+          "allowed_rejected": 0,
+          "persisted_created": 0,
+          "persisted_reused": 0,
+          "error": null
+        },
+        {
+          "parse_status": "FILE_NOT_LOCAL",
+          "raw_extracted": null,
+          "goods_accepted": null,
+          "category_resolved": null,
+          "allowed_rejected": null,
+          "persisted_created": 0,
+          "persisted_reused": 0,
+          "error": null
+        },
+        {
+          "parse_status": "FILE_NOT_LOCAL",
+          "raw_extracted": null,
+          "goods_accepted": null,
+          "category_resolved": null,
+          "allowed_rejected": null,
+          "persisted_created": 0,
+          "persisted_reused": 0,
+          "error": null
+        }
+      ],
+      "bucket": "Z6_FULL_NORMALIZATION_NOT_ATTEMPTED"
+    },
+    {
+      "procurement_id": 450206,
+      "material_document_count": 2,
+      "local_document_count": 2,
+      "parse_attempted": true,
+      "embedded_extraction_attempted": true,
+      "raw_extracted_fact_count": 0,
+      "goods_gate_accepted_count": 0,
+      "category_resolved_count": 0,
+      "allowed_category_rejected_count": 0,
+      "persist_created_count": 0,
+      "persist_reused_count": 0,
+      "persistence_error": null,
+      "full_normalization_attempted": false,
+      "full_normalization_version": null,
+      "full_normalization_result": null,
+      "structured_estimate_rows": 0,
+      "post_parse_normalized_count": 0,
+      "parse_status_counts": {
+        "PARSED": 2
+      },
+      "documents": [
+        {
+          "parse_status": "PARSED",
+          "raw_extracted": 0,
+          "goods_accepted": null,
+          "category_resolved": null,
+          "allowed_rejected": 0,
+          "persisted_created": 0,
+          "persisted_reused": 0,
+          "error": null
+        },
+        {
+          "parse_status": "PARSED",
+          "raw_extracted": 0,
+          "goods_accepted": null,
+          "category_resolved": null,
+          "allowed_rejected": 0,
+          "persisted_created": 0,
+          "persisted_reused": 0,
+          "error": null
+        }
+      ],
+      "bucket": "Z6_FULL_NORMALIZATION_NOT_ATTEMPTED"
+    },
+    {
+      "procurement_id": 451205,
+      "material_document_count": 4,
+      "local_document_count": 4,
+      "parse_attempted": true,
+      "embedded_extraction_attempted": true,
+      "raw_extracted_fact_count": 0,
+      "goods_gate_accepted_count": 0,
+      "category_resolved_count": 0,
+      "allowed_category_rejected_count": 0,
+      "persist_created_count": 0,
+      "persist_reused_count": 0,
+      "persistence_error": null,
+      "full_normalization_attempted": false,
+      "full_normalization_version": null,
+      "full_normalization_result": null,
+      "structured_estimate_rows": 0,
+      "post_parse_normalized_count": 0,
+      "parse_status_counts": {
+        "EMPTY_TEXT": 1,
+        "PARSED": 3
+      },
+      "documents": [
+        {
+          "parse_status": "EMPTY_TEXT",
+          "raw_extracted": 0,
+          "goods_accepted": null,
+          "category_resolved": null,
+          "allowed_rejected": 0,
+          "persisted_created": 0,
+          "persisted_reused": 0,
+          "error": null
+        },
+        {
+          "parse_status": "PARSED",
+          "raw_extracted": 0,
+          "goods_accepted": null,
+          "category_resolved": null,
+          "allowed_rejected": 0,
+          "persisted_created": 0,
+          "persisted_reused": 0,
+          "error": null
+        },
+        {
+          "parse_status": "PARSED",
+          "raw_extracted": 0,
+          "goods_accepted": null,
+          "category_resolved": null,
+          "allowed_rejected": 0,
+          "persisted_created": 0,
+          "persisted_reused": 0,
+          "error": null
+        },
+        {
+          "parse_status": "PARSED",
+          "raw_extracted": 0,
+          "goods_accepted": null,
+          "category_resolved": null,
+          "allowed_rejected": 0,
+          "persisted_created": 0,
+          "persisted_reused": 0,
+          "error": null
+        }
+      ],
+      "bucket": "Z6_FULL_NORMALIZATION_NOT_ATTEMPTED"
+    },
+    {
+      "procurement_id": 453676,
+      "material_document_count": 1,
+      "local_document_count": 1,
+      "parse_attempted": true,
+      "embedded_extraction_attempted": true,
+      "raw_extracted_fact_count": 0,
+      "goods_gate_accepted_count": 0,
+      "category_resolved_count": 0,
+      "allowed_category_rejected_count": 0,
+      "persist_created_count": 0,
+      "persist_reused_count": 0,
+      "persistence_error": null,
+      "full_normalization_attempted": false,
+      "full_normalization_version": null,
+      "full_normalization_result": null,
+      "structured_estimate_rows": 0,
+      "post_parse_normalized_count": 0,
+      "parse_status_counts": {
+        "PARSED": 1
+      },
+      "documents": [
+        {
+          "parse_status": "PARSED",
+          "raw_extracted": 0,
+          "goods_accepted": null,
+          "category_resolved": null,
+          "allowed_rejected": 0,
+          "persisted_created": 0,
+          "persisted_reused": 0,
+          "error": null
+        }
+      ],
+      "bucket": "Z6_FULL_NORMALIZATION_NOT_ATTEMPTED"
+    },
+    {
+      "procurement_id": 453682,
+      "material_document_count": 1,
+      "local_document_count": 1,
+      "parse_attempted": true,
+      "embedded_extraction_attempted": true,
+      "raw_extracted_fact_count": 0,
+      "goods_gate_accepted_count": 0,
+      "category_resolved_count": 0,
+      "allowed_category_rejected_count": 0,
+      "persist_created_count": 0,
+      "persist_reused_count": 0,
+      "persistence_error": null,
+      "full_normalization_attempted": false,
+      "full_normalization_version": null,
+      "full_normalization_result": null,
+      "structured_estimate_rows": 0,
+      "post_parse_normalized_count": 0,
+      "parse_status_counts": {
+        "PARSED": 1
+      },
+      "documents": [
+        {
+          "parse_status": "PARSED",
+          "raw_extracted": 0,
+          "goods_accepted": null,
+          "category_resolved": null,
+          "allowed_rejected": 0,
+          "persisted_created": 0,
+          "persisted_reused": 0,
+          "error": null
+        }
+      ],
+      "bucket": "Z6_FULL_NORMALIZATION_NOT_ATTEMPTED"
+    },
+    {
+      "procurement_id": 458922,
+      "material_document_count": 2,
+      "local_document_count": 2,
+      "parse_attempted": true,
+      "embedded_extraction_attempted": true,
+      "raw_extracted_fact_count": 0,
+      "goods_gate_accepted_count": 0,
+      "category_resolved_count": 0,
+      "allowed_category_rejected_count": 0,
+      "persist_created_count": 0,
+      "persist_reused_count": 0,
+      "persistence_error": null,
+      "full_normalization_attempted": false,
+      "full_normalization_version": null,
+      "full_normalization_result": null,
+      "structured_estimate_rows": 0,
+      "post_parse_normalized_count": 0,
+      "parse_status_counts": {
+        "EMPTY_TEXT": 2
+      },
+      "documents": [
+        {
+          "parse_status": "EMPTY_TEXT",
+          "raw_extracted": 0,
+          "goods_accepted": null,
+          "category_resolved": null,
+          "allowed_rejected": 0,
+          "persisted_created": 0,
+          "persisted_reused": 0,
+          "error": null
+        },
+        {
+          "parse_status": "EMPTY_TEXT",
+          "raw_extracted": 0,
+          "goods_accepted": null,
+          "category_resolved": null,
+          "allowed_rejected": 0,
+          "persisted_created": 0,
+          "persisted_reused": 0,
+          "error": null
+        }
+      ],
+      "bucket": "Z6_FULL_NORMALIZATION_NOT_ATTEMPTED"
+    },
+    {
+      "procurement_id": 459379,
+      "material_document_count": 3,
+      "local_document_count": 3,
+      "parse_attempted": true,
+      "embedded_extraction_attempted": true,
+      "raw_extracted_fact_count": 2,
+      "goods_gate_accepted_count": 0,
+      "category_resolved_count": 0,
+      "allowed_category_rejected_count": 0,
+      "persist_created_count": 0,
+      "persist_reused_count": 0,
+      "persistence_error": null,
+      "full_normalization_attempted": false,
+      "full_normalization_version": null,
+      "full_normalization_result": null,
+      "structured_estimate_rows": 0,
+      "post_parse_normalized_count": 0,
+      "parse_status_counts": {
+        "PARSED": 3
+      },
+      "documents": [
+        {
+          "parse_status": "PARSED",
+          "raw_extracted": 0,
+          "goods_accepted": null,
+          "category_resolved": null,
+          "allowed_rejected": 0,
+          "persisted_created": 0,
+          "persisted_reused": 0,
+          "error": null
+        },
+        {
+          "parse_status": "PARSED",
+          "raw_extracted": 0,
+          "goods_accepted": null,
+          "category_resolved": null,
+          "allowed_rejected": 0,
+          "persisted_created": 0,
+          "persisted_reused": 0,
+          "error": null
+        },
+        {
+          "parse_status": "PARSED",
+          "raw_extracted": 2,
+          "goods_accepted": 0,
+          "category_resolved": 0,
+          "allowed_rejected": 0,
+          "persisted_created": 0,
+          "persisted_reused": 0,
+          "error": null
+        }
+      ],
+      "bucket": "Z6_FULL_NORMALIZATION_NOT_ATTEMPTED"
+    },
+    {
+      "procurement_id": 459603,
+      "material_document_count": 4,
+      "local_document_count": 4,
+      "parse_attempted": true,
+      "embedded_extraction_attempted": true,
+      "raw_extracted_fact_count": 0,
+      "goods_gate_accepted_count": 0,
+      "category_resolved_count": 0,
+      "allowed_category_rejected_count": 0,
+      "persist_created_count": 0,
+      "persist_reused_count": 0,
+      "persistence_error": null,
+      "full_normalization_attempted": false,
+      "full_normalization_version": null,
+      "full_normalization_result": null,
+      "structured_estimate_rows": 0,
+      "post_parse_normalized_count": 0,
+      "parse_status_counts": {
+        "EMPTY_TEXT": 2,
+        "PARSED": 2
+      },
+      "documents": [
+        {
+          "parse_status": "EMPTY_TEXT",
+          "raw_extracted": 0,
+          "goods_accepted": null,
+          "category_resolved": null,
+          "allowed_rejected": 0,
+          "persisted_created": 0,
+          "persisted_reused": 0,
+          "error": null
+        },
+        {
+          "parse_status": "PARSED",
+          "raw_extracted": 0,
+          "goods_accepted": null,
+          "category_resolved": null,
+          "allowed_rejected": 0,
+          "persisted_created": 0,
+          "persisted_reused": 0,
+          "error": null
+        },
+        {
+          "parse_status": "PARSED",
+          "raw_extracted": 0,
+          "goods_accepted": null,
+          "category_resolved": null,
+          "allowed_rejected": 0,
+          "persisted_created": 0,
+          "persisted_reused": 0,
+          "error": null
+        },
+        {
+          "parse_status": "EMPTY_TEXT",
+          "raw_extracted": 0,
+          "goods_accepted": null,
+          "category_resolved": null,
+          "allowed_rejected": 0,
+          "persisted_created": 0,
+          "persisted_reused": 0,
+          "error": null
+        }
+      ],
+      "bucket": "Z6_FULL_NORMALIZATION_NOT_ATTEMPTED"
+    },
+    {
+      "procurement_id": 460882,
+      "material_document_count": 11,
+      "local_document_count": 1,
+      "parse_attempted": true,
+      "embedded_extraction_attempted": true,
+      "raw_extracted_fact_count": 0,
+      "goods_gate_accepted_count": 0,
+      "category_resolved_count": 0,
+      "allowed_category_rejected_count": 0,
+      "persist_created_count": 0,
+      "persist_reused_count": 0,
+      "persistence_error": null,
+      "full_normalization_attempted": false,
+      "full_normalization_version": null,
+      "full_normalization_result": null,
+      "structured_estimate_rows": 0,
+      "post_parse_normalized_count": 0,
+      "parse_status_counts": {
+        "FILE_NOT_LOCAL": 10,
+        "EMPTY_TEXT": 1
+      },
+      "documents": [
+        {
+          "parse_status": "FILE_NOT_LOCAL",
+          "raw_extracted": null,
+          "goods_accepted": null,
+          "category_resolved": null,
+          "allowed_rejected": null,
+          "persisted_created": 0,
+          "persisted_reused": 0,
+          "error": null
+        },
+        {
+          "parse_status": "EMPTY_TEXT",
+          "raw_extracted": 0,
+          "goods_accepted": null,
+          "category_resolved": null,
+          "allowed_rejected": 0,
+          "persisted_created": 0,
+          "persisted_reused": 0,
+          "error": null
+        },
+        {
+          "parse_status": "FILE_NOT_LOCAL",
+          "raw_extracted": null,
+          "goods_accepted": null,
+          "category_resolved": null,
+          "allowed_rejected": null,
+          "persisted_created": 0,
+          "persisted_reused": 0,
+          "error": null
+        },
+        {
+          "parse_status": "FILE_NOT_LOCAL",
+          "raw_extracted": null,
+          "goods_accepted": null,
+          "category_resolved": null,
+          "allowed_rejected": null,
+          "persisted_created": 0,
+          "persisted_reused": 0,
+          "error": null
+        },
+        {
+          "parse_status": "FILE_NOT_LOCAL",
+          "raw_extracted": null,
+          "goods_accepted": null,
+          "category_resolved": null,
+          "allowed_rejected": null,
+          "persisted_created": 0,
+          "persisted_reused": 0,
+          "error": null
+        },
+        {
+          "parse_status": "FILE_NOT_LOCAL",
+          "raw_extracted": null,
+          "goods_accepted": null,
+          "category_resolved": null,
+          "allowed_rejected": null,
+          "persisted_created": 0,
+          "persisted_reused": 0,
+          "error": null
+        },
+        {
+          "parse_status": "FILE_NOT_LOCAL",
+          "raw_extracted": null,
+          "goods_accepted": null,
+          "category_resolved": null,
+          "allowed_rejected": null,
+          "persisted_created": 0,
+          "persisted_reused": 0,
+          "error": null
+        },
+        {
+          "parse_status": "FILE_NOT_LOCAL",
+          "raw_extracted": null,
+          "goods_accepted": null,
+          "category_resolved": null,
+          "allowed_rejected": null,
+          "persisted_created": 0,
+          "persisted_reused": 0,
+          "error": null
+        },
+        {
+          "parse_status": "FILE_NOT_LOCAL",
+          "raw_extracted": null,
+          "goods_accepted": null,
+          "category_resolved": null,
+          "allowed_rejected": null,
+          "persisted_created": 0,
+          "persisted_reused": 0,
+          "error": null
+        },
+        {
+          "parse_status": "FILE_NOT_LOCAL",
+          "raw_extracted": null,
+          "goods_accepted": null,
+          "category_resolved": null,
+          "allowed_rejected": null,
+          "persisted_created": 0,
+          "persisted_reused": 0,
+          "error": null
+        },
+        {
+          "parse_status": "FILE_NOT_LOCAL",
+          "raw_extracted": null,
+          "goods_accepted": null,
+          "category_resolved": null,
+          "allowed_rejected": null,
+          "persisted_created": 0,
+          "persisted_reused": 0,
+          "error": null
+        }
+      ],
+      "bucket": "Z6_FULL_NORMALIZATION_NOT_ATTEMPTED"
+    },
+    {
+      "procurement_id": 460923,
+      "material_document_count": 6,
+      "local_document_count": 1,
+      "parse_attempted": true,
+      "embedded_extraction_attempted": true,
+      "raw_extracted_fact_count": 0,
+      "goods_gate_accepted_count": 0,
+      "category_resolved_count": 0,
+      "allowed_category_rejected_count": 0,
+      "persist_created_count": 0,
+      "persist_reused_count": 0,
+      "persistence_error": null,
+      "full_normalization_attempted": false,
+      "full_normalization_version": null,
+      "full_normalization_result": null,
+      "structured_estimate_rows": 0,
+      "post_parse_normalized_count": 0,
+      "parse_status_counts": {
+        "FILE_NOT_LOCAL": 5,
+        "EMPTY_TEXT": 1
+      },
+      "documents": [
+        {
+          "parse_status": "FILE_NOT_LOCAL",
+          "raw_extracted": null,
+          "goods_accepted": null,
+          "category_resolved": null,
+          "allowed_rejected": null,
+          "persisted_created": 0,
+          "persisted_reused": 0,
+          "error": null
+        },
+        {
+          "parse_status": "FILE_NOT_LOCAL",
+          "raw_extracted": null,
+          "goods_accepted": null,
+          "category_resolved": null,
+          "allowed_rejected": null,
+          "persisted_created": 0,
+          "persisted_reused": 0,
+          "error": null
+        },
+        {
+          "parse_status": "EMPTY_TEXT",
+          "raw_extracted": 0,
+          "goods_accepted": null,
+          "category_resolved": null,
+          "allowed_rejected": 0,
+          "persisted_created": 0,
+          "persisted_reused": 0,
+          "error": null
+        },
+        {
+          "parse_status": "FILE_NOT_LOCAL",
+          "raw_extracted": null,
+          "goods_accepted": null,
+          "category_resolved": null,
+          "allowed_rejected": null,
+          "persisted_created": 0,
+          "persisted_reused": 0,
+          "error": null
+        },
+        {
+          "parse_status": "FILE_NOT_LOCAL",
+          "raw_extracted": null,
+          "goods_accepted": null,
+          "category_resolved": null,
+          "allowed_rejected": null,
+          "persisted_created": 0,
+          "persisted_reused": 0,
+          "error": null
+        },
+        {
+          "parse_status": "FILE_NOT_LOCAL",
+          "raw_extracted": null,
+          "goods_accepted": null,
+          "category_resolved": null,
+          "allowed_rejected": null,
+          "persisted_created": 0,
+          "persisted_reused": 0,
+          "error": null
+        }
+      ],
+      "bucket": "Z6_FULL_NORMALIZATION_NOT_ATTEMPTED"
+    },
+    {
+      "procurement_id": 461281,
+      "material_document_count": 7,
+      "local_document_count": 0,
+      "parse_attempted": false,
+      "embedded_extraction_attempted": false,
+      "raw_extracted_fact_count": 0,
+      "goods_gate_accepted_count": 0,
+      "category_resolved_count": 0,
+      "allowed_category_rejected_count": 0,
+      "persist_created_count": 0,
+      "persist_reused_count": 0,
+      "persistence_error": null,
+      "full_normalization_attempted": false,
+      "full_normalization_version": null,
+      "full_normalization_result": null,
+      "structured_estimate_rows": 0,
+      "post_parse_normalized_count": 0,
+      "parse_status_counts": {
+        "FILE_NOT_LOCAL": 7
+      },
+      "documents": [
+        {
+          "parse_status": "FILE_NOT_LOCAL",
+          "raw_extracted": null,
+          "goods_accepted": null,
+          "category_resolved": null,
+          "allowed_rejected": null,
+          "persisted_created": 0,
+          "persisted_reused": 0,
+          "error": null
+        },
+        {
+          "parse_status": "FILE_NOT_LOCAL",
+          "raw_extracted": null,
+          "goods_accepted": null,
+          "category_resolved": null,
+          "allowed_rejected": null,
+          "persisted_created": 0,
+          "persisted_reused": 0,
+          "error": null
+        },
+        {
+          "parse_status": "FILE_NOT_LOCAL",
+          "raw_extracted": null,
+          "goods_accepted": null,
+          "category_resolved": null,
+          "allowed_rejected": null,
+          "persisted_created": 0,
+          "persisted_reused": 0,
+          "error": null
+        },
+        {
+          "parse_status": "FILE_NOT_LOCAL",
+          "raw_extracted": null,
+          "goods_accepted": null,
+          "category_resolved": null,
+          "allowed_rejected": null,
+          "persisted_created": 0,
+          "persisted_reused": 0,
+          "error": null
+        },
+        {
+          "parse_status": "FILE_NOT_LOCAL",
+          "raw_extracted": null,
+          "goods_accepted": null,
+          "category_resolved": null,
+          "allowed_rejected": null,
+          "persisted_created": 0,
+          "persisted_reused": 0,
+          "error": null
+        },
+        {
+          "parse_status": "FILE_NOT_LOCAL",
+          "raw_extracted": null,
+          "goods_accepted": null,
+          "category_resolved": null,
+          "allowed_rejected": null,
+          "persisted_created": 0,
+          "persisted_reused": 0,
+          "error": null
+        },
+        {
+          "parse_status": "FILE_NOT_LOCAL",
+          "raw_extracted": null,
+          "goods_accepted": null,
+          "category_resolved": null,
+          "allowed_rejected": null,
+          "persisted_created": 0,
+          "persisted_reused": 0,
+          "error": null
+        }
+      ],
+      "bucket": "Z6_FULL_NORMALIZATION_NOT_ATTEMPTED"
+    },
+    {
+      "procurement_id": 464502,
+      "material_document_count": 4,
+      "local_document_count": 4,
+      "parse_attempted": true,
+      "embedded_extraction_attempted": true,
+      "raw_extracted_fact_count": 0,
+      "goods_gate_accepted_count": 0,
+      "category_resolved_count": 0,
+      "allowed_category_rejected_count": 0,
+      "persist_created_count": 0,
+      "persist_reused_count": 0,
+      "persistence_error": null,
+      "full_normalization_attempted": false,
+      "full_normalization_version": null,
+      "full_normalization_result": null,
+      "structured_estimate_rows": 0,
+      "post_parse_normalized_count": 0,
+      "parse_status_counts": {
+        "PARSED": 4
+      },
+      "documents": [
+        {
+          "parse_status": "PARSED",
+          "raw_extracted": 0,
+          "goods_accepted": null,
+          "category_resolved": null,
+          "allowed_rejected": 0,
+          "persisted_created": 0,
+          "persisted_reused": 0,
+          "error": null
+        },
+        {
+          "parse_status": "PARSED",
+          "raw_extracted": 0,
+          "goods_accepted": null,
+          "category_resolved": null,
+          "allowed_rejected": 0,
+          "persisted_created": 0,
+          "persisted_reused": 0,
+          "error": null
+        },
+        {
+          "parse_status": "PARSED",
+          "raw_extracted": 0,
+          "goods_accepted": null,
+          "category_resolved": null,
+          "allowed_rejected": 0,
+          "persisted_created": 0,
+          "persisted_reused": 0,
+          "error": null
+        },
+        {
+          "parse_status": "PARSED",
+          "raw_extracted": 0,
+          "goods_accepted": null,
+          "category_resolved": null,
+          "allowed_rejected": 0,
+          "persisted_created": 0,
+          "persisted_reused": 0,
+          "error": null
+        }
+      ],
+      "bucket": "Z6_FULL_NORMALIZATION_NOT_ATTEMPTED"
+    },
+    {
+      "procurement_id": 484827,
+      "material_document_count": 4,
+      "local_document_count": 4,
+      "parse_attempted": true,
+      "embedded_extraction_attempted": true,
+      "raw_extracted_fact_count": 0,
+      "goods_gate_accepted_count": 0,
+      "category_resolved_count": 0,
+      "allowed_category_rejected_count": 0,
+      "persist_created_count": 0,
+      "persist_reused_count": 0,
+      "persistence_error": null,
+      "full_normalization_attempted": false,
+      "full_normalization_version": null,
+      "full_normalization_result": null,
+      "structured_estimate_rows": 0,
+      "post_parse_normalized_count": 0,
+      "parse_status_counts": {
+        "PARSED": 4
+      },
+      "documents": [
+        {
+          "parse_status": "PARSED",
+          "raw_extracted": 0,
+          "goods_accepted": null,
+          "category_resolved": null,
+          "allowed_rejected": 0,
+          "persisted_created": 0,
+          "persisted_reused": 0,
+          "error": null
+        },
+        {
+          "parse_status": "PARSED",
+          "raw_extracted": 0,
+          "goods_accepted": null,
+          "category_resolved": null,
+          "allowed_rejected": 0,
+          "persisted_created": 0,
+          "persisted_reused": 0,
+          "error": null
+        },
+        {
+          "parse_status": "PARSED",
+          "raw_extracted": 0,
+          "goods_accepted": null,
+          "category_resolved": null,
+          "allowed_rejected": 0,
+          "persisted_created": 0,
+          "persisted_reused": 0,
+          "error": null
+        },
+        {
+          "parse_status": "PARSED",
+          "raw_extracted": 0,
+          "goods_accepted": null,
+          "category_resolved": null,
+          "allowed_rejected": 0,
+          "persisted_created": 0,
+          "persisted_reused": 0,
+          "error": null
+        }
+      ],
+      "bucket": "Z6_FULL_NORMALIZATION_NOT_ATTEMPTED"
+    },
+    {
+      "procurement_id": 484844,
+      "material_document_count": 4,
+      "local_document_count": 4,
+      "parse_attempted": true,
+      "embedded_extraction_attempted": true,
+      "raw_extracted_fact_count": 0,
+      "goods_gate_accepted_count": 0,
+      "category_resolved_count": 0,
+      "allowed_category_rejected_count": 0,
+      "persist_created_count": 0,
+      "persist_reused_count": 0,
+      "persistence_error": null,
+      "full_normalization_attempted": false,
+      "full_normalization_version": null,
+      "full_normalization_result": null,
+      "structured_estimate_rows": 0,
+      "post_parse_normalized_count": 0,
+      "parse_status_counts": {
+        "PARSED": 4
+      },
+      "documents": [
+        {
+          "parse_status": "PARSED",
+          "raw_extracted": 0,
+          "goods_accepted": null,
+          "category_resolved": null,
+          "allowed_rejected": 0,
+          "persisted_created": 0,
+          "persisted_reused": 0,
+          "error": null
+        },
+        {
+          "parse_status": "PARSED",
+          "raw_extracted": 0,
+          "goods_accepted": null,
+          "category_resolved": null,
+          "allowed_rejected": 0,
+          "persisted_created": 0,
+          "persisted_reused": 0,
+          "error": null
+        },
+        {
+          "parse_status": "PARSED",
+          "raw_extracted": 0,
+          "goods_accepted": null,
+          "category_resolved": null,
+          "allowed_rejected": 0,
+          "persisted_created": 0,
+          "persisted_reused": 0,
+          "error": null
+        },
+        {
+          "parse_status": "PARSED",
+          "raw_extracted": 0,
+          "goods_accepted": null,
+          "category_resolved": null,
+          "allowed_rejected": 0,
+          "persisted_created": 0,
+          "persisted_reused": 0,
+          "error": null
+        }
+      ],
+      "bucket": "Z6_FULL_NORMALIZATION_NOT_ATTEMPTED"
+    },
+    {
+      "procurement_id": 484866,
+      "material_document_count": 4,
+      "local_document_count": 4,
+      "parse_attempted": true,
+      "embedded_extraction_attempted": true,
+      "raw_extracted_fact_count": 0,
+      "goods_gate_accepted_count": 0,
+      "category_resolved_count": 0,
+      "allowed_category_rejected_count": 0,
+      "persist_created_count": 0,
+      "persist_reused_count": 0,
+      "persistence_error": null,
+      "full_normalization_attempted": false,
+      "full_normalization_version": null,
+      "full_normalization_result": null,
+      "structured_estimate_rows": 0,
+      "post_parse_normalized_count": 0,
+      "parse_status_counts": {
+        "PARSED": 4
+      },
+      "documents": [
+        {
+          "parse_status": "PARSED",
+          "raw_extracted": 0,
+          "goods_accepted": null,
+          "category_resolved": null,
+          "allowed_rejected": 0,
+          "persisted_created": 0,
+          "persisted_reused": 0,
+          "error": null
+        },
+        {
+          "parse_status": "PARSED",
+          "raw_extracted": 0,
+          "goods_accepted": null,
+          "category_resolved": null,
+          "allowed_rejected": 0,
+          "persisted_created": 0,
+          "persisted_reused": 0,
+          "error": null
+        },
+        {
+          "parse_status": "PARSED",
+          "raw_extracted": 0,
+          "goods_accepted": null,
+          "category_resolved": null,
+          "allowed_rejected": 0,
+          "persisted_created": 0,
+          "persisted_reused": 0,
+          "error": null
+        },
+        {
+          "parse_status": "PARSED",
+          "raw_extracted": 0,
+          "goods_accepted": null,
+          "category_resolved": null,
+          "allowed_rejected": 0,
+          "persisted_created": 0,
+          "persisted_reused": 0,
+          "error": null
+        }
+      ],
+      "bucket": "Z6_FULL_NORMALIZATION_NOT_ATTEMPTED"
+    },
+    {
+      "procurement_id": 484867,
+      "material_document_count": 4,
+      "local_document_count": 4,
+      "parse_attempted": true,
+      "embedded_extraction_attempted": true,
+      "raw_extracted_fact_count": 0,
+      "goods_gate_accepted_count": 0,
+      "category_resolved_count": 0,
+      "allowed_category_rejected_count": 0,
+      "persist_created_count": 0,
+      "persist_reused_count": 0,
+      "persistence_error": null,
+      "full_normalization_attempted": false,
+      "full_normalization_version": null,
+      "full_normalization_result": null,
+      "structured_estimate_rows": 0,
+      "post_parse_normalized_count": 0,
+      "parse_status_counts": {
+        "PARSED": 4
+      },
+      "documents": [
+        {
+          "parse_status": "PARSED",
+          "raw_extracted": 0,
+          "goods_accepted": null,
+          "category_resolved": null,
+          "allowed_rejected": 0,
+          "persisted_created": 0,
+          "persisted_reused": 0,
+          "error": null
+        },
+        {
+          "parse_status": "PARSED",
+          "raw_extracted": 0,
+          "goods_accepted": null,
+          "category_resolved": null,
+          "allowed_rejected": 0,
+          "persisted_created": 0,
+          "persisted_reused": 0,
+          "error": null
+        },
+        {
+          "parse_status": "PARSED",
+          "raw_extracted": 0,
+          "goods_accepted": null,
+          "category_resolved": null,
+          "allowed_rejected": 0,
+          "persisted_created": 0,
+          "persisted_reused": 0,
+          "error": null
+        },
+        {
+          "parse_status": "PARSED",
+          "raw_extracted": 0,
+          "goods_accepted": null,
+          "category_resolved": null,
+          "allowed_rejected": 0,
+          "persisted_created": 0,
+          "persisted_reused": 0,
+          "error": null
+        }
+      ],
+      "bucket": "Z6_FULL_NORMALIZATION_NOT_ATTEMPTED"
+    },
+    {
+      "procurement_id": 484868,
+      "material_document_count": 6,
+      "local_document_count": 6,
+      "parse_attempted": true,
+      "embedded_extraction_attempted": true,
+      "raw_extracted_fact_count": 0,
+      "goods_gate_accepted_count": 0,
+      "category_resolved_count": 0,
+      "allowed_category_rejected_count": 0,
+      "persist_created_count": 0,
+      "persist_reused_count": 0,
+      "persistence_error": null,
+      "full_normalization_attempted": false,
+      "full_normalization_version": null,
+      "full_normalization_result": null,
+      "structured_estimate_rows": 0,
+      "post_parse_normalized_count": 0,
+      "parse_status_counts": {
+        "PARSED": 5,
+        "EMPTY_TEXT": 1
+      },
+      "documents": [
+        {
+          "parse_status": "PARSED",
+          "raw_extracted": 0,
+          "goods_accepted": null,
+          "category_resolved": null,
+          "allowed_rejected": 0,
+          "persisted_created": 0,
+          "persisted_reused": 0,
+          "error": null
+        },
+        {
+          "parse_status": "PARSED",
+          "raw_extracted": 0,
+          "goods_accepted": null,
+          "category_resolved": null,
+          "allowed_rejected": 0,
+          "persisted_created": 0,
+          "persisted_reused": 0,
+          "error": null
+        },
+        {
+          "parse_status": "PARSED",
+          "raw_extracted": 0,
+          "goods_accepted": null,
+          "category_resolved": null,
+          "allowed_rejected": 0,
+          "persisted_created": 0,
+          "persisted_reused": 0,
+          "error": null
+        },
+        {
+          "parse_status": "PARSED",
+          "raw_extracted": 0,
+          "goods_accepted": null,
+          "category_resolved": null,
+          "allowed_rejected": 0,
+          "persisted_created": 0,
+          "persisted_reused": 0,
+          "error": null
+        },
+        {
+          "parse_status": "PARSED",
+          "raw_extracted": 0,
+          "goods_accepted": null,
+          "category_resolved": null,
+          "allowed_rejected": 0,
+          "persisted_created": 0,
+          "persisted_reused": 0,
+          "error": null
+        },
+        {
+          "parse_status": "EMPTY_TEXT",
+          "raw_extracted": 0,
+          "goods_accepted": null,
+          "category_resolved": null,
+          "allowed_rejected": 0,
+          "persisted_created": 0,
+          "persisted_reused": 0,
+          "error": null
+        }
+      ],
+      "bucket": "Z6_FULL_NORMALIZATION_NOT_ATTEMPTED"
+    },
+    {
+      "procurement_id": 484872,
+      "material_document_count": 4,
+      "local_document_count": 4,
+      "parse_attempted": true,
+      "embedded_extraction_attempted": true,
+      "raw_extracted_fact_count": 0,
+      "goods_gate_accepted_count": 0,
+      "category_resolved_count": 0,
+      "allowed_category_rejected_count": 0,
+      "persist_created_count": 0,
+      "persist_reused_count": 0,
+      "persistence_error": null,
+      "full_normalization_attempted": false,
+      "full_normalization_version": null,
+      "full_normalization_result": null,
+      "structured_estimate_rows": 0,
+      "post_parse_normalized_count": 0,
+      "parse_status_counts": {
+        "PARSED": 4
+      },
+      "documents": [
+        {
+          "parse_status": "PARSED",
+          "raw_extracted": 0,
+          "goods_accepted": null,
+          "category_resolved": null,
+          "allowed_rejected": 0,
+          "persisted_created": 0,
+          "persisted_reused": 0,
+          "error": null
+        },
+        {
+          "parse_status": "PARSED",
+          "raw_extracted": 0,
+          "goods_accepted": null,
+          "category_resolved": null,
+          "allowed_rejected": 0,
+          "persisted_created": 0,
+          "persisted_reused": 0,
+          "error": null
+        },
+        {
+          "parse_status": "PARSED",
+          "raw_extracted": 0,
+          "goods_accepted": null,
+          "category_resolved": null,
+          "allowed_rejected": 0,
+          "persisted_created": 0,
+          "persisted_reused": 0,
+          "error": null
+        },
+        {
+          "parse_status": "PARSED",
+          "raw_extracted": 0,
+          "goods_accepted": null,
+          "category_resolved": null,
+          "allowed_rejected": 0,
+          "persisted_created": 0,
+          "persisted_reused": 0,
+          "error": null
+        }
+      ],
+      "bucket": "Z6_FULL_NORMALIZATION_NOT_ATTEMPTED"
+    },
+    {
+      "procurement_id": 484873,
+      "material_document_count": 3,
+      "local_document_count": 3,
+      "parse_attempted": true,
+      "embedded_extraction_attempted": true,
+      "raw_extracted_fact_count": 0,
+      "goods_gate_accepted_count": 0,
+      "category_resolved_count": 0,
+      "allowed_category_rejected_count": 0,
+      "persist_created_count": 0,
+      "persist_reused_count": 0,
+      "persistence_error": null,
+      "full_normalization_attempted": false,
+      "full_normalization_version": null,
+      "full_normalization_result": null,
+      "structured_estimate_rows": 0,
+      "post_parse_normalized_count": 0,
+      "parse_status_counts": {
+        "PARSED": 3
+      },
+      "documents": [
+        {
+          "parse_status": "PARSED",
+          "raw_extracted": 0,
+          "goods_accepted": null,
+          "category_resolved": null,
+          "allowed_rejected": 0,
+          "persisted_created": 0,
+          "persisted_reused": 0,
+          "error": null
+        },
+        {
+          "parse_status": "PARSED",
+          "raw_extracted": 0,
+          "goods_accepted": null,
+          "category_resolved": null,
+          "allowed_rejected": 0,
+          "persisted_created": 0,
+          "persisted_reused": 0,
+          "error": null
+        },
+        {
+          "parse_status": "PARSED",
+          "raw_extracted": 0,
+          "goods_accepted": null,
+          "category_resolved": null,
+          "allowed_rejected": 0,
+          "persisted_created": 0,
+          "persisted_reused": 0,
+          "error": null
+        }
+      ],
+      "bucket": "Z6_FULL_NORMALIZATION_NOT_ATTEMPTED"
+    },
+    {
+      "procurement_id": 484875,
+      "material_document_count": 4,
+      "local_document_count": 4,
+      "parse_attempted": true,
+      "embedded_extraction_attempted": true,
+      "raw_extracted_fact_count": 0,
+      "goods_gate_accepted_count": 0,
+      "category_resolved_count": 0,
+      "allowed_category_rejected_count": 0,
+      "persist_created_count": 0,
+      "persist_reused_count": 0,
+      "persistence_error": null,
+      "full_normalization_attempted": false,
+      "full_normalization_version": null,
+      "full_normalization_result": null,
+      "structured_estimate_rows": 0,
+      "post_parse_normalized_count": 0,
+      "parse_status_counts": {
+        "PARSED": 4
+      },
+      "documents": [
+        {
+          "parse_status": "PARSED",
+          "raw_extracted": 0,
+          "goods_accepted": null,
+          "category_resolved": null,
+          "allowed_rejected": 0,
+          "persisted_created": 0,
+          "persisted_reused": 0,
+          "error": null
+        },
+        {
+          "parse_status": "PARSED",
+          "raw_extracted": 0,
+          "goods_accepted": null,
+          "category_resolved": null,
+          "allowed_rejected": 0,
+          "persisted_created": 0,
+          "persisted_reused": 0,
+          "error": null
+        },
+        {
+          "parse_status": "PARSED",
+          "raw_extracted": 0,
+          "goods_accepted": null,
+          "category_resolved": null,
+          "allowed_rejected": 0,
+          "persisted_created": 0,
+          "persisted_reused": 0,
+          "error": null
+        },
+        {
+          "parse_status": "PARSED",
+          "raw_extracted": 0,
+          "goods_accepted": null,
+          "category_resolved": null,
+          "allowed_rejected": 0,
+          "persisted_created": 0,
+          "persisted_reused": 0,
+          "error": null
+        }
+      ],
+      "bucket": "Z6_FULL_NORMALIZATION_NOT_ATTEMPTED"
+    },
+    {
+      "procurement_id": 484884,
+      "material_document_count": 5,
+      "local_document_count": 5,
+      "parse_attempted": true,
+      "embedded_extraction_attempted": true,
+      "raw_extracted_fact_count": 0,
+      "goods_gate_accepted_count": 0,
+      "category_resolved_count": 0,
+      "allowed_category_rejected_count": 0,
+      "persist_created_count": 0,
+      "persist_reused_count": 0,
+      "persistence_error": null,
+      "full_normalization_attempted": false,
+      "full_normalization_version": null,
+      "full_normalization_result": null,
+      "structured_estimate_rows": 0,
+      "post_parse_normalized_count": 0,
+      "parse_status_counts": {
+        "PARSED": 5
+      },
+      "documents": [
+        {
+          "parse_status": "PARSED",
+          "raw_extracted": 0,
+          "goods_accepted": null,
+          "category_resolved": null,
+          "allowed_rejected": 0,
+          "persisted_created": 0,
+          "persisted_reused": 0,
+          "error": null
+        },
+        {
+          "parse_status": "PARSED",
+          "raw_extracted": 0,
+          "goods_accepted": null,
+          "category_resolved": null,
+          "allowed_rejected": 0,
+          "persisted_created": 0,
+          "persisted_reused": 0,
+          "error": null
+        },
+        {
+          "parse_status": "PARSED",
+          "raw_extracted": 0,
+          "goods_accepted": null,
+          "category_resolved": null,
+          "allowed_rejected": 0,
+          "persisted_created": 0,
+          "persisted_reused": 0,
+          "error": null
+        },
+        {
+          "parse_status": "PARSED",
+          "raw_extracted": 0,
+          "goods_accepted": null,
+          "category_resolved": null,
+          "allowed_rejected": 0,
+          "persisted_created": 0,
+          "persisted_reused": 0,
+          "error": null
+        },
+        {
+          "parse_status": "PARSED",
+          "raw_extracted": 0,
+          "goods_accepted": null,
+          "category_resolved": null,
+          "allowed_rejected": 0,
+          "persisted_created": 0,
+          "persisted_reused": 0,
+          "error": null
+        }
+      ],
+      "bucket": "Z6_FULL_NORMALIZATION_NOT_ATTEMPTED"
+    },
+    {
+      "procurement_id": 484887,
+      "material_document_count": 3,
+      "local_document_count": 2,
+      "parse_attempted": true,
+      "embedded_extraction_attempted": true,
+      "raw_extracted_fact_count": 0,
+      "goods_gate_accepted_count": 0,
+      "category_resolved_count": 0,
+      "allowed_category_rejected_count": 0,
+      "persist_created_count": 0,
+      "persist_reused_count": 0,
+      "persistence_error": null,
+      "full_normalization_attempted": false,
+      "full_normalization_version": null,
+      "full_normalization_result": null,
+      "structured_estimate_rows": 0,
+      "post_parse_normalized_count": 0,
+      "parse_status_counts": {
+        "UNSUPPORTED_FORMAT": 1,
+        "PARSED": 2
+      },
+      "documents": [
+        {
+          "parse_status": "UNSUPPORTED_FORMAT",
+          "raw_extracted": null,
+          "goods_accepted": null,
+          "category_resolved": null,
+          "allowed_rejected": null,
+          "persisted_created": 0,
+          "persisted_reused": 0,
+          "error": null
+        },
+        {
+          "parse_status": "PARSED",
+          "raw_extracted": 0,
+          "goods_accepted": null,
+          "category_resolved": null,
+          "allowed_rejected": 0,
+          "persisted_created": 0,
+          "persisted_reused": 0,
+          "error": null
+        },
+        {
+          "parse_status": "PARSED",
+          "raw_extracted": 0,
+          "goods_accepted": null,
+          "category_resolved": null,
+          "allowed_rejected": 0,
+          "persisted_created": 0,
+          "persisted_reused": 0,
+          "error": null
+        }
+      ],
+      "bucket": "Z6_FULL_NORMALIZATION_NOT_ATTEMPTED"
+    },
+    {
+      "procurement_id": 484932,
+      "material_document_count": 4,
+      "local_document_count": 4,
+      "parse_attempted": true,
+      "embedded_extraction_attempted": true,
+      "raw_extracted_fact_count": 0,
+      "goods_gate_accepted_count": 0,
+      "category_resolved_count": 0,
+      "allowed_category_rejected_count": 0,
+      "persist_created_count": 0,
+      "persist_reused_count": 0,
+      "persistence_error": null,
+      "full_normalization_attempted": false,
+      "full_normalization_version": null,
+      "full_normalization_result": null,
+      "structured_estimate_rows": 0,
+      "post_parse_normalized_count": 0,
+      "parse_status_counts": {
+        "PARSED": 4
+      },
+      "documents": [
+        {
+          "parse_status": "PARSED",
+          "raw_extracted": 0,
+          "goods_accepted": null,
+          "category_resolved": null,
+          "allowed_rejected": 0,
+          "persisted_created": 0,
+          "persisted_reused": 0,
+          "error": null
+        },
+        {
+          "parse_status": "PARSED",
+          "raw_extracted": 0,
+          "goods_accepted": null,
+          "category_resolved": null,
+          "allowed_rejected": 0,
+          "persisted_created": 0,
+          "persisted_reused": 0,
+          "error": null
+        },
+        {
+          "parse_status": "PARSED",
+          "raw_extracted": 0,
+          "goods_accepted": null,
+          "category_resolved": null,
+          "allowed_rejected": 0,
+          "persisted_created": 0,
+          "persisted_reused": 0,
+          "error": null
+        },
+        {
+          "parse_status": "PARSED",
+          "raw_extracted": 0,
+          "goods_accepted": null,
+          "category_resolved": null,
+          "allowed_rejected": 0,
+          "persisted_created": 0,
+          "persisted_reused": 0,
+          "error": null
+        }
+      ],
+      "bucket": "Z6_FULL_NORMALIZATION_NOT_ATTEMPTED"
+    },
+    {
+      "procurement_id": 484960,
+      "material_document_count": 5,
+      "local_document_count": 5,
+      "parse_attempted": true,
+      "embedded_extraction_attempted": true,
+      "raw_extracted_fact_count": 0,
+      "goods_gate_accepted_count": 0,
+      "category_resolved_count": 0,
+      "allowed_category_rejected_count": 0,
+      "persist_created_count": 0,
+      "persist_reused_count": 0,
+      "persistence_error": null,
+      "full_normalization_attempted": false,
+      "full_normalization_version": null,
+      "full_normalization_result": null,
+      "structured_estimate_rows": 0,
+      "post_parse_normalized_count": 0,
+      "parse_status_counts": {
+        "PARSED": 4,
+        "EMPTY_TEXT": 1
+      },
+      "documents": [
+        {
+          "parse_status": "PARSED",
+          "raw_extracted": 0,
+          "goods_accepted": null,
+          "category_resolved": null,
+          "allowed_rejected": 0,
+          "persisted_created": 0,
+          "persisted_reused": 0,
+          "error": null
+        },
+        {
+          "parse_status": "PARSED",
+          "raw_extracted": 0,
+          "goods_accepted": null,
+          "category_resolved": null,
+          "allowed_rejected": 0,
+          "persisted_created": 0,
+          "persisted_reused": 0,
+          "error": null
+        },
+        {
+          "parse_status": "PARSED",
+          "raw_extracted": 0,
+          "goods_accepted": null,
+          "category_resolved": null,
+          "allowed_rejected": 0,
+          "persisted_created": 0,
+          "persisted_reused": 0,
+          "error": null
+        },
+        {
+          "parse_status": "PARSED",
+          "raw_extracted": 0,
+          "goods_accepted": null,
+          "category_resolved": null,
+          "allowed_rejected": 0,
+          "persisted_created": 0,
+          "persisted_reused": 0,
+          "error": null
+        },
+        {
+          "parse_status": "EMPTY_TEXT",
+          "raw_extracted": 0,
+          "goods_accepted": null,
+          "category_resolved": null,
+          "allowed_rejected": 0,
+          "persisted_created": 0,
+          "persisted_reused": 0,
+          "error": null
+        }
+      ],
+      "bucket": "Z6_FULL_NORMALIZATION_NOT_ATTEMPTED"
+    },
+    {
+      "procurement_id": 484985,
+      "material_document_count": 5,
+      "local_document_count": 5,
+      "parse_attempted": true,
+      "embedded_extraction_attempted": true,
+      "raw_extracted_fact_count": 0,
+      "goods_gate_accepted_count": 0,
+      "category_resolved_count": 0,
+      "allowed_category_rejected_count": 0,
+      "persist_created_count": 0,
+      "persist_reused_count": 0,
+      "persistence_error": null,
+      "full_normalization_attempted": false,
+      "full_normalization_version": null,
+      "full_normalization_result": null,
+      "structured_estimate_rows": 0,
+      "post_parse_normalized_count": 0,
+      "parse_status_counts": {
+        "PARSED": 5
+      },
+      "documents": [
+        {
+          "parse_status": "PARSED",
+          "raw_extracted": 0,
+          "goods_accepted": null,
+          "category_resolved": null,
+          "allowed_rejected": 0,
+          "persisted_created": 0,
+          "persisted_reused": 0,
+          "error": null
+        },
+        {
+          "parse_status": "PARSED",
+          "raw_extracted": 0,
+          "goods_accepted": null,
+          "category_resolved": null,
+          "allowed_rejected": 0,
+          "persisted_created": 0,
+          "persisted_reused": 0,
+          "error": null
+        },
+        {
+          "parse_status": "PARSED",
+          "raw_extracted": 0,
+          "goods_accepted": null,
+          "category_resolved": null,
+          "allowed_rejected": 0,
+          "persisted_created": 0,
+          "persisted_reused": 0,
+          "error": null
+        },
+        {
+          "parse_status": "PARSED",
+          "raw_extracted": 0,
+          "goods_accepted": null,
+          "category_resolved": null,
+          "allowed_rejected": 0,
+          "persisted_created": 0,
+          "persisted_reused": 0,
+          "error": null
+        },
+        {
+          "parse_status": "PARSED",
+          "raw_extracted": 0,
+          "goods_accepted": null,
+          "category_resolved": null,
+          "allowed_rejected": 0,
+          "persisted_created": 0,
+          "persisted_reused": 0,
+          "error": null
+        }
+      ],
+      "bucket": "Z6_FULL_NORMALIZATION_NOT_ATTEMPTED"
+    },
+    {
+      "procurement_id": 485011,
+      "material_document_count": 3,
+      "local_document_count": 3,
+      "parse_attempted": true,
+      "embedded_extraction_attempted": true,
+      "raw_extracted_fact_count": 0,
+      "goods_gate_accepted_count": 0,
+      "category_resolved_count": 0,
+      "allowed_category_rejected_count": 0,
+      "persist_created_count": 0,
+      "persist_reused_count": 0,
+      "persistence_error": null,
+      "full_normalization_attempted": false,
+      "full_normalization_version": null,
+      "full_normalization_result": null,
+      "structured_estimate_rows": 0,
+      "post_parse_normalized_count": 0,
+      "parse_status_counts": {
+        "PARSED": 3
+      },
+      "documents": [
+        {
+          "parse_status": "PARSED",
+          "raw_extracted": 0,
+          "goods_accepted": null,
+          "category_resolved": null,
+          "allowed_rejected": 0,
+          "persisted_created": 0,
+          "persisted_reused": 0,
+          "error": null
+        },
+        {
+          "parse_status": "PARSED",
+          "raw_extracted": 0,
+          "goods_accepted": null,
+          "category_resolved": null,
+          "allowed_rejected": 0,
+          "persisted_created": 0,
+          "persisted_reused": 0,
+          "error": null
+        },
+        {
+          "parse_status": "PARSED",
+          "raw_extracted": 0,
+          "goods_accepted": null,
+          "category_resolved": null,
+          "allowed_rejected": 0,
+          "persisted_created": 0,
+          "persisted_reused": 0,
+          "error": null
+        }
+      ],
+      "bucket": "Z6_FULL_NORMALIZATION_NOT_ATTEMPTED"
+    },
+    {
+      "procurement_id": 485012,
+      "material_document_count": 4,
+      "local_document_count": 4,
+      "parse_attempted": true,
+      "embedded_extraction_attempted": true,
+      "raw_extracted_fact_count": 0,
+      "goods_gate_accepted_count": 0,
+      "category_resolved_count": 0,
+      "allowed_category_rejected_count": 0,
+      "persist_created_count": 0,
+      "persist_reused_count": 0,
+      "persistence_error": null,
+      "full_normalization_attempted": false,
+      "full_normalization_version": null,
+      "full_normalization_result": null,
+      "structured_estimate_rows": 0,
+      "post_parse_normalized_count": 0,
+      "parse_status_counts": {
+        "PARSED": 4
+      },
+      "documents": [
+        {
+          "parse_status": "PARSED",
+          "raw_extracted": 0,
+          "goods_accepted": null,
+          "category_resolved": null,
+          "allowed_rejected": 0,
+          "persisted_created": 0,
+          "persisted_reused": 0,
+          "error": null
+        },
+        {
+          "parse_status": "PARSED",
+          "raw_extracted": 0,
+          "goods_accepted": null,
+          "category_resolved": null,
+          "allowed_rejected": 0,
+          "persisted_created": 0,
+          "persisted_reused": 0,
+          "error": null
+        },
+        {
+          "parse_status": "PARSED",
+          "raw_extracted": 0,
+          "goods_accepted": null,
+          "category_resolved": null,
+          "allowed_rejected": 0,
+          "persisted_created": 0,
+          "persisted_reused": 0,
+          "error": null
+        },
+        {
+          "parse_status": "PARSED",
+          "raw_extracted": 0,
+          "goods_accepted": null,
+          "category_resolved": null,
+          "allowed_rejected": 0,
+          "persisted_created": 0,
+          "persisted_reused": 0,
+          "error": null
+        }
+      ],
+      "bucket": "Z6_FULL_NORMALIZATION_NOT_ATTEMPTED"
+    }
+  ]
+}

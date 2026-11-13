@@ -47,6 +47,27 @@ def fs(path):
         with open(path) as fh: return fh.read().strip()
     except Exception: return ""
 
+ROUTING_STATUS_PATH="/var/lib/crm-v3-canary/continuous_backlog_drain/routing_status.json"
+
+def routing_backlog_count():
+    try:
+        with open(ROUTING_STATUS_PATH) as fh:
+            payload=json.load(fh)
+        backlog=payload.get("backlog") or {}
+        full=backlog.get("TOTAL_ROUTING_ELIGIBLE_BACKLOG")
+        if full is not None:
+            return int(full or 0)
+        live=payload.get("TOTAL_ELIGIBLE_BACKLOG")
+        discovery=backlog.get("OTHER_SELECTABLE_LANES")
+        if backlog and (live is not None or discovery is not None):
+            return int(live or 0) + int(discovery or 0)
+        if payload.get("queue_count_selected") is not None:
+            value=payload.get("TOTAL_ELIGIBLE_BACKLOG")
+            return int(value) if value is not None else None
+        return None
+    except Exception:
+        return None
+
 def cpu_cap_detail():
     base="/sys/devices/system/cpu"
     cur=fs(base+"/cpu0/cpufreq/scaling_cur_freq")
@@ -185,6 +206,7 @@ ETA_OK_MAX_HOURS=12
 ETA_EDGE_MAX_HOURS=24
 ADMISSION_POLICY="BUSINESS_RESEARCH_ADMISSION_V2"
 MAX_ROUTING_ATTEMPTS=int(os.environ.get("CRM_V3_ROUTING_MAX_ATTEMPTS","3"))
+DAY_START_MAX_AGE_SECONDS=36*60*60
 
 def daily_kpis():
     """Bounded daily funnel/awards + real rolling throughput."""
@@ -522,25 +544,61 @@ def command_center_metrics():
         if dp:
             out["today"]["processed"]=i(dp[0][0])
             out["yesterday"]["processed"]=i(dp[0][1])
-        cohort_sql="""
+        cohort_sql=f"""
         WITH recv AS (
-          SELECT id FROM crm_procurements WHERE crm_created_at>=current_date
+          SELECT p.id,p.okpd_code,p.ai_assessed_at,
+                 EXISTS (
+                   SELECT 1 FROM crm_procurement_scope_authority a
+                    WHERE a.procurement_id=p.id
+                      AND a.admission_state='ELIGIBLE'
+                      AND a.admission_policy_version='{ADMISSION_POLICY}'
+                 ) AS admitted,
+                 EXISTS (
+                   SELECT 1 FROM crm_procurement_category_opportunities o
+                    WHERE o.procurement_id=p.id AND o.status='CURRENT'
+                 ) AS has_current,
+                 EXISTS (
+                   SELECT 1 FROM crm_category_okpd_priors op
+                    WHERE op.active
+                      AND regexp_replace(coalesce(p.okpd_code,''),'[[:space:]]+','','g') <> ''
+                      AND (
+                        (upper(coalesce(op.match_type,'PREFIX'))='EXACT'
+                         AND regexp_replace(coalesce(p.okpd_code,''),'[[:space:]]+','','g')
+                             =regexp_replace(op.okpd_pattern,'[[:space:]]+','','g'))
+                        OR
+                        (upper(coalesce(op.match_type,'PREFIX')) IN ('PREFIX','BRANCH')
+                         AND (
+                           regexp_replace(coalesce(p.okpd_code,''),'[[:space:]]+','','g')
+                             =regexp_replace(op.okpd_pattern,'[[:space:]]+','','g')
+                           OR regexp_replace(coalesce(p.okpd_code,''),'[[:space:]]+','','g')
+                             LIKE regexp_replace(op.okpd_pattern,'[[:space:]]+','','g') || '.%'
+                         ))
+                      )
+                 ) AS has_prior
+            FROM crm_procurements p
+           WHERE p.crm_created_at>=current_date
+        ), signals AS (
+          SELECT *,
+                 admitted AND (
+                   has_prior OR has_current
+                   OR COALESCE(ai_assessed_at>=current_date,false)
+                 ) AS actionable
+            FROM recv
         )
         SELECT count(*),
-               count(*) FILTER (WHERE EXISTS (
-                 SELECT 1 FROM crm_procurements p
-                  WHERE p.id=recv.id AND p.ai_assessed_at>=current_date)),
-               count(*) FILTER (WHERE EXISTS (
-                 SELECT 1 FROM crm_procurement_category_opportunities o
-                  WHERE o.procurement_id=recv.id AND o.status='CURRENT'
-                    AND o.created_at>=current_date))
-          FROM recv
+               count(*) FILTER (WHERE actionable),
+               count(*) FILTER (WHERE NOT actionable),
+               count(*) FILTER (
+                 WHERE actionable AND ai_assessed_at>=current_date
+               )
+          FROM signals
         """
         cohort=rows(pq("crm",cohort_sql,30))
         if cohort:
             out["today"]["received"]=i(cohort[0][0])
-            out["today"]["model_from_received"]=i(cohort[0][1])
-            out["today"]["commercial_from_received"]=i(cohort[0][2])
+            out["today"]["actionable_from_received"]=i(cohort[0][1])
+            out["today"]["no_commercial_signal"]=i(cohort[0][2])
+            out["today"]["processed_from_received"]=i(cohort[0][3])
 
         doc_sql=f"""
         SELECT count(*) FILTER (WHERE status IN
@@ -842,6 +900,15 @@ def contour():
     if not latest: return out
     day_start=rows.get("prior_day")
     day_start_source="prior_day"
+    try:
+        day_start_age=int(day_start.get("age_sec")) if day_start else None
+    except (TypeError,ValueError):
+        day_start_age=None
+    if day_start and (day_start_age is None or day_start_age>DAY_START_MAX_AGE_SECONDS):
+        # A missed timer must not anchor today's workload to an old outage
+        # snapshot. Use the first fresh snapshot from today instead.
+        day_start=rows.get("first_today")
+        day_start_source="first_today_after_stale_prior_day"
     if not day_start:
         day_start=rows.get("first_today")
         day_start_source="first_today"
@@ -874,38 +941,34 @@ def daily_work_contract(command, contour_data):
     today=(command or {}).get("today") or {}
     yesterday=(command or {}).get("yesterday") or {}
     latest=(contour_data or {}).get("latest") or {}
-    day_start=(contour_data or {}).get("day_start") or {}
-    backlog_at_start=day_start.get("remaining_total")
-    admitted_today=today.get("admitted")
-    processed=today.get("processed")
-    daily_workload=(backlog_at_start+admitted_today
-                    if backlog_at_start is not None and admitted_today is not None else None)
-    daily_remaining=(daily_workload-processed
-                     if daily_workload is not None and processed is not None else None)
-    daily_pct=(round(100.0*processed/daily_workload,1)
-               if daily_workload not in (None,0) and processed is not None else None)
+    actionable=today.get("actionable_from_received")
+    processed=today.get("processed_from_received")
+    daily_remaining=(max(0,actionable-processed)
+                     if actionable is not None and processed is not None else None)
+    daily_pct=(round(100.0*processed/actionable,1)
+               if actionable not in (None,0) and processed is not None else None)
     current_remaining=latest.get("remaining_total")
-    backlog_delta=(current_remaining-backlog_at_start
-                   if current_remaining is not None and backlog_at_start is not None else None)
     eligible=latest.get("eligible_total")
     processed_total=latest.get("processed_total")
     contour_pct=(round(1000.0*processed_total/eligible)/10
                  if eligible and processed_total is not None else None)
+    routing_backlog=routing_backlog_count()
+    documents=(command or {}).get("documents") or {}
     daily_work={
         "received_today":today.get("received"),
-        "admitted_today":admitted_today,
-        "backlog_at_day_start":backlog_at_start,
-        "backlog_at_day_start_captured_at":day_start.get("captured_at"),
-        "backlog_at_day_start_source":day_start.get("source"),
-        "daily_workload":daily_workload,
+        "actionable_today":actionable,
+        "no_commercial_signal":today.get("no_commercial_signal"),
+        "daily_workload":actionable,
         "processed_from_day_work_set":processed,
         "remaining_from_day_work_set":daily_remaining,
+        "processed_all_cohorts_today":today.get("processed"),
         "daily_progress_pct":daily_pct,
         "current_remaining":current_remaining,
-        "backlog_delta_today":backlog_delta,
+        "routing_backlog":routing_backlog,
+        "document_queue_pending":documents.get("waiting"),
         "previous_day":{
             "received":yesterday.get("received"),
-            "admitted":yesterday.get("admitted"),
+            "actionable":yesterday.get("actionable_from_received"),
             "processed":yesterday.get("processed"),
         },
     }
@@ -973,7 +1036,7 @@ header{height:42px;padding:6px 14px;background:#161b22;border-bottom:2px solid #
 .delta-up{color:#3fb950}.delta-down{color:#ff7b72}.split-grid{display:grid;grid-template-columns:1fr 1fr;gap:18px}.inner-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px}
 .metric-pair{display:flex;justify-content:space-between;border-bottom:1px solid #21262d;padding:2px 0;line-height:1.22}.medals{display:flex;gap:8px;flex-wrap:wrap}.medal{font-weight:700}.flow-line{display:flex;gap:24px;align-items:baseline}.flow-state-ok{color:#3fb950}.flow-state-warn{color:#d29922}.flow-state-bad{color:#ff7b72}.flow-state-unknown{color:#8b949e}
 .resources{display:grid;grid-template-columns:2.1fr 2.1fr 1.2fr 1.3fr;gap:8px;height:calc(100% - 20px)}.resbox{background:#0d1117;border:1px solid #30363d;border-radius:8px;padding:7px 9px;min-height:0;overflow:hidden}.activity-grid{display:grid;grid-template-columns:1fr 1fr;gap:5px}.activity{background:#161b22;border:1px solid #30363d;border-radius:7px;padding:4px 6px;min-height:0}.activity b{display:block;font-size:20px;line-height:1.05}.activity span{font-size:10px;line-height:1.1;color:#8b949e}
-.daily-kpis{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:5px}.daily-kpi{background:#161b22;border:1px solid #30363d;border-radius:7px;padding:4px 7px;min-width:0}.daily-kpi .label{font-size:10px;color:#8b949e;text-transform:uppercase;white-space:nowrap}.daily-kpi .value{font-size:23px;font-weight:750;line-height:1.08}.daily-kpi .note{font-size:10px;color:#8b949e;white-space:nowrap}
+.daily-kpis{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:5px}.daily-kpi{background:#161b22;border:1px solid #30363d;border-radius:7px;padding:4px 7px;min-width:0}.daily-kpi .label{font-size:10px;color:#8b949e;text-transform:uppercase;white-space:nowrap}.daily-kpi .value{font-size:23px;font-weight:750;line-height:1.08}.daily-kpi .note{font-size:10px;color:#8b949e;white-space:nowrap}
 .daily-progress{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:6px 12px;margin-top:6px;align-items:end}.daily-progress .track{height:19px;background:#21262d;border-radius:5px;overflow:hidden}.daily-progress .track>span{display:block;height:100%;background:#2ea043}.daily-progress .pct{font-size:27px;font-weight:750;line-height:1}.daily-meta{display:flex;justify-content:space-between;gap:12px;margin-top:3px}.daily-tail{font-weight:700}.daily-tail-ok{color:#3fb950}.daily-tail-warn{color:#d29922}.contour-note{margin-top:4px;color:#8b949e;font-size:10px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .resbox h3{margin:0 0 4px;font-size:13px;color:#58a6ff}.cores{display:grid;grid-template-columns:repeat(8,1fr);gap:2px;margin-top:4px}.core{height:12px;background:#21262d;border-radius:2px;overflow:hidden;position:relative}
 .core>span{display:block;position:absolute;bottom:0;width:100%}.core>i{position:absolute;top:0;left:1px;font-style:normal;font-size:9px;color:#8b949e}.temp{padding:1px 7px;border-radius:6px;display:inline-block}
@@ -1010,9 +1073,9 @@ const fmtEta=h=>h==null?'н/д':(h<1?Math.max(1,Math.round(h*60))+' мин':Math
 async function tick(){try{const m=await (await fetch('/api/metrics')).json(),cmd=m.command||{},t=cmd.today||{},d=cmd.documents||{},mo=cmd.model||{},co=cmd.commercial||{},rates=cmd.rates||{},ct=m.contour||{},dw=m.daily_work||{},ctTotal=m.contour_total||{},prev=dw.previous_day||{},dk=m.daily||{};
  $('clock').textContent=m.time||'';$('cache').textContent='данные '+(m.cache_ts||'н/д');
  const ss=m.system_status||{state:'UNKNOWN',label:'СОСТОЯНИЕ НЕ ОПРЕДЕЛЕНО'};$('system').textContent=(ss.state==='OK'?'● ':ss.state==='WARNING'?'⚠ ':ss.state==='CRITICAL'?'✕ ':'? ')+ss.label;$('system').className='system '+(ss.state==='OK'?'sys-ok':ss.state==='WARNING'?'sys-warn':ss.state==='CRITICAL'?'sys-bad':'sys-unknown');
- const dt=dk.today||{},age=ctTotal.snapshot_age_sec==null?null:Math.round(ctTotal.snapshot_age_sec/60),dailyPct=dw.daily_progress_pct,barWidth=dailyPct==null?0:Math.max(0,Math.min(100,dailyPct)),tail=dw.backlog_delta_today,tailText=tail==null?'н/д':(tail>0?'+':'')+nn(tail)+' '+(tail>0?'⚠ растёт':tail<0?'✓ сокращается':'без изменений'),tailCls=tail==null?'':tail>0?'daily-tail-warn':'daily-tail-ok';
+ const dt=dk.today||{},age=ctTotal.snapshot_age_sec==null?null:Math.round(ctTotal.snapshot_age_sec/60),dailyPct=dw.daily_progress_pct,barWidth=dailyPct==null?0:Math.max(0,Math.min(100,dailyPct)),tail=dw.remaining_from_day_work_set,tailText=tail==null?'н/д':(tail>0?'осталось '+nn(tail):'✓ очередь дня закрыта'),tailCls=tail==null?'':tail>0?'daily-tail-warn':'daily-tail-ok';
  const metric=(label,value,note)=>`<div class="daily-kpi"><div class="label">${label}</div><div class="value">${nn(value)}</div><div class="note">${note||''}</div></div>`;
- $('daily_work').innerHTML=`<div class="daily-kpis">${metric('Пришло',dw.received_today,delta(dw.received_today-prev.received||0))}${metric('Допущено в работу',dw.admitted_today,delta(dw.admitted_today-prev.admitted||0))}${metric('Остаток с вчера',dw.backlog_at_day_start,'день начинается здесь')}${metric('Всего к обработке',dw.daily_workload,'вчерашний хвост + новые')}${metric('Обработано',dw.processed_from_day_work_set,delta(dw.processed_from_day_work_set-prev.processed||0))}${metric('Осталось',dw.remaining_from_day_work_set,'из рабочего объёма дня')}</div><div class="daily-progress"><div><div class="track"><span style="width:${barWidth}%"></span></div><div class="daily-meta"><span class="small">Прогресс сегодняшнего объёма</span><span class="daily-tail ${tailCls}">Хвост с начала дня: ${tailText}</span></div></div><div class="pct">${dailyPct==null?'н/д':num1(dailyPct)+'%'}</div></div><div class="contour-note">Общий накопленный контур: ${nn(ctTotal.processed_total)} / ${nn(ctTotal.eligible_total)} · ${ctTotal.progress_pct==null?'н/д':num1(ctTotal.progress_pct)+'%'} · осталось ${nn(ctTotal.remaining_total)} · срез ${age==null?'н/д':age+' мин'} · ${ct.delta_source||'н/д'}</div>`;
+ $('daily_work').innerHTML=`<div class="daily-kpis">${metric('Сегодня поступило',dw.received_today,delta(dw.received_today-prev.received||0))}${metric('Требуют обработки',dw.actionable_today,'с коммерческим сигналом')}${metric('Без коммерческого сигнала',dw.no_commercial_signal,'не входят в remaining')}${metric('Обработано',dw.processed_from_day_work_set,'та же сегодняшняя когорта')}${metric('Осталось',dw.remaining_from_day_work_set,'actionable − processed')}</div><div class="daily-progress"><div><div class="track"><span style="width:${barWidth}%"></span></div><div class="daily-meta"><span class="small">Прогресс обработки сегодняшней когорты</span><span class="daily-tail ${tailCls}">${tailText}</span></div></div><div class="pct">${dailyPct==null?'н/д':num1(dailyPct)+'%'}</div></div><div class="contour-note">Операционно · Routing backlog ${nn(dw.routing_backlog)} · Document queue pending ${nn(dw.document_queue_pending)}</div><div class="contour-note">Общий накопленный контур: ${nn(ctTotal.processed_total)} / ${nn(ctTotal.eligible_total)} · ${ctTotal.progress_pct==null?'н/д':num1(ctTotal.progress_pct)+'%'} · осталось ${nn(ctTotal.remaining_total)} · срез ${age==null?'н/д':age+' мин'} · ${ct.delta_source||'н/д'}</div>`;
  const acts=[['Задачи документов завершены',dt.processed,'procurements'],['AI assessed',t.model_processed,'procurements'],['Validated match details',mo.raw_done_today,'match details'],['Commercial results',co.result_today,'procurements']];
  $('activity').innerHTML=acts.map(a=>`<div class="activity"><b>${nn(a[1])}</b><span>${a[0]} · ${a[2]}</span></div>`).join('');
  const docRate=d.throughput_per_hour,docEta=(docRate>0&&d.waiting>0)?d.waiting/docRate:null;

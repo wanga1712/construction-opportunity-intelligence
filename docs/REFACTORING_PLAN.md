@@ -7210,3 +7210,72 @@ not documented. `DEPLOY=NO`, `PURGE=NO`, `DB_WRITES=0`. Evidence:
 ## 2026-11-12 — WIP_HYDRO_KANBAN_INLINE_SIDECAR_V1
 
 Этап начат локально от HEAD 8b639e271b6c08f03df50b935542299ec9d367cf. Bootstrap выявил незакоммиченные изменения в целевых UI-файлах; сохранены. Первое изменение заменило primary-action УК-card на отдельную зону drag handle. Узкая проверка: py_compile src/ui/hydro_cards.py — PASS. Полный sidecar, Chrome/Edge canary и Full HD screenshot пока PENDING; schema/data/scoring/funnel без изменений.
+
+2026-11-12 sidecar read-model/UI section added in
+`src/ui/hydro_inline_sidecar.py` (270 lines, cohesive module). Uses existing
+`company_contacts` / `company_activities` / reception fields and
+`fetch_uk_object_addresses`; supports contact, reception, meeting and call
+actions through existing repository methods. `py_compile` — PASS. DOM
+anchoring and visual acceptance remain PENDING.
+
+Follow-up after operator report that the card click did not work: replaced the
+custom iframe click event with a native Streamlit button that carries the
+account card surface; the drag handle remains separate. Focused Python syntax
+compilation and diff whitespace check pass. Browser behavior remains pending.
+
+Read-only runtime check 2026-11-12 confirmed the currently active S13
+`crm-streamlit.service` is at runtime HEAD `b5d46b8f2713b7a1533a6037b461cca6eed7231e`.
+Its `/opt/CRM_Streamlit` tree lacks the new local `hydro_cards.py` and
+`hydro_inline_sidecar.py`; its Kanban and drag component are separate untracked
+files. No production files were copied and no service was restarted. Existing
+approved production release scopes do not include this Hydro UI WIP, so
+production update and browser acceptance are BLOCKED pending a documented
+release route. A local preview is also not configured: the application
+bootstrap aborts on missing `DB_DATABASE` in the local environment, before a
+browser session starts. No local DB connection was attempted.
+
+Owner authorized a one-time Hydro UI release after the old runtime was
+confirmed. A scoped route for four S13 UI paths was added to
+`docs/PROJECT_OPERATING_RULES.md`; route-document diff check passes. Runtime
+schema preflight, staged release, restart and Chrome/Edge acceptance remain
+pending.
+
+Read-only S13 schema preflight found only the base `management_companies`
+columns; reception fields and the `company_contacts` / `company_activities`
+tables are absent, and the example INN is not in this CRM table. No migration
+will be made. The production canary will use factual fields already present on
+the Kanban card plus the existing parking address read source, with `—` for
+missing contact/activity values.
+
+Ported the sidecar into a temp copy of the active 409-line S13 Kanban rather
+than replacing it with the divergent local branch file. The account surface is
+a native Streamlit button; its drag handle is separate. Python syntax and
+targeted diff checks pass. The runtime-adapted module uses card fallbacks when
+the production contact/activity schema is absent. The authority specifies
+timestamped preimage backups under
+`/opt/CRM_Streamlit/backups/hydro_kanban_inline_sidecar_20261112_<HHMMSS>/`.
+Four reviewed stage files are uploaded beside the S13 targets; their hashes
+match the release manifest. Runtime virtualenv compile and staged fresh-process
+imports pass. S13 release completed with four atomic file replacements, one
+restart, active service, HTTP 200 and fresh-process imports PASS. Backup:
+`/opt/CRM_Streamlit/backups/hydro_kanban_inline_sidecar_20261112_133821/`.
+The Windows browser access host is unavailable, so Chrome/Edge interaction
+acceptance and 1920x1080 screenshot remain pending. A local SSH preview tunnel
+at `127.0.0.1:18504` returns HTTP 200 and is left open for the operator.
+
+2026-11-13 post-parse persistence, queue and kiosk repair completed as a
+bounded production release. `PersistenceResult` now preserves raw, goods-gate,
+category, allowed-scope, created and reused counts; reused facts can no longer
+become `NO_FACTS`, and universal estimate persistence records an explicit
+`UNIVERSAL_ROWS_PERSISTED_NOT_NORMALIZED` outcome. The 200-row stalled queue was
+explained by exact claim predicate (174 missing selected documents, 26
+no-research actions), with 193 rows stale outside the current eligible cohort.
+A five-row canary and full reconciliation retired 195 stale/no-research rows,
+transitioned 71 and inserted 8; workers claimed and completed 8 current rows.
+The kiosk now reports one daily cohort (`38 received / 17 actionable / 21 no
+signal / 17 processed / 0 remaining`) and shows routing and document backlog
+separately. All 105 zero-fact cards lack both structured estimate rows and
+post-parse jobs, so full normalization was not attempted: Z6=105 and
+`TRUE_ZERO_AFTER_FULL_NORMALIZATION` remains uncomputed. Thirteen targeted
+tests pass. No mass normalization, reparse, redownload or taxonomy change was
+run.
