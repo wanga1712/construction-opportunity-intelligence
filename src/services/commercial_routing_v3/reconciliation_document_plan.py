@@ -30,6 +30,34 @@ _DOCS_SQL = """
 """
 
 
+def _planning_opportunities(
+    procurement_id: int,
+    source: dict,
+    opportunities: list[dict],
+) -> list[dict]:
+    """Return real opportunities or one queue-only object-discovery context.
+
+    The synthetic context is never persisted as a commercial category. It
+    tells Queue V2 to select estimate/BOQ/NMCK documents and discover the
+    category from parsed rows.
+    """
+    if opportunities:
+        return [dict(row) for row in opportunities]
+    return [
+        {
+            **dict(source),
+            "procurement_id": procurement_id,
+            "commercial_category_code": None,
+            "category_code": None,
+            "opportunity_track": "EMBEDDED_MATERIAL",
+            "commercial_state": "OPEN",
+            "research_action_v2": "DOCUMENT_RESEARCH_REQUIRED",
+            "research_action_v2_base": "DOCUMENT_RESEARCH_REQUIRED",
+            "planning_context_only": True,
+        }
+    ]
+
+
 def _load_documents(cur: Any, generation: str, pids: list[int]) -> dict:
     if not pids:
         return {}
@@ -195,9 +223,11 @@ def prepare_document_plans(
     expanded_rate_only = 0
     for pid in pids:
         docs = docs_by_pid.get(pid) or []
-        opps = [dict(row) for row in opportunities.get(pid) or []]
-        if not opps:
-            continue
+        opps = _planning_opportunities(
+            pid,
+            sources[pid],
+            opportunities.get(pid) or [],
+        )
         has_reusable = any(doc.get("has_local_file") for doc in docs)
         for opp in opps:
             decision = decide_research_action(

@@ -21,6 +21,7 @@ def write_queue_plan(
 ) -> None:
     """Update a legacy receipt or insert one current-generation queue row."""
     context = dict((row or {}).get("category_context") or {})
+    object_discovery = not plan["category_codes"]
     context.update({
         "admission_state": "ELIGIBLE",
         "populate_method": policy_version,
@@ -30,21 +31,31 @@ def write_queue_plan(
         "primary_category": priority.get("queue_primary_category"),
         "category_codes": plan["category_codes"],
         "document_routing_mode": plan.get("document_routing_mode"),
+        "requires_object_discovery": object_discovery,
+        "initial_priority": "LOW" if object_discovery else "HIGH",
+        "research_priority": "LOW" if object_discovery else "HIGH",
     })
+    commercial_priority = int(priority.get("queue_commercial_priority_score") or 0)
     fields = {
         "source_table": source["source_table"],
         "source_id": source["source_id"],
         "contract_number": source.get("contract_number"),
         "source_start_date": plan["source_start_date"],
-        "queue_lane": "awarded_recent" if str(source["source_table"]).endswith("_awarded") else "open_active",
-        "priority_score": int(priority.get("queue_commercial_priority_score") or 0),
+        "queue_lane": (
+            "discovery_review"
+            if object_discovery
+            else "awarded_recent"
+            if str(source["source_table"]).endswith("_awarded")
+            else "open_active"
+        ),
+        "priority_score": commercial_priority or (10 if object_discovery else 50),
         "candidate_level": priority.get("queue_medal"),
         "candidate_initial_medal": priority.get("queue_initial_medal"),
         "current_effective_medal": priority.get("queue_current_medal"),
         "category_codes": plan["category_codes"],
         "category_context": psycopg2.extras.Json(context),
         "research_action": "FACTUAL_FEEDER_ADMITTED" if status == "PRE_RESEARCH_WAITING" else "NO_DOCUMENT_RESEARCH",
-        "research_depth": "highest",
+        "research_depth": "normal" if object_discovery else "highest",
         "research_action_v2": plan["research_action_v2"],
         "plan_version": plan["plan_version"],
         "priority_policy_version": plan["priority_policy_version"],

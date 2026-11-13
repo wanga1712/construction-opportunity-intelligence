@@ -424,6 +424,38 @@ taxonomy fields on `structured_estimate_rows` plus the run/coverage authority
 tables. It may not write medals, opportunities or category values. Dossier
 read-model release may include one CRM Streamlit restart and health check.
 
+## Owner-authorized eligible/no-signal research reachability release 2026-11-13
+
+The owner explicitly requested
+`WIP_ELIGIBLE_NO_SIGNAL_MUST_STILL_RESEARCH_V1`. This scoped route allows
+release of:
+
+```text
+/opt/CRM_Streamlit/src/services/commercial_routing_v3/routing_initial_pass.py
+/opt/CRM_Streamlit/src/services/commercial_routing_v3/routing_eligibility.py
+/opt/CRM_Streamlit/src/services/commercial_routing_v3/routing_priority.py
+/opt/CRM_Streamlit/src/services/commercial_routing_v3/queue_producer.py
+/opt/CRM_Streamlit/src/services/commercial_routing_v3/document_queue_reconciliation.py
+/opt/CRM_Streamlit/src/services/commercial_routing_v3/reconciliation_document_plan.py
+/opt/CRM_Streamlit/src/services/commercial_routing_v3/reconciliation_queue_writer.py
+/opt/CRM_Streamlit/src/services/crm_ai_assessment_runner.py
+/usr/local/bin/s13_dashboard3.py
+```
+
+The canonical host is `s13`; runtime identities remain those already
+configured for the listed services. Release requires timestamped preimages,
+SHA-256 hashes, sibling staging files, runtime compilation and fresh-process
+imports, atomic replacement and automatic rollback. A divergent production
+file must be patched on its runtime preimage rather than overwritten with a
+different local-branch file.
+
+The route authorizes one kiosk process restart/reload and a bounded read-only
+audit followed by document-queue reconciliation for current eligible
+procurements. It authorizes no schema change, document redownload, reparse,
+mass normalization, taxonomy/medal/category-value change, or synthetic
+category opportunity. Queue reconciliation may only materialize missing
+document links and queue metadata for current `ELIGIBLE` procurements.
+
 ## Documentation consolidation record
 
 На 2026-08-16 conflicting/stale access statements были найдены в

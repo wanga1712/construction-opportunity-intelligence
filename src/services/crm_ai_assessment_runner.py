@@ -21,6 +21,55 @@ LOCK_ID = 892341235612349014
 _V3_SCHEMA_READINESS_CACHE: Optional[Any] = None
 
 
+class _PrefetchCrmDb:
+    """Isolated read-only CRM connection for background prefetch."""
+
+    def __init__(self) -> None:
+        self._connection = None
+        self._connect()
+
+    def _connect(self) -> None:
+        import psycopg2
+        from psycopg2.extras import RealDictCursor
+        from src.services.crm_db_runtime import require_crm_db_connect_kwargs
+
+        if self._connection is not None and not self._connection.closed:
+            self._connection.close()
+        self._connection = psycopg2.connect(
+            **dict(require_crm_db_connect_kwargs()),
+            cursor_factory=RealDictCursor,
+        )
+        self._connection.set_session(readonly=True, autocommit=True)
+
+    def execute_query(
+        self,
+        query: str,
+        params: Optional[tuple] = None,
+    ) -> List[Dict[str, Any]]:
+        import psycopg2
+        from psycopg2.extras import RealDictCursor
+
+        for attempt in range(2):
+            try:
+                if self._connection is None or self._connection.closed:
+                    self._connect()
+                with self._connection.cursor(
+                    cursor_factory=RealDictCursor
+                ) as cur:
+                    cur.execute(query, params)
+                    return [dict(row) for row in cur.fetchall()]
+            except (psycopg2.OperationalError, psycopg2.InterfaceError):
+                if attempt:
+                    raise
+                self._connect()
+        return []
+
+    def close(self) -> None:
+        if self._connection is not None and not self._connection.closed:
+            self._connection.close()
+        self._connection = None
+
+
 def should_run_legacy_ai_when_v3_enabled(use_v3_runtime: bool) -> bool:
     """Production never auto-falls back to V2. Legacy only via explicit non-prod entrypoints."""
     from src.services.commercial_routing_v3.routing_runtime_config import AUTOMATIC_V2_FALLBACK
@@ -233,12 +282,24 @@ def build_live_prompt(item: Dict[str, Any], allowed_registry: List[Dict[str, Any
         "}"
     )
 
-def fetch_candidates(tender_db, crm_db) -> List[Dict[str, Any]]:
+def fetch_candidates(
+    tender_db,
+    crm_db,
+    *,
+    reclaim_stale: bool = True,
+) -> List[Dict[str, Any]]:
     """Production selector — canonical evaluate_routing_eligibility only."""
     from src.services.commercial_routing_v3.okpd_priors import load_okpd_priors_from_db, match_okpd_priors
     from src.services.commercial_routing_v3.procurement_form import classify_procurement_form
-    from src.services.commercial_routing_v3.routing_initial_pass import initial_pass_mode, initial_pass_decision
+    from src.services.commercial_routing_v3.routing_initial_pass import (
+        SELECT_NO_PRIORITY_SIGNAL,
+        initial_pass_mode,
+        initial_pass_decision,
+    )
     from src.services.commercial_routing_v3.processing_lease import reclaim_stale_running
+    from src.services.commercial_routing_v3.procurement_queue_priority import (
+        aggregate_procurement_opportunities,
+    )
     from src.services.commercial_routing_v3.routing_eligibility import (
         LANE_ACTIVE_OPEN,
         LANE_AWARDED_ADMITTED,
@@ -247,7 +308,8 @@ def fetch_candidates(tender_db, crm_db) -> List[Dict[str, Any]]:
         evaluate_routing_eligibility,
     )
 
-    reclaim_stale_running(crm_db)
+    if reclaim_stale:
+        reclaim_stale_running(crm_db)
     try:
         priors = load_okpd_priors_from_db(crm_db)
     except Exception:
@@ -287,6 +349,7 @@ def fetch_candidates(tender_db, crm_db) -> List[Dict[str, Any]]:
     t_sql_fetch = time.perf_counter() - _t_fetch_start
     authority_map = {}
     existing_evidence_ids = set()
+    opportunity_priority_map = {}
     if initial_pass_mode():
         for _a in (crm_db.execute_query(
             "SELECT procurement_id, source_lifecycle, procurement_scope_type, "
@@ -302,9 +365,18 @@ def fetch_candidates(tender_db, crm_db) -> List[Dict[str, Any]]:
                 "admission_reason": _a[4],
                 "admission_policy_version": _a[5],
             }
-        ev_rows = crm_db.execute_query(
-            "SELECT procurement_id FROM crm_procurement_category_opportunities WHERE status = 'CURRENT'"
-        ) or []
+    opportunity_rows = crm_db.execute_query(
+        """
+        SELECT procurement_id, commercial_category_code,
+               current_effective_medal, candidate_initial_medal, candidate_medal,
+               commercial_priority_score
+          FROM crm_procurement_category_opportunities
+         WHERE status = 'CURRENT'
+        """
+    ) or []
+    opportunity_priority_map = aggregate_procurement_opportunities(opportunity_rows)
+    if initial_pass_mode():
+        ev_rows = opportunity_rows
         existing_evidence_ids = {
             int(r["procurement_id"] if isinstance(r, dict) else r[0])
             for r in ev_rows
@@ -375,13 +447,18 @@ def fetch_candidates(tender_db, crm_db) -> List[Dict[str, Any]]:
         if not _select:
             skip_reasons[_ip_reason] = skip_reasons.get(_ip_reason, 0) + 1
             continue
+        low_priority = _ip_reason == SELECT_NO_PRIORITY_SIGNAL
         c["initial_pass_reason"] = _ip_reason
+        c["research_priority"] = "LOW" if low_priority else "HIGH"
         c["routing_lane"] = decision.lane
         c["normalized_lifecycle"] = decision.normalized_lifecycle
         c["commercial_lane"] = decision.commercial_lane
         c["eligibility_reason"] = decision.reason
         c["lifecycle"] = decision.normalized_lifecycle
-        c["priority_group"] = lane_rank.get(decision.lane or "", 9)
+        c["priority_group"] = lane_rank.get(decision.lane or "", 9) + (
+            20 if low_priority else 0
+        )
+        c.update(opportunity_priority_map.get(int(c["id"]), {}))
         candidates.append(c)
 
     from src.services.commercial_routing_v3.routing_priority import sort_lane_buckets
@@ -445,6 +522,28 @@ def ensure_v3_model_input(c: Dict[str, Any], crm_db) -> Dict[str, Any]:
     card = build_canonical_card(
         procurement=full, priors=priors, tender_db=None, resolve_links=True
     )
+    try:
+        hierarchy_rows = crm_db.execute_query(
+            """SELECT procurement_mode, object_applicable, object_sector,
+                      object_type, object_subtype, object_context,
+                      application_area, classification_status,
+                      classification_source, classification_method,
+                      confidence, classification_version, matched_terms
+                 FROM crm_procurement_object_classifications
+                WHERE procurement_id = %s AND is_current = TRUE
+                ORDER BY updated_at DESC LIMIT 1""",
+            (crm_id,),
+        ) or []
+        card["object_hierarchy_context"] = (
+            dict(hierarchy_rows[0])
+            if hierarchy_rows
+            else {"status": "UNCLASSIFIED"}
+        )
+    except Exception as exc:  # noqa: BLE001 - classification remains fail-soft
+        card["object_hierarchy_context"] = {
+            "status": "UNAVAILABLE",
+            "reason": type(exc).__name__,
+        }
     model_input = build_v3_routing_model_input(card)
     shaped = model_input_as_prompt_procurement(model_input)
     # Preserve scheduler lane / eligibility metadata; overlay semantic fields.
@@ -654,7 +753,6 @@ def _run_initial_pass_deterministic(c: Dict[str, Any], crm_db, fp: str):
     """
     from src.services.commercial_routing_v3.engine import CommercialRoutingV3Engine
     from src.services.commercial_routing_v3.runtime_adapter import decision_to_normalized_result
-    from src.services.commercial_routing_v3.opportunity_persistence import persist_category_opportunities
     from src.services.commercial_routing_v3.routing_arbitration import (
         MODE_ACCEPT, MODE_QWEN, arbitrate_deterministic,
     )
@@ -690,19 +788,9 @@ def _run_initial_pass_deterministic(c: Dict[str, Any], crm_db, fp: str):
             normalized = decision_to_normalized_result(decision=decision, procurement=procurement)
         except Exception:
             normalized = {}
-        category_opportunities = normalized.get("category_opportunities") or []
-        try:
-            persist = persist_category_opportunities(
-                crm_db,
-                procurement_id=crm_id,
-                assessment_id=None,
-                normalized_result=normalized,
-                category_opportunities=category_opportunities,
-                dry_run=False,
-            )
-        except Exception as exc:
-            logger.error("INITIAL_PASS deterministic persist failed for %s: %s", crm_id, exc)
-            return False
+        # Category opportunities/medals require parsed estimate-row evidence.
+        # This initial pass runs before document download, so only the overall
+        # procurement assessment is persisted here.
         score = int(getattr(chosen, "commercial_priority_score", 0) or 0)
         crm_db.execute_update(
             """
@@ -1694,23 +1782,9 @@ def process_item(c: Dict[str, Any], rules: List[Any], medians: Dict[str, Any], r
                             crm_id
                         )
                     )
-        if v3_used:
-            from src.services.commercial_routing_v3.opportunity_persistence import (
-                persist_category_opportunities,
-            )
-
-            persist_dry_run = (
-                os.getenv("COMMERCIAL_ROUTING_V3_PERSIST_OPPORTUNITIES_DRY_RUN", "1") == "1"
-                or qwen_shadow_mode()
-            )
-            persist_category_opportunities(
-                crm_db,
-                procurement_id=crm_id,
-                assessment_id=crm_assessment_id,
-                normalized_result=normalized_result,
-                category_opportunities=policy_res.get("category_opportunities") or [],
-                dry_run=persist_dry_run,
-            )
+        # Initial V3 routing is pre-parse. Do not project category opportunity
+        # rows or category medals from these hypotheses; the post-parse
+        # estimate-row assessment owns that projection.
         return True
     except Exception as err:
         logger.error(f"Error processing CRM item {crm_id}: {err}")
@@ -1735,6 +1809,7 @@ def run_live(
     produce_s13_queue: bool = False,
     force_reassess: bool = False,
     reassess_reason: str = "",
+    preloaded_candidates: Optional[List[Dict[str, Any]]] = None,
 ) -> Dict[str, Any]:
     from src.services.commercial_routing_v3.processing_lease import reclaim_stale_running
 
@@ -1749,7 +1824,13 @@ def run_live(
     registry_hash = get_registry_hash(registry)
     examples = load_approved_examples(tender_db)
 
-    if procurement_id is not None and force_reassess:
+    if preloaded_candidates is not None:
+        candidates = list(preloaded_candidates)
+        logger.info(
+            "Live AI Scheduler: preloaded capacity_batch=%s",
+            len(candidates),
+        )
+    elif procurement_id is not None and force_reassess:
         c = fetch_procurement_for_controlled_reassess(crm_db, procurement_id)
         if not c:
             logger.warning("force-reassess: procurement_id=%s not found", procurement_id)
@@ -1902,6 +1983,25 @@ def main():
                 allocate_production_routing_batch,
             )
 
+            def prefetch_candidates(
+                exclude_ids: set[int],
+            ) -> List[Dict[str, Any]]:
+                """Fetch the next pool on an isolated connection."""
+                prefetch_db = _PrefetchCrmDb()
+                try:
+                    rows = fetch_candidates(
+                        None,
+                        prefetch_db,
+                        reclaim_stale=False,
+                    )
+                finally:
+                    prefetch_db.close()
+                return [
+                    candidate
+                    for candidate in rows
+                    if int(candidate.get("id") or 0) not in exclude_ids
+                ]
+
             run_backlog_drain(
                 tender_db=tender_db,
                 crm_db=crm_db,
@@ -1911,6 +2011,7 @@ def main():
                 allocate_fn=allocate_production_routing_batch,
                 batch_size=args.limit,
                 max_runtime_sec=args.max_runtime_sec,
+                prefetch_candidates_fn=prefetch_candidates,
             )
         else:
             run_live(
@@ -1923,8 +2024,22 @@ def main():
                 reassess_reason=args.reassess_reason,
             )
     finally:
-        with conn.cursor() as cur:
-            cur.execute("SELECT pg_advisory_unlock(%s)", (LOCK_ID,))
+        try:
+            if getattr(conn, "closed", 1):
+                crm_db.reconnect()
+                conn = crm_db._connection
+            if conn is not None and not conn.closed:
+                with conn.cursor() as cur:
+                    cur.execute(
+                        "SELECT pg_advisory_unlock(%s)",
+                        (LOCK_ID,),
+                    )
+        except Exception as exc:
+            # A closed session already released its session-level lock.
+            logger.warning(
+                "Advisory unlock skipped after connection loss: %s",
+                exc,
+            )
 
 if __name__ == "__main__":
     logging.basicConfig(level=logging.INFO, format="%(asctime)s | %(levelname)s | %(message)s")

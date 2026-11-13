@@ -22,14 +22,19 @@ from src.services.commercial_routing_v3.reconciliation_queue_writer import (
 ACTIVE_STATUSES = frozenset({"PENDING", "PRE_RESEARCH_WAITING", "PROCESSING"})
 FROZEN_TERMINAL_STATUSES = frozenset({"COMPLETED", "FAILED", "SKIPPED_NOISE"})
 POLICY_VERSION = "CURRENT_ELIGIBLE_DAILY_V2"
+ADMISSION_POLICY_VERSION = "BUSINESS_RESEARCH_ADMISSION_V2"
 STALE_QUEUE_REASON = "STALE_NOT_CURRENT_ELIGIBLE"
 NO_RESEARCH_QUEUE_REASON = "NO_DOCUMENT_RESEARCH"
 
 
-def _current_eligible_workset(crm_db: Any) -> tuple[dict, dict, dict]:
-    rows = crm_db.execute_query(
-        """
-        SELECT o.procurement_id, o.commercial_category_code,
+def _current_eligible_workset(
+    crm_db: Any,
+    *,
+    procurement_ids: list[int] | None = None,
+) -> tuple[dict, dict, dict]:
+    query = """
+        SELECT a.procurement_id, a.source_lifecycle AS authority_lifecycle,
+               o.id AS opportunity_id, o.commercial_category_code,
                o.commercial_category_code AS category_code,
                o.opportunity_track, o.commercial_state,
                o.current_effective_medal, o.candidate_initial_medal,
@@ -38,27 +43,38 @@ def _current_eligible_workset(crm_db: Any) -> tuple[dict, dict, dict]:
                p.start_date, p.crm_stage, p.award_status, p.source_status,
                p.end_date, p.delivery_start_date, p.delivery_end_date,
                p.execution_start_at, p.execution_end_at
-          FROM crm_procurement_category_opportunities o
-          JOIN crm_procurement_scope_authority a
-            ON a.procurement_id = o.procurement_id
-           AND a.admission_state = 'ELIGIBLE'
-          JOIN crm_procurements p ON p.id = o.procurement_id
-         WHERE o.status = 'CURRENT'
-         ORDER BY o.procurement_id, o.id
+          FROM crm_procurement_scope_authority a
+          JOIN crm_procurements p ON p.id = a.procurement_id
+          LEFT JOIN crm_procurement_category_opportunities o
+            ON o.procurement_id = a.procurement_id
+           AND o.status = 'CURRENT'
+         WHERE a.admission_state = 'ELIGIBLE'
+           AND a.admission_policy_version = 'BUSINESS_RESEARCH_ADMISSION_V2'
+           AND a.source_lifecycle IN ('OPEN', 'AWARDED')
+           {pid_filter}
+         ORDER BY a.procurement_id, o.id
         """
+    params = None
+    pid_filter = ""
+    if procurement_ids:
+        pid_filter = "AND a.procurement_id = ANY(%s)"
+        params = (sorted({int(pid) for pid in procurement_ids}),)
+    rows = crm_db.execute_query(
+        query.format(pid_filter=pid_filter),
+        params,
     ) or []
     priorities = aggregate_procurement_opportunities(rows)
     sources: Dict[int, Dict[str, Any]] = {}
     opportunities: Dict[int, list[dict]] = defaultdict(list)
     for row in rows:
         pid = int(row["procurement_id"])
-        opportunities[pid].append(dict(row))
+        if row.get("opportunity_id") is not None:
+            opportunities[pid].append(dict(row))
         sources.setdefault(
             pid,
             dict(row),
         )
     return priorities, sources, opportunities
-
 
 def _queue_lane(source_table: str) -> str:
     return (
@@ -94,9 +110,13 @@ def reconcile_current_eligible_document_queue(
     document_db_kwargs: dict,
     pipeline_generation: str,
     apply: bool,
+    procurement_ids: list[int] | None = None,
 ) -> dict:
     """Refresh active rows and restore only current, eligible unfinished work."""
-    priorities, sources, opportunities = _current_eligible_workset(crm_db)
+    priorities, sources, opportunities = _current_eligible_workset(
+        crm_db,
+        procurement_ids=procurement_ids,
+    )
     pids = sorted(priorities)
     rows_by_pid: dict[int, list[dict]] = defaultdict(list)
     conn = psycopg2.connect(**document_db_kwargs)

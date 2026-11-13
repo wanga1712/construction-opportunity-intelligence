@@ -216,8 +216,8 @@ class CommercialRoutingV3QueueProducer:
 
     # ------------------------------------------------------------------
     # STEP 3/4: Exhaustive population — AI_QUEUE_ADMISSION_GATE=NO
-    # Eligibility = deterministic (has links + not terminal crm_stage).
-    # Model output NOT consulted. Every eligible procurement enters queue.
+    # Business eligibility = canonical scope authority, never an OKPD match.
+    # Model output is not consulted. Every eligible procurement enters queue.
     # ------------------------------------------------------------------
 
     _TERMINAL_STAGES = frozenset([
@@ -232,28 +232,27 @@ class CommercialRoutingV3QueueProducer:
         max_total: int = 0,
         dry_run: bool = False,
     ) -> Dict[str, Any]:
-        """Queue ALL lifecycle-eligible procurements from CRM.
+        """Queue every canonically research-eligible procurement from CRM.
 
-        Eligibility criteria (deterministic, no AI):
-          - Has document links (count_document_links > 0)
+        Eligibility criteria:
+          - admission_state=ELIGIBLE under BUSINESS_RESEARCH_ADMISSION_V2
+          - current source lifecycle OPEN/AWARDED
           - crm_stage not in terminal/excluded list
           - Not already queued for this pipeline_generation
 
-        AI_QUEUE_ADMISSION_GATE=NO
-        STOPWORD_QUEUE_ADMISSION_GATE=NO
-        Every eligible procurement enters queue at lane=open_active, priority=50.
+        Missing/out-of-target OKPD changes priority and adds no category hint;
+        it never suppresses a document-research queue row.
         """
         from src.services.commercial_routing_v3.document_links import batch_count_document_links
         from src.services.commercial_routing_v3.okpd_priors import (
-            ADMISSION_OUT_OF_TARGET,
             ADMISSION_TARGET,
-            ADMISSION_UNKNOWN_OKPD,
             classify_target_okpd,
             load_okpd_priors_from_db,
         )
 
         inserted = updated = skipped_already_active = errors = 0
         skipped_out_of_target = skipped_unknown_okpd = 0
+        classified_target = classified_unknown = classified_out_of_target = 0
         target_waiting_inserted = target_waiting_updated = 0
         no_links_inserted = no_links_updated = 0
         offset = 0
@@ -278,12 +277,19 @@ class CommercialRoutingV3QueueProducer:
                     cur.execute(
                         """
                         SELECT p.id, p.source_table, p.source_id, p.contract_number,
-                               p.end_date, p.crm_stage, p.award_status, p.okpd_code
+                               p.end_date, p.crm_stage, p.award_status, p.okpd_code,
+                               a.source_lifecycle
                         FROM crm_procurements p
+                        JOIN crm_procurement_scope_authority a
+                          ON a.procurement_id = p.id
+                         AND a.admission_state = 'ELIGIBLE'
+                         AND a.admission_policy_version =
+                             'BUSINESS_RESEARCH_ADMISSION_V2'
                         WHERE p.crm_stage NOT IN (
                             'cancelled', 'failed', 'closed', 'rejected',
                             'archived', 'no_winner', 'suspended', 'razygranye'
                         )
+                          AND a.source_lifecycle IN ('OPEN', 'AWARDED')
                         ORDER BY p.id
                         LIMIT %s OFFSET %s
                         """,
@@ -310,15 +316,17 @@ class CommercialRoutingV3QueueProducer:
                             okpd = proc.get("okpd_code")
                             classification, matched_priors = classify_target_okpd(okpd, priors)
 
-                            if classification == ADMISSION_OUT_OF_TARGET:
-                                skipped_out_of_target += 1
-                                continue
+                            if classification == ADMISSION_TARGET:
+                                classified_target += 1
+                            elif str(okpd or "").strip():
+                                classified_out_of_target += 1
+                            else:
+                                classified_unknown += 1
 
-                            if classification == ADMISSION_UNKNOWN_OKPD:
-                                skipped_unknown_okpd += 1
-                                continue
-
-                            # TARGET procurement
+                            initial_signal = (
+                                classification == ADMISSION_TARGET
+                                and bool(matched_priors)
+                            )
                             lc = link_counts.get(pid, 0)
 
                             if lc == 0:
@@ -328,6 +336,13 @@ class CommercialRoutingV3QueueProducer:
                                     "AI_QUEUE_ADMISSION_GATE": "NO",
                                     "link_count": 0,
                                     "exclusion_reason": "NO_CANONICAL_DOCUMENTS",
+                                    "admission_state": "ELIGIBLE",
+                                    "admission_policy_version":
+                                        "BUSINESS_RESEARCH_ADMISSION_V2",
+                                    "okpd_classification": classification,
+                                    "initial_signal": initial_signal,
+                                    "initial_priority":
+                                        "HIGH" if initial_signal else "LOW",
                                 }
                                 dispatchable = False
                             else:
@@ -336,6 +351,13 @@ class CommercialRoutingV3QueueProducer:
                                     "populate_method": "EXHAUSTIVE_ALL_ELIGIBLE",
                                     "AI_QUEUE_ADMISSION_GATE": "NO",
                                     "link_count": lc,
+                                    "admission_state": "ELIGIBLE",
+                                    "admission_policy_version":
+                                        "BUSINESS_RESEARCH_ADMISSION_V2",
+                                    "okpd_classification": classification,
+                                    "initial_signal": initial_signal,
+                                    "initial_priority":
+                                        "HIGH" if initial_signal else "LOW",
                                 }
                                 dispatchable = True
 
@@ -354,9 +376,12 @@ class CommercialRoutingV3QueueProducer:
                                 "candidate_level": None,
                                 "candidate_score": None,
                                 "research_action": ResearchAction.DEEP_RESEARCH.value,
-                                "research_depth": "highest",
-                                "queue_lane": "open_active",
-                                "priority_score": 50,
+                                "research_depth":
+                                    "highest" if initial_signal else "normal",
+                                "queue_lane":
+                                    "open_active" if initial_signal
+                                    else "discovery_review",
+                                "priority_score": 90 if initial_signal else 40,
                                 "dispatchable": dispatchable,
                             }
 
@@ -419,6 +444,9 @@ class CommercialRoutingV3QueueProducer:
             "skipped_already_active": skipped_already_active,
             "skipped_out_of_target": skipped_out_of_target,
             "skipped_unknown_okpd": skipped_unknown_okpd,
+            "classified_target": classified_target,
+            "classified_unknown": classified_unknown,
+            "classified_out_of_target": classified_out_of_target,
             "target_waiting_inserted": target_waiting_inserted,
             "target_waiting_updated": target_waiting_updated,
             "no_links_inserted": no_links_inserted,

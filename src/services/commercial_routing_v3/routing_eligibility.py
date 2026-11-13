@@ -159,10 +159,6 @@ def evaluate_routing_eligibility(
             )
         lane, commercial = LANE_WAITING_HOLD, "HOLD"
     elif lifecycle == "AWARDED":
-        if not has_prior and not designish:
-            return RoutingEligibilityDecision(
-                False, None, "AWARDED_NO_PRIOR", lifecycle, True, "AWARDED", attempts, status
-            )
         lane, commercial = LANE_AWARDED_ADMITTED, "AWARDED"
     else:
         return RoutingEligibilityDecision(

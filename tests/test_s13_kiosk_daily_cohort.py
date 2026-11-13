@@ -16,7 +16,7 @@ def _load_dashboard():
     return module
 
 
-def test_daily_contract_uses_one_received_today_cohort(monkeypatch):
+def test_daily_contract_uses_one_researchable_today_cohort(monkeypatch):
     dashboard = _load_dashboard()
     monkeypatch.setattr(dashboard, "routing_backlog_count", lambda: 0)
 
@@ -24,9 +24,11 @@ def test_daily_contract_uses_one_received_today_cohort(monkeypatch):
         {
             "today": {
                 "received": 38,
-                "actionable_from_received": 17,
-                "no_commercial_signal": 21,
-                "processed_from_received": 17,
+                "researchable_from_received": 38,
+                "with_initial_signal": 17,
+                "without_initial_signal": 21,
+                "processed_from_received": 10,
+                "in_progress_from_received": 5,
                 "processed": 18,
             },
             "documents": {"waiting": 200},
@@ -36,17 +38,19 @@ def test_daily_contract_uses_one_received_today_cohort(monkeypatch):
     )
 
     assert daily["received_today"] == 38
-    assert daily["actionable_today"] == 17
-    assert daily["no_commercial_signal"] == 21
-    assert daily["processed_from_day_work_set"] == 17
-    assert daily["remaining_from_day_work_set"] == 0
-    assert daily["daily_progress_pct"] == 100.0
+    assert daily["researchable_today"] == 38
+    assert daily["with_initial_signal"] == 17
+    assert daily["without_initial_signal"] == 21
+    assert daily["processed_from_day_work_set"] == 10
+    assert daily["in_progress_from_day_work_set"] == 5
+    assert daily["remaining_from_day_work_set"] == 28
+    assert daily["daily_progress_pct"] == 26.3
     assert daily["routing_backlog"] == 0
     assert daily["document_queue_pending"] == 200
     assert contour["remaining_total"] == 30
 
 
-def test_no_signal_is_not_counted_as_remaining(monkeypatch):
+def test_no_initial_signal_remains_in_research_remaining(monkeypatch):
     dashboard = _load_dashboard()
     monkeypatch.setattr(dashboard, "routing_backlog_count", lambda: 0)
 
@@ -54,14 +58,17 @@ def test_no_signal_is_not_counted_as_remaining(monkeypatch):
         {
             "today": {
                 "received": 38,
-                "actionable_from_received": 5,
-                "no_commercial_signal": 33,
+                "researchable_from_received": 38,
+                "with_initial_signal": 5,
+                "without_initial_signal": 33,
                 "processed_from_received": 3,
+                "in_progress_from_received": 4,
             },
             "documents": {"waiting": 200},
         },
         {"latest": {}},
     )
 
-    assert daily["remaining_from_day_work_set"] == 2
-    assert daily["daily_progress_pct"] == 60.0
+    assert daily["without_initial_signal"] == 33
+    assert daily["remaining_from_day_work_set"] == 35
+    assert daily["daily_progress_pct"] == 7.9

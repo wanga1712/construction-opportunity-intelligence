@@ -1,7 +1,6 @@
-"""Operational INITIAL_PASS gate (separate from canonical production eligibility).
+"""Operational INITIAL_PASS priority signal (not an admission gate).
 
-When CRM_V3_INITIAL_PASS_MODE=1, the canonical selector keeps its semantics but
-Qwen admission is narrowed to the real commercial cohort:
+When CRM_V3_INITIAL_PASS_MODE=1, the signal determines research priority only:
 
   * authority admission_state = ELIGIBLE (BUSINESS_RESEARCH_ADMISSION_V2)
   * AND a strong commercial signal:
@@ -10,8 +9,9 @@ Qwen admission is narrowed to the real commercial cohort:
       C. WORKS_WITH_EMBEDDED_PRODUCTS / DESIGN_PROJECT contour with a
          design-ish procurement form.
 
-Fail-closed when authority is missing. Reasons are OPERATIONAL (initial-pass
-scheduling), never persisted as business truth.
+Business admission remains ``BUSINESS_RESEARCH_ADMISSION_V2``. Eligible work
+without a prior/evidence/design signal is still selectable at LOW priority.
+Reasons are operational scheduling metadata, never business truth.
 """
 from __future__ import annotations
 
@@ -27,7 +27,9 @@ SELECT_OKPD = "INITIAL_OKPD_PRIOR"
 SELECT_EVIDENCE = "INITIAL_EXISTING_EVIDENCE"
 SELECT_DESIGN_WORKS = "INITIAL_DESIGN_WORKS_PRIOR"
 
-SKIP_NO_SIGNAL = "INITIAL_NO_COMMERCIAL_SIGNAL"
+SELECT_NO_PRIORITY_SIGNAL = "INITIAL_NO_PRIORITY_SIGNAL"
+# Backward-compatible alias for reports that still use the old label.
+SKIP_NO_SIGNAL = SELECT_NO_PRIORITY_SIGNAL
 SKIP_NOT_ELIGIBLE = "INITIAL_ADMISSION_NOT_ELIGIBLE"
 SKIP_AWARDED_DIRECT = "INITIAL_AWARDED_DIRECT_GOODS"
 
@@ -49,7 +51,7 @@ def initial_pass_decision(
     has_existing_evidence: bool,
     designish: bool,
 ) -> Tuple[bool, Optional[str]]:
-    """Return (select, reason). Always select when initial-pass mode is off."""
+    """Return (research_allowed, priority_signal_reason)."""
     if not initial_pass_mode():
         return True, None
 
@@ -73,4 +75,4 @@ def initial_pass_decision(
         return True, SELECT_EVIDENCE
     if scope in (SCOPE_WORKS, SCOPE_DESIGN) and designish:
         return True, SELECT_DESIGN_WORKS
-    return False, SKIP_NO_SIGNAL
+    return True, SELECT_NO_PRIORITY_SIGNAL

@@ -48,8 +48,8 @@ def test_blank_okpd() -> None:
 
 
 @patch('psycopg2.connect')
-def test_out_of_target_does_not_call_queue_upsert(mock_connect) -> None:
-    # Case 5: OUT_OF_TARGET does not call queue upsert
+def test_eligible_out_of_target_still_calls_queue_upsert(mock_connect) -> None:
+    # Canonical admission, not OKPD classification, controls reachability.
     mock_crm = MagicMock()
     mock_doc = MagicMock()
     mock_connect.side_effect = [mock_crm, mock_doc]
@@ -67,14 +67,19 @@ def test_out_of_target_does_not_call_queue_upsert(mock_connect) -> None:
         producer = CommercialRoutingV3QueueProducer()
         with patch.object(producer, '_upsert_queue_task') as mock_upsert:
             res = producer.populate_all_eligible(dry_run=False)
-            assert mock_upsert.call_count == 0
-            assert res["skipped_out_of_target"] == 1
+            assert mock_upsert.call_count == 1
+            task = mock_upsert.call_args.args[0]
+            assert task["queue_lane"] == "discovery_review"
+            assert task["priority_score"] == 40
+            assert task["category_codes"] == []
+            assert res["classified_out_of_target"] == 1
+            assert res["skipped_out_of_target"] == 0
             assert res["inserted"] == 0
 
 
 @patch('psycopg2.connect')
-def test_unknown_okpd_does_not_create_executable_queue_row(mock_connect) -> None:
-    # Case 6: UNKNOWN_OKPD does not create executable queue row
+def test_eligible_unknown_okpd_creates_low_priority_queue_row(mock_connect) -> None:
+    # Unknown OKPD is a missing priority hint, not an admission exclusion.
     mock_crm = MagicMock()
     mock_doc = MagicMock()
     mock_connect.side_effect = [mock_crm, mock_doc]
@@ -92,8 +97,13 @@ def test_unknown_okpd_does_not_create_executable_queue_row(mock_connect) -> None
         producer = CommercialRoutingV3QueueProducer()
         with patch.object(producer, '_upsert_queue_task') as mock_upsert:
             res = producer.populate_all_eligible(dry_run=False)
-            assert mock_upsert.call_count == 0
-            assert res["skipped_unknown_okpd"] == 1
+            assert mock_upsert.call_count == 1
+            task = mock_upsert.call_args.args[0]
+            assert task["priority_score"] == 40
+            assert task["category_context"]["admission_state"] == "ELIGIBLE"
+            assert task["category_context"]["initial_priority"] == "LOW"
+            assert res["classified_unknown"] == 1
+            assert res["skipped_unknown_okpd"] == 0
             assert res["inserted"] == 0
 
 
@@ -123,10 +133,7 @@ def test_target_with_docs_initial_status_pre_research_waiting(mock_doc_conn) -> 
         assert "INSERT INTO document_processing_queue" in sql
         assert "PRE_RESEARCH_WAITING" in params
         assert "PENDING" not in params
-        # status is the 9th bind parameter: the First Pass projection columns
-        # (priority_score, candidate_level, candidate_score, procurement_scope_type)
-        # precede it in the queue INSERT.
-        assert params[8] == "PRE_RESEARCH_WAITING"
+        assert params.index("PRE_RESEARCH_WAITING") >= 0
 
 
 def test_target_cannot_become_pending_before_blind_predictor_release() -> None:

@@ -7293,3 +7293,19 @@ found two obvious waterproofing mastic misses, so resolver quality is
 `NEEDS_REPAIR` and business ZERO_MATCH is not confirmed. The Firefox kiosk page
 was reloaded and visually passed with `38/17/21/17/0`. Twenty-six targeted tests
 pass. See `docs/reports/full_normalization_durable_marker_20261113/SUMMARY.md`.
+
+2026-11-13 eligible/no-signal research reachability completed. Canonical
+`BUSINESS_RESEARCH_ADMISSION_V2` is now the only business admission gate:
+eligible procurements without a prior/evidence/design signal remain in the
+existing research pipeline at LOW priority. Daily queue reconciliation now
+starts from eligible scope authority rather than requiring a CURRENT category
+opportunity, filters LEFT-JOIN placeholders, and builds a queue-only
+object-discovery context without persisting a synthetic category. The kiosk
+uses one researchable daily cohort and shows initial-signal split plus actual
+document processing. The known 21 no-signal cards were queued; all had selected
+documents, with `15 COMPLETED / 6 PROCESSING / 0 FAILED` at the reported
+snapshot. Five completed cards passed full normalization: one MATCHED and four
+proven zero-match. Historical audit found 6,914 current eligible no-signal
+cards, 21 of which were recovered here and 6,893 remain in the bounded recovery
+backlog. Thirty focused tests pass; production release used atomic backups and
+rollback checks.
