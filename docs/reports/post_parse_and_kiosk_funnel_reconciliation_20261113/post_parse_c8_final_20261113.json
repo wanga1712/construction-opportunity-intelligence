@@ -1,0 +1,3828 @@
+{
+  "cards": 174,
+  "bucket_counts": {
+    "B_COMPLETED_ZERO_FACTS": 105,
+    "A_NOT_ATTEMPTED": 27,
+    "C_FAILED": 42
+  },
+  "sum": 174,
+  "rows": [
+    {
+      "procurement_id": 631,
+      "contract_number": "0144200001826000123",
+      "material_document_count": 1,
+      "downloaded_material_document_count": 1,
+      "parsed_material_document_count": 1,
+      "embedded_run_count": 0,
+      "embedded_completed_count": 0,
+      "embedded_failed_count": 0,
+      "structured_entity_count": 0,
+      "last_extractor_version": "EMBEDDED_EXTRACTOR_V1",
+      "last_run_status": "NO_FACTS",
+      "last_run_at": "2026-10-13 14:36:43.929070+03:00",
+      "document_extraction_outcomes": [
+        "NO_FACTS"
+      ],
+      "reasons": [
+        "parse_time_hook"
+      ],
+      "bucket": "B_COMPLETED_ZERO_FACTS"
+    },
+    {
+      "procurement_id": 1303,
+      "contract_number": "0173200001425001110",
+      "material_document_count": 1,
+      "downloaded_material_document_count": 1,
+      "parsed_material_document_count": 1,
+      "embedded_run_count": 0,
+      "embedded_completed_count": 0,
+      "embedded_failed_count": 0,
+      "structured_entity_count": 0,
+      "last_extractor_version": null,
+      "last_run_status": null,
+      "last_run_at": null,
+      "document_extraction_outcomes": [],
+      "reasons": [],
+      "bucket": "A_NOT_ATTEMPTED"
+    },
+    {
+      "procurement_id": 1503,
+      "contract_number": "0128200000125004931",
+      "material_document_count": 2,
+      "downloaded_material_document_count": 2,
+      "parsed_material_document_count": 1,
+      "embedded_run_count": 0,
+      "embedded_completed_count": 0,
+      "embedded_failed_count": 0,
+      "structured_entity_count": 0,
+      "last_extractor_version": null,
+      "last_run_status": null,
+      "last_run_at": null,
+      "document_extraction_outcomes": [],
+      "reasons": [],
+      "bucket": "A_NOT_ATTEMPTED"
+    },
+    {
+      "procurement_id": 6354,
+      "contract_number": "0372100009926000058",
+      "material_document_count": 1,
+      "downloaded_material_document_count": 1,
+      "parsed_material_document_count": 1,
+      "embedded_run_count": 0,
+      "embedded_completed_count": 0,
+      "embedded_failed_count": 0,
+      "structured_entity_count": 0,
+      "last_extractor_version": "EMBEDDED_EXTRACTOR_V1",
+      "last_run_status": "NO_FACTS",
+      "last_run_at": "2026-10-13 14:39:54.354140+03:00",
+      "document_extraction_outcomes": [
+        "NO_FACTS"
+      ],
+      "reasons": [
+        "parse_time_hook"
+      ],
+      "bucket": "B_COMPLETED_ZERO_FACTS"
+    },
+    {
+      "procurement_id": 6845,
+      "contract_number": "0366200035626004736",
+      "material_document_count": 1,
+      "downloaded_material_document_count": 1,
+      "parsed_material_document_count": 1,
+      "embedded_run_count": 0,
+      "embedded_completed_count": 0,
+      "embedded_failed_count": 0,
+      "structured_entity_count": 0,
+      "last_extractor_version": null,
+      "last_run_status": null,
+      "last_run_at": null,
+      "document_extraction_outcomes": [],
+      "reasons": [],
+      "bucket": "A_NOT_ATTEMPTED"
+    },
+    {
+      "procurement_id": 9659,
+      "contract_number": "0154300014626000669",
+      "material_document_count": 1,
+      "downloaded_material_document_count": 1,
+      "parsed_material_document_count": 1,
+      "embedded_run_count": 0,
+      "embedded_completed_count": 0,
+      "embedded_failed_count": 0,
+      "structured_entity_count": 0,
+      "last_extractor_version": "EMBEDDED_EXTRACTOR_V1",
+      "last_run_status": "NO_FACTS",
+      "last_run_at": "2026-10-13 14:55:36.553246+03:00",
+      "document_extraction_outcomes": [
+        "NO_FACTS"
+      ],
+      "reasons": [
+        "parse_time_hook"
+      ],
+      "bucket": "B_COMPLETED_ZERO_FACTS"
+    },
+    {
+      "procurement_id": 9662,
+      "contract_number": "0151300023826000155",
+      "material_document_count": 1,
+      "downloaded_material_document_count": 1,
+      "parsed_material_document_count": 1,
+      "embedded_run_count": 1,
+      "embedded_completed_count": 1,
+      "embedded_failed_count": 0,
+      "structured_entity_count": 0,
+      "last_extractor_version": "EMBEDDED_EXTRACTOR_V1",
+      "last_run_status": "COMPLETED",
+      "last_run_at": "2026-10-12 21:13:44.554685+03:00",
+      "document_extraction_outcomes": [
+        "FACTS_FOUND",
+        "NO_FACTS"
+      ],
+      "reasons": [
+        "parse_time_hook"
+      ],
+      "bucket": "C_FAILED",
+      "failure_code": "FACTS_FOUND_NOT_PERSISTED",
+      "failure_reason": "FACTS_FOUND outcome with structured_entities=0",
+      "document_types": [
+        "docx"
+      ]
+    },
+    {
+      "procurement_id": 9994,
+      "contract_number": "0351100008926000131",
+      "material_document_count": 1,
+      "downloaded_material_document_count": 1,
+      "parsed_material_document_count": 1,
+      "embedded_run_count": 0,
+      "embedded_completed_count": 0,
+      "embedded_failed_count": 0,
+      "structured_entity_count": 0,
+      "last_extractor_version": "EMBEDDED_EXTRACTOR_V1",
+      "last_run_status": "NO_FACTS",
+      "last_run_at": "2026-10-13 13:17:55.932205+03:00",
+      "document_extraction_outcomes": [
+        "NO_FACTS"
+      ],
+      "reasons": [
+        "parse_time_hook"
+      ],
+      "bucket": "B_COMPLETED_ZERO_FACTS"
+    },
+    {
+      "procurement_id": 10187,
+      "contract_number": null,
+      "material_document_count": 1,
+      "downloaded_material_document_count": 1,
+      "parsed_material_document_count": 1,
+      "embedded_run_count": 1,
+      "embedded_completed_count": 1,
+      "embedded_failed_count": 0,
+      "structured_entity_count": 0,
+      "last_extractor_version": "EMBEDDED_EXTRACTOR_V1",
+      "last_run_status": "COMPLETED",
+      "last_run_at": "2026-10-16 09:48:19.228153+03:00",
+      "document_extraction_outcomes": [
+        "FACTS_FOUND",
+        "NO_FACTS"
+      ],
+      "reasons": [
+        "parse_time_hook"
+      ],
+      "bucket": "C_FAILED",
+      "failure_code": "FACTS_FOUND_NOT_PERSISTED",
+      "failure_reason": "FACTS_FOUND outcome with structured_entities=0",
+      "document_types": [
+        "xls"
+      ]
+    },
+    {
+      "procurement_id": 11013,
+      "contract_number": "0158300007826000228",
+      "material_document_count": 1,
+      "downloaded_material_document_count": 1,
+      "parsed_material_document_count": 1,
+      "embedded_run_count": 0,
+      "embedded_completed_count": 0,
+      "embedded_failed_count": 0,
+      "structured_entity_count": 0,
+      "last_extractor_version": "EMBEDDED_EXTRACTOR_V1",
+      "last_run_status": "NO_FACTS",
+      "last_run_at": "2026-10-12 22:09:58.839405+03:00",
+      "document_extraction_outcomes": [
+        "NO_FACTS"
+      ],
+      "reasons": [
+        "parse_time_hook"
+      ],
+      "bucket": "B_COMPLETED_ZERO_FACTS"
+    },
+    {
+      "procurement_id": 11459,
+      "contract_number": "0158300002226000060",
+      "material_document_count": 1,
+      "downloaded_material_document_count": 1,
+      "parsed_material_document_count": 1,
+      "embedded_run_count": 0,
+      "embedded_completed_count": 0,
+      "embedded_failed_count": 0,
+      "structured_entity_count": 0,
+      "last_extractor_version": "EMBEDDED_EXTRACTOR_V1",
+      "last_run_status": "NO_FACTS",
+      "last_run_at": "2026-10-13 15:01:31.530934+03:00",
+      "document_extraction_outcomes": [
+        "NO_FACTS"
+      ],
+      "reasons": [
+        "parse_time_hook"
+      ],
+      "bucket": "B_COMPLETED_ZERO_FACTS"
+    },
+    {
+      "procurement_id": 12077,
+      "contract_number": "0124200000626005262",
+      "material_document_count": 1,
+      "downloaded_material_document_count": 1,
+      "parsed_material_document_count": 1,
+      "embedded_run_count": 0,
+      "embedded_completed_count": 0,
+      "embedded_failed_count": 0,
+      "structured_entity_count": 0,
+      "last_extractor_version": "EMBEDDED_EXTRACTOR_V1",
+      "last_run_status": "NO_FACTS",
+      "last_run_at": "2026-10-13 15:00:10.239125+03:00",
+      "document_extraction_outcomes": [
+        "NO_FACTS"
+      ],
+      "reasons": [
+        "parse_time_hook"
+      ],
+      "bucket": "B_COMPLETED_ZERO_FACTS"
+    },
+    {
+      "procurement_id": 14568,
+      "contract_number": "0131300007926000092",
+      "material_document_count": 1,
+      "downloaded_material_document_count": 1,
+      "parsed_material_document_count": 1,
+      "embedded_run_count": 0,
+      "embedded_completed_count": 0,
+      "embedded_failed_count": 0,
+      "structured_entity_count": 0,
+      "last_extractor_version": "EMBEDDED_EXTRACTOR_V1",
+      "last_run_status": "NO_FACTS",
+      "last_run_at": "2026-10-14 15:29:06.473788+03:00",
+      "document_extraction_outcomes": [
+        "NO_FACTS"
+      ],
+      "reasons": [
+        "parse_time_hook"
+      ],
+      "bucket": "B_COMPLETED_ZERO_FACTS"
+    },
+    {
+      "procurement_id": 14591,
+      "contract_number": "0131300007926000093",
+      "material_document_count": 1,
+      "downloaded_material_document_count": 1,
+      "parsed_material_document_count": 1,
+      "embedded_run_count": 0,
+      "embedded_completed_count": 0,
+      "embedded_failed_count": 0,
+      "structured_entity_count": 0,
+      "last_extractor_version": "EMBEDDED_EXTRACTOR_V1",
+      "last_run_status": "NO_FACTS",
+      "last_run_at": "2026-10-12 22:04:08.526276+03:00",
+      "document_extraction_outcomes": [
+        "NO_FACTS"
+      ],
+      "reasons": [
+        "parse_time_hook"
+      ],
+      "bucket": "B_COMPLETED_ZERO_FACTS"
+    },
+    {
+      "procurement_id": 16556,
+      "contract_number": "0118300003726000343",
+      "material_document_count": 1,
+      "downloaded_material_document_count": 1,
+      "parsed_material_document_count": 1,
+      "embedded_run_count": 0,
+      "embedded_completed_count": 0,
+      "embedded_failed_count": 0,
+      "structured_entity_count": 0,
+      "last_extractor_version": "EMBEDDED_EXTRACTOR_V1",
+      "last_run_status": "NO_FACTS",
+      "last_run_at": "2026-10-12 21:29:08.709078+03:00",
+      "document_extraction_outcomes": [
+        "NO_FACTS"
+      ],
+      "reasons": [
+        "parse_time_hook"
+      ],
+      "bucket": "B_COMPLETED_ZERO_FACTS"
+    },
+    {
+      "procurement_id": 22877,
+      "contract_number": "32616282340",
+      "material_document_count": 1,
+      "downloaded_material_document_count": 1,
+      "parsed_material_document_count": 1,
+      "embedded_run_count": 0,
+      "embedded_completed_count": 0,
+      "embedded_failed_count": 0,
+      "structured_entity_count": 0,
+      "last_extractor_version": "EMBEDDED_EXTRACTOR_V1",
+      "last_run_status": "NO_FACTS",
+      "last_run_at": "2026-10-14 11:47:04.075776+03:00",
+      "document_extraction_outcomes": [
+        "NO_FACTS"
+      ],
+      "reasons": [
+        "parse_time_hook"
+      ],
+      "bucket": "B_COMPLETED_ZERO_FACTS"
+    },
+    {
+      "procurement_id": 24048,
+      "contract_number": "0173200001426001467",
+      "material_document_count": 2,
+      "downloaded_material_document_count": 0,
+      "parsed_material_document_count": 0,
+      "embedded_run_count": 1,
+      "embedded_completed_count": 1,
+      "embedded_failed_count": 0,
+      "structured_entity_count": 0,
+      "last_extractor_version": "EMBEDDED_EXTRACTOR_V1",
+      "last_run_status": "COMPLETED",
+      "last_run_at": "2026-10-13 16:49:07.840708+03:00",
+      "document_extraction_outcomes": [
+        "FACTS_FOUND",
+        "NO_FACTS"
+      ],
+      "reasons": [
+        "parse_time_hook"
+      ],
+      "bucket": "C_FAILED",
+      "failure_code": "FACTS_FOUND_NOT_PERSISTED",
+      "failure_reason": "FACTS_FOUND outcome with structured_entities=0",
+      "document_types": [
+        "xlsx"
+      ]
+    },
+    {
+      "procurement_id": 25006,
+      "contract_number": "0131300004626000064",
+      "material_document_count": 1,
+      "downloaded_material_document_count": 1,
+      "parsed_material_document_count": 1,
+      "embedded_run_count": 0,
+      "embedded_completed_count": 0,
+      "embedded_failed_count": 0,
+      "structured_entity_count": 0,
+      "last_extractor_version": "EMBEDDED_EXTRACTOR_V1",
+      "last_run_status": "NO_FACTS",
+      "last_run_at": "2026-10-14 15:30:17.267446+03:00",
+      "document_extraction_outcomes": [
+        "NO_FACTS"
+      ],
+      "reasons": [
+        "parse_time_hook"
+      ],
+      "bucket": "B_COMPLETED_ZERO_FACTS"
+    },
+    {
+      "procurement_id": 25063,
+      "contract_number": "0144200001826000130",
+      "material_document_count": 1,
+      "downloaded_material_document_count": 1,
+      "parsed_material_document_count": 1,
+      "embedded_run_count": 0,
+      "embedded_completed_count": 0,
+      "embedded_failed_count": 0,
+      "structured_entity_count": 0,
+      "last_extractor_version": "EMBEDDED_EXTRACTOR_V1",
+      "last_run_status": "NO_FACTS",
+      "last_run_at": "2026-10-12 21:49:54.809946+03:00",
+      "document_extraction_outcomes": [
+        "NO_FACTS"
+      ],
+      "reasons": [
+        "parse_time_hook"
+      ],
+      "bucket": "B_COMPLETED_ZERO_FACTS"
+    },
+    {
+      "procurement_id": 25064,
+      "contract_number": "0144200001826000129",
+      "material_document_count": 1,
+      "downloaded_material_document_count": 1,
+      "parsed_material_document_count": 1,
+      "embedded_run_count": 0,
+      "embedded_completed_count": 0,
+      "embedded_failed_count": 0,
+      "structured_entity_count": 0,
+      "last_extractor_version": "EMBEDDED_EXTRACTOR_V1",
+      "last_run_status": "NO_FACTS",
+      "last_run_at": "2026-10-12 21:53:42.366439+03:00",
+      "document_extraction_outcomes": [
+        "NO_FACTS"
+      ],
+      "reasons": [
+        "parse_time_hook"
+      ],
+      "bucket": "B_COMPLETED_ZERO_FACTS"
+    },
+    {
+      "procurement_id": 26129,
+      "contract_number": "0372100009926000092",
+      "material_document_count": 1,
+      "downloaded_material_document_count": 1,
+      "parsed_material_document_count": 1,
+      "embedded_run_count": 0,
+      "embedded_completed_count": 0,
+      "embedded_failed_count": 0,
+      "structured_entity_count": 0,
+      "last_extractor_version": "EMBEDDED_EXTRACTOR_V1",
+      "last_run_status": "NO_FACTS",
+      "last_run_at": "2026-10-13 16:50:05.145962+03:00",
+      "document_extraction_outcomes": [
+        "NO_FACTS"
+      ],
+      "reasons": [
+        "parse_time_hook"
+      ],
+      "bucket": "B_COMPLETED_ZERO_FACTS"
+    },
+    {
+      "procurement_id": 26131,
+      "contract_number": "0372100009926000091",
+      "material_document_count": 1,
+      "downloaded_material_document_count": 1,
+      "parsed_material_document_count": 1,
+      "embedded_run_count": 0,
+      "embedded_completed_count": 0,
+      "embedded_failed_count": 0,
+      "structured_entity_count": 0,
+      "last_extractor_version": "EMBEDDED_EXTRACTOR_V1",
+      "last_run_status": "NO_FACTS",
+      "last_run_at": "2026-10-13 16:49:39.183164+03:00",
+      "document_extraction_outcomes": [
+        "NO_FACTS"
+      ],
+      "reasons": [
+        "parse_time_hook"
+      ],
+      "bucket": "B_COMPLETED_ZERO_FACTS"
+    },
+    {
+      "procurement_id": 27726,
+      "contract_number": "0372100009926000095",
+      "material_document_count": 1,
+      "downloaded_material_document_count": 1,
+      "parsed_material_document_count": 1,
+      "embedded_run_count": 2,
+      "embedded_completed_count": 2,
+      "embedded_failed_count": 0,
+      "structured_entity_count": 0,
+      "last_extractor_version": "EMBEDDED_EXTRACTOR_V1",
+      "last_run_status": "COMPLETED",
+      "last_run_at": "2026-10-13 17:13:29.935502+03:00",
+      "document_extraction_outcomes": [
+        "FACTS_FOUND",
+        "NO_FACTS"
+      ],
+      "reasons": [
+        "parse_time_hook"
+      ],
+      "bucket": "C_FAILED",
+      "failure_code": "FACTS_FOUND_NOT_PERSISTED",
+      "failure_reason": "FACTS_FOUND outcome with structured_entities=0",
+      "document_types": [
+        "xlsx"
+      ]
+    },
+    {
+      "procurement_id": 27727,
+      "contract_number": "0372100009926000088",
+      "material_document_count": 1,
+      "downloaded_material_document_count": 1,
+      "parsed_material_document_count": 1,
+      "embedded_run_count": 4,
+      "embedded_completed_count": 4,
+      "embedded_failed_count": 0,
+      "structured_entity_count": 0,
+      "last_extractor_version": "EMBEDDED_EXTRACTOR_V1",
+      "last_run_status": "COMPLETED",
+      "last_run_at": "2026-10-13 17:31:16.202050+03:00",
+      "document_extraction_outcomes": [
+        "FACTS_FOUND",
+        "NO_FACTS"
+      ],
+      "reasons": [
+        "parse_time_hook"
+      ],
+      "bucket": "C_FAILED",
+      "failure_code": "FACTS_FOUND_NOT_PERSISTED",
+      "failure_reason": "FACTS_FOUND outcome with structured_entities=0",
+      "document_types": [
+        "xlsx"
+      ]
+    },
+    {
+      "procurement_id": 27729,
+      "contract_number": "0372100009926000094",
+      "material_document_count": 1,
+      "downloaded_material_document_count": 1,
+      "parsed_material_document_count": 1,
+      "embedded_run_count": 1,
+      "embedded_completed_count": 1,
+      "embedded_failed_count": 0,
+      "structured_entity_count": 0,
+      "last_extractor_version": "EMBEDDED_EXTRACTOR_V1",
+      "last_run_status": "COMPLETED",
+      "last_run_at": "2026-10-13 17:10:31.847115+03:00",
+      "document_extraction_outcomes": [
+        "FACTS_FOUND",
+        "NO_FACTS"
+      ],
+      "reasons": [
+        "parse_time_hook"
+      ],
+      "bucket": "C_FAILED",
+      "failure_code": "FACTS_FOUND_NOT_PERSISTED",
+      "failure_reason": "FACTS_FOUND outcome with structured_entities=0",
+      "document_types": [
+        "xlsx"
+      ]
+    },
+    {
+      "procurement_id": 27734,
+      "contract_number": "0372100009926000087",
+      "material_document_count": 1,
+      "downloaded_material_document_count": 1,
+      "parsed_material_document_count": 1,
+      "embedded_run_count": 2,
+      "embedded_completed_count": 2,
+      "embedded_failed_count": 0,
+      "structured_entity_count": 0,
+      "last_extractor_version": "EMBEDDED_EXTRACTOR_V1",
+      "last_run_status": "COMPLETED",
+      "last_run_at": "2026-10-13 17:31:06.140553+03:00",
+      "document_extraction_outcomes": [
+        "FACTS_FOUND",
+        "NO_FACTS"
+      ],
+      "reasons": [
+        "parse_time_hook"
+      ],
+      "bucket": "C_FAILED",
+      "failure_code": "FACTS_FOUND_NOT_PERSISTED",
+      "failure_reason": "FACTS_FOUND outcome with structured_entities=0",
+      "document_types": [
+        "xlsx"
+      ]
+    },
+    {
+      "procurement_id": 27739,
+      "contract_number": "0372100009926000096",
+      "material_document_count": 1,
+      "downloaded_material_document_count": 1,
+      "parsed_material_document_count": 1,
+      "embedded_run_count": 2,
+      "embedded_completed_count": 2,
+      "embedded_failed_count": 0,
+      "structured_entity_count": 0,
+      "last_extractor_version": "EMBEDDED_EXTRACTOR_V1",
+      "last_run_status": "COMPLETED",
+      "last_run_at": "2026-10-13 17:53:01.234202+03:00",
+      "document_extraction_outcomes": [
+        "FACTS_FOUND",
+        "NO_FACTS"
+      ],
+      "reasons": [
+        "parse_time_hook"
+      ],
+      "bucket": "C_FAILED",
+      "failure_code": "FACTS_FOUND_NOT_PERSISTED",
+      "failure_reason": "FACTS_FOUND outcome with structured_entities=0",
+      "document_types": [
+        "xlsx"
+      ]
+    },
+    {
+      "procurement_id": 29007,
+      "contract_number": "32616297675",
+      "material_document_count": 1,
+      "downloaded_material_document_count": 1,
+      "parsed_material_document_count": 1,
+      "embedded_run_count": 0,
+      "embedded_completed_count": 0,
+      "embedded_failed_count": 0,
+      "structured_entity_count": 0,
+      "last_extractor_version": null,
+      "last_run_status": null,
+      "last_run_at": null,
+      "document_extraction_outcomes": [],
+      "reasons": [],
+      "bucket": "A_NOT_ATTEMPTED"
+    },
+    {
+      "procurement_id": 29301,
+      "contract_number": "0372100009926000098",
+      "material_document_count": 1,
+      "downloaded_material_document_count": 1,
+      "parsed_material_document_count": 1,
+      "embedded_run_count": 0,
+      "embedded_completed_count": 0,
+      "embedded_failed_count": 0,
+      "structured_entity_count": 0,
+      "last_extractor_version": "EMBEDDED_EXTRACTOR_V1",
+      "last_run_status": "NO_FACTS",
+      "last_run_at": "2026-10-13 17:32:56.241213+03:00",
+      "document_extraction_outcomes": [
+        "NO_FACTS"
+      ],
+      "reasons": [
+        "parse_time_hook"
+      ],
+      "bucket": "B_COMPLETED_ZERO_FACTS"
+    },
+    {
+      "procurement_id": 29311,
+      "contract_number": "0372100009926000068",
+      "material_document_count": 1,
+      "downloaded_material_document_count": 1,
+      "parsed_material_document_count": 1,
+      "embedded_run_count": 1,
+      "embedded_completed_count": 1,
+      "embedded_failed_count": 0,
+      "structured_entity_count": 0,
+      "last_extractor_version": "EMBEDDED_EXTRACTOR_V1",
+      "last_run_status": "COMPLETED",
+      "last_run_at": "2026-10-13 15:06:23.069340+03:00",
+      "document_extraction_outcomes": [
+        "FACTS_FOUND",
+        "NO_FACTS"
+      ],
+      "reasons": [
+        "parse_time_hook"
+      ],
+      "bucket": "C_FAILED",
+      "failure_code": "FACTS_FOUND_NOT_PERSISTED",
+      "failure_reason": "FACTS_FOUND outcome with structured_entities=0",
+      "document_types": [
+        "xlsx"
+      ]
+    },
+    {
+      "procurement_id": 29993,
+      "contract_number": "0846600001926000177",
+      "material_document_count": 1,
+      "downloaded_material_document_count": 1,
+      "parsed_material_document_count": 1,
+      "embedded_run_count": 0,
+      "embedded_completed_count": 0,
+      "embedded_failed_count": 0,
+      "structured_entity_count": 0,
+      "last_extractor_version": "EMBEDDED_EXTRACTOR_V1",
+      "last_run_status": "NO_FACTS",
+      "last_run_at": "2026-10-12 22:00:36.172098+03:00",
+      "document_extraction_outcomes": [
+        "NO_FACTS"
+      ],
+      "reasons": [
+        "parse_time_hook"
+      ],
+      "bucket": "B_COMPLETED_ZERO_FACTS"
+    },
+    {
+      "procurement_id": 32557,
+      "contract_number": "0372100009926000076",
+      "material_document_count": 1,
+      "downloaded_material_document_count": 1,
+      "parsed_material_document_count": 1,
+      "embedded_run_count": 4,
+      "embedded_completed_count": 4,
+      "embedded_failed_count": 0,
+      "structured_entity_count": 0,
+      "last_extractor_version": "EMBEDDED_EXTRACTOR_V1",
+      "last_run_status": "COMPLETED",
+      "last_run_at": "2026-10-13 16:30:26.961883+03:00",
+      "document_extraction_outcomes": [
+        "FACTS_FOUND",
+        "NO_FACTS"
+      ],
+      "reasons": [
+        "parse_time_hook"
+      ],
+      "bucket": "C_FAILED",
+      "failure_code": "FACTS_FOUND_NOT_PERSISTED",
+      "failure_reason": "FACTS_FOUND outcome with structured_entities=0",
+      "document_types": [
+        "xlsx"
+      ]
+    },
+    {
+      "procurement_id": 32784,
+      "contract_number": "0813500000126015266",
+      "material_document_count": 3,
+      "downloaded_material_document_count": 0,
+      "parsed_material_document_count": 3,
+      "embedded_run_count": 0,
+      "embedded_completed_count": 0,
+      "embedded_failed_count": 0,
+      "structured_entity_count": 0,
+      "last_extractor_version": "EMBEDDED_EXTRACTOR_V1",
+      "last_run_status": "NO_FACTS",
+      "last_run_at": "2026-10-12 21:39:07.614282+03:00",
+      "document_extraction_outcomes": [
+        "NO_FACTS"
+      ],
+      "reasons": [
+        "parse_time_hook"
+      ],
+      "bucket": "B_COMPLETED_ZERO_FACTS"
+    },
+    {
+      "procurement_id": 35037,
+      "contract_number": "0351100008926000157",
+      "material_document_count": 1,
+      "downloaded_material_document_count": 1,
+      "parsed_material_document_count": 1,
+      "embedded_run_count": 0,
+      "embedded_completed_count": 0,
+      "embedded_failed_count": 0,
+      "structured_entity_count": 0,
+      "last_extractor_version": "EMBEDDED_EXTRACTOR_V1",
+      "last_run_status": "NO_FACTS",
+      "last_run_at": "2026-10-12 21:43:13.781630+03:00",
+      "document_extraction_outcomes": [
+        "NO_FACTS"
+      ],
+      "reasons": [
+        "parse_time_hook"
+      ],
+      "bucket": "B_COMPLETED_ZERO_FACTS"
+    },
+    {
+      "procurement_id": 35038,
+      "contract_number": "0351100008926000154",
+      "material_document_count": 1,
+      "downloaded_material_document_count": 1,
+      "parsed_material_document_count": 1,
+      "embedded_run_count": 0,
+      "embedded_completed_count": 0,
+      "embedded_failed_count": 0,
+      "structured_entity_count": 0,
+      "last_extractor_version": "EMBEDDED_EXTRACTOR_V1",
+      "last_run_status": "NO_FACTS",
+      "last_run_at": "2026-10-12 21:16:47.224270+03:00",
+      "document_extraction_outcomes": [
+        "NO_FACTS"
+      ],
+      "reasons": [
+        "parse_time_hook"
+      ],
+      "bucket": "B_COMPLETED_ZERO_FACTS"
+    },
+    {
+      "procurement_id": 35039,
+      "contract_number": "0351100008926000156",
+      "material_document_count": 1,
+      "downloaded_material_document_count": 1,
+      "parsed_material_document_count": 1,
+      "embedded_run_count": 0,
+      "embedded_completed_count": 0,
+      "embedded_failed_count": 0,
+      "structured_entity_count": 0,
+      "last_extractor_version": "EMBEDDED_EXTRACTOR_V1",
+      "last_run_status": "NO_FACTS",
+      "last_run_at": "2026-10-12 21:43:24.034811+03:00",
+      "document_extraction_outcomes": [
+        "NO_FACTS"
+      ],
+      "reasons": [
+        "parse_time_hook"
+      ],
+      "bucket": "B_COMPLETED_ZERO_FACTS"
+    },
+    {
+      "procurement_id": 35442,
+      "contract_number": "0173200001426001442",
+      "material_document_count": 2,
+      "downloaded_material_document_count": 2,
+      "parsed_material_document_count": 2,
+      "embedded_run_count": 0,
+      "embedded_completed_count": 0,
+      "embedded_failed_count": 0,
+      "structured_entity_count": 0,
+      "last_extractor_version": "EMBEDDED_EXTRACTOR_V1",
+      "last_run_status": "NO_FACTS",
+      "last_run_at": "2026-10-13 15:32:49.879009+03:00",
+      "document_extraction_outcomes": [
+        "NO_FACTS"
+      ],
+      "reasons": [
+        "parse_time_hook"
+      ],
+      "bucket": "B_COMPLETED_ZERO_FACTS"
+    },
+    {
+      "procurement_id": 35992,
+      "contract_number": "0124200000626005407",
+      "material_document_count": 1,
+      "downloaded_material_document_count": 1,
+      "parsed_material_document_count": 1,
+      "embedded_run_count": 0,
+      "embedded_completed_count": 0,
+      "embedded_failed_count": 0,
+      "structured_entity_count": 0,
+      "last_extractor_version": "EMBEDDED_EXTRACTOR_V1",
+      "last_run_status": "NO_FACTS",
+      "last_run_at": "2026-10-13 15:18:03.997647+03:00",
+      "document_extraction_outcomes": [
+        "NO_FACTS"
+      ],
+      "reasons": [
+        "parse_time_hook"
+      ],
+      "bucket": "B_COMPLETED_ZERO_FACTS"
+    },
+    {
+      "procurement_id": 37142,
+      "contract_number": "0372100009926000077",
+      "material_document_count": 1,
+      "downloaded_material_document_count": 1,
+      "parsed_material_document_count": 1,
+      "embedded_run_count": 1,
+      "embedded_completed_count": 1,
+      "embedded_failed_count": 0,
+      "structured_entity_count": 0,
+      "last_extractor_version": "EMBEDDED_EXTRACTOR_V1",
+      "last_run_status": "COMPLETED",
+      "last_run_at": "2026-10-13 15:21:28.542336+03:00",
+      "document_extraction_outcomes": [
+        "FACTS_FOUND",
+        "NO_FACTS"
+      ],
+      "reasons": [
+        "parse_time_hook"
+      ],
+      "bucket": "C_FAILED",
+      "failure_code": "FACTS_FOUND_NOT_PERSISTED",
+      "failure_reason": "FACTS_FOUND outcome with structured_entities=0",
+      "document_types": [
+        "xlsx"
+      ]
+    },
+    {
+      "procurement_id": 37680,
+      "contract_number": "0144200001826000125",
+      "material_document_count": 1,
+      "downloaded_material_document_count": 1,
+      "parsed_material_document_count": 1,
+      "embedded_run_count": 0,
+      "embedded_completed_count": 0,
+      "embedded_failed_count": 0,
+      "structured_entity_count": 0,
+      "last_extractor_version": "EMBEDDED_EXTRACTOR_V1",
+      "last_run_status": "NO_FACTS",
+      "last_run_at": "2026-10-12 21:36:22.568742+03:00",
+      "document_extraction_outcomes": [
+        "NO_FACTS"
+      ],
+      "reasons": [
+        "parse_time_hook"
+      ],
+      "bucket": "B_COMPLETED_ZERO_FACTS"
+    },
+    {
+      "procurement_id": 37822,
+      "contract_number": "0149600001526000080",
+      "material_document_count": 1,
+      "downloaded_material_document_count": 1,
+      "parsed_material_document_count": 1,
+      "embedded_run_count": 0,
+      "embedded_completed_count": 0,
+      "embedded_failed_count": 0,
+      "structured_entity_count": 0,
+      "last_extractor_version": "EMBEDDED_EXTRACTOR_V1",
+      "last_run_status": "NO_FACTS",
+      "last_run_at": "2026-10-12 21:55:52.385643+03:00",
+      "document_extraction_outcomes": [
+        "NO_FACTS"
+      ],
+      "reasons": [
+        "parse_time_hook"
+      ],
+      "bucket": "B_COMPLETED_ZERO_FACTS"
+    },
+    {
+      "procurement_id": 38239,
+      "contract_number": "0136500001126004439",
+      "material_document_count": 1,
+      "downloaded_material_document_count": 1,
+      "parsed_material_document_count": 1,
+      "embedded_run_count": 0,
+      "embedded_completed_count": 0,
+      "embedded_failed_count": 0,
+      "structured_entity_count": 0,
+      "last_extractor_version": "EMBEDDED_EXTRACTOR_V1",
+      "last_run_status": "NO_FACTS",
+      "last_run_at": "2026-10-14 15:31:24.792263+03:00",
+      "document_extraction_outcomes": [
+        "NO_FACTS"
+      ],
+      "reasons": [
+        "parse_time_hook"
+      ],
+      "bucket": "B_COMPLETED_ZERO_FACTS"
+    },
+    {
+      "procurement_id": 40020,
+      "contract_number": "32616260749",
+      "material_document_count": 1,
+      "downloaded_material_document_count": 1,
+      "parsed_material_document_count": 1,
+      "embedded_run_count": 0,
+      "embedded_completed_count": 0,
+      "embedded_failed_count": 0,
+      "structured_entity_count": 0,
+      "last_extractor_version": "EMBEDDED_EXTRACTOR_V1",
+      "last_run_status": "NO_FACTS",
+      "last_run_at": "2026-10-14 11:45:09.310371+03:00",
+      "document_extraction_outcomes": [
+        "NO_FACTS"
+      ],
+      "reasons": [
+        "parse_time_hook"
+      ],
+      "bucket": "B_COMPLETED_ZERO_FACTS"
+    },
+    {
+      "procurement_id": 40656,
+      "contract_number": "0329200062226002233",
+      "material_document_count": 1,
+      "downloaded_material_document_count": 1,
+      "parsed_material_document_count": 1,
+      "embedded_run_count": 0,
+      "embedded_completed_count": 0,
+      "embedded_failed_count": 0,
+      "structured_entity_count": 0,
+      "last_extractor_version": null,
+      "last_run_status": null,
+      "last_run_at": null,
+      "document_extraction_outcomes": [],
+      "reasons": [],
+      "bucket": "A_NOT_ATTEMPTED"
+    },
+    {
+      "procurement_id": 40710,
+      "contract_number": "0131300004626000060",
+      "material_document_count": 1,
+      "downloaded_material_document_count": 1,
+      "parsed_material_document_count": 1,
+      "embedded_run_count": 0,
+      "embedded_completed_count": 0,
+      "embedded_failed_count": 0,
+      "structured_entity_count": 0,
+      "last_extractor_version": "EMBEDDED_EXTRACTOR_V1",
+      "last_run_status": "NO_FACTS",
+      "last_run_at": "2026-10-14 15:30:23.291245+03:00",
+      "document_extraction_outcomes": [
+        "NO_FACTS"
+      ],
+      "reasons": [
+        "parse_time_hook"
+      ],
+      "bucket": "B_COMPLETED_ZERO_FACTS"
+    },
+    {
+      "procurement_id": 41655,
+      "contract_number": "0372100009926000070",
+      "material_document_count": 1,
+      "downloaded_material_document_count": 1,
+      "parsed_material_document_count": 1,
+      "embedded_run_count": 0,
+      "embedded_completed_count": 0,
+      "embedded_failed_count": 0,
+      "structured_entity_count": 0,
+      "last_extractor_version": null,
+      "last_run_status": null,
+      "last_run_at": null,
+      "document_extraction_outcomes": [],
+      "reasons": [],
+      "bucket": "A_NOT_ATTEMPTED"
+    },
+    {
+      "procurement_id": 42598,
+      "contract_number": "0157600002926000028",
+      "material_document_count": 4,
+      "downloaded_material_document_count": 3,
+      "parsed_material_document_count": 3,
+      "embedded_run_count": 0,
+      "embedded_completed_count": 0,
+      "embedded_failed_count": 0,
+      "structured_entity_count": 0,
+      "last_extractor_version": "EMBEDDED_EXTRACTOR_V1",
+      "last_run_status": "NO_FACTS",
+      "last_run_at": "2026-10-14 15:28:41.802801+03:00",
+      "document_extraction_outcomes": [
+        "NO_FACTS"
+      ],
+      "reasons": [
+        "parse_time_hook"
+      ],
+      "bucket": "B_COMPLETED_ZERO_FACTS"
+    },
+    {
+      "procurement_id": 43943,
+      "contract_number": "0866300029926000017",
+      "material_document_count": 1,
+      "downloaded_material_document_count": 1,
+      "parsed_material_document_count": 1,
+      "embedded_run_count": 0,
+      "embedded_completed_count": 0,
+      "embedded_failed_count": 0,
+      "structured_entity_count": 0,
+      "last_extractor_version": "EMBEDDED_EXTRACTOR_V1",
+      "last_run_status": "NO_FACTS",
+      "last_run_at": "2026-10-12 21:53:23.548358+03:00",
+      "document_extraction_outcomes": [
+        "NO_FACTS"
+      ],
+      "reasons": [
+        "parse_time_hook"
+      ],
+      "bucket": "B_COMPLETED_ZERO_FACTS"
+    },
+    {
+      "procurement_id": 46714,
+      "contract_number": "32616219585",
+      "material_document_count": 1,
+      "downloaded_material_document_count": 0,
+      "parsed_material_document_count": 0,
+      "embedded_run_count": 0,
+      "embedded_completed_count": 0,
+      "embedded_failed_count": 0,
+      "structured_entity_count": 0,
+      "last_extractor_version": "EMBEDDED_EXTRACTOR_V1",
+      "last_run_status": "NO_FACTS",
+      "last_run_at": "2026-10-14 12:16:08.605172+03:00",
+      "document_extraction_outcomes": [
+        "NO_FACTS"
+      ],
+      "reasons": [
+        "parse_time_hook"
+      ],
+      "bucket": "B_COMPLETED_ZERO_FACTS"
+    },
+    {
+      "procurement_id": 47259,
+      "contract_number": "0351100008926000137",
+      "material_document_count": 1,
+      "downloaded_material_document_count": 1,
+      "parsed_material_document_count": 1,
+      "embedded_run_count": 0,
+      "embedded_completed_count": 0,
+      "embedded_failed_count": 0,
+      "structured_entity_count": 0,
+      "last_extractor_version": "EMBEDDED_EXTRACTOR_V1",
+      "last_run_status": "NO_FACTS",
+      "last_run_at": "2026-10-13 13:30:37.505954+03:00",
+      "document_extraction_outcomes": [
+        "NO_FACTS"
+      ],
+      "reasons": [
+        "parse_time_hook"
+      ],
+      "bucket": "B_COMPLETED_ZERO_FACTS"
+    },
+    {
+      "procurement_id": 47266,
+      "contract_number": "0351100008926000139",
+      "material_document_count": 1,
+      "downloaded_material_document_count": 1,
+      "parsed_material_document_count": 1,
+      "embedded_run_count": 0,
+      "embedded_completed_count": 0,
+      "embedded_failed_count": 0,
+      "structured_entity_count": 0,
+      "last_extractor_version": "EMBEDDED_EXTRACTOR_V1",
+      "last_run_status": "NO_FACTS",
+      "last_run_at": "2026-10-13 13:31:28.814561+03:00",
+      "document_extraction_outcomes": [
+        "NO_FACTS"
+      ],
+      "reasons": [
+        "parse_time_hook"
+      ],
+      "bucket": "B_COMPLETED_ZERO_FACTS"
+    },
+    {
+      "procurement_id": 48952,
+      "contract_number": "0833600000826000537",
+      "material_document_count": 2,
+      "downloaded_material_document_count": 2,
+      "parsed_material_document_count": 1,
+      "embedded_run_count": 0,
+      "embedded_completed_count": 0,
+      "embedded_failed_count": 0,
+      "structured_entity_count": 0,
+      "last_extractor_version": null,
+      "last_run_status": null,
+      "last_run_at": null,
+      "document_extraction_outcomes": [],
+      "reasons": [],
+      "bucket": "A_NOT_ATTEMPTED"
+    },
+    {
+      "procurement_id": 49875,
+      "contract_number": "0351100008926000134",
+      "material_document_count": 1,
+      "downloaded_material_document_count": 1,
+      "parsed_material_document_count": 1,
+      "embedded_run_count": 0,
+      "embedded_completed_count": 0,
+      "embedded_failed_count": 0,
+      "structured_entity_count": 0,
+      "last_extractor_version": "EMBEDDED_EXTRACTOR_V1",
+      "last_run_status": "NO_FACTS",
+      "last_run_at": "2026-10-13 13:18:59.435518+03:00",
+      "document_extraction_outcomes": [
+        "NO_FACTS"
+      ],
+      "reasons": [
+        "parse_time_hook"
+      ],
+      "bucket": "B_COMPLETED_ZERO_FACTS"
+    },
+    {
+      "procurement_id": 51424,
+      "contract_number": "0351100008926000129",
+      "material_document_count": 1,
+      "downloaded_material_document_count": 1,
+      "parsed_material_document_count": 1,
+      "embedded_run_count": 0,
+      "embedded_completed_count": 0,
+      "embedded_failed_count": 0,
+      "structured_entity_count": 0,
+      "last_extractor_version": "EMBEDDED_EXTRACTOR_V1",
+      "last_run_status": "NO_FACTS",
+      "last_run_at": "2026-10-13 13:16:18.024649+03:00",
+      "document_extraction_outcomes": [
+        "NO_FACTS"
+      ],
+      "reasons": [
+        "parse_time_hook"
+      ],
+      "bucket": "B_COMPLETED_ZERO_FACTS"
+    },
+    {
+      "procurement_id": 51428,
+      "contract_number": "0351100008926000128",
+      "material_document_count": 1,
+      "downloaded_material_document_count": 1,
+      "parsed_material_document_count": 1,
+      "embedded_run_count": 0,
+      "embedded_completed_count": 0,
+      "embedded_failed_count": 0,
+      "structured_entity_count": 0,
+      "last_extractor_version": "EMBEDDED_EXTRACTOR_V1",
+      "last_run_status": "NO_FACTS",
+      "last_run_at": "2026-10-13 13:16:06.759804+03:00",
+      "document_extraction_outcomes": [
+        "NO_FACTS"
+      ],
+      "reasons": [
+        "parse_time_hook"
+      ],
+      "bucket": "B_COMPLETED_ZERO_FACTS"
+    },
+    {
+      "procurement_id": 51431,
+      "contract_number": "0351100008926000124",
+      "material_document_count": 1,
+      "downloaded_material_document_count": 1,
+      "parsed_material_document_count": 1,
+      "embedded_run_count": 0,
+      "embedded_completed_count": 0,
+      "embedded_failed_count": 0,
+      "structured_entity_count": 0,
+      "last_extractor_version": "EMBEDDED_EXTRACTOR_V1",
+      "last_run_status": "NO_FACTS",
+      "last_run_at": "2026-10-13 13:15:07.053408+03:00",
+      "document_extraction_outcomes": [
+        "NO_FACTS"
+      ],
+      "reasons": [
+        "parse_time_hook"
+      ],
+      "bucket": "B_COMPLETED_ZERO_FACTS"
+    },
+    {
+      "procurement_id": 51432,
+      "contract_number": "0351100008926000130",
+      "material_document_count": 1,
+      "downloaded_material_document_count": 1,
+      "parsed_material_document_count": 1,
+      "embedded_run_count": 0,
+      "embedded_completed_count": 0,
+      "embedded_failed_count": 0,
+      "structured_entity_count": 0,
+      "last_extractor_version": "EMBEDDED_EXTRACTOR_V1",
+      "last_run_status": "NO_FACTS",
+      "last_run_at": "2026-10-13 13:17:22.165792+03:00",
+      "document_extraction_outcomes": [
+        "NO_FACTS"
+      ],
+      "reasons": [
+        "parse_time_hook"
+      ],
+      "bucket": "B_COMPLETED_ZERO_FACTS"
+    },
+    {
+      "procurement_id": 51433,
+      "contract_number": "0351100008926000126",
+      "material_document_count": 1,
+      "downloaded_material_document_count": 1,
+      "parsed_material_document_count": 1,
+      "embedded_run_count": 0,
+      "embedded_completed_count": 0,
+      "embedded_failed_count": 0,
+      "structured_entity_count": 0,
+      "last_extractor_version": "EMBEDDED_EXTRACTOR_V1",
+      "last_run_status": "NO_FACTS",
+      "last_run_at": "2026-10-13 13:15:42.817031+03:00",
+      "document_extraction_outcomes": [
+        "NO_FACTS"
+      ],
+      "reasons": [
+        "parse_time_hook"
+      ],
+      "bucket": "B_COMPLETED_ZERO_FACTS"
+    },
+    {
+      "procurement_id": 59620,
+      "contract_number": "0818400001526000011",
+      "material_document_count": 1,
+      "downloaded_material_document_count": 0,
+      "parsed_material_document_count": 0,
+      "embedded_run_count": 1,
+      "embedded_completed_count": 1,
+      "embedded_failed_count": 0,
+      "structured_entity_count": 0,
+      "last_extractor_version": "EMBEDDED_EXTRACTOR_V1",
+      "last_run_status": "COMPLETED",
+      "last_run_at": "2026-10-13 17:36:14.417527+03:00",
+      "document_extraction_outcomes": [
+        "FACTS_FOUND",
+        "NO_FACTS"
+      ],
+      "reasons": [
+        "parse_time_hook"
+      ],
+      "bucket": "C_FAILED",
+      "failure_code": "FACTS_FOUND_NOT_PERSISTED",
+      "failure_reason": "FACTS_FOUND outcome with structured_entities=0",
+      "document_types": [
+        "xlsx"
+      ]
+    },
+    {
+      "procurement_id": 63232,
+      "contract_number": "0372100009926000101",
+      "material_document_count": 1,
+      "downloaded_material_document_count": 1,
+      "parsed_material_document_count": 1,
+      "embedded_run_count": 0,
+      "embedded_completed_count": 0,
+      "embedded_failed_count": 0,
+      "structured_entity_count": 0,
+      "last_extractor_version": "EMBEDDED_EXTRACTOR_V1",
+      "last_run_status": "NO_FACTS",
+      "last_run_at": "2026-10-13 17:59:41.804729+03:00",
+      "document_extraction_outcomes": [
+        "NO_FACTS"
+      ],
+      "reasons": [
+        "parse_time_hook"
+      ],
+      "bucket": "B_COMPLETED_ZERO_FACTS"
+    },
+    {
+      "procurement_id": 64108,
+      "contract_number": "0328300032826000684",
+      "material_document_count": 1,
+      "downloaded_material_document_count": 0,
+      "parsed_material_document_count": 0,
+      "embedded_run_count": 0,
+      "embedded_completed_count": 0,
+      "embedded_failed_count": 0,
+      "structured_entity_count": 0,
+      "last_extractor_version": "EMBEDDED_EXTRACTOR_V1",
+      "last_run_status": "NO_FACTS",
+      "last_run_at": "2026-10-27 15:05:49.676755+03:00",
+      "document_extraction_outcomes": [
+        "NO_FACTS"
+      ],
+      "reasons": [
+        "parse_time_hook"
+      ],
+      "bucket": "B_COMPLETED_ZERO_FACTS"
+    },
+    {
+      "procurement_id": 66585,
+      "contract_number": "0144200001826000138",
+      "material_document_count": 1,
+      "downloaded_material_document_count": 1,
+      "parsed_material_document_count": 1,
+      "embedded_run_count": 1,
+      "embedded_completed_count": 1,
+      "embedded_failed_count": 0,
+      "structured_entity_count": 0,
+      "last_extractor_version": "EMBEDDED_EXTRACTOR_V1",
+      "last_run_status": "COMPLETED",
+      "last_run_at": "2026-10-13 18:37:37.876177+03:00",
+      "document_extraction_outcomes": [
+        "FACTS_FOUND",
+        "NO_FACTS"
+      ],
+      "reasons": [
+        "parse_time_hook"
+      ],
+      "bucket": "C_FAILED",
+      "failure_code": "FACTS_FOUND_NOT_PERSISTED",
+      "failure_reason": "FACTS_FOUND outcome with structured_entities=0",
+      "document_types": [
+        "pdf"
+      ]
+    },
+    {
+      "procurement_id": 75573,
+      "contract_number": "0148200005426000301",
+      "material_document_count": 1,
+      "downloaded_material_document_count": 1,
+      "parsed_material_document_count": 0,
+      "embedded_run_count": 0,
+      "embedded_completed_count": 0,
+      "embedded_failed_count": 0,
+      "structured_entity_count": 0,
+      "last_extractor_version": null,
+      "last_run_status": null,
+      "last_run_at": null,
+      "document_extraction_outcomes": [],
+      "reasons": [],
+      "bucket": "A_NOT_ATTEMPTED"
+    },
+    {
+      "procurement_id": 102795,
+      "contract_number": "32616038050",
+      "material_document_count": 1,
+      "downloaded_material_document_count": 1,
+      "parsed_material_document_count": 1,
+      "embedded_run_count": 1,
+      "embedded_completed_count": 1,
+      "embedded_failed_count": 0,
+      "structured_entity_count": 0,
+      "last_extractor_version": "EMBEDDED_EXTRACTOR_V1",
+      "last_run_status": "COMPLETED",
+      "last_run_at": "2026-10-12 16:06:41.550503+03:00",
+      "document_extraction_outcomes": [
+        "NO_FACTS"
+      ],
+      "reasons": [
+        "parse_time_hook"
+      ],
+      "bucket": "B_COMPLETED_ZERO_FACTS"
+    },
+    {
+      "procurement_id": 114477,
+      "contract_number": "0106300004526000028",
+      "material_document_count": 1,
+      "downloaded_material_document_count": 1,
+      "parsed_material_document_count": 1,
+      "embedded_run_count": 0,
+      "embedded_completed_count": 0,
+      "embedded_failed_count": 0,
+      "structured_entity_count": 0,
+      "last_extractor_version": "EMBEDDED_EXTRACTOR_V1",
+      "last_run_status": "NO_FACTS",
+      "last_run_at": "2026-10-14 11:39:20.262120+03:00",
+      "document_extraction_outcomes": [
+        "NO_FACTS"
+      ],
+      "reasons": [
+        "parse_time_hook"
+      ],
+      "bucket": "B_COMPLETED_ZERO_FACTS"
+    },
+    {
+      "procurement_id": 116192,
+      "contract_number": "32615894011",
+      "material_document_count": 1,
+      "downloaded_material_document_count": 1,
+      "parsed_material_document_count": 1,
+      "embedded_run_count": 0,
+      "embedded_completed_count": 0,
+      "embedded_failed_count": 0,
+      "structured_entity_count": 0,
+      "last_extractor_version": "EMBEDDED_EXTRACTOR_V1",
+      "last_run_status": "NO_FACTS",
+      "last_run_at": "2026-10-14 14:47:00.796210+03:00",
+      "document_extraction_outcomes": [
+        "NO_FACTS"
+      ],
+      "reasons": [
+        "parse_time_hook"
+      ],
+      "bucket": "B_COMPLETED_ZERO_FACTS"
+    },
+    {
+      "procurement_id": 116236,
+      "contract_number": "0132600032726000227",
+      "material_document_count": 2,
+      "downloaded_material_document_count": 2,
+      "parsed_material_document_count": 1,
+      "embedded_run_count": 0,
+      "embedded_completed_count": 0,
+      "embedded_failed_count": 0,
+      "structured_entity_count": 0,
+      "last_extractor_version": "EMBEDDED_EXTRACTOR_V1",
+      "last_run_status": "NO_FACTS",
+      "last_run_at": "2026-10-27 15:05:51.094945+03:00",
+      "document_extraction_outcomes": [
+        "NO_FACTS"
+      ],
+      "reasons": [
+        "parse_time_hook"
+      ],
+      "bucket": "B_COMPLETED_ZERO_FACTS"
+    },
+    {
+      "procurement_id": 116971,
+      "contract_number": "0342300000126000445",
+      "material_document_count": 1,
+      "downloaded_material_document_count": 1,
+      "parsed_material_document_count": 1,
+      "embedded_run_count": 0,
+      "embedded_completed_count": 0,
+      "embedded_failed_count": 0,
+      "structured_entity_count": 0,
+      "last_extractor_version": "EMBEDDED_EXTRACTOR_V1",
+      "last_run_status": "NO_FACTS",
+      "last_run_at": "2026-10-27 15:05:52.210923+03:00",
+      "document_extraction_outcomes": [
+        "NO_FACTS"
+      ],
+      "reasons": [
+        "parse_time_hook"
+      ],
+      "bucket": "B_COMPLETED_ZERO_FACTS"
+    },
+    {
+      "procurement_id": 117442,
+      "contract_number": "0310200000326000619",
+      "material_document_count": 1,
+      "downloaded_material_document_count": 1,
+      "parsed_material_document_count": 1,
+      "embedded_run_count": 0,
+      "embedded_completed_count": 0,
+      "embedded_failed_count": 0,
+      "structured_entity_count": 0,
+      "last_extractor_version": "EMBEDDED_EXTRACTOR_V1",
+      "last_run_status": "NO_FACTS",
+      "last_run_at": "2026-10-14 12:52:49.692774+03:00",
+      "document_extraction_outcomes": [
+        "NO_FACTS"
+      ],
+      "reasons": [
+        "parse_time_hook"
+      ],
+      "bucket": "B_COMPLETED_ZERO_FACTS"
+    },
+    {
+      "procurement_id": 118005,
+      "contract_number": "0133600001426000004",
+      "material_document_count": 1,
+      "downloaded_material_document_count": 1,
+      "parsed_material_document_count": 1,
+      "embedded_run_count": 0,
+      "embedded_completed_count": 0,
+      "embedded_failed_count": 0,
+      "structured_entity_count": 0,
+      "last_extractor_version": "EMBEDDED_EXTRACTOR_V1",
+      "last_run_status": "NO_FACTS",
+      "last_run_at": "2026-10-27 15:05:52.921239+03:00",
+      "document_extraction_outcomes": [
+        "NO_FACTS"
+      ],
+      "reasons": [
+        "parse_time_hook"
+      ],
+      "bucket": "B_COMPLETED_ZERO_FACTS"
+    },
+    {
+      "procurement_id": 130044,
+      "contract_number": "3910600261426000001",
+      "material_document_count": 1,
+      "downloaded_material_document_count": 1,
+      "parsed_material_document_count": 1,
+      "embedded_run_count": 0,
+      "embedded_completed_count": 0,
+      "embedded_failed_count": 0,
+      "structured_entity_count": 0,
+      "last_extractor_version": "EMBEDDED_EXTRACTOR_V1",
+      "last_run_status": "NO_FACTS",
+      "last_run_at": "2026-10-14 12:00:46.978240+03:00",
+      "document_extraction_outcomes": [
+        "NO_FACTS"
+      ],
+      "reasons": [
+        "parse_time_hook"
+      ],
+      "bucket": "B_COMPLETED_ZERO_FACTS"
+    },
+    {
+      "procurement_id": 145353,
+      "contract_number": "0813500000126016116",
+      "material_document_count": 1,
+      "downloaded_material_document_count": 1,
+      "parsed_material_document_count": 1,
+      "embedded_run_count": 0,
+      "embedded_completed_count": 0,
+      "embedded_failed_count": 0,
+      "structured_entity_count": 0,
+      "last_extractor_version": "EMBEDDED_EXTRACTOR_V1",
+      "last_run_status": "NO_FACTS",
+      "last_run_at": "2026-10-13 21:34:59.405932+03:00",
+      "document_extraction_outcomes": [
+        "NO_FACTS"
+      ],
+      "reasons": [
+        "parse_time_hook"
+      ],
+      "bucket": "B_COMPLETED_ZERO_FACTS"
+    },
+    {
+      "procurement_id": 149160,
+      "contract_number": "0848300062726000289",
+      "material_document_count": 1,
+      "downloaded_material_document_count": 1,
+      "parsed_material_document_count": 0,
+      "embedded_run_count": 0,
+      "embedded_completed_count": 0,
+      "embedded_failed_count": 0,
+      "structured_entity_count": 0,
+      "last_extractor_version": "EMBEDDED_EXTRACTOR_V1",
+      "last_run_status": "NO_FACTS",
+      "last_run_at": "2026-10-13 19:21:17.024794+03:00",
+      "document_extraction_outcomes": [
+        "NO_FACTS"
+      ],
+      "reasons": [
+        "parse_time_hook"
+      ],
+      "bucket": "B_COMPLETED_ZERO_FACTS"
+    },
+    {
+      "procurement_id": 149802,
+      "contract_number": "0166300016626000019",
+      "material_document_count": 1,
+      "downloaded_material_document_count": 0,
+      "parsed_material_document_count": 0,
+      "embedded_run_count": 0,
+      "embedded_completed_count": 0,
+      "embedded_failed_count": 0,
+      "structured_entity_count": 0,
+      "last_extractor_version": "EMBEDDED_EXTRACTOR_V1",
+      "last_run_status": "NO_FACTS",
+      "last_run_at": "2026-10-13 19:32:59.748894+03:00",
+      "document_extraction_outcomes": [
+        "NO_FACTS"
+      ],
+      "reasons": [
+        "parse_time_hook"
+      ],
+      "bucket": "B_COMPLETED_ZERO_FACTS"
+    },
+    {
+      "procurement_id": 166239,
+      "contract_number": "0813500000126016620",
+      "material_document_count": 1,
+      "downloaded_material_document_count": 1,
+      "parsed_material_document_count": 1,
+      "embedded_run_count": 0,
+      "embedded_completed_count": 0,
+      "embedded_failed_count": 0,
+      "structured_entity_count": 0,
+      "last_extractor_version": "EMBEDDED_EXTRACTOR_V1",
+      "last_run_status": "NO_FACTS",
+      "last_run_at": "2026-10-13 20:06:37.535241+03:00",
+      "document_extraction_outcomes": [
+        "NO_FACTS"
+      ],
+      "reasons": [
+        "parse_time_hook"
+      ],
+      "bucket": "B_COMPLETED_ZERO_FACTS"
+    },
+    {
+      "procurement_id": 166248,
+      "contract_number": "0321100019426000064",
+      "material_document_count": 8,
+      "downloaded_material_document_count": 8,
+      "parsed_material_document_count": 0,
+      "embedded_run_count": 0,
+      "embedded_completed_count": 0,
+      "embedded_failed_count": 0,
+      "structured_entity_count": 0,
+      "last_extractor_version": "EMBEDDED_EXTRACTOR_V1",
+      "last_run_status": "NO_FACTS",
+      "last_run_at": "2026-10-13 20:15:22.951965+03:00",
+      "document_extraction_outcomes": [
+        "NO_FACTS"
+      ],
+      "reasons": [
+        "parse_time_hook"
+      ],
+      "bucket": "B_COMPLETED_ZERO_FACTS"
+    },
+    {
+      "procurement_id": 173345,
+      "contract_number": "0348100042426000084",
+      "material_document_count": 1,
+      "downloaded_material_document_count": 1,
+      "parsed_material_document_count": 1,
+      "embedded_run_count": 0,
+      "embedded_completed_count": 0,
+      "embedded_failed_count": 0,
+      "structured_entity_count": 0,
+      "last_extractor_version": "EMBEDDED_EXTRACTOR_V1",
+      "last_run_status": "NO_FACTS",
+      "last_run_at": "2026-10-13 19:51:54.013447+03:00",
+      "document_extraction_outcomes": [
+        "NO_FACTS"
+      ],
+      "reasons": [
+        "parse_time_hook"
+      ],
+      "bucket": "B_COMPLETED_ZERO_FACTS"
+    },
+    {
+      "procurement_id": 173347,
+      "contract_number": "0348100042426000088",
+      "material_document_count": 1,
+      "downloaded_material_document_count": 1,
+      "parsed_material_document_count": 1,
+      "embedded_run_count": 0,
+      "embedded_completed_count": 0,
+      "embedded_failed_count": 0,
+      "structured_entity_count": 0,
+      "last_extractor_version": "EMBEDDED_EXTRACTOR_V1",
+      "last_run_status": "NO_FACTS",
+      "last_run_at": "2026-10-13 19:52:10.650524+03:00",
+      "document_extraction_outcomes": [
+        "NO_FACTS"
+      ],
+      "reasons": [
+        "parse_time_hook"
+      ],
+      "bucket": "B_COMPLETED_ZERO_FACTS"
+    },
+    {
+      "procurement_id": 173349,
+      "contract_number": "0348100042426000085",
+      "material_document_count": 1,
+      "downloaded_material_document_count": 1,
+      "parsed_material_document_count": 1,
+      "embedded_run_count": 0,
+      "embedded_completed_count": 0,
+      "embedded_failed_count": 0,
+      "structured_entity_count": 0,
+      "last_extractor_version": "EMBEDDED_EXTRACTOR_V1",
+      "last_run_status": "NO_FACTS",
+      "last_run_at": "2026-10-13 19:51:59.568686+03:00",
+      "document_extraction_outcomes": [
+        "NO_FACTS"
+      ],
+      "reasons": [
+        "parse_time_hook"
+      ],
+      "bucket": "B_COMPLETED_ZERO_FACTS"
+    },
+    {
+      "procurement_id": 173350,
+      "contract_number": "0348100042426000087",
+      "material_document_count": 1,
+      "downloaded_material_document_count": 1,
+      "parsed_material_document_count": 1,
+      "embedded_run_count": 0,
+      "embedded_completed_count": 0,
+      "embedded_failed_count": 0,
+      "structured_entity_count": 0,
+      "last_extractor_version": "EMBEDDED_EXTRACTOR_V1",
+      "last_run_status": "NO_FACTS",
+      "last_run_at": "2026-10-13 19:52:05.074214+03:00",
+      "document_extraction_outcomes": [
+        "NO_FACTS"
+      ],
+      "reasons": [
+        "parse_time_hook"
+      ],
+      "bucket": "B_COMPLETED_ZERO_FACTS"
+    },
+    {
+      "procurement_id": 173351,
+      "contract_number": "0348100042426000089",
+      "material_document_count": 1,
+      "downloaded_material_document_count": 1,
+      "parsed_material_document_count": 1,
+      "embedded_run_count": 0,
+      "embedded_completed_count": 0,
+      "embedded_failed_count": 0,
+      "structured_entity_count": 0,
+      "last_extractor_version": "EMBEDDED_EXTRACTOR_V1",
+      "last_run_status": "NO_FACTS",
+      "last_run_at": "2026-10-13 19:52:16.161725+03:00",
+      "document_extraction_outcomes": [
+        "NO_FACTS"
+      ],
+      "reasons": [
+        "parse_time_hook"
+      ],
+      "bucket": "B_COMPLETED_ZERO_FACTS"
+    },
+    {
+      "procurement_id": 173353,
+      "contract_number": "0348100042426000083",
+      "material_document_count": 1,
+      "downloaded_material_document_count": 1,
+      "parsed_material_document_count": 1,
+      "embedded_run_count": 0,
+      "embedded_completed_count": 0,
+      "embedded_failed_count": 0,
+      "structured_entity_count": 0,
+      "last_extractor_version": "EMBEDDED_EXTRACTOR_V1",
+      "last_run_status": "NO_FACTS",
+      "last_run_at": "2026-10-13 19:51:48.427892+03:00",
+      "document_extraction_outcomes": [
+        "NO_FACTS"
+      ],
+      "reasons": [
+        "parse_time_hook"
+      ],
+      "bucket": "B_COMPLETED_ZERO_FACTS"
+    },
+    {
+      "procurement_id": 173893,
+      "contract_number": "0372100009926000108",
+      "material_document_count": 1,
+      "downloaded_material_document_count": 1,
+      "parsed_material_document_count": 1,
+      "embedded_run_count": 1,
+      "embedded_completed_count": 1,
+      "embedded_failed_count": 0,
+      "structured_entity_count": 0,
+      "last_extractor_version": "EMBEDDED_EXTRACTOR_V1",
+      "last_run_status": "COMPLETED",
+      "last_run_at": "2026-10-13 19:51:27.246081+03:00",
+      "document_extraction_outcomes": [
+        "FACTS_FOUND",
+        "NO_FACTS"
+      ],
+      "reasons": [
+        "parse_time_hook"
+      ],
+      "bucket": "C_FAILED",
+      "failure_code": "FACTS_FOUND_NOT_PERSISTED",
+      "failure_reason": "FACTS_FOUND outcome with structured_entities=0",
+      "document_types": [
+        "xlsx"
+      ]
+    },
+    {
+      "procurement_id": 173894,
+      "contract_number": "0372100009926000107",
+      "material_document_count": 1,
+      "downloaded_material_document_count": 1,
+      "parsed_material_document_count": 1,
+      "embedded_run_count": 1,
+      "embedded_completed_count": 1,
+      "embedded_failed_count": 0,
+      "structured_entity_count": 0,
+      "last_extractor_version": "EMBEDDED_EXTRACTOR_V1",
+      "last_run_status": "COMPLETED",
+      "last_run_at": "2026-10-13 19:49:57.782716+03:00",
+      "document_extraction_outcomes": [
+        "FACTS_FOUND",
+        "NO_FACTS"
+      ],
+      "reasons": [
+        "parse_time_hook"
+      ],
+      "bucket": "C_FAILED",
+      "failure_code": "FACTS_FOUND_NOT_PERSISTED",
+      "failure_reason": "FACTS_FOUND outcome with structured_entities=0",
+      "document_types": [
+        "xlsx"
+      ]
+    },
+    {
+      "procurement_id": 173898,
+      "contract_number": "0372100009926000106",
+      "material_document_count": 1,
+      "downloaded_material_document_count": 1,
+      "parsed_material_document_count": 1,
+      "embedded_run_count": 1,
+      "embedded_completed_count": 1,
+      "embedded_failed_count": 0,
+      "structured_entity_count": 0,
+      "last_extractor_version": "EMBEDDED_EXTRACTOR_V1",
+      "last_run_status": "COMPLETED",
+      "last_run_at": "2026-10-13 19:43:38.187414+03:00",
+      "document_extraction_outcomes": [
+        "FACTS_FOUND",
+        "NO_FACTS"
+      ],
+      "reasons": [
+        "parse_time_hook"
+      ],
+      "bucket": "C_FAILED",
+      "failure_code": "FACTS_FOUND_NOT_PERSISTED",
+      "failure_reason": "FACTS_FOUND outcome with structured_entities=0",
+      "document_types": [
+        "xlsx"
+      ]
+    },
+    {
+      "procurement_id": 175973,
+      "contract_number": "32616342586",
+      "material_document_count": 1,
+      "downloaded_material_document_count": 1,
+      "parsed_material_document_count": 1,
+      "embedded_run_count": 0,
+      "embedded_completed_count": 0,
+      "embedded_failed_count": 0,
+      "structured_entity_count": 0,
+      "last_extractor_version": "EMBEDDED_EXTRACTOR_V1",
+      "last_run_status": "NO_FACTS",
+      "last_run_at": "2026-10-14 13:17:34.010186+03:00",
+      "document_extraction_outcomes": [
+        "NO_FACTS"
+      ],
+      "reasons": [
+        "parse_time_hook"
+      ],
+      "bucket": "B_COMPLETED_ZERO_FACTS"
+    },
+    {
+      "procurement_id": 177309,
+      "contract_number": "0144200001826000161",
+      "material_document_count": 1,
+      "downloaded_material_document_count": 1,
+      "parsed_material_document_count": 1,
+      "embedded_run_count": 0,
+      "embedded_completed_count": 0,
+      "embedded_failed_count": 0,
+      "structured_entity_count": 0,
+      "last_extractor_version": "EMBEDDED_EXTRACTOR_V1",
+      "last_run_status": "NO_FACTS",
+      "last_run_at": "2026-10-13 19:34:46.376794+03:00",
+      "document_extraction_outcomes": [
+        "NO_FACTS"
+      ],
+      "reasons": [
+        "parse_time_hook"
+      ],
+      "bucket": "B_COMPLETED_ZERO_FACTS"
+    },
+    {
+      "procurement_id": 177349,
+      "contract_number": "0848300053226000300",
+      "material_document_count": 1,
+      "downloaded_material_document_count": 1,
+      "parsed_material_document_count": 0,
+      "embedded_run_count": 0,
+      "embedded_completed_count": 0,
+      "embedded_failed_count": 0,
+      "structured_entity_count": 0,
+      "last_extractor_version": null,
+      "last_run_status": null,
+      "last_run_at": null,
+      "document_extraction_outcomes": [],
+      "reasons": [],
+      "bucket": "A_NOT_ATTEMPTED"
+    },
+    {
+      "procurement_id": 178495,
+      "contract_number": "0372100009926000120",
+      "material_document_count": 1,
+      "downloaded_material_document_count": 1,
+      "parsed_material_document_count": 1,
+      "embedded_run_count": 0,
+      "embedded_completed_count": 0,
+      "embedded_failed_count": 0,
+      "structured_entity_count": 0,
+      "last_extractor_version": null,
+      "last_run_status": null,
+      "last_run_at": null,
+      "document_extraction_outcomes": [],
+      "reasons": [],
+      "bucket": "A_NOT_ATTEMPTED"
+    },
+    {
+      "procurement_id": 178497,
+      "contract_number": "0372100009926000122",
+      "material_document_count": 1,
+      "downloaded_material_document_count": 1,
+      "parsed_material_document_count": 1,
+      "embedded_run_count": 1,
+      "embedded_completed_count": 1,
+      "embedded_failed_count": 0,
+      "structured_entity_count": 0,
+      "last_extractor_version": "EMBEDDED_EXTRACTOR_V1",
+      "last_run_status": "COMPLETED",
+      "last_run_at": "2026-10-13 20:49:01.758662+03:00",
+      "document_extraction_outcomes": [
+        "FACTS_FOUND",
+        "NO_FACTS"
+      ],
+      "reasons": [
+        "parse_time_hook"
+      ],
+      "bucket": "C_FAILED",
+      "failure_code": "FACTS_FOUND_NOT_PERSISTED",
+      "failure_reason": "FACTS_FOUND outcome with structured_entities=0",
+      "document_types": [
+        "xlsx"
+      ]
+    },
+    {
+      "procurement_id": 178501,
+      "contract_number": "0372100009926000116",
+      "material_document_count": 1,
+      "downloaded_material_document_count": 1,
+      "parsed_material_document_count": 1,
+      "embedded_run_count": 1,
+      "embedded_completed_count": 1,
+      "embedded_failed_count": 0,
+      "structured_entity_count": 0,
+      "last_extractor_version": "EMBEDDED_EXTRACTOR_V1",
+      "last_run_status": "COMPLETED",
+      "last_run_at": "2026-10-13 20:38:25.993746+03:00",
+      "document_extraction_outcomes": [
+        "FACTS_FOUND",
+        "NO_FACTS"
+      ],
+      "reasons": [
+        "parse_time_hook"
+      ],
+      "bucket": "C_FAILED",
+      "failure_code": "FACTS_FOUND_NOT_PERSISTED",
+      "failure_reason": "FACTS_FOUND outcome with structured_entities=0",
+      "document_types": [
+        "xlsx"
+      ]
+    },
+    {
+      "procurement_id": 178504,
+      "contract_number": "0372100009926000119",
+      "material_document_count": 1,
+      "downloaded_material_document_count": 1,
+      "parsed_material_document_count": 1,
+      "embedded_run_count": 1,
+      "embedded_completed_count": 1,
+      "embedded_failed_count": 0,
+      "structured_entity_count": 0,
+      "last_extractor_version": "EMBEDDED_EXTRACTOR_V1",
+      "last_run_status": "COMPLETED",
+      "last_run_at": "2026-10-13 20:44:59.846119+03:00",
+      "document_extraction_outcomes": [
+        "FACTS_FOUND",
+        "NO_FACTS"
+      ],
+      "reasons": [
+        "parse_time_hook"
+      ],
+      "bucket": "C_FAILED",
+      "failure_code": "FACTS_FOUND_NOT_PERSISTED",
+      "failure_reason": "FACTS_FOUND outcome with structured_entities=0",
+      "document_types": [
+        "xlsx"
+      ]
+    },
+    {
+      "procurement_id": 178505,
+      "contract_number": "0372100009926000117",
+      "material_document_count": 1,
+      "downloaded_material_document_count": 1,
+      "parsed_material_document_count": 1,
+      "embedded_run_count": 1,
+      "embedded_completed_count": 1,
+      "embedded_failed_count": 0,
+      "structured_entity_count": 0,
+      "last_extractor_version": "EMBEDDED_EXTRACTOR_V1",
+      "last_run_status": "COMPLETED",
+      "last_run_at": "2026-10-13 20:40:04.048253+03:00",
+      "document_extraction_outcomes": [
+        "FACTS_FOUND",
+        "NO_FACTS"
+      ],
+      "reasons": [
+        "parse_time_hook"
+      ],
+      "bucket": "C_FAILED",
+      "failure_code": "FACTS_FOUND_NOT_PERSISTED",
+      "failure_reason": "FACTS_FOUND outcome with structured_entities=0",
+      "document_types": [
+        "xlsx"
+      ]
+    },
+    {
+      "procurement_id": 178510,
+      "contract_number": "0372100009926000118",
+      "material_document_count": 1,
+      "downloaded_material_document_count": 1,
+      "parsed_material_document_count": 1,
+      "embedded_run_count": 1,
+      "embedded_completed_count": 1,
+      "embedded_failed_count": 0,
+      "structured_entity_count": 0,
+      "last_extractor_version": "EMBEDDED_EXTRACTOR_V1",
+      "last_run_status": "COMPLETED",
+      "last_run_at": "2026-10-13 20:42:40.275411+03:00",
+      "document_extraction_outcomes": [
+        "FACTS_FOUND",
+        "NO_FACTS"
+      ],
+      "reasons": [
+        "parse_time_hook"
+      ],
+      "bucket": "C_FAILED",
+      "failure_code": "FACTS_FOUND_NOT_PERSISTED",
+      "failure_reason": "FACTS_FOUND outcome with structured_entities=0",
+      "document_types": [
+        "xlsx"
+      ]
+    },
+    {
+      "procurement_id": 178513,
+      "contract_number": "0372100009926000121",
+      "material_document_count": 1,
+      "downloaded_material_document_count": 1,
+      "parsed_material_document_count": 1,
+      "embedded_run_count": 1,
+      "embedded_completed_count": 1,
+      "embedded_failed_count": 0,
+      "structured_entity_count": 0,
+      "last_extractor_version": "EMBEDDED_EXTRACTOR_V1",
+      "last_run_status": "COMPLETED",
+      "last_run_at": "2026-10-13 20:47:21.674487+03:00",
+      "document_extraction_outcomes": [
+        "FACTS_FOUND",
+        "NO_FACTS"
+      ],
+      "reasons": [
+        "parse_time_hook"
+      ],
+      "bucket": "C_FAILED",
+      "failure_code": "FACTS_FOUND_NOT_PERSISTED",
+      "failure_reason": "FACTS_FOUND outcome with structured_entities=0",
+      "document_types": [
+        "xlsx"
+      ]
+    },
+    {
+      "procurement_id": 178516,
+      "contract_number": "0372100009926000114",
+      "material_document_count": 1,
+      "downloaded_material_document_count": 1,
+      "parsed_material_document_count": 1,
+      "embedded_run_count": 1,
+      "embedded_completed_count": 1,
+      "embedded_failed_count": 0,
+      "structured_entity_count": 0,
+      "last_extractor_version": "EMBEDDED_EXTRACTOR_V1",
+      "last_run_status": "COMPLETED",
+      "last_run_at": "2026-10-13 20:28:11.611323+03:00",
+      "document_extraction_outcomes": [
+        "FACTS_FOUND",
+        "NO_FACTS"
+      ],
+      "reasons": [
+        "parse_time_hook"
+      ],
+      "bucket": "C_FAILED",
+      "failure_code": "FACTS_FOUND_NOT_PERSISTED",
+      "failure_reason": "FACTS_FOUND outcome with structured_entities=0",
+      "document_types": [
+        "pdf"
+      ]
+    },
+    {
+      "procurement_id": 178788,
+      "contract_number": "0329200062226002491",
+      "material_document_count": 1,
+      "downloaded_material_document_count": 1,
+      "parsed_material_document_count": 1,
+      "embedded_run_count": 0,
+      "embedded_completed_count": 0,
+      "embedded_failed_count": 0,
+      "structured_entity_count": 0,
+      "last_extractor_version": "EMBEDDED_EXTRACTOR_V1",
+      "last_run_status": "NO_FACTS",
+      "last_run_at": "2026-10-13 20:53:50.479463+03:00",
+      "document_extraction_outcomes": [
+        "NO_FACTS"
+      ],
+      "reasons": [
+        "parse_time_hook"
+      ],
+      "bucket": "B_COMPLETED_ZERO_FACTS"
+    },
+    {
+      "procurement_id": 178926,
+      "contract_number": "0148300044126000022",
+      "material_document_count": 1,
+      "downloaded_material_document_count": 1,
+      "parsed_material_document_count": 0,
+      "embedded_run_count": 0,
+      "embedded_completed_count": 0,
+      "embedded_failed_count": 0,
+      "structured_entity_count": 0,
+      "last_extractor_version": null,
+      "last_run_status": null,
+      "last_run_at": null,
+      "document_extraction_outcomes": [],
+      "reasons": [],
+      "bucket": "A_NOT_ATTEMPTED"
+    },
+    {
+      "procurement_id": 180109,
+      "contract_number": "32615660765",
+      "material_document_count": 1,
+      "downloaded_material_document_count": 1,
+      "parsed_material_document_count": 1,
+      "embedded_run_count": 0,
+      "embedded_completed_count": 0,
+      "embedded_failed_count": 0,
+      "structured_entity_count": 0,
+      "last_extractor_version": null,
+      "last_run_status": null,
+      "last_run_at": null,
+      "document_extraction_outcomes": [],
+      "reasons": [],
+      "bucket": "A_NOT_ATTEMPTED"
+    },
+    {
+      "procurement_id": 188261,
+      "contract_number": "0144200001826000163",
+      "material_document_count": 1,
+      "downloaded_material_document_count": 1,
+      "parsed_material_document_count": 1,
+      "embedded_run_count": 0,
+      "embedded_completed_count": 0,
+      "embedded_failed_count": 0,
+      "structured_entity_count": 0,
+      "last_extractor_version": null,
+      "last_run_status": null,
+      "last_run_at": null,
+      "document_extraction_outcomes": [],
+      "reasons": [],
+      "bucket": "A_NOT_ATTEMPTED"
+    },
+    {
+      "procurement_id": 188330,
+      "contract_number": "0841200000726001658",
+      "material_document_count": 1,
+      "downloaded_material_document_count": 1,
+      "parsed_material_document_count": 1,
+      "embedded_run_count": 0,
+      "embedded_completed_count": 0,
+      "embedded_failed_count": 0,
+      "structured_entity_count": 0,
+      "last_extractor_version": "EMBEDDED_EXTRACTOR_V1",
+      "last_run_status": "NO_FACTS",
+      "last_run_at": "2026-10-13 21:35:31.866892+03:00",
+      "document_extraction_outcomes": [
+        "NO_FACTS"
+      ],
+      "reasons": [
+        "parse_time_hook"
+      ],
+      "bucket": "B_COMPLETED_ZERO_FACTS"
+    },
+    {
+      "procurement_id": 188490,
+      "contract_number": "0132300034126000095",
+      "material_document_count": 1,
+      "downloaded_material_document_count": 1,
+      "parsed_material_document_count": 1,
+      "embedded_run_count": 2,
+      "embedded_completed_count": 2,
+      "embedded_failed_count": 0,
+      "structured_entity_count": 0,
+      "last_extractor_version": "EMBEDDED_EXTRACTOR_V1",
+      "last_run_status": "COMPLETED",
+      "last_run_at": "2026-10-13 21:19:05.969476+03:00",
+      "document_extraction_outcomes": [
+        "FACTS_FOUND",
+        "NO_FACTS"
+      ],
+      "reasons": [
+        "parse_time_hook"
+      ],
+      "bucket": "C_FAILED",
+      "failure_code": "FACTS_FOUND_NOT_PERSISTED",
+      "failure_reason": "FACTS_FOUND outcome with structured_entities=0",
+      "document_types": [
+        "pdf"
+      ]
+    },
+    {
+      "procurement_id": 188571,
+      "contract_number": "0851200000626005971",
+      "material_document_count": 1,
+      "downloaded_material_document_count": 1,
+      "parsed_material_document_count": 1,
+      "embedded_run_count": 1,
+      "embedded_completed_count": 1,
+      "embedded_failed_count": 0,
+      "structured_entity_count": 0,
+      "last_extractor_version": "EMBEDDED_EXTRACTOR_V1",
+      "last_run_status": "COMPLETED",
+      "last_run_at": "2026-10-13 21:34:49.362618+03:00",
+      "document_extraction_outcomes": [
+        "FACTS_FOUND",
+        "NO_FACTS"
+      ],
+      "reasons": [
+        "parse_time_hook"
+      ],
+      "bucket": "C_FAILED",
+      "failure_code": "FACTS_FOUND_NOT_PERSISTED",
+      "failure_reason": "FACTS_FOUND outcome with structured_entities=0",
+      "document_types": [
+        "pdf"
+      ]
+    },
+    {
+      "procurement_id": 205695,
+      "contract_number": "0833600000826000911",
+      "material_document_count": 2,
+      "downloaded_material_document_count": 2,
+      "parsed_material_document_count": 2,
+      "embedded_run_count": 1,
+      "embedded_completed_count": 1,
+      "embedded_failed_count": 0,
+      "structured_entity_count": 0,
+      "last_extractor_version": "EMBEDDED_EXTRACTOR_V1",
+      "last_run_status": "COMPLETED",
+      "last_run_at": "2026-10-13 21:35:37.579197+03:00",
+      "document_extraction_outcomes": [
+        "FACTS_FOUND",
+        "NO_FACTS"
+      ],
+      "reasons": [
+        "parse_time_hook"
+      ],
+      "bucket": "C_FAILED",
+      "failure_code": "FACTS_FOUND_NOT_PERSISTED",
+      "failure_reason": "FACTS_FOUND outcome with structured_entities=0",
+      "document_types": [
+        "docx"
+      ]
+    },
+    {
+      "procurement_id": 209309,
+      "contract_number": "0848300016526000370",
+      "material_document_count": 1,
+      "downloaded_material_document_count": 1,
+      "parsed_material_document_count": 0,
+      "embedded_run_count": 0,
+      "embedded_completed_count": 0,
+      "embedded_failed_count": 0,
+      "structured_entity_count": 0,
+      "last_extractor_version": "EMBEDDED_EXTRACTOR_V1",
+      "last_run_status": "NO_FACTS",
+      "last_run_at": "2026-10-13 20:16:03.667024+03:00",
+      "document_extraction_outcomes": [
+        "NO_FACTS"
+      ],
+      "reasons": [
+        "parse_time_hook"
+      ],
+      "bucket": "B_COMPLETED_ZERO_FACTS"
+    },
+    {
+      "procurement_id": 209314,
+      "contract_number": "0848300059126000162",
+      "material_document_count": 1,
+      "downloaded_material_document_count": 1,
+      "parsed_material_document_count": 0,
+      "embedded_run_count": 0,
+      "embedded_completed_count": 0,
+      "embedded_failed_count": 0,
+      "structured_entity_count": 0,
+      "last_extractor_version": null,
+      "last_run_status": null,
+      "last_run_at": null,
+      "document_extraction_outcomes": [],
+      "reasons": [],
+      "bucket": "A_NOT_ATTEMPTED"
+    },
+    {
+      "procurement_id": 209427,
+      "contract_number": "0351100008926000182",
+      "material_document_count": 1,
+      "downloaded_material_document_count": 1,
+      "parsed_material_document_count": 1,
+      "embedded_run_count": 0,
+      "embedded_completed_count": 0,
+      "embedded_failed_count": 0,
+      "structured_entity_count": 0,
+      "last_extractor_version": "EMBEDDED_EXTRACTOR_V1",
+      "last_run_status": "NO_FACTS",
+      "last_run_at": "2026-10-13 20:57:35.331258+03:00",
+      "document_extraction_outcomes": [
+        "NO_FACTS"
+      ],
+      "reasons": [
+        "parse_time_hook"
+      ],
+      "bucket": "B_COMPLETED_ZERO_FACTS"
+    },
+    {
+      "procurement_id": 209906,
+      "contract_number": "0372100009926000126",
+      "material_document_count": 1,
+      "downloaded_material_document_count": 1,
+      "parsed_material_document_count": 1,
+      "embedded_run_count": 1,
+      "embedded_completed_count": 1,
+      "embedded_failed_count": 0,
+      "structured_entity_count": 0,
+      "last_extractor_version": "EMBEDDED_EXTRACTOR_V1",
+      "last_run_status": "COMPLETED",
+      "last_run_at": "2026-10-13 20:53:37.759904+03:00",
+      "document_extraction_outcomes": [
+        "FACTS_FOUND",
+        "NO_FACTS"
+      ],
+      "reasons": [
+        "parse_time_hook"
+      ],
+      "bucket": "C_FAILED",
+      "failure_code": "FACTS_FOUND_NOT_PERSISTED",
+      "failure_reason": "FACTS_FOUND outcome with structured_entities=0",
+      "document_types": [
+        "xlsx"
+      ]
+    },
+    {
+      "procurement_id": 209910,
+      "contract_number": "0372100009926000125",
+      "material_document_count": 1,
+      "downloaded_material_document_count": 1,
+      "parsed_material_document_count": 1,
+      "embedded_run_count": 0,
+      "embedded_completed_count": 0,
+      "embedded_failed_count": 0,
+      "structured_entity_count": 0,
+      "last_extractor_version": null,
+      "last_run_status": null,
+      "last_run_at": null,
+      "document_extraction_outcomes": [],
+      "reasons": [],
+      "bucket": "A_NOT_ATTEMPTED"
+    },
+    {
+      "procurement_id": 209912,
+      "contract_number": "0372100009926000124",
+      "material_document_count": 1,
+      "downloaded_material_document_count": 1,
+      "parsed_material_document_count": 1,
+      "embedded_run_count": 1,
+      "embedded_completed_count": 1,
+      "embedded_failed_count": 0,
+      "structured_entity_count": 0,
+      "last_extractor_version": "EMBEDDED_EXTRACTOR_V1",
+      "last_run_status": "COMPLETED",
+      "last_run_at": "2026-10-13 20:52:00.829123+03:00",
+      "document_extraction_outcomes": [
+        "FACTS_FOUND",
+        "NO_FACTS"
+      ],
+      "reasons": [
+        "parse_time_hook"
+      ],
+      "bucket": "C_FAILED",
+      "failure_code": "FACTS_FOUND_NOT_PERSISTED",
+      "failure_reason": "FACTS_FOUND outcome with structured_entities=0",
+      "document_types": [
+        "xlsx"
+      ]
+    },
+    {
+      "procurement_id": 209913,
+      "contract_number": "0372100009926000123",
+      "material_document_count": 1,
+      "downloaded_material_document_count": 1,
+      "parsed_material_document_count": 1,
+      "embedded_run_count": 1,
+      "embedded_completed_count": 1,
+      "embedded_failed_count": 0,
+      "structured_entity_count": 0,
+      "last_extractor_version": "EMBEDDED_EXTRACTOR_V1",
+      "last_run_status": "COMPLETED",
+      "last_run_at": "2026-10-13 20:50:33.737896+03:00",
+      "document_extraction_outcomes": [
+        "FACTS_FOUND",
+        "NO_FACTS"
+      ],
+      "reasons": [
+        "parse_time_hook"
+      ],
+      "bucket": "C_FAILED",
+      "failure_code": "FACTS_FOUND_NOT_PERSISTED",
+      "failure_reason": "FACTS_FOUND outcome with structured_entities=0",
+      "document_types": [
+        "xlsx"
+      ]
+    },
+    {
+      "procurement_id": 210147,
+      "contract_number": "32616354605",
+      "material_document_count": 1,
+      "downloaded_material_document_count": 1,
+      "parsed_material_document_count": 1,
+      "embedded_run_count": 1,
+      "embedded_completed_count": 1,
+      "embedded_failed_count": 0,
+      "structured_entity_count": 0,
+      "last_extractor_version": "EMBEDDED_EXTRACTOR_V1",
+      "last_run_status": "COMPLETED",
+      "last_run_at": "2026-10-14 12:15:05.366607+03:00",
+      "document_extraction_outcomes": [
+        "FACTS_FOUND",
+        "NO_FACTS"
+      ],
+      "reasons": [
+        "parse_time_hook"
+      ],
+      "bucket": "C_FAILED",
+      "failure_code": "FACTS_FOUND_NOT_PERSISTED",
+      "failure_reason": "FACTS_FOUND outcome with structured_entities=0",
+      "document_types": [
+        "pdf"
+      ]
+    },
+    {
+      "procurement_id": 210238,
+      "contract_number": "32616353997",
+      "material_document_count": 4,
+      "downloaded_material_document_count": 4,
+      "parsed_material_document_count": 4,
+      "embedded_run_count": 0,
+      "embedded_completed_count": 0,
+      "embedded_failed_count": 0,
+      "structured_entity_count": 0,
+      "last_extractor_version": null,
+      "last_run_status": null,
+      "last_run_at": null,
+      "document_extraction_outcomes": [],
+      "reasons": [],
+      "bucket": "A_NOT_ATTEMPTED"
+    },
+    {
+      "procurement_id": 212190,
+      "contract_number": "0851200000626005785",
+      "material_document_count": 1,
+      "downloaded_material_document_count": 1,
+      "parsed_material_document_count": 1,
+      "embedded_run_count": 1,
+      "embedded_completed_count": 1,
+      "embedded_failed_count": 0,
+      "structured_entity_count": 0,
+      "last_extractor_version": "EMBEDDED_EXTRACTOR_V1",
+      "last_run_status": "COMPLETED",
+      "last_run_at": "2026-10-13 20:12:52.731422+03:00",
+      "document_extraction_outcomes": [
+        "FACTS_FOUND",
+        "NO_FACTS"
+      ],
+      "reasons": [
+        "parse_time_hook"
+      ],
+      "bucket": "C_FAILED",
+      "failure_code": "FACTS_FOUND_NOT_PERSISTED",
+      "failure_reason": "FACTS_FOUND outcome with structured_entities=0",
+      "document_types": [
+        "pdf"
+      ]
+    },
+    {
+      "procurement_id": 212647,
+      "contract_number": "0372100009926000111",
+      "material_document_count": 1,
+      "downloaded_material_document_count": 1,
+      "parsed_material_document_count": 1,
+      "embedded_run_count": 2,
+      "embedded_completed_count": 2,
+      "embedded_failed_count": 0,
+      "structured_entity_count": 0,
+      "last_extractor_version": "EMBEDDED_EXTRACTOR_V1",
+      "last_run_status": "COMPLETED",
+      "last_run_at": "2026-10-13 20:04:24.343261+03:00",
+      "document_extraction_outcomes": [
+        "FACTS_FOUND",
+        "NO_FACTS"
+      ],
+      "reasons": [
+        "parse_time_hook"
+      ],
+      "bucket": "C_FAILED",
+      "failure_code": "FACTS_FOUND_NOT_PERSISTED",
+      "failure_reason": "FACTS_FOUND outcome with structured_entities=0",
+      "document_types": [
+        "docx",
+        "xlsx"
+      ]
+    },
+    {
+      "procurement_id": 212677,
+      "contract_number": "0372100009926000112",
+      "material_document_count": 1,
+      "downloaded_material_document_count": 1,
+      "parsed_material_document_count": 1,
+      "embedded_run_count": 2,
+      "embedded_completed_count": 2,
+      "embedded_failed_count": 0,
+      "structured_entity_count": 0,
+      "last_extractor_version": "EMBEDDED_EXTRACTOR_V1",
+      "last_run_status": "COMPLETED",
+      "last_run_at": "2026-10-13 20:06:09.165413+03:00",
+      "document_extraction_outcomes": [
+        "FACTS_FOUND",
+        "NO_FACTS"
+      ],
+      "reasons": [
+        "parse_time_hook"
+      ],
+      "bucket": "C_FAILED",
+      "failure_code": "FACTS_FOUND_NOT_PERSISTED",
+      "failure_reason": "FACTS_FOUND outcome with structured_entities=0",
+      "document_types": [
+        "docx",
+        "xlsx"
+      ]
+    },
+    {
+      "procurement_id": 213012,
+      "contract_number": "0328300032826000732",
+      "material_document_count": 1,
+      "downloaded_material_document_count": 1,
+      "parsed_material_document_count": 1,
+      "embedded_run_count": 0,
+      "embedded_completed_count": 0,
+      "embedded_failed_count": 0,
+      "structured_entity_count": 0,
+      "last_extractor_version": "EMBEDDED_EXTRACTOR_V1",
+      "last_run_status": "NO_FACTS",
+      "last_run_at": "2026-10-13 21:58:25.565541+03:00",
+      "document_extraction_outcomes": [
+        "NO_FACTS"
+      ],
+      "reasons": [
+        "parse_time_hook"
+      ],
+      "bucket": "B_COMPLETED_ZERO_FACTS"
+    },
+    {
+      "procurement_id": 213013,
+      "contract_number": "0328300032826000733",
+      "material_document_count": 1,
+      "downloaded_material_document_count": 1,
+      "parsed_material_document_count": 1,
+      "embedded_run_count": 0,
+      "embedded_completed_count": 0,
+      "embedded_failed_count": 0,
+      "structured_entity_count": 0,
+      "last_extractor_version": "EMBEDDED_EXTRACTOR_V1",
+      "last_run_status": "NO_FACTS",
+      "last_run_at": "2026-10-13 21:58:30.434850+03:00",
+      "document_extraction_outcomes": [
+        "NO_FACTS"
+      ],
+      "reasons": [
+        "parse_time_hook"
+      ],
+      "bucket": "B_COMPLETED_ZERO_FACTS"
+    },
+    {
+      "procurement_id": 213276,
+      "contract_number": "0132300034126000101",
+      "material_document_count": 2,
+      "downloaded_material_document_count": 2,
+      "parsed_material_document_count": 2,
+      "embedded_run_count": 3,
+      "embedded_completed_count": 3,
+      "embedded_failed_count": 0,
+      "structured_entity_count": 0,
+      "last_extractor_version": "EMBEDDED_EXTRACTOR_V1",
+      "last_run_status": "COMPLETED",
+      "last_run_at": "2026-10-13 21:56:06.189652+03:00",
+      "document_extraction_outcomes": [
+        "FACTS_FOUND",
+        "NO_FACTS"
+      ],
+      "reasons": [
+        "parse_time_hook"
+      ],
+      "bucket": "C_FAILED",
+      "failure_code": "FACTS_FOUND_NOT_PERSISTED",
+      "failure_reason": "FACTS_FOUND outcome with structured_entities=0",
+      "document_types": [
+        "pdf"
+      ]
+    },
+    {
+      "procurement_id": 214585,
+      "contract_number": "0111300095226000090",
+      "material_document_count": 1,
+      "downloaded_material_document_count": 1,
+      "parsed_material_document_count": 1,
+      "embedded_run_count": 0,
+      "embedded_completed_count": 0,
+      "embedded_failed_count": 0,
+      "structured_entity_count": 0,
+      "last_extractor_version": "EMBEDDED_EXTRACTOR_V1",
+      "last_run_status": "NO_FACTS",
+      "last_run_at": "2026-10-13 22:53:08.946273+03:00",
+      "document_extraction_outcomes": [
+        "NO_FACTS"
+      ],
+      "reasons": [
+        "parse_time_hook"
+      ],
+      "bucket": "B_COMPLETED_ZERO_FACTS"
+    },
+    {
+      "procurement_id": 216493,
+      "contract_number": "0859300019726000304",
+      "material_document_count": 1,
+      "downloaded_material_document_count": 1,
+      "parsed_material_document_count": 1,
+      "embedded_run_count": 1,
+      "embedded_completed_count": 1,
+      "embedded_failed_count": 0,
+      "structured_entity_count": 0,
+      "last_extractor_version": "EMBEDDED_EXTRACTOR_V1",
+      "last_run_status": "COMPLETED",
+      "last_run_at": "2026-10-14 07:37:38.547354+03:00",
+      "document_extraction_outcomes": [
+        "FACTS_FOUND",
+        "NO_FACTS"
+      ],
+      "reasons": [
+        "parse_time_hook"
+      ],
+      "bucket": "C_FAILED",
+      "failure_code": "FACTS_FOUND_NOT_PERSISTED",
+      "failure_reason": "FACTS_FOUND outcome with structured_entities=0",
+      "document_types": [
+        "pdf"
+      ]
+    },
+    {
+      "procurement_id": 311901,
+      "contract_number": "32514802773",
+      "material_document_count": 1,
+      "downloaded_material_document_count": 1,
+      "parsed_material_document_count": 1,
+      "embedded_run_count": 0,
+      "embedded_completed_count": 0,
+      "embedded_failed_count": 0,
+      "structured_entity_count": 0,
+      "last_extractor_version": null,
+      "last_run_status": null,
+      "last_run_at": null,
+      "document_extraction_outcomes": [],
+      "reasons": [],
+      "bucket": "A_NOT_ATTEMPTED"
+    },
+    {
+      "procurement_id": 326613,
+      "contract_number": "0157300002026000304",
+      "material_document_count": 8,
+      "downloaded_material_document_count": 7,
+      "parsed_material_document_count": 7,
+      "embedded_run_count": 0,
+      "embedded_completed_count": 0,
+      "embedded_failed_count": 0,
+      "structured_entity_count": 0,
+      "last_extractor_version": "EMBEDDED_EXTRACTOR_V1",
+      "last_run_status": "NO_FACTS",
+      "last_run_at": "2026-11-11 21:03:14.030107+03:00",
+      "document_extraction_outcomes": [
+        "NO_FACTS"
+      ],
+      "reasons": [
+        "parse_time_hook"
+      ],
+      "bucket": "B_COMPLETED_ZERO_FACTS"
+    },
+    {
+      "procurement_id": 327915,
+      "contract_number": "0848300016526000405",
+      "material_document_count": 1,
+      "downloaded_material_document_count": 1,
+      "parsed_material_document_count": 1,
+      "embedded_run_count": 0,
+      "embedded_completed_count": 0,
+      "embedded_failed_count": 0,
+      "structured_entity_count": 0,
+      "last_extractor_version": "EMBEDDED_EXTRACTOR_V1",
+      "last_run_status": "NO_FACTS",
+      "last_run_at": "2026-10-14 08:26:53.978696+03:00",
+      "document_extraction_outcomes": [
+        "NO_FACTS"
+      ],
+      "reasons": [
+        "parse_time_hook"
+      ],
+      "bucket": "B_COMPLETED_ZERO_FACTS"
+    },
+    {
+      "procurement_id": 328659,
+      "contract_number": "0164600007126000060",
+      "material_document_count": 1,
+      "downloaded_material_document_count": 1,
+      "parsed_material_document_count": 1,
+      "embedded_run_count": 0,
+      "embedded_completed_count": 0,
+      "embedded_failed_count": 0,
+      "structured_entity_count": 0,
+      "last_extractor_version": "EMBEDDED_EXTRACTOR_V1",
+      "last_run_status": "NO_FACTS",
+      "last_run_at": "2026-10-12 21:58:39.790567+03:00",
+      "document_extraction_outcomes": [
+        "NO_FACTS"
+      ],
+      "reasons": [
+        "parse_time_hook"
+      ],
+      "bucket": "B_COMPLETED_ZERO_FACTS"
+    },
+    {
+      "procurement_id": 333680,
+      "contract_number": "0173200024026000182",
+      "material_document_count": 1,
+      "downloaded_material_document_count": 1,
+      "parsed_material_document_count": 1,
+      "embedded_run_count": 0,
+      "embedded_completed_count": 0,
+      "embedded_failed_count": 0,
+      "structured_entity_count": 0,
+      "last_extractor_version": "EMBEDDED_EXTRACTOR_V1",
+      "last_run_status": "NO_FACTS",
+      "last_run_at": "2026-10-14 09:06:11.611051+03:00",
+      "document_extraction_outcomes": [
+        "NO_FACTS"
+      ],
+      "reasons": [
+        "parse_time_hook"
+      ],
+      "bucket": "B_COMPLETED_ZERO_FACTS"
+    },
+    {
+      "procurement_id": 336251,
+      "contract_number": "32616395724",
+      "material_document_count": 3,
+      "downloaded_material_document_count": 3,
+      "parsed_material_document_count": 2,
+      "embedded_run_count": 0,
+      "embedded_completed_count": 0,
+      "embedded_failed_count": 0,
+      "structured_entity_count": 0,
+      "last_extractor_version": null,
+      "last_run_status": null,
+      "last_run_at": null,
+      "document_extraction_outcomes": [],
+      "reasons": [],
+      "bucket": "A_NOT_ATTEMPTED"
+    },
+    {
+      "procurement_id": 336974,
+      "contract_number": "32616403624",
+      "material_document_count": 4,
+      "downloaded_material_document_count": 2,
+      "parsed_material_document_count": 2,
+      "embedded_run_count": 0,
+      "embedded_completed_count": 0,
+      "embedded_failed_count": 0,
+      "structured_entity_count": 0,
+      "last_extractor_version": "EMBEDDED_EXTRACTOR_V1",
+      "last_run_status": "NO_FACTS",
+      "last_run_at": "2026-11-11 18:15:31.086125+03:00",
+      "document_extraction_outcomes": [
+        "NO_FACTS"
+      ],
+      "reasons": [
+        "parse_time_hook"
+      ],
+      "bucket": "B_COMPLETED_ZERO_FACTS"
+    },
+    {
+      "procurement_id": 409545,
+      "contract_number": "0121600003826000145",
+      "material_document_count": 1,
+      "downloaded_material_document_count": 1,
+      "parsed_material_document_count": 1,
+      "embedded_run_count": 0,
+      "embedded_completed_count": 0,
+      "embedded_failed_count": 0,
+      "structured_entity_count": 0,
+      "last_extractor_version": null,
+      "last_run_status": null,
+      "last_run_at": null,
+      "document_extraction_outcomes": [],
+      "reasons": [],
+      "bucket": "A_NOT_ATTEMPTED"
+    },
+    {
+      "procurement_id": 409549,
+      "contract_number": "0321100019426000073",
+      "material_document_count": 1,
+      "downloaded_material_document_count": 1,
+      "parsed_material_document_count": 1,
+      "embedded_run_count": 1,
+      "embedded_completed_count": 1,
+      "embedded_failed_count": 0,
+      "structured_entity_count": 0,
+      "last_extractor_version": "EMBEDDED_EXTRACTOR_V1",
+      "last_run_status": "COMPLETED",
+      "last_run_at": "2026-10-12 21:34:05.498391+03:00",
+      "document_extraction_outcomes": [
+        "FACTS_FOUND",
+        "NO_FACTS"
+      ],
+      "reasons": [
+        "parse_time_hook"
+      ],
+      "bucket": "C_FAILED",
+      "failure_code": "FACTS_FOUND_NOT_PERSISTED",
+      "failure_reason": "FACTS_FOUND outcome with structured_entities=0",
+      "document_types": [
+        "xlsx"
+      ]
+    },
+    {
+      "procurement_id": 409841,
+      "contract_number": "0141300023526000040",
+      "material_document_count": 1,
+      "downloaded_material_document_count": 1,
+      "parsed_material_document_count": 1,
+      "embedded_run_count": 0,
+      "embedded_completed_count": 0,
+      "embedded_failed_count": 0,
+      "structured_entity_count": 0,
+      "last_extractor_version": null,
+      "last_run_status": null,
+      "last_run_at": null,
+      "document_extraction_outcomes": [],
+      "reasons": [],
+      "bucket": "A_NOT_ATTEMPTED"
+    },
+    {
+      "procurement_id": 410275,
+      "contract_number": "0354100008426000172",
+      "material_document_count": 1,
+      "downloaded_material_document_count": 1,
+      "parsed_material_document_count": 0,
+      "embedded_run_count": 0,
+      "embedded_completed_count": 0,
+      "embedded_failed_count": 0,
+      "structured_entity_count": 0,
+      "last_extractor_version": "EMBEDDED_EXTRACTOR_V1",
+      "last_run_status": "NO_FACTS",
+      "last_run_at": "2026-10-12 21:06:07.313386+03:00",
+      "document_extraction_outcomes": [
+        "NO_FACTS"
+      ],
+      "reasons": [
+        "parse_time_hook"
+      ],
+      "bucket": "B_COMPLETED_ZERO_FACTS"
+    },
+    {
+      "procurement_id": 412620,
+      "contract_number": "0168500000626003067",
+      "material_document_count": 1,
+      "downloaded_material_document_count": 1,
+      "parsed_material_document_count": 1,
+      "embedded_run_count": 0,
+      "embedded_completed_count": 0,
+      "embedded_failed_count": 0,
+      "structured_entity_count": 0,
+      "last_extractor_version": "EMBEDDED_EXTRACTOR_V1",
+      "last_run_status": "NO_FACTS",
+      "last_run_at": "2026-10-14 15:31:49.885797+03:00",
+      "document_extraction_outcomes": [
+        "NO_FACTS"
+      ],
+      "reasons": [
+        "parse_time_hook"
+      ],
+      "bucket": "B_COMPLETED_ZERO_FACTS"
+    },
+    {
+      "procurement_id": 425303,
+      "contract_number": "32616424118",
+      "material_document_count": 1,
+      "downloaded_material_document_count": 1,
+      "parsed_material_document_count": 1,
+      "embedded_run_count": 0,
+      "embedded_completed_count": 0,
+      "embedded_failed_count": 0,
+      "structured_entity_count": 0,
+      "last_extractor_version": "EMBEDDED_EXTRACTOR_V1",
+      "last_run_status": "NO_FACTS",
+      "last_run_at": "2026-10-14 11:55:19.871256+03:00",
+      "document_extraction_outcomes": [
+        "NO_FACTS"
+      ],
+      "reasons": [
+        "parse_time_hook"
+      ],
+      "bucket": "B_COMPLETED_ZERO_FACTS"
+    },
+    {
+      "procurement_id": 437961,
+      "contract_number": "32514475559",
+      "material_document_count": 1,
+      "downloaded_material_document_count": 1,
+      "parsed_material_document_count": 1,
+      "embedded_run_count": 0,
+      "embedded_completed_count": 0,
+      "embedded_failed_count": 0,
+      "structured_entity_count": 0,
+      "last_extractor_version": null,
+      "last_run_status": null,
+      "last_run_at": null,
+      "document_extraction_outcomes": [],
+      "reasons": [],
+      "bucket": "A_NOT_ATTEMPTED"
+    },
+    {
+      "procurement_id": 449594,
+      "contract_number": null,
+      "material_document_count": 5,
+      "downloaded_material_document_count": 4,
+      "parsed_material_document_count": 5,
+      "embedded_run_count": 0,
+      "embedded_completed_count": 0,
+      "embedded_failed_count": 0,
+      "structured_entity_count": 0,
+      "last_extractor_version": "EMBEDDED_EXTRACTOR_V1",
+      "last_run_status": "NO_FACTS",
+      "last_run_at": "2026-11-05 07:31:12.700862+03:00",
+      "document_extraction_outcomes": [
+        "NO_FACTS"
+      ],
+      "reasons": [
+        "parse_time_hook"
+      ],
+      "bucket": "B_COMPLETED_ZERO_FACTS"
+    },
+    {
+      "procurement_id": 450206,
+      "contract_number": null,
+      "material_document_count": 0,
+      "downloaded_material_document_count": 0,
+      "parsed_material_document_count": 0,
+      "embedded_run_count": 0,
+      "embedded_completed_count": 0,
+      "embedded_failed_count": 0,
+      "structured_entity_count": 0,
+      "last_extractor_version": "EMBEDDED_EXTRACTOR_V1",
+      "last_run_status": "NO_FACTS",
+      "last_run_at": "2026-10-12 21:40:38.046313+03:00",
+      "document_extraction_outcomes": [
+        "NO_FACTS"
+      ],
+      "reasons": [
+        "parse_time_hook"
+      ],
+      "bucket": "B_COMPLETED_ZERO_FACTS"
+    },
+    {
+      "procurement_id": 450315,
+      "contract_number": "32616429753",
+      "material_document_count": 1,
+      "downloaded_material_document_count": 1,
+      "parsed_material_document_count": 1,
+      "embedded_run_count": 1,
+      "embedded_completed_count": 1,
+      "embedded_failed_count": 0,
+      "structured_entity_count": 0,
+      "last_extractor_version": "EMBEDDED_EXTRACTOR_V1",
+      "last_run_status": "COMPLETED",
+      "last_run_at": "2026-10-14 13:13:28.153745+03:00",
+      "document_extraction_outcomes": [
+        "FACTS_FOUND",
+        "NO_FACTS"
+      ],
+      "reasons": [
+        "parse_time_hook"
+      ],
+      "bucket": "C_FAILED",
+      "failure_code": "FACTS_FOUND_NOT_PERSISTED",
+      "failure_reason": "FACTS_FOUND outcome with structured_entities=0",
+      "document_types": [
+        "pdf"
+      ]
+    },
+    {
+      "procurement_id": 451205,
+      "contract_number": "0351100008926000199",
+      "material_document_count": 1,
+      "downloaded_material_document_count": 1,
+      "parsed_material_document_count": 1,
+      "embedded_run_count": 0,
+      "embedded_completed_count": 0,
+      "embedded_failed_count": 0,
+      "structured_entity_count": 0,
+      "last_extractor_version": "EMBEDDED_EXTRACTOR_V1",
+      "last_run_status": "NO_FACTS",
+      "last_run_at": "2026-10-12 21:58:04.955398+03:00",
+      "document_extraction_outcomes": [
+        "NO_FACTS"
+      ],
+      "reasons": [
+        "parse_time_hook"
+      ],
+      "bucket": "B_COMPLETED_ZERO_FACTS"
+    },
+    {
+      "procurement_id": 453676,
+      "contract_number": "0848300041026000251",
+      "material_document_count": 1,
+      "downloaded_material_document_count": 0,
+      "parsed_material_document_count": 0,
+      "embedded_run_count": 0,
+      "embedded_completed_count": 0,
+      "embedded_failed_count": 0,
+      "structured_entity_count": 0,
+      "last_extractor_version": "EMBEDDED_EXTRACTOR_V1",
+      "last_run_status": "NO_FACTS",
+      "last_run_at": "2026-10-14 07:00:20.144537+03:00",
+      "document_extraction_outcomes": [
+        "NO_FACTS"
+      ],
+      "reasons": [
+        "parse_time_hook"
+      ],
+      "bucket": "B_COMPLETED_ZERO_FACTS"
+    },
+    {
+      "procurement_id": 453682,
+      "contract_number": "0848300041026000252",
+      "material_document_count": 1,
+      "downloaded_material_document_count": 0,
+      "parsed_material_document_count": 0,
+      "embedded_run_count": 0,
+      "embedded_completed_count": 0,
+      "embedded_failed_count": 0,
+      "structured_entity_count": 0,
+      "last_extractor_version": "EMBEDDED_EXTRACTOR_V1",
+      "last_run_status": "NO_FACTS",
+      "last_run_at": "2026-10-14 07:00:39.341651+03:00",
+      "document_extraction_outcomes": [
+        "NO_FACTS"
+      ],
+      "reasons": [
+        "parse_time_hook"
+      ],
+      "bucket": "B_COMPLETED_ZERO_FACTS"
+    },
+    {
+      "procurement_id": 453695,
+      "contract_number": "0848300041026000253",
+      "material_document_count": 1,
+      "downloaded_material_document_count": 0,
+      "parsed_material_document_count": 0,
+      "embedded_run_count": 1,
+      "embedded_completed_count": 1,
+      "embedded_failed_count": 0,
+      "structured_entity_count": 0,
+      "last_extractor_version": "EMBEDDED_EXTRACTOR_V1",
+      "last_run_status": "COMPLETED",
+      "last_run_at": "2026-10-14 07:00:45.126091+03:00",
+      "document_extraction_outcomes": [
+        "FACTS_FOUND",
+        "NO_FACTS"
+      ],
+      "reasons": [
+        "parse_time_hook"
+      ],
+      "bucket": "C_FAILED",
+      "failure_code": "FACTS_FOUND_NOT_PERSISTED",
+      "failure_reason": "FACTS_FOUND outcome with structured_entities=0",
+      "document_types": [
+        "pdf"
+      ]
+    },
+    {
+      "procurement_id": 456559,
+      "contract_number": "0148200005426000439",
+      "material_document_count": 1,
+      "downloaded_material_document_count": 1,
+      "parsed_material_document_count": 0,
+      "embedded_run_count": 0,
+      "embedded_completed_count": 0,
+      "embedded_failed_count": 0,
+      "structured_entity_count": 0,
+      "last_extractor_version": null,
+      "last_run_status": null,
+      "last_run_at": null,
+      "document_extraction_outcomes": [],
+      "reasons": [],
+      "bucket": "A_NOT_ATTEMPTED"
+    },
+    {
+      "procurement_id": 457680,
+      "contract_number": "0373500000126000069",
+      "material_document_count": 5,
+      "downloaded_material_document_count": 3,
+      "parsed_material_document_count": 5,
+      "embedded_run_count": 2,
+      "embedded_completed_count": 2,
+      "embedded_failed_count": 0,
+      "structured_entity_count": 0,
+      "last_extractor_version": "EMBEDDED_EXTRACTOR_V1",
+      "last_run_status": "COMPLETED",
+      "last_run_at": "2026-10-14 09:59:58.230085+03:00",
+      "document_extraction_outcomes": [
+        "FACTS_FOUND",
+        "NO_FACTS"
+      ],
+      "reasons": [
+        "parse_time_hook"
+      ],
+      "bucket": "C_FAILED",
+      "failure_code": "FACTS_FOUND_NOT_PERSISTED",
+      "failure_reason": "FACTS_FOUND outcome with structured_entities=0",
+      "document_types": [
+        "pdf",
+        "xlsx"
+      ]
+    },
+    {
+      "procurement_id": 457693,
+      "contract_number": null,
+      "material_document_count": 11,
+      "downloaded_material_document_count": 9,
+      "parsed_material_document_count": 11,
+      "embedded_run_count": 2,
+      "embedded_completed_count": 2,
+      "embedded_failed_count": 0,
+      "structured_entity_count": 0,
+      "last_extractor_version": "EMBEDDED_EXTRACTOR_V1",
+      "last_run_status": "COMPLETED",
+      "last_run_at": "2026-10-14 09:50:28.041213+03:00",
+      "document_extraction_outcomes": [
+        "FACTS_FOUND",
+        "NO_FACTS"
+      ],
+      "reasons": [
+        "parse_time_hook"
+      ],
+      "bucket": "C_FAILED",
+      "failure_code": "FACTS_FOUND_NOT_PERSISTED",
+      "failure_reason": "FACTS_FOUND outcome with structured_entities=0",
+      "document_types": [
+        "pdf",
+        "xlsx"
+      ]
+    },
+    {
+      "procurement_id": 457905,
+      "contract_number": null,
+      "material_document_count": 7,
+      "downloaded_material_document_count": 5,
+      "parsed_material_document_count": 7,
+      "embedded_run_count": 1,
+      "embedded_completed_count": 1,
+      "embedded_failed_count": 0,
+      "structured_entity_count": 0,
+      "last_extractor_version": "EMBEDDED_EXTRACTOR_V1",
+      "last_run_status": "COMPLETED",
+      "last_run_at": "2026-10-14 10:56:07.336412+03:00",
+      "document_extraction_outcomes": [
+        "FACTS_FOUND",
+        "NO_FACTS"
+      ],
+      "reasons": [
+        "parse_time_hook"
+      ],
+      "bucket": "C_FAILED",
+      "failure_code": "FACTS_FOUND_NOT_PERSISTED",
+      "failure_reason": "FACTS_FOUND outcome with structured_entities=0",
+      "document_types": [
+        "pdf"
+      ]
+    },
+    {
+      "procurement_id": 458922,
+      "contract_number": null,
+      "material_document_count": 1,
+      "downloaded_material_document_count": 1,
+      "parsed_material_document_count": 0,
+      "embedded_run_count": 0,
+      "embedded_completed_count": 0,
+      "embedded_failed_count": 0,
+      "structured_entity_count": 0,
+      "last_extractor_version": "EMBEDDED_EXTRACTOR_V1",
+      "last_run_status": "NO_FACTS",
+      "last_run_at": "2026-10-12 21:52:35.461051+03:00",
+      "document_extraction_outcomes": [
+        "NO_FACTS"
+      ],
+      "reasons": [
+        "parse_time_hook"
+      ],
+      "bucket": "B_COMPLETED_ZERO_FACTS"
+    },
+    {
+      "procurement_id": 458956,
+      "contract_number": null,
+      "material_document_count": 1,
+      "downloaded_material_document_count": 1,
+      "parsed_material_document_count": 1,
+      "embedded_run_count": 1,
+      "embedded_completed_count": 1,
+      "embedded_failed_count": 0,
+      "structured_entity_count": 0,
+      "last_extractor_version": "EMBEDDED_EXTRACTOR_V1",
+      "last_run_status": "COMPLETED",
+      "last_run_at": "2026-10-12 21:02:17.374994+03:00",
+      "document_extraction_outcomes": [
+        "FACTS_FOUND",
+        "NO_FACTS"
+      ],
+      "reasons": [
+        "parse_time_hook"
+      ],
+      "bucket": "C_FAILED",
+      "failure_code": "FACTS_FOUND_NOT_PERSISTED",
+      "failure_reason": "FACTS_FOUND outcome with structured_entities=0",
+      "document_types": [
+        "xlsx"
+      ]
+    },
+    {
+      "procurement_id": 459379,
+      "contract_number": null,
+      "material_document_count": 0,
+      "downloaded_material_document_count": 0,
+      "parsed_material_document_count": 0,
+      "embedded_run_count": 0,
+      "embedded_completed_count": 0,
+      "embedded_failed_count": 0,
+      "structured_entity_count": 0,
+      "last_extractor_version": "EMBEDDED_EXTRACTOR_V1",
+      "last_run_status": "NO_FACTS",
+      "last_run_at": "2026-10-12 21:36:17.083797+03:00",
+      "document_extraction_outcomes": [
+        "NO_FACTS"
+      ],
+      "reasons": [
+        "parse_time_hook"
+      ],
+      "bucket": "B_COMPLETED_ZERO_FACTS"
+    },
+    {
+      "procurement_id": 459603,
+      "contract_number": "0848300069526000365",
+      "material_document_count": 1,
+      "downloaded_material_document_count": 1,
+      "parsed_material_document_count": 1,
+      "embedded_run_count": 0,
+      "embedded_completed_count": 0,
+      "embedded_failed_count": 0,
+      "structured_entity_count": 0,
+      "last_extractor_version": "EMBEDDED_EXTRACTOR_V1",
+      "last_run_status": "NO_FACTS",
+      "last_run_at": "2026-10-12 21:41:21.339093+03:00",
+      "document_extraction_outcomes": [
+        "NO_FACTS"
+      ],
+      "reasons": [
+        "parse_time_hook"
+      ],
+      "bucket": "B_COMPLETED_ZERO_FACTS"
+    },
+    {
+      "procurement_id": 460882,
+      "contract_number": "0372100009926000171",
+      "material_document_count": 1,
+      "downloaded_material_document_count": 1,
+      "parsed_material_document_count": 1,
+      "embedded_run_count": 0,
+      "embedded_completed_count": 0,
+      "embedded_failed_count": 0,
+      "structured_entity_count": 0,
+      "last_extractor_version": "EMBEDDED_EXTRACTOR_V1",
+      "last_run_status": "NO_FACTS",
+      "last_run_at": "2026-10-13 06:33:25.752256+03:00",
+      "document_extraction_outcomes": [
+        "NO_FACTS"
+      ],
+      "reasons": [
+        "parse_time_hook"
+      ],
+      "bucket": "B_COMPLETED_ZERO_FACTS"
+    },
+    {
+      "procurement_id": 460884,
+      "contract_number": "0172300005626000039",
+      "material_document_count": 1,
+      "downloaded_material_document_count": 1,
+      "parsed_material_document_count": 1,
+      "embedded_run_count": 0,
+      "embedded_completed_count": 0,
+      "embedded_failed_count": 0,
+      "structured_entity_count": 0,
+      "last_extractor_version": null,
+      "last_run_status": null,
+      "last_run_at": null,
+      "document_extraction_outcomes": [],
+      "reasons": [],
+      "bucket": "A_NOT_ATTEMPTED"
+    },
+    {
+      "procurement_id": 460923,
+      "contract_number": null,
+      "material_document_count": 0,
+      "downloaded_material_document_count": 0,
+      "parsed_material_document_count": 0,
+      "embedded_run_count": 0,
+      "embedded_completed_count": 0,
+      "embedded_failed_count": 0,
+      "structured_entity_count": 0,
+      "last_extractor_version": "EMBEDDED_EXTRACTOR_V1",
+      "last_run_status": "NO_FACTS",
+      "last_run_at": "2026-10-13 07:01:36.629239+03:00",
+      "document_extraction_outcomes": [
+        "NO_FACTS"
+      ],
+      "reasons": [
+        "parse_time_hook"
+      ],
+      "bucket": "B_COMPLETED_ZERO_FACTS"
+    },
+    {
+      "procurement_id": 461281,
+      "contract_number": null,
+      "material_document_count": 0,
+      "downloaded_material_document_count": 0,
+      "parsed_material_document_count": 0,
+      "embedded_run_count": 0,
+      "embedded_completed_count": 0,
+      "embedded_failed_count": 0,
+      "structured_entity_count": 0,
+      "last_extractor_version": "EMBEDDED_EXTRACTOR_V1",
+      "last_run_status": "NO_FACTS",
+      "last_run_at": "2026-10-12 17:11:29.697048+03:00",
+      "document_extraction_outcomes": [
+        "NO_FACTS"
+      ],
+      "reasons": [
+        "parse_time_hook"
+      ],
+      "bucket": "B_COMPLETED_ZERO_FACTS"
+    },
+    {
+      "procurement_id": 464370,
+      "contract_number": "0825300004226000082",
+      "material_document_count": 1,
+      "downloaded_material_document_count": 1,
+      "parsed_material_document_count": 1,
+      "embedded_run_count": 0,
+      "embedded_completed_count": 0,
+      "embedded_failed_count": 0,
+      "structured_entity_count": 0,
+      "last_extractor_version": null,
+      "last_run_status": null,
+      "last_run_at": null,
+      "document_extraction_outcomes": [],
+      "reasons": [],
+      "bucket": "A_NOT_ATTEMPTED"
+    },
+    {
+      "procurement_id": 464502,
+      "contract_number": "32616466618",
+      "material_document_count": 4,
+      "downloaded_material_document_count": 4,
+      "parsed_material_document_count": 4,
+      "embedded_run_count": 0,
+      "embedded_completed_count": 0,
+      "embedded_failed_count": 0,
+      "structured_entity_count": 0,
+      "last_extractor_version": "EMBEDDED_EXTRACTOR_V1",
+      "last_run_status": "NO_FACTS",
+      "last_run_at": "2026-11-11 17:38:42.458130+03:00",
+      "document_extraction_outcomes": [
+        "NO_FACTS"
+      ],
+      "reasons": [
+        "parse_time_hook"
+      ],
+      "bucket": "B_COMPLETED_ZERO_FACTS"
+    },
+    {
+      "procurement_id": 464746,
+      "contract_number": "0825300004226000091",
+      "material_document_count": 1,
+      "downloaded_material_document_count": 1,
+      "parsed_material_document_count": 1,
+      "embedded_run_count": 0,
+      "embedded_completed_count": 0,
+      "embedded_failed_count": 0,
+      "structured_entity_count": 0,
+      "last_extractor_version": null,
+      "last_run_status": null,
+      "last_run_at": null,
+      "document_extraction_outcomes": [],
+      "reasons": [],
+      "bucket": "A_NOT_ATTEMPTED"
+    },
+    {
+      "procurement_id": 464748,
+      "contract_number": "0825300004226000089",
+      "material_document_count": 1,
+      "downloaded_material_document_count": 1,
+      "parsed_material_document_count": 1,
+      "embedded_run_count": 0,
+      "embedded_completed_count": 0,
+      "embedded_failed_count": 0,
+      "structured_entity_count": 0,
+      "last_extractor_version": null,
+      "last_run_status": null,
+      "last_run_at": null,
+      "document_extraction_outcomes": [],
+      "reasons": [],
+      "bucket": "A_NOT_ATTEMPTED"
+    },
+    {
+      "procurement_id": 484827,
+      "contract_number": "0355600001926000314",
+      "material_document_count": 4,
+      "downloaded_material_document_count": 4,
+      "parsed_material_document_count": 4,
+      "embedded_run_count": 0,
+      "embedded_completed_count": 0,
+      "embedded_failed_count": 0,
+      "structured_entity_count": 0,
+      "last_extractor_version": "EMBEDDED_EXTRACTOR_V1",
+      "last_run_status": "NO_FACTS",
+      "last_run_at": "2026-11-11 17:45:47.889193+03:00",
+      "document_extraction_outcomes": [
+        "NO_FACTS"
+      ],
+      "reasons": [
+        "parse_time_hook"
+      ],
+      "bucket": "B_COMPLETED_ZERO_FACTS"
+    },
+    {
+      "procurement_id": 484830,
+      "contract_number": "32616484645",
+      "material_document_count": 1,
+      "downloaded_material_document_count": 1,
+      "parsed_material_document_count": 1,
+      "embedded_run_count": 0,
+      "embedded_completed_count": 0,
+      "embedded_failed_count": 0,
+      "structured_entity_count": 0,
+      "last_extractor_version": null,
+      "last_run_status": null,
+      "last_run_at": null,
+      "document_extraction_outcomes": [],
+      "reasons": [],
+      "bucket": "A_NOT_ATTEMPTED"
+    },
+    {
+      "procurement_id": 484844,
+      "contract_number": "0151400000826000277",
+      "material_document_count": 5,
+      "downloaded_material_document_count": 4,
+      "parsed_material_document_count": 5,
+      "embedded_run_count": 0,
+      "embedded_completed_count": 0,
+      "embedded_failed_count": 0,
+      "structured_entity_count": 0,
+      "last_extractor_version": "EMBEDDED_EXTRACTOR_V1",
+      "last_run_status": "NO_FACTS",
+      "last_run_at": "2026-11-11 18:16:38.147880+03:00",
+      "document_extraction_outcomes": [
+        "NO_FACTS"
+      ],
+      "reasons": [
+        "parse_time_hook"
+      ],
+      "bucket": "B_COMPLETED_ZERO_FACTS"
+    },
+    {
+      "procurement_id": 484866,
+      "contract_number": "0372100027326000697",
+      "material_document_count": 4,
+      "downloaded_material_document_count": 4,
+      "parsed_material_document_count": 4,
+      "embedded_run_count": 0,
+      "embedded_completed_count": 0,
+      "embedded_failed_count": 0,
+      "structured_entity_count": 0,
+      "last_extractor_version": "EMBEDDED_EXTRACTOR_V1",
+      "last_run_status": "NO_FACTS",
+      "last_run_at": "2026-11-11 17:42:41.156633+03:00",
+      "document_extraction_outcomes": [
+        "NO_FACTS"
+      ],
+      "reasons": [
+        "parse_time_hook"
+      ],
+      "bucket": "B_COMPLETED_ZERO_FACTS"
+    },
+    {
+      "procurement_id": 484867,
+      "contract_number": "0372200071126000133",
+      "material_document_count": 4,
+      "downloaded_material_document_count": 4,
+      "parsed_material_document_count": 4,
+      "embedded_run_count": 0,
+      "embedded_completed_count": 0,
+      "embedded_failed_count": 0,
+      "structured_entity_count": 0,
+      "last_extractor_version": "EMBEDDED_EXTRACTOR_V1",
+      "last_run_status": "NO_FACTS",
+      "last_run_at": "2026-11-11 17:42:02.679388+03:00",
+      "document_extraction_outcomes": [
+        "NO_FACTS"
+      ],
+      "reasons": [
+        "parse_time_hook"
+      ],
+      "bucket": "B_COMPLETED_ZERO_FACTS"
+    },
+    {
+      "procurement_id": 484868,
+      "contract_number": "0372200173426000009",
+      "material_document_count": 6,
+      "downloaded_material_document_count": 6,
+      "parsed_material_document_count": 6,
+      "embedded_run_count": 0,
+      "embedded_completed_count": 0,
+      "embedded_failed_count": 0,
+      "structured_entity_count": 0,
+      "last_extractor_version": "EMBEDDED_EXTRACTOR_V1",
+      "last_run_status": "NO_FACTS",
+      "last_run_at": "2026-11-11 17:41:42.690813+03:00",
+      "document_extraction_outcomes": [
+        "NO_FACTS"
+      ],
+      "reasons": [
+        "parse_time_hook"
+      ],
+      "bucket": "B_COMPLETED_ZERO_FACTS"
+    },
+    {
+      "procurement_id": 484872,
+      "contract_number": "0372100004526000034",
+      "material_document_count": 4,
+      "downloaded_material_document_count": 4,
+      "parsed_material_document_count": 4,
+      "embedded_run_count": 0,
+      "embedded_completed_count": 0,
+      "embedded_failed_count": 0,
+      "structured_entity_count": 0,
+      "last_extractor_version": "EMBEDDED_EXTRACTOR_V1",
+      "last_run_status": "NO_FACTS",
+      "last_run_at": "2026-11-11 17:41:51.624960+03:00",
+      "document_extraction_outcomes": [
+        "NO_FACTS"
+      ],
+      "reasons": [
+        "parse_time_hook"
+      ],
+      "bucket": "B_COMPLETED_ZERO_FACTS"
+    },
+    {
+      "procurement_id": 484873,
+      "contract_number": "0372200037326000105",
+      "material_document_count": 4,
+      "downloaded_material_document_count": 4,
+      "parsed_material_document_count": 4,
+      "embedded_run_count": 0,
+      "embedded_completed_count": 0,
+      "embedded_failed_count": 0,
+      "structured_entity_count": 0,
+      "last_extractor_version": "EMBEDDED_EXTRACTOR_V1",
+      "last_run_status": "NO_FACTS",
+      "last_run_at": "2026-11-11 17:46:35.389147+03:00",
+      "document_extraction_outcomes": [
+        "NO_FACTS"
+      ],
+      "reasons": [
+        "parse_time_hook"
+      ],
+      "bucket": "B_COMPLETED_ZERO_FACTS"
+    },
+    {
+      "procurement_id": 484875,
+      "contract_number": "0174500001126006718",
+      "material_document_count": 4,
+      "downloaded_material_document_count": 4,
+      "parsed_material_document_count": 4,
+      "embedded_run_count": 0,
+      "embedded_completed_count": 0,
+      "embedded_failed_count": 0,
+      "structured_entity_count": 0,
+      "last_extractor_version": "EMBEDDED_EXTRACTOR_V1",
+      "last_run_status": "NO_FACTS",
+      "last_run_at": "2026-11-12 07:50:28.290459+03:00",
+      "document_extraction_outcomes": [
+        "NO_FACTS"
+      ],
+      "reasons": [
+        "parse_time_hook"
+      ],
+      "bucket": "B_COMPLETED_ZERO_FACTS"
+    },
+    {
+      "procurement_id": 484884,
+      "contract_number": "0194200000526005917",
+      "material_document_count": 5,
+      "downloaded_material_document_count": 5,
+      "parsed_material_document_count": 5,
+      "embedded_run_count": 0,
+      "embedded_completed_count": 0,
+      "embedded_failed_count": 0,
+      "structured_entity_count": 0,
+      "last_extractor_version": "EMBEDDED_EXTRACTOR_V1",
+      "last_run_status": "NO_FACTS",
+      "last_run_at": "2026-11-12 07:11:46.329322+03:00",
+      "document_extraction_outcomes": [
+        "NO_FACTS"
+      ],
+      "reasons": [
+        "parse_time_hook"
+      ],
+      "bucket": "B_COMPLETED_ZERO_FACTS"
+    },
+    {
+      "procurement_id": 484887,
+      "contract_number": "0318300406426000144",
+      "material_document_count": 4,
+      "downloaded_material_document_count": 3,
+      "parsed_material_document_count": 4,
+      "embedded_run_count": 0,
+      "embedded_completed_count": 0,
+      "embedded_failed_count": 0,
+      "structured_entity_count": 0,
+      "last_extractor_version": "EMBEDDED_EXTRACTOR_V1",
+      "last_run_status": "NO_FACTS",
+      "last_run_at": "2026-11-12 07:14:19.779246+03:00",
+      "document_extraction_outcomes": [
+        "NO_FACTS"
+      ],
+      "reasons": [
+        "parse_time_hook"
+      ],
+      "bucket": "B_COMPLETED_ZERO_FACTS"
+    },
+    {
+      "procurement_id": 484932,
+      "contract_number": "0330500000926000099",
+      "material_document_count": 5,
+      "downloaded_material_document_count": 4,
+      "parsed_material_document_count": 5,
+      "embedded_run_count": 0,
+      "embedded_completed_count": 0,
+      "embedded_failed_count": 0,
+      "structured_entity_count": 0,
+      "last_extractor_version": "EMBEDDED_EXTRACTOR_V1",
+      "last_run_status": "NO_FACTS",
+      "last_run_at": "2026-11-11 18:15:10.404422+03:00",
+      "document_extraction_outcomes": [
+        "NO_FACTS"
+      ],
+      "reasons": [
+        "parse_time_hook"
+      ],
+      "bucket": "B_COMPLETED_ZERO_FACTS"
+    },
+    {
+      "procurement_id": 484960,
+      "contract_number": "0372200070926000037",
+      "material_document_count": 5,
+      "downloaded_material_document_count": 5,
+      "parsed_material_document_count": 5,
+      "embedded_run_count": 0,
+      "embedded_completed_count": 0,
+      "embedded_failed_count": 0,
+      "structured_entity_count": 0,
+      "last_extractor_version": "EMBEDDED_EXTRACTOR_V1",
+      "last_run_status": "NO_FACTS",
+      "last_run_at": "2026-11-11 18:15:00.888590+03:00",
+      "document_extraction_outcomes": [
+        "NO_FACTS"
+      ],
+      "reasons": [
+        "parse_time_hook"
+      ],
+      "bucket": "B_COMPLETED_ZERO_FACTS"
+    },
+    {
+      "procurement_id": 484985,
+      "contract_number": "0370500000726000027",
+      "material_document_count": 5,
+      "downloaded_material_document_count": 5,
+      "parsed_material_document_count": 5,
+      "embedded_run_count": 0,
+      "embedded_completed_count": 0,
+      "embedded_failed_count": 0,
+      "structured_entity_count": 0,
+      "last_extractor_version": "EMBEDDED_EXTRACTOR_V1",
+      "last_run_status": "NO_FACTS",
+      "last_run_at": "2026-11-11 18:15:24.138075+03:00",
+      "document_extraction_outcomes": [
+        "NO_FACTS"
+      ],
+      "reasons": [
+        "parse_time_hook"
+      ],
+      "bucket": "B_COMPLETED_ZERO_FACTS"
+    },
+    {
+      "procurement_id": 485011,
+      "contract_number": "32616567814",
+      "material_document_count": 4,
+      "downloaded_material_document_count": 3,
+      "parsed_material_document_count": 4,
+      "embedded_run_count": 0,
+      "embedded_completed_count": 0,
+      "embedded_failed_count": 0,
+      "structured_entity_count": 0,
+      "last_extractor_version": "EMBEDDED_EXTRACTOR_V1",
+      "last_run_status": "NO_FACTS",
+      "last_run_at": "2026-11-12 07:54:20.532728+03:00",
+      "document_extraction_outcomes": [
+        "NO_FACTS"
+      ],
+      "reasons": [
+        "parse_time_hook"
+      ],
+      "bucket": "B_COMPLETED_ZERO_FACTS"
+    },
+    {
+      "procurement_id": 485012,
+      "contract_number": "32616548808",
+      "material_document_count": 4,
+      "downloaded_material_document_count": 4,
+      "parsed_material_document_count": 4,
+      "embedded_run_count": 0,
+      "embedded_completed_count": 0,
+      "embedded_failed_count": 0,
+      "structured_entity_count": 0,
+      "last_extractor_version": "EMBEDDED_EXTRACTOR_V1",
+      "last_run_status": "NO_FACTS",
+      "last_run_at": "2026-11-12 07:58:30.456872+03:00",
+      "document_extraction_outcomes": [
+        "NO_FACTS"
+      ],
+      "reasons": [
+        "parse_time_hook"
+      ],
+      "bucket": "B_COMPLETED_ZERO_FACTS"
+    }
+  ],
+  "other": 0,
+  "failed_breakdown": [
+    {
+      "error_code": "FACTS_FOUND_NOT_PERSISTED",
+      "reason": "FACTS_FOUND outcome with structured_entities=0",
+      "extractor_version": "EMBEDDED_EXTRACTOR_V1",
+      "document_types": {
+        "docx": 4,
+        "xls": 1,
+        "xlsx": 28,
+        "pdf": 13
+      },
+      "cards": 42
+    }
+  ]
+}
