@@ -24,6 +24,42 @@ browser host is unavailable and the computer-use tool could not determine the
 active Chrome URL. WIP remains PARTIAL pending browser acceptance and
 screenshots.
 
+2026-11-16 Hydro UK inline manager workspace: a read-only catalog audit of the
+canonical CRM database on S13 confirmed website, company reception type and
+schedule, stage, manual overrides, contacts, activities, object relations, and
+the CRM-side 615 address/link/sync stores. Contact-level reception fields and a
+normalized multi-phone table are absent. The local Kanban overlay now contains
+four conditional tabs and keeps stage movement in the overlay; the separate
+`hydro_open_uk` page route was removed. The idempotent contact/phone migration
+is drafted but was not executed pending review of the audit output. Local
+compilation and 26 focused tests passed. Production release and browser
+acceptance remain pending.
+
+2026-11-16 Hydro UK contact schema production migration: after explicit owner
+approval, applied `src/migrations/hydro_contact_reception_phones_1.sql` twice
+through the canonical S13 CRM admin route. The migration is additive, has no
+data backfill, adds per-contact reception fields and a normalized phone table,
+and enforces the company/contact pair with a composite FK. First/second runs,
+catalog acceptance and rollback-only smoke checks passed. Contact row count
+remained 0, the phone table is empty, and CRM application table/sequence
+privileges are present. No overlay release or CRM restart was performed; see
+`docs/wip/WIP_CRM_HYDRO_UK_CONTACT_SCHEMA_PRODUCTION_MIGRATION_1.md` and the
+next deployment WIP.
+
+2026-11-16 Hydro UK inline overlay deployment phase: kept the manager workspace
+inside the Kanban overlay and added batched per-object 615-ПП status plus key
+contact reception hours in Actions. Focused inline/call/stage tests pass (30).
+Two broader test modules cannot collect in this Windows checkout because
+`modules.crm.analytics.tender_row_utils` is absent. Production release/browser
+acceptance remain pending; no production files changed in this phase yet. See
+`docs/wip/WIP_CRM_HYDRO_UK_OVERLAY_FOUR_TAB_DEPLOYMENT_1.md`.
+
+The 488-line `hydro_inline_workspace_tabs.py` is deliberately cohesive for this
+phase: each tab renderer shares the small formatting/status helpers, while
+`dispatch_workspace_tab` guarantees only the selected tab executes. Splitting
+the file now would create a cross-module helper surface without reducing query
+coupling; revisit only if another workspace needs these renderers.
+
 2026-11-12 production card/read-module correction: fixed the two-level
 GrandSmeta numeric mapping so current-price columns are used instead of base
 columns, repaired affected existing rows, and split the card read model into

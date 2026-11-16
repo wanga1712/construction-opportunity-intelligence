@@ -262,6 +262,33 @@ def read_uk_matches(db: Any, uk_key: str, year: int) -> list[dict[str, Any]]:
     return matches
 
 
+def read_uk_contract_rows(db: Any, uk_key: str, *, now: datetime | None = None) -> dict[str, Any]:
+    """Read the CRM-side address match and contract detail in one bounded query."""
+    try:
+        ensure_store_ready(db)
+        state = read_state(db)
+        status, message = freshness(state, now)
+        rows = _rows(db, """
+            SELECT a.address_key, a.address_text, a.match_method AS address_match_method,
+                   a.match_score AS address_match_score, l.contract_id, l.contract_number,
+                   l.contract_date, l.contract_year, l.amount, l.is_waterproofing,
+                   l.match_method, l.match_score
+              FROM crm_waterproofing_615_uk_address a
+              LEFT JOIN crm_waterproofing_615_uk_link l
+                ON l.uk_key = a.uk_key AND l.address_key = a.address_key
+             WHERE a.uk_key = %(uk_key)s
+             ORDER BY a.address_text, l.contract_date DESC NULLS LAST, l.contract_id
+        """, {"uk_key": str(uk_key)})
+        return {"available": True, "status": status, "message": message,
+                "state": state, "rows": rows}
+    except StoreUnavailable as error:
+        return {"available": False, "status": STATUS_UNAVAILABLE,
+                "message": str(error), "state": {}, "rows": []}
+    except Exception as error:  # The UI must distinguish unavailable from no matches.
+        return {"available": False, "status": STATUS_UNAVAILABLE,
+                "message": f"615-ПП недоступны: {error}", "state": {}, "rows": []}
+
+
 def freshness(state: dict[str, Any], now: datetime | None = None) -> tuple[str, str]:
     """(статус, честное сообщение) по последней попытке обновления связки."""
     moment = now or datetime.now(timezone.utc)

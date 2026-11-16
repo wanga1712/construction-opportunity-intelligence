@@ -24,6 +24,8 @@ from src.services.waterproofing_funnel import (
 from src.ui.hydro_dom import kanban_card_key
 
 OPEN_UK_KEY = "hydro_open_uk"
+SIDECAR_OPEN_KEY = "hydro_inline_sidecar_open"
+SIDECAR_SELECTED_KEY = "hydro_inline_sidecar_selected"
 
 
 def _amount_text(card: dict[str, Any]) -> str:
@@ -31,6 +33,53 @@ def _amount_text(card: dict[str, Any]) -> str:
     if amount <= 0:
         return ""
     return str(int(amount)) if amount.is_integer() else str(amount)
+
+
+def call_readiness(card: dict[str, Any]) -> dict[str, Any]:
+    """Mandatory call-prep checks on the existing account fields."""
+    checks = (
+        ("телефон", bool(str(card.get("phone") or "").strip())),
+        ("часы приёма", bool(str(card.get("reception_hours") or "").strip())),
+        (
+            "ответственный",
+            str(card.get("responsible") or "").strip() not in ("", "—"),
+        ),
+        ("следующее действие", bool(str(card.get("next_action") or "").strip())),
+        ("дата касания", bool(str(card.get("next_action_date") or "").strip())),
+        ("время звонка", bool(str(card.get("next_action_time") or "").strip())),
+    )
+    missing = [label for label, present in checks if not present]
+    goal = str(
+        card.get("next_action")
+        or STAGE_DEFAULT_ACTIONS.get(str(card.get("stage") or ""), "")
+    ).strip()
+    return {"ready": not missing, "missing": missing, "goal": goal}
+
+
+def call_calendar_rows(cards: list[dict[str, Any]]) -> list[dict[str, str]]:
+    """One calendar row per UK; equal times are never collapsed together."""
+    rows = [
+        {
+            "Дата": str(card.get("next_action_date") or ""),
+            "Время": str(card.get("next_action_time") or ""),
+            "УК": str(card.get("uk_name_short") or card.get("uk_name") or ""),
+            "Ответственный": str(card.get("responsible") or "—"),
+            "Телефон": str(card.get("phone") or ""),
+            "Цель звонка": str(card.get("next_action") or ""),
+            "Часы приёма": str(card.get("reception_hours") or ""),
+            "Этап": str(card.get("stage_label") or card.get("stage") or ""),
+        }
+        for card in cards
+        if card.get("next_action_date") or card.get("next_action_time")
+    ]
+    return sorted(
+        rows,
+        key=lambda row: (
+            row["Дата"] or "9999-12-31",
+            row["Время"] or "99:99",
+            row["УК"],
+        ),
+    )
 
 
 def account_card_lines(card: dict[str, Any]) -> list[str]:
@@ -66,13 +115,28 @@ def account_card_lines(card: dict[str, Any]) -> list[str]:
         lines.append(f"✅ тех. контакт: {card.get('tech_contact_person') or 'есть'}")
     else:
         lines.append("⛔ тех. контакта нет")
-    touch = card.get("next_action_date") or "касание не назначено"
+    reception = str(card.get("reception_hours") or "").strip()
+    lines.append(f"🕘 приём: {reception or 'не указаны'}")
+    touch = " ".join(
+        part for part in (
+            str(card.get("next_action_date") or "").strip(),
+            str(card.get("next_action_time") or "").strip(),
+        )
+        if part
+    ) or "касание не назначено"
     if card.get("overdue"):
         touch += f" · 🔴 просрочено {card.get('overdue_days')} дн."
     lines.append(f"📅 {touch}")
     lines.append(
         f"👤 {card.get('responsible')} · 🏷 {card.get('stage_label') or card.get('stage')}"
     )
+    readiness = call_readiness(card)
+    if readiness["ready"]:
+        lines.append(f"✅ К звонку готово · 🎯 {readiness['goal']}")
+    else:
+        lines.append(f"⚠️ Заполнить перед звонком: {', '.join(readiness['missing'])}")
+        if readiness["goal"]:
+            lines.append(f"🎯 Цель звонка: {readiness['goal']}")
     return lines
 
 
@@ -101,13 +165,24 @@ def deal_card_lines(card: dict[str, Any]) -> list[str]:
 
 
 def render_account_card(card: dict[str, Any]) -> None:
-    """УК card with the link into the detailed account card."""
+    """Use a native Streamlit card action and a separate drag handle."""
     key = str(card.get("key") or "")
-    with st.container(border=True, key=kanban_card_key("account", key)):
-        st.markdown("  \n".join(account_card_lines(card)))
-        if st.button("Открыть карточку УК", key=f"hydro_open_{key}", use_container_width=True):
-            st.session_state[OPEN_UK_KEY] = key
+    with st.container(key=kanban_card_key("account", key)):
+        lines = account_card_lines(card)
+        if st.button(
+            "  \n".join(lines),
+            key=f"hydro_select_account_{key}",
+            use_container_width=True,
+            type="secondary",
+        ):
+            st.session_state[SIDECAR_SELECTED_KEY] = key
+            st.session_state[SIDECAR_OPEN_KEY] = True
             st.rerun()
+        st.markdown(
+            '<span class="hydro-drag-handle" draggable="true" '
+            'title="Перетащить карточку" aria-label="Перетащить карточку">⠿</span>',
+            unsafe_allow_html=True,
+        )
 
 
 def _deal_progress_form(card: dict[str, Any]) -> None:
@@ -179,6 +254,8 @@ def render_deal_card(card: dict[str, Any]) -> None:
 __all__ = [
     "OPEN_UK_KEY",
     "account_card_lines",
+    "call_calendar_rows",
+    "call_readiness",
     "deal_card_lines",
     "render_account_card",
     "render_deal_card",

@@ -13,7 +13,6 @@ from src.ui.waterproofing_kanban_tab import render_kanban_tab
 from src.ui.waterproofing_map_tab import render_map_tab
 from src.ui.waterproofing_meta_tabs import render_ai_tab, render_fields_tab, render_pipeline_tab
 from src.ui.waterproofing_objects_tab import render_objects_tab
-from src.ui.waterproofing_uk_tab import render_uk_card
 
 SCREEN_KANBAN = "🔷 Доска: УК и объекты"
 SCREEN_MAP = "🗺 Карта объектов"
@@ -29,12 +28,6 @@ SCREENS = [SCREEN_KANBAN, SCREEN_PARKING, SCREEN_MAP, SCREEN_OBJECTS,
 
 def render_waterproofing_page(service: ObjectsService) -> None:
     """Render the УК-centric waterproofing CRM."""
-    open_key = st.session_state.get("hydro_open_uk")
-    if open_key:
-        st.title("💧 Гидроизоляция — карточка УК")
-        render_uk_card(service, str(open_key))
-        return
-
     st.title("💧 Гидроизоляция")
     st.caption("Управляющие компании и объекты")
     st.caption("Работа с УК → обследование → техрешение → ТЗ → закупка → контракт")

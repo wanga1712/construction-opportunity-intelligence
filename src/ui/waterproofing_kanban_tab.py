@@ -68,9 +68,16 @@ from src.ui.hydro_board import (
     render_board,
     render_kpi_strip,
 )
-from src.ui.hydro_cards import render_account_card, render_deal_card
+from src.ui.hydro_cards import (
+    SIDECAR_OPEN_KEY,
+    SIDECAR_SELECTED_KEY,
+    call_calendar_rows,
+    render_account_card,
+    render_deal_card,
+)
 from src.ui.hydro_dom import kanban_card_key, kanban_column_key
 from src.ui.hydro_filters import render_toolbar
+from src.ui.hydro_inline_sidecar import render_inline_sidecar
 from src.ui.session_deps import get_parking_db
 
 SEARCH_ACCOUNT = ("uk_name", "uk_name_short", "uk_inn", "uk_ogrn", "uk_address")
@@ -200,6 +207,9 @@ def _consume_drag_event(event: dict[str, Any]) -> None:
 def _render_drag_and_drop(
     account_cards: list[dict[str, Any]],
     deal_cards: list[dict[str, Any]],
+    *,
+    selected_account_key: str | None = None,
+    sidecar_open: bool = False,
 ) -> None:
     """Attach one drag-drop bridge to both rendered funnels."""
     cards = [
@@ -208,6 +218,7 @@ def _render_drag_and_drop(
             "card_key": str(card.get("key") or ""),
             "stage": str(card.get("stage") or ""),
             "funnel": funnel,
+            "open_sidecar": funnel == FUNNEL_ACCOUNT,
         }
         for funnel, rows in (
             (FUNNEL_ACCOUNT, account_cards),
@@ -227,9 +238,40 @@ def _render_drag_and_drop(
         )
         for stage in stages
     ]
-    event = hydro_drag_drop(cards=cards, columns=columns, key="hydro_kanban_drag")
+    selected_dom_key = None
+    if selected_account_key:
+        selected_dom_key = kanban_card_key("account", selected_account_key)
+    event = hydro_drag_drop(
+        cards=cards,
+        columns=columns,
+        key="hydro_kanban_drag",
+        selected_account_dom_key=selected_dom_key,
+        sidecar_open=sidecar_open,
+    )
     if isinstance(event, dict):
         _consume_drag_event(event)
+
+
+def _render_call_calendar(cards: list[dict[str, Any]]) -> None:
+    """Agenda view; equal time slots remain separate rows for each UK."""
+    rows = call_calendar_rows(cards)
+    with st.expander(f"📅 Календарь звонков ({len(rows)})"):
+        if not rows:
+            st.caption("Звонки не запланированы: заполните дату и время касания в карточке УК.")
+            return
+        st.dataframe(
+            rows,
+            use_container_width=True,
+            hide_index=True,
+            column_config={
+                "Дата": st.column_config.TextColumn("Дата", width="small"),
+                "Время": st.column_config.TextColumn("Время", width="small"),
+                "УК": st.column_config.TextColumn("УК", width="large"),
+                "Цель звонка": st.column_config.TextColumn("Цель звонка", width="large"),
+                "Часы приёма": st.column_config.TextColumn("Часы приёма", width="medium"),
+            },
+        )
+        st.caption("Одинаковое время у разных УК показывается отдельными строками.")
 
 
 def _render_actions(service: Any, snapshot: dict[str, Any]) -> None:
@@ -349,6 +391,7 @@ def render_kanban_tab(service: ObjectsService) -> None:
     if drag_notice:
         st.warning(str(drag_notice))
     st.caption("Перетащите карточку в колонку нужного этапа.")
+    _render_call_calendar(visible_accounts)
     account_columns_rows = account_columns(visible_accounts)
     _cap_base_column(account_columns_rows)
     render_band(*BAND_ACCOUNT)
@@ -360,4 +403,31 @@ def render_kanban_tab(service: ObjectsService) -> None:
     )
     render_band(*BAND_DEAL)
     render_board(deal_columns(visible_deals), render_deal_card, key=DEAL_BOARD_KEY)
-    _render_drag_and_drop(account_cards, deal_cards)
+    selected_key = st.session_state.get(SIDECAR_SELECTED_KEY)
+    sidecar_open = bool(st.session_state.get(SIDECAR_OPEN_KEY) and selected_key)
+    selected_card = next(
+        (card for card in visible_accounts if str(card.get("key") or "") == str(selected_key or "")),
+        None,
+    )
+    if sidecar_open and selected_card:
+        render_inline_sidecar(
+            selected_card,
+            getattr(service, "crm_db", None),
+            object_rows,
+            move_stage=lambda target: move_card_stage(
+                card_key=str(selected_card.get("key") or ""),
+                funnel=FUNNEL_ACCOUNT,
+                from_stage=str(selected_card.get("stage") or ""),
+                to_stage=str(target),
+            ),
+        )
+    elif sidecar_open:
+        st.session_state[SIDECAR_SELECTED_KEY] = None
+        st.session_state[SIDECAR_OPEN_KEY] = False
+        sidecar_open = False
+    _render_drag_and_drop(
+        account_cards,
+        deal_cards,
+        selected_account_key=str(selected_key) if sidecar_open else None,
+        sidecar_open=sidecar_open,
+    )
