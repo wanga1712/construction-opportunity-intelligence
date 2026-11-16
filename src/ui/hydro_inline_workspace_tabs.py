@@ -12,53 +12,17 @@ from src.services.hydro.company_repository import (
     ACTIVITY_STATUS_LABELS,
     ACTIVITY_TYPE_LABELS,
     RECEPTION_TYPE_LABELS,
-    RECEPTION_TYPES,
-    normalize_schedule,
     schedule_text,
+)
+from src.ui.reception_schedule_editor import (
+    format_compact_schedule,
+    render_reception_schedule_editor,
+    render_reception_schedule_summary,
 )
 from src.services.waterproofing_crm import CRM_STAGES, STAGE_DEFAULT_ACTIONS, normalize_stage
 
 STATUS_FRESH = "fresh"
 STATUS_STALE = "stale"
-
-_RECEPTION_DAYS = (
-    ("mon", "Понедельник", ("mon", "monday", "пн", "понедельник")),
-    ("tue", "Вторник", ("tue", "tues", "tuesday", "вт", "вторник")),
-    ("wed", "Среда", ("wed", "wednesday", "ср", "среда")),
-    ("thu", "Четверг", ("thu", "thur", "thurs", "thursday", "чт", "четверг")),
-    ("fri", "Пятница", ("fri", "friday", "пт", "пятница")),
-    ("sat", "Суббота", ("sat", "saturday", "сб", "суббота")),
-    ("sun", "Воскресенье", ("sun", "sunday", "вс", "воскресенье")),
-)
-
-
-def _reception_schedule_editor(label: str, value: Any, key: str) -> dict[str, str]:
-    """Edit reception hours as weekday rows, separately from freeform notes."""
-    schedule = normalize_schedule(value) or {}
-    normalized = {str(day).strip().casefold(): str(hours).strip()
-                  for day, hours in schedule.items() if str(hours).strip()}
-    known_aliases = {alias for _, _, aliases in _RECEPTION_DAYS for alias in aliases}
-    result: dict[str, str] = {
-        str(day): str(hours) for day, hours in schedule.items()
-        if str(day).strip().casefold() not in known_aliases and str(hours).strip()
-    }
-    st.markdown(f"**{label}**")
-    for day_key, day_label, aliases in _RECEPTION_DAYS:
-        hours = next((normalized[alias] for alias in aliases if alias in normalized), "")
-        columns = st.columns([1, 3])
-        enabled = columns[0].checkbox(
-            day_label, value=bool(hours), key=f"{key}_{day_key}_enabled",
-        )
-        slot = columns[1].text_input(
-            "Часы" if day_key == "mon" else f"Часы · {day_label}",
-            value=hours, placeholder="09:00–18:00",
-            key=f"{key}_{day_key}_hours", disabled=not enabled,
-            label_visibility="collapsed" if day_key != "mon" else "visible",
-        )
-        if enabled and slot.strip():
-            result[day_key] = slot.strip()
-    return result
-
 
 def short_address(value: Any) -> str:
     """Keep a compact street/house label while preserving source text as help."""
@@ -138,24 +102,22 @@ def _render_contact_form(repo: Any, company: Mapping[str, Any], contact: Mapping
                 extension = f" доб. {number.get('extension')}" if number.get("extension") else ""
                 st.caption(f"Телефон {idx}: {number.get('phone') or '—'}{extension} · {number.get('label') or number.get('phone_type') or ''}")
                 _render_phone_edit(repo, cid, number, contact_id, f"contact_{contact_id}_{idx}")
-            reception_options = ["", *RECEPTION_TYPES]
-            current_reception = str(contact.get("reception_type") or "")
-            reception_type = st.selectbox(
-                "Приём этого контакта", reception_options,
-                index=reception_options.index(current_reception) if current_reception in reception_options else 0,
-                format_func=lambda key: RECEPTION_TYPE_LABELS.get(key, "Не задано") if key else "Не задано",
-                key=f"hydro_contact_reception_type_{contact_id}",
+            reception_type, reception_schedule, schedule_error, shortcut_applied = render_reception_schedule_editor(
+                f"hydro_contact_reception_{contact_id}", contact.get("reception_type"),
+                contact.get("reception_schedule"),
             )
-            reception_schedule = _reception_schedule_editor(
-                "Часы приёма по дням", contact.get("reception_schedule"),
-                f"hydro_contact_reception_schedule_{contact_id}",
-            )
-            reception_note = st.text_area(
-                "Примечание по приёму", value=str(contact.get("reception_note") or ""),
+            reception_note = st.text_input(
+                "Комментарий к приёму", value=str(contact.get("reception_note") or ""),
                 key=f"hydro_contact_reception_note_{contact_id}",
             )
             comment = st.text_area("Заметка о контакте", value=str(contact.get("comment") or ""))
-            if st.form_submit_button("Сохранить контакт"):
+            save_contact = st.form_submit_button("Сохранить контакт")
+            if shortcut_applied:
+                return
+            if save_contact:
+                if schedule_error:
+                    st.error(schedule_error)
+                    return
                 try:
                     ok = repo.update_contact(contact_id, {
                         "company_id": cid, "full_name": full_name, "role": role,
@@ -184,17 +146,18 @@ def _render_contact_add(repo: Any, company: Mapping[str, Any], contacts: list[di
             phone = left.text_input("Телефон")
             extension = right.text_input("Добавочный")
             email = st.text_input("Email")
-            reception_options = ["", *RECEPTION_TYPES]
-            reception_type = st.selectbox(
-                "Приём этого контакта", reception_options,
-                format_func=lambda key: RECEPTION_TYPE_LABELS.get(key, "Не задано") if key else "Не задано",
+            reception_type, reception_schedule, schedule_error, shortcut_applied = render_reception_schedule_editor(
+                f"hydro_contact_add_reception_{cid}", None, None,
             )
-            reception_schedule = _reception_schedule_editor(
-                "Часы приёма по дням", None, f"hydro_contact_add_schedule_{cid}",
-            )
-            reception_note = st.text_area("Примечание по приёму")
+            reception_note = st.text_input("Комментарий к приёму")
             primary = st.checkbox("Основной контакт", value=not contacts)
-            if st.form_submit_button("Добавить контакт"):
+            add_contact = st.form_submit_button("Добавить контакт")
+            if shortcut_applied:
+                return
+            if add_contact:
+                if schedule_error:
+                    st.error(schedule_error)
+                    return
                 if not full_name.strip() or not role.strip():
                     st.error("Укажите ФИО и роль.")
                 else:
@@ -250,27 +213,31 @@ def render_contacts(repo: Any, company: Mapping[str, Any], card: Mapping[str, An
     contacts = repo.list_contacts(cid)
     website = str(company.get("website") or "")
     phone = str(company.get("phone") or card.get("phone") or "")
-    reception_options = ["", *RECEPTION_TYPES]
-    current_reception = str(company.get("reception_type") or "")
-    with st.form(f"hydro_company_contacts_{cid}"):
-        website_value = st.text_input("Сайт УК", value=website, placeholder="https://…")
-        phone_value = st.text_input("Общий телефон", value=phone)
-        reception_type = st.selectbox(
-            "Приём УК", reception_options,
-            index=reception_options.index(current_reception) if current_reception in reception_options else 0,
-            format_func=lambda key: RECEPTION_TYPE_LABELS.get(key, "Не задано") if key else "Не задано",
-        )
-        reception_schedule = _reception_schedule_editor(
-            "График приёма УК", company.get("reception_schedule"),
-            f"hydro_company_reception_schedule_{cid}",
-        )
-        if st.form_submit_button("Сохранить данные УК"):
-            repo.save_params(cid, {
-                "website": website_value, "phone": phone_value,
-                "reception_type": reception_type or None,
-                "reception_schedule": reception_schedule,
-            })
-            st.rerun()
+    if phone or website:
+        st.caption(" · ".join(value for value in (phone, website) if value))
+    st.markdown("**График приёма УК**")
+    render_reception_schedule_summary(company.get("reception_type"), company.get("reception_schedule"))
+    with st.expander("Изменить данные УК", expanded=False):
+        with st.form(f"hydro_company_contacts_{cid}"):
+            website_value = st.text_input("Сайт УК", value=website, placeholder="https://…")
+            phone_value = st.text_input("Общий телефон", value=phone)
+            reception_type, reception_schedule, schedule_error, shortcut_applied = render_reception_schedule_editor(
+                f"hydro_company_reception_{cid}", company.get("reception_type"),
+                company.get("reception_schedule"),
+            )
+            save_company = st.form_submit_button("Сохранить данные УК")
+            if shortcut_applied:
+                return
+            if save_company:
+                if schedule_error:
+                    st.error(schedule_error)
+                else:
+                    repo.save_params(cid, {
+                        "website": website_value, "phone": phone_value,
+                        "reception_type": reception_type,
+                        "reception_schedule": reception_schedule,
+                    })
+                    st.rerun()
     try:
         company_phones = repo.list_company_phones(cid)
     except Exception:
@@ -297,6 +264,14 @@ def render_contacts(repo: Any, company: Mapping[str, Any], card: Mapping[str, An
             ))
         if contact.get("email"):
             st.caption(str(contact["email"]))
+        if contact.get("reception_type") or contact.get("reception_schedule"):
+            st.caption(f"Тип приёма: {RECEPTION_TYPE_LABELS.get(contact.get('reception_type'), 'Живая очередь')}")
+            for schedule_line in format_compact_schedule(
+                contact.get("reception_schedule"), contact.get("reception_type"),
+            ).splitlines():
+                st.caption(schedule_line)
+        if contact.get("reception_note"):
+            st.caption(f"Комментарий к приёму: {contact['reception_note']}")
         _render_contact_form(repo, company, contact)
     _render_contact_add(repo, company, contacts)
     _render_add_phone(repo, company, contacts)

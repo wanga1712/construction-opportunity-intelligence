@@ -12,7 +12,7 @@ import json
 from datetime import datetime, timedelta
 from typing import Any, Iterable, Mapping
 
-RECEPTION_TYPE_LABELS = {"daily": "Живая очередь", "scheduled": "По записи"}
+RECEPTION_TYPE_LABELS = {"daily": "Живая очередь", "scheduled": "По предварительной записи"}
 RECEPTION_TYPES = tuple(RECEPTION_TYPE_LABELS)
 
 STAGE_LABELS = {
@@ -87,8 +87,27 @@ def schedule_text(value: Any) -> str:
         return ""
     if isinstance(value, str):
         return value
-    parts = [f"{day}: {slot}" for day, slot in value.items() if slot and str(day).lower() not in ("_role", "role")]
+    parts = []
+    for day, slot in value.items():
+        if not slot or str(day).lower() in ("_role", "role"):
+            continue
+        if isinstance(slot, Mapping):
+            start = slot.get("from", slot.get("start"))
+            end = slot.get("to", slot.get("end"))
+            slot = f"{start}–{end}" if start and end else ""
+        if slot:
+            parts.append(f"{day}: {slot}")
     return "; ".join(parts)
+
+
+def schedule_for_storage(raw: Any):
+    """Keep the current JSONB contract while accepting canonical nested day rows."""
+    if raw is None:
+        return None
+    if isinstance(raw, Mapping):
+        return {str(key): dict(value) if isinstance(value, Mapping) else str(value)
+                for key, value in raw.items() if value not in (None, "")}
+    return normalize_schedule(raw)
 
 
 def _split_schedule_entry(chunk):
@@ -191,7 +210,7 @@ class HydroCompanyRepository:
             if key == "phone":
                 continue
             if key == "reception_schedule":
-                value = normalize_schedule(raw)
+                value = schedule_for_storage(raw)
             elif key == "reception_type":
                 value = str(raw) if str(raw) in RECEPTION_TYPES else None
             elif key == "stage":
@@ -279,8 +298,8 @@ class HydroCompanyRepository:
               values.get("phone_ext") or None, values.get("email") or None,
               is_primary, values.get("comment") or None,
               values.get("reception_type") or None,
-              (json.dumps(normalize_schedule(values.get("reception_schedule")), ensure_ascii=False)
-               if normalize_schedule(values.get("reception_schedule")) is not None else None),
+              (json.dumps(schedule_for_storage(values.get("reception_schedule")), ensure_ascii=False)
+               if schedule_for_storage(values.get("reception_schedule")) is not None else None),
               values.get("reception_note") or None))
         if not rows:
             return None
@@ -308,8 +327,8 @@ class HydroCompanyRepository:
         """, (name or None, values.get("role") or None, phone or None,
               values.get("phone_ext") or None, values.get("email") or None,
               values.get("comment") or None, is_primary, values.get("reception_type") or None,
-              (json.dumps(normalize_schedule(values.get("reception_schedule")), ensure_ascii=False)
-               if normalize_schedule(values.get("reception_schedule")) is not None else None),
+              (json.dumps(schedule_for_storage(values.get("reception_schedule")), ensure_ascii=False)
+               if schedule_for_storage(values.get("reception_schedule")) is not None else None),
               values.get("reception_note") or None, contact_id,
               values.get("company_id")))
         return bool(rows)

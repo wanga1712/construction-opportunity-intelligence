@@ -3348,7 +3348,7 @@ Python 3.13 и откат:
 - Резервная копия: `/etc/systemd/system/crm-streamlit.service.bak-20260804-python312`.
 - Восстановление: `sudo cp /etc/systemd/system/crm-streamlit.service.bak-20260804-python312 /etc/systemd/system/crm-streamlit.service`.
 - Затем: `sudo systemctl daemon-reload` и `sudo systemctl restart crm-streamlit`.
-- Проверка: `systemctl is-active crm-streamlit` и `curl -sS -o /dev/null -w '%{http_code}\n' http://127.0.0.1:8504/`; ожидается `active` и `200`.
+- Проверка: `systemctl is-active crm-streamlit` и `curl -sS -o /dev/null -w '%{http_code}\r\n' http://127.0.0.1:8504/`; ожидается `active` и `200`.
 
 ## WIP: RESTORE CANONICAL CRM DATA + REBUILD ANALYTICS V2 OVERVIEW (????????? Windows)
 
@@ -7367,3 +7367,12 @@ proven zero-match. Historical audit found 6,914 current eligible no-signal
 cards, 21 of which were recovered here and 6,893 remain in the bounded recovery
 backlog. Thirty focused tests pass; production release used atomic backups and
 rollback checks.
+
+2026-11-16 Hydro reception schedule compact editor: replaced the free-text
+schedule fields with one shared company/contact component using reception-type
+radio choices, weekday toggles, separate start/end time pickers, validation and
+a weekday quick-fill callback. Persisted values retain daily/scheduled types
+and use nested JSONB day intervals; legacy text and flat JSON are normalized,
+while unparseable data is carried under `_legacy` and shown for review. Read-only
+company/contact views compact equal ranges. Focused unit tests pass locally;
+production release and browser acceptance are pending.
