@@ -13,12 +13,51 @@ from src.services.hydro.company_repository import (
     ACTIVITY_TYPE_LABELS,
     RECEPTION_TYPE_LABELS,
     RECEPTION_TYPES,
+    normalize_schedule,
     schedule_text,
 )
 from src.services.waterproofing_crm import CRM_STAGES, STAGE_DEFAULT_ACTIONS, normalize_stage
 
 STATUS_FRESH = "fresh"
 STATUS_STALE = "stale"
+
+_RECEPTION_DAYS = (
+    ("mon", "Понедельник", ("mon", "monday", "пн", "понедельник")),
+    ("tue", "Вторник", ("tue", "tues", "tuesday", "вт", "вторник")),
+    ("wed", "Среда", ("wed", "wednesday", "ср", "среда")),
+    ("thu", "Четверг", ("thu", "thur", "thurs", "thursday", "чт", "четверг")),
+    ("fri", "Пятница", ("fri", "friday", "пт", "пятница")),
+    ("sat", "Суббота", ("sat", "saturday", "сб", "суббота")),
+    ("sun", "Воскресенье", ("sun", "sunday", "вс", "воскресенье")),
+)
+
+
+def _reception_schedule_editor(label: str, value: Any, key: str) -> dict[str, str]:
+    """Edit reception hours as weekday rows, separately from freeform notes."""
+    schedule = normalize_schedule(value) or {}
+    normalized = {str(day).strip().casefold(): str(hours).strip()
+                  for day, hours in schedule.items() if str(hours).strip()}
+    known_aliases = {alias for _, _, aliases in _RECEPTION_DAYS for alias in aliases}
+    result: dict[str, str] = {
+        str(day): str(hours) for day, hours in schedule.items()
+        if str(day).strip().casefold() not in known_aliases and str(hours).strip()
+    }
+    st.markdown(f"**{label}**")
+    for day_key, day_label, aliases in _RECEPTION_DAYS:
+        hours = next((normalized[alias] for alias in aliases if alias in normalized), "")
+        columns = st.columns([1, 3])
+        enabled = columns[0].checkbox(
+            day_label, value=bool(hours), key=f"{key}_{day_key}_enabled",
+        )
+        slot = columns[1].text_input(
+            "Часы" if day_key == "mon" else f"Часы · {day_label}",
+            value=hours, placeholder="09:00–18:00",
+            key=f"{key}_{day_key}_hours", disabled=not enabled,
+            label_visibility="collapsed" if day_key != "mon" else "visible",
+        )
+        if enabled and slot.strip():
+            result[day_key] = slot.strip()
+    return result
 
 
 def short_address(value: Any) -> str:
@@ -107,9 +146,9 @@ def _render_contact_form(repo: Any, company: Mapping[str, Any], contact: Mapping
                 format_func=lambda key: RECEPTION_TYPE_LABELS.get(key, "Не задано") if key else "Не задано",
                 key=f"hydro_contact_reception_type_{contact_id}",
             )
-            reception_schedule = st.text_area(
-                "Часы приёма по дням", value=schedule_text(contact.get("reception_schedule")),
-                key=f"hydro_contact_reception_schedule_{contact_id}",
+            reception_schedule = _reception_schedule_editor(
+                "Часы приёма по дням", contact.get("reception_schedule"),
+                f"hydro_contact_reception_schedule_{contact_id}",
             )
             reception_note = st.text_area(
                 "Примечание по приёму", value=str(contact.get("reception_note") or ""),
@@ -150,7 +189,9 @@ def _render_contact_add(repo: Any, company: Mapping[str, Any], contacts: list[di
                 "Приём этого контакта", reception_options,
                 format_func=lambda key: RECEPTION_TYPE_LABELS.get(key, "Не задано") if key else "Не задано",
             )
-            reception_schedule = st.text_area("Часы приёма по дням")
+            reception_schedule = _reception_schedule_editor(
+                "Часы приёма по дням", None, f"hydro_contact_add_schedule_{cid}",
+            )
             reception_note = st.text_area("Примечание по приёму")
             primary = st.checkbox("Основной контакт", value=not contacts)
             if st.form_submit_button("Добавить контакт"):
@@ -219,8 +260,9 @@ def render_contacts(repo: Any, company: Mapping[str, Any], card: Mapping[str, An
             index=reception_options.index(current_reception) if current_reception in reception_options else 0,
             format_func=lambda key: RECEPTION_TYPE_LABELS.get(key, "Не задано") if key else "Не задано",
         )
-        reception_schedule = st.text_area(
-            "График приёма УК", value=schedule_text(company.get("reception_schedule")),
+        reception_schedule = _reception_schedule_editor(
+            "График приёма УК", company.get("reception_schedule"),
+            f"hydro_company_reception_schedule_{cid}",
         )
         if st.form_submit_button("Сохранить данные УК"):
             repo.save_params(cid, {
