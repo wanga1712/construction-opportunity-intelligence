@@ -17,7 +17,6 @@ Review and release the matching runtime implementation for:
 
 - `src/ui/waterproofing_kanban_tab.py`
 - `src/ui/waterproofing_page.py`
-- `src/ui/hydro_cards.py`
 - `src/ui/hydro_inline_sidecar.py`
 - `src/ui/hydro_inline_workspace_tabs.py`
 - `src/services/hydro/company_repository.py`
@@ -61,8 +60,9 @@ COMMITS=NONE
 that report unknown when the last snapshot is stale/unavailable, and exposed
 key-contact reception hours in Actions. General company phone remains sourced
 from `manual_overrides.phone` with the factual Kanban card phone as fallback;
-contact rows are not required. Seven runtime files are in release scope
-including `hydro_cards.py`, which owns Kanban card/open-overlay controls.
+contact rows are not required. Six runtime files are in release scope. The
+production Kanban already selects a card and opens its inline sidecar, so the
+local-only `hydro_cards.py` change is not part of the production release.
 Compilation and the inline/call/stage focused tests passed (30 tests). The wider
 615-store and UK-CRM suites fail collection in this Windows checkout because
 `modules.crm.analytics.tender_row_utils` is absent. No production files changed.
