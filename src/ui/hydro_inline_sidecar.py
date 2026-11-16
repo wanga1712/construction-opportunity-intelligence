@@ -59,11 +59,12 @@ def _metric_summary(company: Mapping[str, Any], objects: list[dict[str, Any]], c
     return " · ".join(parts)
 
 
-def _six_fifteen_count(card: Mapping[str, Any]) -> int:
+def _six_fifteen_count(card: Mapping[str, Any]) -> int | None:
     for key in ("tenders_615_count", "history_tenders_615", "contracts_615_count"):
         try:
             if card.get(key) is not None:
-                return int(card[key])
+                value = int(card[key])
+                return value if value > 0 else None
         except (TypeError, ValueError):
             pass
     summary = card.get("tenders_615") or card.get("waterproofing_615") or {}
@@ -71,7 +72,8 @@ def _six_fifteen_count(card: Mapping[str, Any]) -> int:
         for key in ("history_tenders", "tenders", "contracts", "contracts_count"):
             try:
                 if summary.get(key) is not None:
-                    return int(summary[key])
+                value = int(summary[key])
+                return value if value > 0 else None
             except (TypeError, ValueError):
                 pass
     return 0
@@ -120,8 +122,9 @@ def render_inline_sidecar(
             return
 
         contract_count = _six_fifteen_count(card)
+        pp615_label = f"615-ПП · {contract_count}" if contract_count is not None else "615-ПП · —"
         labels = ["Контакты", f"Объекты · {int(company.get('objects_count') or len(objects))}",
-                  f"615-ПП · {contract_count}", "Действия"]
+                  pp615_label, "Действия"]
         if hasattr(st, "segmented_control"):
             selected = st.segmented_control(
                 "Рабочие разделы", labels, default=labels[0],

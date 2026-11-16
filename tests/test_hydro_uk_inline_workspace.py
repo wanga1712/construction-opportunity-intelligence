@@ -195,6 +195,11 @@ def test_general_phone_falls_back_to_card_without_contact_rows():
     assert "list_contacts" not in overlay
 
 
+def test_unknown_615_count_is_not_rendered_as_zero():
+    assert sidecar._six_fifteen_count({"tenders_615_count": 0}) is None
+    assert sidecar._six_fifteen_count({"tenders_615_count": 3}) == 3
+
+
 def test_company_phone_can_have_no_person_contact():
     source = (ROOT / "src" / "services" / "hydro" / "company_repository.py").read_text(encoding="utf-8")
     assert "add_contact_phone" in source
