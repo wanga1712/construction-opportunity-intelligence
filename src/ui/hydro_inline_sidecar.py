@@ -72,11 +72,11 @@ def _six_fifteen_count(card: Mapping[str, Any]) -> int | None:
         for key in ("history_tenders", "tenders", "contracts", "contracts_count"):
             try:
                 if summary.get(key) is not None:
-                value = int(summary[key])
-                return value if value > 0 else None
+                    value = int(summary[key])
+                    return value if value > 0 else None
             except (TypeError, ValueError):
                 pass
-    return 0
+    return None
 
 
 def render_inline_sidecar(
