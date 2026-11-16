@@ -7384,7 +7384,8 @@ acceptance remains pending because the browser access host is unavailable.
 2026-11-16 Hydro schedule interaction follow-up: removed Saturday/Sunday from
 editable and compact weekly views. Moved reception controls outside Streamlit
 forms because form buffering prevented day checkbox changes from enabling time
-pickers immediately. Company/contact basic fields and schedule now save through
+pickers immediately. Company/contact fields and schedule now save through
 separate user actions; focused persistence tests cover company schedule JSONB,
 contact create/update reception fields and notes. Thirty-eight focused Hydro
-tests pass. Production release pending.
+tests pass. Deployed in commit `857f50e`; CRM health passed. Browser access
+remains unavailable.
