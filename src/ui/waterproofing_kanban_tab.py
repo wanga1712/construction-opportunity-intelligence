@@ -1,34 +1,14 @@
-"""Waterproofing CRM board: the УК funnel and the object funnel.
-
-The unit of work changes inside this direction, so the section runs two linked
-funnels instead of one long board:
-
-* Until a concrete address exists the card is the managing company — find the УК,
-  reach the decision maker, hold the meeting, get the objects and the access.
-* Once an object exists the card is that object — survey, proposal,
-  specification, procurement, contract.
-
-One УК therefore appears on the УК board exactly once, while its objects progress
-independently on the object board. Micro-actions such as a first call or a found
-chief engineer are not columns: they live in activity, history and next action.
-"""
+"""UK kanban board — the main screen of the waterproofing CRM."""
 from __future__ import annotations
 
+from hashlib import sha1
 from typing import Any
 
 import streamlit as st
 
-from src.services.hydro_daily_sync import read_health
 from src.services.map_export import fetch_uk_object_addresses, fetch_uk_summary
 from src.services.objects_service import ObjectsService
 from src.services.waterproofing_615_store import board_615_line, read_board
-from src.services.waterproofing_board import (
-    account_columns,
-    apply_filters,
-    dashboard_kpis,
-    uk_district,
-    uk_districts,
-)
 from src.services.waterproofing_contour import (
     contour_key,
     latest_contour_state,
@@ -37,111 +17,44 @@ from src.services.waterproofing_contour import (
 )
 from src.services.waterproofing_crm import (
     CRM_STAGES,
+    normalize_stage,
+    PRIORITIES,
     STAGE_DEFAULT_ACTIONS,
     board_kpis,
     build_card,
-    normalize_stage as normalize_crm_stage,
+    kanban_columns,
     next_touch_default,
 )
-from src.services.waterproofing_deals import (
-    build_deal_card,
-    deal_columns,
-    deal_key,
-    load_deal_states,
-)
-from src.services.waterproofing_funnel import (
-    ACCOUNT_STAGES,
-    DEAL_STAGES,
-    FUNNEL_ACCOUNT,
-    FUNNEL_DEAL,
-    normalize_stage,
-)
-from src.services.waterproofing_stage_move import (
-    INVALID_FUNNEL,
-    INVALID_STAGE,
-    STALE_STAGE_MOVE,
-    move_card_stage,
-)
 from src.ui.components.hydro_drag_drop import hydro_drag_drop
-from src.ui.hydro_board import (
-    BAND_ACCOUNT,
-    BAND_DEAL,
-    render_band,
-    render_board,
-    render_kpi_strip,
-)
-from src.ui.hydro_cards import (
+from src.ui.hydro_inline_sidecar import (
     SIDECAR_OPEN_KEY,
     SIDECAR_SELECTED_KEY,
-    call_calendar_rows,
-    render_account_card,
-    render_deal_card,
+    render_inline_sidecar,
 )
-from src.ui.hydro_dom import kanban_card_key, kanban_column_key
-from src.ui.hydro_filters import render_toolbar
-from src.ui.hydro_inline_sidecar import render_inline_sidecar
 from src.ui.session_deps import get_parking_db
 
-SEARCH_ACCOUNT = ("uk_name", "uk_name_short", "uk_inn", "uk_ogrn", "uk_address")
-SEARCH_DEAL = ("name", "address", "cadastral_number", "uk_name", "uk_name_short")
-BASE_LIMIT = 50
-INTAKE_KEY = "hydro_intake_open"
-ACCOUNT_BOARD_KEY = "hydro_board_account"
-DEAL_BOARD_KEY = "hydro_board_deal"
-DRAG_EVENT_KEY = "hydro_kanban_last_drag_event"
-DRAG_NOTICE_KEY = "hydro_kanban_drag_notice"
+COLUMNS_PER_ROW = 6
+SCOPE_WORK = "УК в работе"
+SCOPE_ALL = "Все УК из базы"
+DRAG_EVENT_KEY = "hydro_remote_last_drag_event"
+DRAG_NOTICE_KEY = "hydro_remote_drag_notice"
 
 
 def _load_615(service: Any) -> dict[str, Any]:
-    """Готовый срез 615-ПП из CRM БД: связка считается раз в сутки, не в UI."""
+    """Готовый срез 615-ПП из CRM БД: связка считается раз в сутки, не в UI.
+
+    Доска не обращается к источнику торгов и не делает нечёткое сопоставление
+    на каждый rerun. Если хранилище пустое или устарело, это видно в подписи,
+    а не превращается в «0 торгов».
+    """
     return read_board(getattr(service, "crm_db", None))
-
-
-def _data_line(service: Any, snapshot: dict[str, Any]) -> str:
-    """Freshness of the daily loads. Never reports a missing load as zero."""
-    state = snapshot.get("state") or {}
-    if state.get("last_success_at"):
-        parts = [f"615-ПП: связка обновлена {str(state['last_success_at'])[:10]}"]
-    else:
-        parts = ["615-ПП: связка ещё не рассчитана"]
-    health = read_health(getattr(service, "crm_db", None))
-    if health.get("last_success_at"):
-        parts.append(
-            f"Hydro: загрузка {str(health['last_success_at'])[:10]} "
-            f"(+{int(health.get('rows_inserted') or 0)} / ~"
-            f"{int(health.get('rows_updated') or 0)})"
-        )
-    elif health.get("status"):
-        parts.append(f"Hydro: загрузка — {str(health['status']).lower()}")
-    else:
-        parts.append("Hydro: ежедневная загрузка ещё не запускалась")
-    return " · ".join(parts)
-
-
-def _account_cards(
-    states: dict[str, dict[str, Any]],
-    uk_rows: list[dict[str, Any]],
-    tenders_by_key: dict[str, Any],
-) -> list[dict[str, Any]]:
-    """Contours in work first, then every УК of the base as «Новая УК / База»."""
-    rows_by_key = {contour_key(row): row for row in uk_rows}
-    cards = [
-        build_card(rows_by_key.get(key, {}), state, tenders_615=tenders_by_key.get(key))
-        for key, state in states.items()
-    ]
-    cards += [
-        build_card(row, tenders_615=tenders_by_key.get(contour_key(row)))
-        for row in uk_rows
-        if contour_key(row) not in states
-    ]
-    return cards
 
 
 def _move_overlay_stage(card: dict[str, Any], target: str) -> dict[str, Any]:
     """Persist an inline stage move while inheriting the full contour journal row."""
     key = str(card.get("key") or "")
-    current = normalize_crm_stage(card.get("stage"))
-    actual = normalize_crm_stage(latest_contour_state(key).get("stage"))
+    current = normalize_stage(card.get("stage"))
+    actual = normalize_stage(latest_contour_state(key).get("stage"))
     if target not in CRM_STAGES:
         return {"moved": False, "reason": "INVALID_STAGE"}
     if actual != current:
@@ -156,172 +69,234 @@ def _move_overlay_stage(card: dict[str, Any], target: str) -> dict[str, Any]:
     return {"moved": True, "from_stage": current, "to_stage": target}
 
 
-def _deal_cards(
-    account_cards: list[dict[str, Any]],
-    object_rows: list[dict[str, Any]],
-    deal_states: dict[str, dict[str, Any]],
-) -> list[dict[str, Any]]:
-    """Objects enter the deal funnel once access is granted or work has started."""
-    granted = {
-        str(card.get("key") or "")
-        for card in account_cards
-        if normalize_stage(card.get("stage")) == "survey_approved"
-    }
-    cards: list[dict[str, Any]] = []
-    seen: set[str] = set()
-    for row in object_rows:
-        object_row = {
-            "object_id": row.get("object_id"),
-            "name": row.get("address_text"),
-            "address": row.get("address_text"),
-            "cadastral_number": row.get("cadastral_number"),
-            "floors_underground": row.get("floors_underground"),
-        }
-        key = deal_key(object_row)
-        if not key or key in seen:
-            continue
-        state = deal_states.get(key)
-        if state is None and contour_key(row) not in granted:
-            continue
-        seen.add(key)
-        cards.append(build_deal_card(object_row, row, state))
-    return cards
+def _render_kpis(cards: list[dict[str, Any]], snapshot: dict[str, Any] | None = None) -> None:
+    kpis = board_kpis(cards)
+    columns = st.columns(6)
+    for column, label, value in zip(columns, (
+        "УК на доске", "Объектов", "Паркингов", "Подземных этажей", "Просрочено", "Потенциал",
+    ), (
+        kpis["contours"], kpis["objects"], kpis["parkings"],
+        kpis["underground_floors"], kpis["overdue"], kpis["amount_label"],
+    )):
+        column.metric(label, value)
+    line = board_615_line(snapshot or {}, kpis)
+    if line["level"] == "warning":
+        st.warning(line["text"])
+    else:
+        st.caption(line["text"])
+    st.caption(
+        f"ГБУ «Жилищник» на доске: {kpis['municipal']} · "
+        f"с тех. контактом: {kpis['with_tech_contact']}"
+    )
+    if kpis["overdue"]:
+        st.warning(f"Просрочено касаний: {kpis['overdue']}. Начните с красных карточек.")
 
 
-def _cap_base_column(columns: list[dict[str, Any]]) -> None:
-    """Keep the «База» column usable without hiding how many УК it holds."""
-    for column in columns:
-        if column.get("stage") != FUNNEL_ACCOUNT or column.get("index") != 0:
-            continue
-        cards = column.get("cards") or []
-        if len(cards) > BASE_LIMIT:
-            column["hidden"] = len(cards) - BASE_LIMIT
-            column["cards"] = cards[:BASE_LIMIT]
+def _call_readiness(card: dict[str, Any]) -> dict[str, Any]:
+    checks = (
+        ("телефон", bool(str(card.get("phone") or "").strip())),
+        ("часы приёма", bool(str(card.get("reception_hours") or "").strip())),
+        ("ответственный", str(card.get("responsible") or "").strip() not in ("", "—")),
+        ("следующее действие", bool(str(card.get("next_action") or "").strip())),
+        ("дата касания", bool(str(card.get("next_action_date") or "").strip())),
+        ("время звонка", bool(str(card.get("next_action_time") or "").strip())),
+    )
+    missing = [label for label, present in checks if not present]
+    goal = str(
+        card.get("next_action")
+        or STAGE_DEFAULT_ACTIONS.get(str(card.get("stage") or ""), "")
+    ).strip()
+    return {"ready": not missing, "missing": missing, "goal": goal}
 
 
-def _consume_drag_event(event: dict[str, Any]) -> None:
-    """Validate and persist one structured drop event."""
+def _card_lines(card: dict[str, Any]) -> list[str]:
+    """Поля карточки УК на канбане: без ОГРН и без подсказки «следующее действие»."""
+    lines = [f"**{card.get('uk_name_short')}**"]
+    if card.get("tenders_615_count"):
+        years = card.get("tenders_615_years") or []
+        span = f"{years[0]}-{years[-1]}" if len(years) > 1 else (str(years[0]) if years else "")
+        line = f"🏗 615-ПП: {card['tenders_615_count']} торг(ов) на {card['tenders_615_amount_label']}"
+        if span:
+            line += f" ({span})"
+        if card.get("tenders_615_year_count"):
+            line += f" · в {card['tenders_615_year']}: {card['tenders_615_year_amount_label']}"
+        if card.get("tenders_615_waterproofing"):
+            line += f" · гидроизоляция: {card['tenders_615_waterproofing']}"
+        lines.append(line)
+    lines.append(f"ИНН {card.get('uk_inn')} · ☎ {card.get('phone') or '—'}")
+    if card.get("uk_address"):
+        lines.append(f"📍 {str(card['uk_address'])[:110]}")
+    lines.append(
+        f"🏢 объектов: {card.get('object_count')} · с подземными: {card.get('ge1_floors')}"
+        f" · паркингов: {card.get('parking_count')}"
+    )
+    max_floors = int(card.get("max_underground_floors") or 0)
+    floors = f"🅿 подземных этажей: {card.get('total_underground_floors')}"
+    if max_floors > 1:
+        floors += f" · максимум в одном паркинге: {max_floors}"
+    lines.append(floors)
+    lines.append(f"💰 {card.get('potential_amount_label')} · {card.get('priority_icon')} {card.get('priority')}")
+    if card.get("tech_contact"):
+        lines.append(f"✅ тех. контакт: {card.get('tech_contact_person') or 'есть'}")
+    else:
+        lines.append("⛔ тех. контакта нет")
+    reception = str(card.get("reception_hours") or "").strip()
+    lines.append(f"🕘 приём: {reception or 'не указаны'}")
+    touch = " ".join(
+        part for part in (
+            str(card.get("next_action_date") or "").strip(),
+            str(card.get("next_action_time") or "").strip(),
+        )
+        if part
+    ) or "касание не назначено"
+    if card.get("overdue"):
+        touch += f" · 🔴 просрочено {card.get('overdue_days')} дн."
+    lines.append(f"📅 {touch}")
+    lines.append(f"👤 {card.get('responsible')} · 🏷 {card.get('stage')}")
+    readiness = _call_readiness(card)
+    if readiness["ready"]:
+        lines.append(f"✅ К звонку готово · 🎯 {readiness['goal']}")
+    else:
+        lines.append(f"⚠️ Заполнить перед звонком: {', '.join(readiness['missing'])}")
+        if readiness["goal"]:
+            lines.append(f"🎯 Цель звонка: {readiness['goal']}")
+    return lines
+
+
+def _card_dom_key(card_key: Any) -> str:
+    digest = sha1(str(card_key or "").encode("utf-8")).hexdigest()[:16]
+    return f"hydro_remote_card_{digest}"
+
+
+def _column_dom_key(index: int) -> str:
+    return f"hydro_remote_column_{int(index)}"
+
+
+def _render_card(card: dict[str, Any]) -> None:
+    key = str(card.get("key") or "")
+    with st.container(key=_card_dom_key(key)):
+        if st.button(
+            "  \n".join(_card_lines(card)),
+            key=f"hydro_select_account_{key}",
+            use_container_width=True,
+            type="secondary",
+        ):
+            st.session_state[SIDECAR_SELECTED_KEY] = key
+            st.session_state[SIDECAR_OPEN_KEY] = True
+            st.rerun()
+        st.markdown(
+            '<span class="hydro-drag-handle" draggable="true" '
+            'title="Перетащить карточку" aria-label="Перетащить карточку">⠿</span>',
+            unsafe_allow_html=True,
+        )
+
+
+def _render_column(column: dict[str, Any]) -> None:
+    with st.container(border=True, key=_column_dom_key(column["index"])):
+        st.markdown(f"**{column['index'] + 1}. {column['stage']}**")
+        st.caption(f"{column['count']} УК · {column['amount_label']}")
+        if not column["cards"]:
+            st.caption("— пусто —")
+        for card in column["cards"]:
+            _render_card(card)
+
+
+def _consume_drag_event(event: dict[str, Any], cards: list[dict[str, Any]]) -> None:
+    """Persist one validated S13 board drop into the existing contour journal."""
     if event.get("type") != "hydro_stage_move":
         return
     event_id = str(event.get("event_id") or "")
     if not event_id or event_id == st.session_state.get(DRAG_EVENT_KEY):
         return
-    result = move_card_stage(
-        card_key=str(event.get("card_key") or ""),
-        funnel=str(event.get("funnel") or ""),
-        from_stage=str(event.get("from_stage") or ""),
-        to_stage=str(event.get("to_stage") or ""),
-    )
-    st.session_state[DRAG_EVENT_KEY] = event_id
-    reason = str(result.get("reason") or "")
-    if reason == STALE_STAGE_MOVE:
+    card_key = str(event.get("card_key") or "")
+    funnel = str(event.get("funnel") or "")
+    from_stage = str(event.get("from_stage") or "")
+    to_stage = str(event.get("to_stage") or "")
+    card = next((row for row in cards if str(row.get("key") or "") == card_key), None)
+    if funnel != "account" or card is None or from_stage not in CRM_STAGES or to_stage not in CRM_STAGES:
+        st.session_state[DRAG_NOTICE_KEY] = "Перемещение отклонено: неверная воронка или этап."
+        st.session_state[DRAG_EVENT_KEY] = event_id
+        st.rerun()
+    actual_stage = str(latest_contour_state(card_key).get("stage") or CRM_STAGES[0])
+    if actual_stage != from_stage:
         st.session_state[DRAG_NOTICE_KEY] = (
             "Этап уже был изменён в другой вкладке. Доска обновлена без перезаписи."
         )
-    elif reason in (INVALID_FUNNEL, INVALID_STAGE):
-        st.session_state[DRAG_NOTICE_KEY] = (
-            "Перемещение отклонено: этап не относится к этой воронке."
-        )
+        st.session_state[DRAG_EVENT_KEY] = event_id
+        st.rerun()
+    if from_stage != to_stage:
+        merge_contour_state(card_key, {
+            "uk_name": card.get("uk_name") or "",
+            "uk_inn": card.get("uk_inn") or "",
+            "uk_ogrn": card.get("uk_ogrn") or "",
+            "uk_phone": card.get("uk_phone") or "",
+            "uk_address": card.get("uk_address") or "",
+            "object_count": int(card.get("object_count") or 0),
+            "parking_count": int(card.get("parking_count") or 0),
+            "total_underground_floors": int(card.get("total_underground_floors") or 0),
+            "max_underground_floors": int(card.get("max_underground_floors") or 0),
+            "ge1_floors": int(card.get("ge1_floors") or 0),
+            "ge2_floors": int(card.get("ge2_floors") or 0),
+            "stage": to_stage,
+            "next_action": STAGE_DEFAULT_ACTIONS[to_stage],
+            "next_action_date": next_touch_default(to_stage),
+        })
+    st.session_state[DRAG_EVENT_KEY] = event_id
     st.rerun()
 
 
 def _render_drag_and_drop(
-    account_cards: list[dict[str, Any]],
-    deal_cards: list[dict[str, Any]],
-    *,
-    selected_account_key: str | None = None,
-    sidecar_open: bool = False,
+    cards: list[dict[str, Any]], columns: list[dict[str, Any]], *,
+    selected_account_key: str | None = None, sidecar_open: bool = False,
 ) -> None:
-    """Attach one drag-drop bridge to both rendered funnels."""
-    cards = [
-        {
-            "dom_key": kanban_card_key(funnel, card.get("key")),
+    selected_dom_key = _card_dom_key(selected_account_key) if selected_account_key else None
+    event = hydro_drag_drop(
+        cards=[{
+            "dom_key": _card_dom_key(card.get("key")),
             "card_key": str(card.get("key") or ""),
             "stage": str(card.get("stage") or ""),
-            "funnel": funnel,
-            "open_sidecar": funnel == FUNNEL_ACCOUNT,
-        }
-        for funnel, rows in (
-            (FUNNEL_ACCOUNT, account_cards),
-            (FUNNEL_DEAL, deal_cards),
-        )
-        for card in rows
-    ]
-    columns = [
-        {
-            "dom_key": kanban_column_key(board_key, stage.id),
-            "stage": stage.id,
-            "funnel": funnel,
-        }
-        for funnel, board_key, stages in (
-            (FUNNEL_ACCOUNT, ACCOUNT_BOARD_KEY, ACCOUNT_STAGES),
-            (FUNNEL_DEAL, DEAL_BOARD_KEY, DEAL_STAGES),
-        )
-        for stage in stages
-    ]
-    selected_dom_key = None
-    if selected_account_key:
-        selected_dom_key = kanban_card_key("account", selected_account_key)
-    event = hydro_drag_drop(
-        cards=cards,
-        columns=columns,
-        key="hydro_kanban_drag",
+            "funnel": "account",
+            "open_sidecar": True,
+        } for card in cards],
+        columns=[{
+            "dom_key": _column_dom_key(column["index"]),
+            "stage": str(column["stage"]),
+            "funnel": "account",
+        } for column in columns],
+        key="hydro_remote_drag",
         selected_account_dom_key=selected_dom_key,
         sidecar_open=sidecar_open,
     )
     if isinstance(event, dict):
-        _consume_drag_event(event)
+        _consume_drag_event(event, cards)
 
 
-def _render_call_calendar(cards: list[dict[str, Any]]) -> None:
-    """Agenda view; equal time slots remain separate rows for each UK."""
-    rows = call_calendar_rows(cards)
-    with st.expander(f"📅 Календарь звонков ({len(rows)})"):
-        if not rows:
-            st.caption("Звонки не запланированы: заполните дату и время касания в карточке УК.")
-            return
-        st.dataframe(
-            rows,
-            use_container_width=True,
-            hide_index=True,
-            column_config={
-                "Дата": st.column_config.TextColumn("Дата", width="small"),
-                "Время": st.column_config.TextColumn("Время", width="small"),
-                "УК": st.column_config.TextColumn("УК", width="large"),
-                "Цель звонка": st.column_config.TextColumn("Цель звонка", width="large"),
-                "Часы приёма": st.column_config.TextColumn("Часы приёма", width="medium"),
-            },
-        )
-        st.caption("Одинаковое время у разных УК показывается отдельными строками.")
-
-
-def _render_actions(service: Any, snapshot: dict[str, Any]) -> None:
-    """Header action row: data freshness on the left, the two actions on the right."""
-    left, add, refresh = st.columns([4, 1, 1], vertical_alignment="bottom")
-    with left:
-        st.caption(_data_line(service, snapshot))
-    with add:
-        if st.button("+ Добавить УК", key="hydro_add_uk", use_container_width=True):
-            st.session_state[INTAKE_KEY] = True
-            st.rerun()
-    with refresh:
-        if st.button("Обновить", key="hydro_refresh", use_container_width=True):
-            st.cache_data.clear()
-            st.rerun()
+def _render_board(
+    cards: list[dict[str, Any]], all_cards: list[dict[str, Any]], *,
+    selected_account_key: str | None = None, sidecar_open: bool = False,
+) -> None:
+    columns = kanban_columns(cards)
+    for start in range(0, len(columns), COLUMNS_PER_ROW):
+        row = columns[start:start + COLUMNS_PER_ROW]
+        for column, cell in zip(st.columns(len(row)), row):
+            with column:
+                _render_column(cell)
+    _render_drag_and_drop(
+        all_cards, columns,
+        selected_account_key=selected_account_key,
+        sidecar_open=sidecar_open,
+    )
 
 
 def _render_intake(uk_rows: list[dict[str, Any]], states: dict[str, dict[str, Any]]) -> None:
-    """Take an УК from the source base into work without leaving the board."""
     free_rows = [row for row in uk_rows if contour_key(row) not in states]
-    with st.expander(f"Добавить УК из базы в работу ({len(free_rows)})", key=INTAKE_KEY):
+    with st.expander(f"➕ Взять УК из базы в работу ({len(free_rows)})"):
         if not free_rows:
             st.caption("Все УК из выбранного среза уже взяты в работу.")
             return
-        responsible = st.text_input("Ответственный для новых УК", key="hydro_intake_responsible")
+        responsible = st.text_input("Ответственный для новых контуров", key="hydro_intake_responsible")
         stage = CRM_STAGES[0]
-        ordered = sorted(
-            free_rows, key=lambda row: int(row.get("total_underground_floors") or 0), reverse=True
-        )
+        ordered = sorted(free_rows, key=lambda r: int(r.get("total_underground_floors") or 0), reverse=True)
         for row in ordered[:20]:
             key = contour_key(row)
             left, right = st.columns([4, 1])
@@ -346,88 +321,145 @@ def _render_intake(uk_rows: list[dict[str, Any]], states: dict[str, dict[str, An
                     "next_action_date": next_touch_default(stage),
                     "responsible": responsible,
                 })
-                st.session_state[INTAKE_KEY] = False
                 st.success(f"{row.get('uk_name')} добавлена в воронку.")
                 st.rerun()
 
 
+def _render_filters(cards: list[dict[str, Any]], *, db_ok: bool, has_work: bool) -> dict[str, Any]:
+    c1, c2, c3, c4 = st.columns([1, 1, 2, 1])
+    with c1:
+        min_floors = st.selectbox(
+            "Подземные этажи", [1, 2, 3, 0], index=0,
+            format_func=lambda value: "Любые" if value == 0 else f"≥ {value}",
+            key="hydro_board_min_floors",
+        )
+    with c2:
+        priority = st.selectbox("Приоритет", ("Все",) + PRIORITIES, index=0, key="hydro_board_priority")
+    with c3:
+        query = st.text_input("Поиск УК / ИНН / адрес", key="hydro_board_query").strip().lower()
+    with c4:
+        only_overdue = st.toggle("Только просрочка", key="hydro_board_overdue")
+    scope_options = [SCOPE_WORK, SCOPE_ALL] if db_ok else [SCOPE_WORK]
+    if db_ok and not has_work and "hydro_board_scope" not in st.session_state:
+        st.session_state["hydro_board_scope"] = SCOPE_ALL
+    scope = st.radio("Срез доски", scope_options, horizontal=True, key="hydro_board_scope")
+    left, right = st.columns([2, 1])
+    with left:
+        responsibles = sorted({str(card.get("responsible")) for card in cards if card.get("responsible") != "—"})
+        responsible = st.selectbox(
+            "Ответственный", ("Все",) + tuple(responsibles), index=0, key="hydro_board_responsible"
+        )
+    with right:
+        municipal_only = st.toggle("Только ГБУ «Жилищник»", key="hydro_board_municipal")
+    return {
+        "min_floors": min_floors, "priority": priority, "query": query, "only_overdue": only_overdue,
+        "scope": scope, "responsible": responsible, "municipal_only": municipal_only,
+    }
+
+
+def _apply_filters(cards: list[dict[str, Any]], filters: dict[str, Any]) -> list[dict[str, Any]]:
+    result = cards
+    if filters["scope"] == SCOPE_WORK:
+        result = [card for card in result if card.get("in_work")]
+    if filters["municipal_only"]:
+        result = [card for card in result if card.get("municipal")]
+    if filters["min_floors"] >= 1:
+        result = [card for card in result if int(card.get("ge1_floors") or 0) >= filters["min_floors"]]
+    if filters["priority"] != "Все":
+        result = [card for card in result if card.get("priority") == filters["priority"]]
+    if filters["responsible"] != "Все":
+        result = [card for card in result if card.get("responsible") == filters["responsible"]]
+    if filters["only_overdue"]:
+        result = [card for card in result if card.get("overdue")]
+    if filters["query"]:
+        result = [
+            card for card in result
+            if filters["query"] in " ".join(
+                str(card.get(field) or "").lower()
+                for field in ("uk_name", "uk_name_short", "uk_inn", "uk_ogrn", "uk_address")
+            )
+        ]
+    return result
+
+
+def _call_calendar_rows(cards: list[dict[str, Any]]) -> list[dict[str, str]]:
+    rows = [
+        {
+            "Дата": str(card.get("next_action_date") or ""),
+            "Время": str(card.get("next_action_time") or ""),
+            "УК": str(card.get("uk_name_short") or card.get("uk_name") or ""),
+            "Ответственный": str(card.get("responsible") or "—"),
+            "Телефон": str(card.get("phone") or ""),
+            "Цель звонка": str(card.get("next_action") or ""),
+            "Часы приёма": str(card.get("reception_hours") or ""),
+            "Этап": str(card.get("stage") or ""),
+        }
+        for card in cards
+        if card.get("next_action_date") or card.get("next_action_time")
+    ]
+    return sorted(rows, key=lambda row: (row["Дата"] or "9999-12-31", row["Время"] or "99:99", row["УК"]))
+
+
+def _render_call_calendar(cards: list[dict[str, Any]]) -> None:
+    rows = _call_calendar_rows(cards)
+    with st.expander(f"📅 Календарь звонков ({len(rows)})"):
+        if not rows:
+            st.caption("Звонки не запланированы: заполните дату и время касания в карточке УК.")
+            return
+        st.dataframe(rows, use_container_width=True, hide_index=True)
+        st.caption("Одинаковое время у разных УК показывается отдельными строками.")
+
+
 def render_kanban_tab(service: ObjectsService) -> None:
-    """Render the two linked boards of the waterproofing CRM."""
+    """Render the UK funnel board — the main waterproofing CRM screen."""
+    st.caption(
+        "С какими УК мы работаем, где они в воронке и что делать следующим шагом. "
+        "Объекты вложены в карточку УК. Карта объектов — вторичный экран."
+    )
     parking_db = get_parking_db()
     db_ok = bool(parking_db.connect())
     if not db_ok:
-        st.warning(
-            f"База объектов недоступна ({parking_db.last_error}); "
-            "показаны только УК, взятые в работу."
-        )
-    snapshot_615 = _load_615(service)
-    tenders_by_key = dict(snapshot_615.get("uk") or {})
+        st.warning(f"База объектов недоступна ({parking_db.last_error}); показаны только контуры в работе.")
     states = load_contour_states()
     uk_rows = fetch_uk_summary(parking_db, min_floors=1) if db_ok else []
-    account_cards = _account_cards(states, uk_rows, tenders_by_key)
+    snapshot_615 = _load_615(service)
+    tenders_by_key = dict(snapshot_615.get("uk") or {})
+    rows_by_key = {contour_key(row): row for row in uk_rows}
+    cards = [
+        build_card(rows_by_key.get(key, {}), state, tenders_615=tenders_by_key.get(key))
+        for key, state in states.items()
+    ]
+    cards += [
+        build_card(row, tenders_615=tenders_by_key.get(contour_key(row)))
+        for row in uk_rows if contour_key(row) not in states
+    ]
+    for card in cards:
+        state = states.get(str(card.get("key") or ""), {})
+        card["next_action_time"] = str(state.get("next_action_time") or "")
+        card["reception_hours"] = str(state.get("reception_hours") or "")
 
-    object_rows = fetch_uk_object_addresses(parking_db, min_floors=0) if db_ok else []
-    deal_cards = _deal_cards(account_cards, object_rows, load_deal_states())
-
-    _render_actions(service, snapshot_615)
-    render_kpi_strip(dashboard_kpis(account_cards, deal_cards))
-    all_kpis = board_kpis(account_cards)
-    line = board_615_line(snapshot_615, all_kpis)
-    if line["level"] == "warning":
-        st.warning(line["text"])
-    else:
-        st.caption(line["text"])
-    st.caption(
-        f"ГБУ «Жилищник» на доске: {all_kpis['municipal']} · "
-        f"с тех. контактом: {all_kpis['with_tech_contact']}"
-    )
-
-    filters = render_toolbar(
-        districts=sorted({*uk_districts(account_cards), *uk_districts(deal_cards)}),
-        managers=sorted({
-            str(card.get("responsible"))
-            for card in [*account_cards, *deal_cards]
-            if card.get("responsible") not in (None, "", "—")
-        }),
-    )
-    visible_accounts = apply_filters(
-        account_cards,
-        filters,
-        district_of=uk_district,
-        active_of=lambda card: int(card.get("object_count") or 0) > 0,
-        search_fields=SEARCH_ACCOUNT,
-    )
-    visible_deals = apply_filters(
-        deal_cards,
-        filters,
-        district_of=uk_district,
-        active_of=lambda card: bool(card.get("in_work")),
-        search_fields=SEARCH_DEAL,
-    )
-
+    filters = _render_filters(cards, db_ok=db_ok, has_work=bool(states))
+    visible = _apply_filters(cards, filters)
+    if filters["scope"] == SCOPE_ALL:
+        limit = st.selectbox("Показать УК", [50, 100, 200, 500], index=1, key="hydro_board_limit")
+        visible = sorted(
+            visible, key=lambda card: int(card.get("total_underground_floors") or 0), reverse=True
+        )[:int(limit)]
+    _render_kpis(visible, snapshot_615)
     if db_ok:
         _render_intake(uk_rows, states)
-
     drag_notice = st.session_state.pop(DRAG_NOTICE_KEY, None)
     if drag_notice:
         st.warning(str(drag_notice))
+    if not visible:
+        st.info("На выбранном срезе нет УК. Возьмите контур в работу из блока выше.")
+        return
     st.caption("Перетащите карточку в колонку нужного этапа.")
-    _render_call_calendar(visible_accounts)
-    account_columns_rows = account_columns(visible_accounts)
-    _cap_base_column(account_columns_rows)
-    render_band(*BAND_ACCOUNT)
-    render_board(account_columns_rows, render_account_card, key=ACCOUNT_BOARD_KEY)
-
-    st.caption(
-        "Объекты без адреса или координат в воронку объектов не попадают: "
-        "их нельзя ни обследовать, ни сопоставить с торгами."
-    )
-    render_band(*BAND_DEAL)
-    render_board(deal_columns(visible_deals), render_deal_card, key=DEAL_BOARD_KEY)
+    _render_call_calendar(visible)
     selected_key = st.session_state.get(SIDECAR_SELECTED_KEY)
     sidecar_open = bool(st.session_state.get(SIDECAR_OPEN_KEY) and selected_key)
     selected_card = next(
-        (card for card in visible_accounts if str(card.get("key") or "") == str(selected_key or "")),
+        (card for card in visible if str(card.get("key") or "") == str(selected_key or "")),
         None,
     )
     if sidecar_open and selected_card:
@@ -441,9 +473,9 @@ def render_kanban_tab(service: ObjectsService) -> None:
         st.session_state[SIDECAR_SELECTED_KEY] = None
         st.session_state[SIDECAR_OPEN_KEY] = False
         sidecar_open = False
-    _render_drag_and_drop(
-        account_cards,
-        deal_cards,
+    _render_board(
+        visible,
+        cards,
         selected_account_key=str(selected_key) if sidecar_open else None,
         sidecar_open=sidecar_open,
     )
