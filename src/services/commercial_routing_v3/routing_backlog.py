@@ -11,6 +11,7 @@ from typing import Any, Dict, List, Optional
 from src.services.commercial_routing_v3.routing_eligibility import (
     LANE_ACTIVE_OPEN,
     LANE_AWARDED_ADMITTED,
+    LANE_REVIEW_DISCOVERY,
 )
 
 CHANGED_REASONS = frozenset({"FINGERPRINT_CHANGED", "REASSESSMENT_REQUESTED"})
@@ -40,6 +41,9 @@ def classify_eligible_backlog(candidates: List[Dict[str, Any]]) -> Dict[str, Any
     active = [c for c in candidates if c.get("routing_lane") == LANE_ACTIVE_OPEN]
     awarded = [c for c in candidates if c.get("routing_lane") == LANE_AWARDED_ADMITTED]
     # REVIEW_DISCOVERY is not part of 70/30 capacity; count separately if present
+    discovery = [
+        c for c in candidates if c.get("routing_lane") == LANE_REVIEW_DISCOVERY
+    ]
     other = [
         c
         for c in candidates
@@ -74,8 +78,10 @@ def classify_eligible_backlog(candidates: List[Dict[str, Any]]) -> Dict[str, Any
         "ELIGIBLE_AWARDED_CATCHUP": w["CATCHUP"],
         "ACTIVE_BACKLOG": a["TOTAL"],
         "AWARDED_BACKLOG": w["TOTAL"],
+        "REVIEW_DISCOVERY": len(discovery),
         "OTHER_SELECTABLE_LANES": len(other),
-        "TOTAL_ROUTING_ELIGIBLE_BACKLOG": a["TOTAL"] + w["TOTAL"],
+        "LIVE_ROUTING_ELIGIBLE_BACKLOG": a["TOTAL"] + w["TOTAL"],
+        "TOTAL_ROUTING_ELIGIBLE_BACKLOG": a["TOTAL"] + w["TOTAL"] + len(other),
         "reason_counts": dict(Counter(c.get("eligibility_reason") for c in candidates)),
         "lane_counts": dict(Counter(c.get("routing_lane") for c in candidates)),
     }

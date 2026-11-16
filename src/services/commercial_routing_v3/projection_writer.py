@@ -83,12 +83,18 @@ _SOURCE_PULLS: Tuple[Tuple[str, str, SourceStage], ...] = (
     ("reestr_contract_223_fz_commission_work", "placer", SourceStage.WAITING_SOURCE_OUTCOME),
     ("reestr_contract_44_fz_awarded", "customer", SourceStage.AWARDED),
     ("reestr_contract_223_fz_awarded", "placer", SourceStage.AWARDED),
+    ("reestr_contract_44_fz_completed", "customer", SourceStage.TERMINAL),
+    ("reestr_contract_44_fz_unclear", "customer", SourceStage.TERMINAL),
+    ("reestr_contract_44_fz_unknown", "customer", SourceStage.TERMINAL),
+    ("reestr_contract_223_fz_completed", "placer", SourceStage.TERMINAL),
+    ("reestr_contract_223_fz_unclear", "placer", SourceStage.TERMINAL),
 )
 
 _STAGE_CRM = {
     SourceStage.OPEN: ("torgi", "submission_open"),
     SourceStage.WAITING_SOURCE_OUTCOME: ("commission", "commission"),
     SourceStage.AWARDED: ("razygranye", "awarded"),
+    SourceStage.TERMINAL: ("commission", "terminal_no_result"),
 }
 
 
@@ -179,6 +185,10 @@ def _crm_stage_for(source_table: str, end_date: Any, stage: Optional[SourceStage
     """ONE canonical temporal lifecycle → crm_stage/award_status."""
     table = str(source_table or "")
     # Physical awarded/commission still win via normalizer; end_date drives open→waiting.
+    if stage is None:
+        stage = stage_from_source_table(table)
+    if stage == SourceStage.TERMINAL:
+        return _STAGE_CRM[SourceStage.TERMINAL]
     if stage == SourceStage.AWARDED or "awarded" in table.lower():
         seed_stage, seed_status = "razygranye", "awarded"
     elif stage == SourceStage.WAITING_SOURCE_OUTCOME or "commission" in table.lower():
@@ -426,8 +436,23 @@ def _pull_source_rows(
     crm_ids, cn44, cn223 = _load_crm_identity_sets(crm_db)
     out: List[Dict[str, Any]] = []
 
+    columns_cache: Dict[str, set] = {}
+
+    def _table_columns(table_name: str) -> set:
+        if table_name not in columns_cache:
+            rows = _tender_dicts(
+                tender_db,
+                "SELECT column_name FROM information_schema.columns "
+                "WHERE table_name = %(table)s",
+                {"table": table_name},
+            ) or []
+            columns_cache[table_name] = {
+                str(row.get("column_name") or "") for row in rows
+            }
+        return columns_cache[table_name]
+
     for table, cust_col, stage in _SOURCE_PULLS:
-        if stage != SourceStage.AWARDED:
+        if stage not in (SourceStage.AWARDED, SourceStage.TERMINAL):
             # Incremental open pull: only rows changed since the previous
             # successful cycle (WIP=S7-S13-LIFECYCLE-SYNC-1 section 5).
             wm_clause = "WHERE c.updated_at > %(owm)s" if open_watermark is not None else ""
@@ -476,6 +501,31 @@ def _pull_source_rows(
         is_223 = "223" in table
         cn_list = list(cn223 if is_223 else cn44) or ["__none__"]
         id_list = list(crm_ids) or [-1]
+        table_columns = _table_columns(table)
+        updated_expr = (
+            "c.updated_at" if "updated_at" in table_columns else "NULL::timestamptz"
+        )
+        created_expr = (
+            "c.created_at" if "created_at" in table_columns else "NULL::timestamptz"
+        )
+        if stage == SourceStage.TERMINAL:
+            sql = f"""
+                SELECT
+                    c.id AS source_id, c.contract_number, c.auction_name,
+                    c.initial_price, c.final_price, c.{cust_col} AS customer,
+                    c.start_date, c.end_date, c.delivery_start_date, c.delivery_end_date,
+                    c.tender_link, {updated_expr} AS source_updated_at,
+                    {created_expr} AS source_created_at,
+                    c.customer_id AS source_customer_id,
+                    {_REGION_SELECT}, {_OKPD_SELECT}
+                FROM {table} c {_OKPD_JOIN} {_REGION_JOIN}
+                WHERE {updated_expr} > %(wm)s
+            """
+            rows = _tender_dicts(tender_db, sql, {"wm": awarded_watermark}) or []
+            for row in rows:
+                row["source_table"] = table
+                out.append(row)
+            continue
         sql = f"""
             SELECT
                 c.id AS source_id,
@@ -489,8 +539,8 @@ def _pull_source_rows(
                 c.delivery_start_date,
                 c.delivery_end_date,
                 c.tender_link,
-                c.updated_at AS source_updated_at,
-                c.created_at AS source_created_at,
+                {updated_expr} AS source_updated_at,
+                {created_expr} AS source_created_at,
                 c.customer_id AS source_customer_id,
                 {_REGION_SELECT},
                 {_OKPD_SELECT},
@@ -498,7 +548,7 @@ def _pull_source_rows(
                 CASE
                   WHEN NULLIF(btrim(c.contract_number),'') = ANY(%(cns)s)
                     OR c.id = ANY(%(ids)s) THEN 'EXISTING'
-                  WHEN c.updated_at > %(wm)s THEN 'INCREMENTAL'
+                  WHEN {updated_expr} > %(wm)s THEN 'INCREMENTAL'
                   ELSE 'HISTORY'
                 END AS award_bucket
             FROM {table} c
@@ -524,12 +574,34 @@ def _pull_source_rows(
     return out, result
 
 
+def _factual_completeness(row: Dict[str, Any]) -> Tuple:
+    """Deterministic factual-completeness score; never synthesises a merge."""
+    try:
+        price = float(row.get("initial_price") or 0)
+    except (TypeError, ValueError):
+        price = 0.0
+    return (
+        1 if str(row.get("contract_number") or "").strip() else 0,
+        1 if row.get("start_date") else 0,
+        1 if row.get("end_date") else 0,
+        1 if price > 0 else 0,
+        1 if str(row.get("auction_name") or "").strip() else 0,
+        1 if str(row.get("okpd_code") or "").strip() else 0,
+        1 if (row.get("customer") or row.get("source_customer_id")) else 0,
+    )
+
+
 def _dedupe_by_lifecycle(rows: Sequence[Dict[str, Any]]) -> List[Dict[str, Any]]:
-    """Keep highest stage per lifecycle key (AWARDED > WAITING > OPEN)."""
+    """Keep one deterministic factual row per lifecycle key.
+
+    Lifecycle precedence is TERMINAL > AWARDED > WAITING > OPEN. Same-stage
+    duplicates prefer the most complete row, then the highest source id.
+    """
     rank = {
         SourceStage.OPEN: 1,
         SourceStage.WAITING_SOURCE_OUTCOME: 2,
         SourceStage.AWARDED: 3,
+        SourceStage.TERMINAL: 4,
     }
     best: Dict[Tuple, Dict[str, Any]] = {}
     for row in rows:
@@ -544,9 +616,74 @@ def _dedupe_by_lifecycle(rows: Sequence[Dict[str, Any]]) -> List[Dict[str, Any]]
             best[ident.key()] = row
             continue
         prev_stage = stage_from_source_table(str(prev.get("source_table") or ""))
-        if rank[stage] >= rank[prev_stage]:
+        if rank[stage] > rank[prev_stage]:
             best[ident.key()] = row
+        elif rank[stage] == rank[prev_stage]:
+            if _factual_completeness(row) > _factual_completeness(prev):
+                best[ident.key()] = row
+            elif (
+                _factual_completeness(row) == _factual_completeness(prev)
+                and int(row.get("source_id") or 0) > int(prev.get("source_id") or 0)
+            ):
+                best[ident.key()] = row
     return list(best.values())
+
+
+_LIFECYCLE_RANK = {
+    SourceStage.OPEN: 1,
+    SourceStage.WAITING_SOURCE_OUTCOME: 2,
+    SourceStage.AWARDED: 3,
+    SourceStage.TERMINAL: 4,
+}
+
+
+def _existing_lifecycle_rank(existing: Optional[Dict[str, Any]]) -> int:
+    if not existing:
+        return 0
+    if str(existing.get("crm_stage") or "").lower() == "manual_hold":
+        return 99
+    stage = stage_from_source_table(str(existing.get("source_table") or ""))
+    stage_rank = _LIFECYCLE_RANK[stage]
+    crm_rank = {
+        "torgi": _LIFECYCLE_RANK[SourceStage.OPEN],
+        "commission": _LIFECYCLE_RANK[SourceStage.WAITING_SOURCE_OUTCOME],
+        "razygranye": _LIFECYCLE_RANK[SourceStage.AWARDED],
+    }.get(str(existing.get("crm_stage") or "").lower(), 0)
+    return max(stage_rank, crm_rank)
+
+
+def _crm_procurement_columns(crm_db) -> Optional[set]:
+    """Return CRM columns when the DB wrapper supports schema introspection."""
+    cache_key = "_projection_crm_procurement_columns"
+    cached = getattr(crm_db, cache_key, None)
+    if cached is not None:
+        return cached
+    execute_query = getattr(crm_db, "execute_query", None)
+    if not callable(execute_query):
+        return None
+    rows = execute_query(
+        "SELECT column_name FROM information_schema.columns "
+        "WHERE table_schema = current_schema() AND table_name = %s",
+        ("crm_procurements",),
+    ) or []
+    columns = {str(row.get("column_name") or "") for row in rows}
+    try:
+        setattr(crm_db, cache_key, columns)
+    except (AttributeError, TypeError):
+        pass
+    return columns
+
+
+def _has_optional_crm_column(crm_db, column_name: str) -> bool:
+    columns = _crm_procurement_columns(crm_db)
+    return columns is None or column_name in columns
+
+
+def _is_schema_error(exc: Exception) -> bool:
+    sqlstate = getattr(getattr(exc, "diag", None), "sqlstate", None)
+    return isinstance(sqlstate, str) and (
+        sqlstate.startswith("42") or sqlstate == "3F000"
+    )
 
 
 def _upsert_one(crm_db, row: Dict[str, Any], existing: Optional[Dict[str, Any]], dry_run: bool) -> str:
@@ -601,6 +738,8 @@ def _upsert_one(crm_db, row: Dict[str, Any], existing: Optional[Dict[str, Any]],
     stage = stage_from_source_table(str(row.get("source_table") or ""))
     crm_stage, award_status = _crm_stage_for(str(row.get("source_table") or ""), effective_end, stage)
     cn = normalize_contract_number(row.get("contract_number")) or ""
+    if _existing_lifecycle_rank(existing) > _LIFECYCLE_RANK[stage]:
+        return "skipped_lifecycle_downgrade"
     title = (str(row.get("auction_name")).strip() if row.get("auction_name") is not None else "") or ""
     okpd_code = row.get("okpd_code")
     if okpd_code is not None:
@@ -651,6 +790,15 @@ def _upsert_one(crm_db, row: Dict[str, Any], existing: Optional[Dict[str, Any]],
         payload["source_awarded_table"] = row.get("source_table")
         payload["source_awarded_id"] = int(row["source_id"])
 
+    has_deadline_trust = _has_optional_crm_column(crm_db, "deadline_trust")
+    deadline_column_sql = ",\n                    deadline_trust" if has_deadline_trust else ""
+    deadline_value_sql = ",\n                    %(deadline_trust)s" if has_deadline_trust else ""
+    deadline_assignment_sql = (
+        "deadline_trust = %(deadline_trust)s,\n                "
+        if has_deadline_trust
+        else ""
+    )
+
     if dry_run:
         if existing is None:
             return "insert"
@@ -662,7 +810,7 @@ def _upsert_one(crm_db, row: Dict[str, Any], existing: Optional[Dict[str, Any]],
     try:
         if existing is None:
             crm_db.execute_update(
-                """
+                f"""
                 INSERT INTO crm_procurements (
                     source_table, source_id, contract_number, auction_name,
                     initial_price, final_price, customer, delivery_region, region_id,
@@ -671,8 +819,7 @@ def _upsert_one(crm_db, row: Dict[str, Any], existing: Optional[Dict[str, Any]],
                     tender_link, source_updated_at,
                     crm_stage, award_status, qualification_state, ai_assessment_status,
                     source_awarded_table, source_awarded_id,
-                    winner_name, winner_inn, final_contract_price,
-                    deadline_trust
+                    winner_name, winner_inn, final_contract_price{deadline_column_sql}
                 ) VALUES (
                     %(source_table)s, %(source_id)s, %(contract_number)s, %(auction_name)s,
                     %(initial_price)s, %(final_price)s, %(customer)s, %(delivery_region)s, %(region_id)s,
@@ -681,8 +828,7 @@ def _upsert_one(crm_db, row: Dict[str, Any], existing: Optional[Dict[str, Any]],
                     %(tender_link)s, %(source_updated_at)s,
                     %(crm_stage)s, %(award_status)s, 'unassessed', %(ai_assessment_status)s,
                     %(source_awarded_table)s, %(source_awarded_id)s,
-                    %(winner_name)s, %(winner_inn)s, %(final_contract_price)s,
-                    %(deadline_trust)s
+                    %(winner_name)s, %(winner_inn)s, %(final_contract_price)s{deadline_value_sql}
                 )
                 """,
                 {
@@ -695,7 +841,7 @@ def _upsert_one(crm_db, row: Dict[str, Any], existing: Optional[Dict[str, Any]],
 
         old_stage = existing.get("crm_stage")
         crm_db.execute_update(
-            """
+            f"""
             UPDATE crm_procurements SET
                 source_table = %(source_table)s,
                 source_id = %(source_id)s,
@@ -745,8 +891,7 @@ def _upsert_one(crm_db, row: Dict[str, Any], existing: Optional[Dict[str, Any]],
                 END,
                 source_awarded_table = COALESCE(%(source_awarded_table)s, source_awarded_table),
                 source_awarded_id = COALESCE(%(source_awarded_id)s, source_awarded_id),
-                deadline_trust = %(deadline_trust)s,
-                crm_updated_at = now()
+                {deadline_assignment_sql}crm_updated_at = now()
             WHERE id = %(id)s
             """,
             {
@@ -760,6 +905,8 @@ def _upsert_one(crm_db, row: Dict[str, Any], existing: Optional[Dict[str, Any]],
             return "reconcile"
         return "update"
     except Exception as exc:
+        if _is_schema_error(exc):
+            raise
         msg = str(exc).lower()
         if "unique" in msg or "duplicate" in msg:
             return "duplicate"

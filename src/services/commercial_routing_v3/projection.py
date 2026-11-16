@@ -87,6 +87,7 @@ class SourceStage(StrEnum):
     OPEN = "OPEN"
     WAITING_SOURCE_OUTCOME = "WAITING_SOURCE_OUTCOME"
     AWARDED = "AWARDED"
+    TERMINAL = "TERMINAL"
 
 
 class ProcurementRoutingState(StrEnum):
@@ -144,6 +145,8 @@ PROJECTED_CORE_FIELDS_COUNT = len(PROJECTED_CORE_FIELDS)
 
 def stage_from_source_table(source_table: str) -> SourceStage:
     t = (source_table or "").lower()
+    if "completed" in t or "unclear" in t or "unknown" in t or "bad" in t:
+        return SourceStage.TERMINAL
     if "commission" in t:
         return SourceStage.WAITING_SOURCE_OUTCOME
     if "awarded" in t:

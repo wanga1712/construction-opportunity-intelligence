@@ -7,6 +7,11 @@ from typing import Any, Dict, List, Optional
 from src.services.commercial_routing_v3.source_lifecycle import (
     normalize_source_lifecycle_event,
 )
+from src.services.commercial_routing_v3.routing_eligibility import (
+    LANE_ACTIVE_OPEN,
+    LANE_AWARDED_ADMITTED,
+    LANE_REVIEW_DISCOVERY,
+)
 
 ACTIVE_CAPACITY_PCT = 70
 AWARDED_CAPACITY_PCT = 30
@@ -87,15 +92,19 @@ def allocate_production_routing_batch(
     """
     from src.services.commercial_routing_v3.routing_backlog import sort_drain_priority
 
+    capacity = max(int(total), 0)
     active = sort_drain_priority(
-        [c for c in candidates if c.get("routing_lane") == "ACTIVE_OPEN"]
+        [c for c in candidates if c.get("routing_lane") == LANE_ACTIVE_OPEN]
     )
     awarded = sort_drain_priority(
-        [c for c in candidates if c.get("routing_lane") == "AWARDED_ADMITTED"]
+        [c for c in candidates if c.get("routing_lane") == LANE_AWARDED_ADMITTED]
+    )
+    discovery = sort_drain_priority(
+        [c for c in candidates if c.get("routing_lane") == LANE_REVIEW_DISCOVERY]
     )
 
-    active_target = int(round(total * ACTIVE_CAPACITY_PCT / 100.0))
-    awarded_target = total - active_target
+    active_target = int(round(capacity * ACTIVE_CAPACITY_PCT / 100.0))
+    awarded_target = capacity - active_target
     active_take = active[:active_target]
     awarded_take = awarded[:awarded_target]
 
@@ -109,7 +118,9 @@ def allocate_production_routing_batch(
         active_take.extend([c for c in active if c not in active_take][:need])
 
     selected = active_take + awarded_take
-    return selected[:total]
+    if len(selected) < capacity:
+        selected.extend(discovery[: capacity - len(selected)])
+    return selected[:capacity]
 
 
 def allocate_canary_slots(

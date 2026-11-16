@@ -1,404 +1,439 @@
-# CRM Streamlit & Tender Documents Research
+# Construction Opportunity Intelligence
+## Аналитический коммерческий контур закупок и строительных объектов
 
-> **Canonical hosts, operators, SSH/DB/service identities and access rules:**
-> [docs/PROJECT_OPERATING_RULES.md](docs/PROJECT_OPERATING_RULES.md).
-> **Полная карта текущего проекта и аудит согласованности:**
-> [docs/PROJECT_OVERVIEW_AND_AUDIT.md](docs/PROJECT_OVERVIEW_AND_AUDIT.md).
-> **План согласования модулей, устранения дублей и файлов >450 строк:**
-> [docs/MODULE_CONSISTENCY_REFACTORING_PLAN.md](docs/MODULE_CONSISTENCY_REFACTORING_PLAN.md).
-> **Refactoring & launch plan:** [docs/REFACTORING_PLAN.md](docs/REFACTORING_PLAN.md) / [docs/CRM_V3_LAUNCH_ROADMAP.md](docs/CRM_V3_LAUNCH_ROADMAP.md).
-> **Analytics Contour V2 UI rebuild:** [docs/ANALYTICS_CONTOUR_V2_UI_REBUILD_PLAN.md](docs/ANALYTICS_CONTOUR_V2_UI_REBUILD_PLAN.md).
->
-> **Текущее UI-состояние (2026-10-25):** стартовый экран — таблица закупок
-> (`table_workspace`). Analytics V2 сохранён как скрытый legacy/deep-link
-> route; актуальная навигация определяется `src/ui/nav.py`.
->
-> ### UI Contract (краткий)
->
-> Dashboard «Аналитический контур V2» отображает фактические KPI из БД:
-> массив 44-ФЗ/223-ФЗ × торги/разыгранные, новые за 24ч (rolling,
-> `crm_created_at`), статус документального pipeline, и медальную
-> transition matrix по category opportunity (не по закупке).
-> `research_prior_band` не является коммерческой медалью.
+Система собирает закупки и строительные объекты, определяет их коммерческую
+релевантность, исследует документацию, выделяет товарные и проектные категории,
+формирует доказательные коммерческие возможности и выдаёт их в CRM, карточку
+объекта, аналитический контур, kiosk и commercial portal/API.
 
----
+`CRM Streamlit` и `Tender Documents Research` — компоненты системы, а не
+описание всего продукта.
 
-## 1. Архитектура системы
-
-- **CRM Streamlit** (`src/ui/`, `src/services/`): Аналитический кабинет менеджера, разметка объектов, карточки закупок с теневой ИИ-аналитикой, реестр товарных категорий, Superuser-панель управления таксономией ОКПД.
-- **Tender Documents Research** (`tender_documents_research/`): Контур загрузки, парсинга, поиска вхождений и семантической валидации контекста документов.
-- **Learning & Prior Subsystem** (`src/learning/okpd_prior/`, `src/repositories/`, `src/services/`): Обучаемый контур предсказания вероятности полезных находок $P(\text{RESEARCH\_HIT})$ и управления очередью исследований (V1 OKPD-only & V2 Semantic + Domain Disambiguation).
-
-### 1.1. Контур документов: разбор в момент парсинга
-
-Сырые файлы живут на диске ограниченно (retention, 3 дня) и затем удаляются,
-поэтому **весь разбор выполняется в момент парсинга**, а не отдельными
-скриптами постфактум (`document_processor/parse_extractors.py`, хук в
-`task_pipeline.py`, fail-safe — ошибка разбора не ломает парсинг):
-
-- **Сметы.** `smeta_forma_4b.py` — фиксированная карта «Формы № 4б» (Smeta.RU):
-  колонки `Ед. изм.` / `Кол-во` / `Цена за ед.` / `Стоимость`; количество
-  считается как `стоимость(базис) / цена`. `xlsx_table_reader.py` — общий
-  читатель по подписям колонок для остальных шаблонов смет. Найденные строки
-  пишутся в `structured_entities` со статусом `MANUAL_PROOF_QUARANTINE`
-  (в карточки не попадают до подтверждения).
-- **Проектная документация (R4-PD).** `project_metadata_reader.py` извлекает
-  организации и персон (ГИП/ГАП/руководители/разработал/проверил…) с
-  обязательной цитатой в `project_metadata_organizations` /
-  `project_metadata_people` — отдельная доменная модель, не товарные сущности.
-- **Политика файлов.** `file_skip_list.py` не скачивает и не обрабатывает:
-  проект контракта/договора, извещения, платформенные артефакты, числовые
-  имена, растровые изображения (`.png/.jpg/...`), чертежи (`.dwg/.dxf/.dwf`),
-  подписи и криптоконтейнеры (`.sig/.p7s/.gge/.sign/.gsfx`), сертификаты.
-- **OCR.** Включается `ENABLE_OCR=1` (+`ENABLE_OCR_PAGED=1`); сканы PDF идут
-  через OCR-фолбэк (`pytesseract`/`tesseract`, `rus+eng`). Растровые файлы
-  при этом не скачиваются.
-- **Учёт и статусы очереди.** Retention проставляет
-  `document_files.local_deleted_at` при фактическом удалении; статус
-  `SKIPPED_NOISE` — терминальный пропуск по политике файлов (воркеры его не
-  клеймят).
-- **Шаблоны и кандидаты.** `estimate_template_registry` — реестр
-  неразобранных раскладок (`NEEDS_SUPPORT`); `category_phrase_candidates` —
-  кандидаты новых категорий (порог ≥5 закупок, статусы NEW/APPROVED/REJECTED).
-
----
-
-## 2. Обучение модели и управление очередью исследований
-
-> **Подробная спецификация, регламент разметки и планировщик:** [docs/MODEL_TRAINING_AND_PRIORITY.md](docs/MODEL_TRAINING_AND_PRIORITY.md).
-
-### Ступень 1 — Research Prior V1 & V2
-
-Обучаемый классификатор оценивает вероятность полезных находок **до скачивания закупочной документации**:
-
-$$\text{Вход}: [\text{Title Text, OKPD Hierarchy, Domain Disambiguation Signals, Log Price}] \implies P(\text{RESEARCH\_HIT}) \in [0, 1]$$
-
-#### Эволюция моделей приоритета:
-
-1. **`OKPD_HIERARCHICAL_PRIOR_V1` (Deterministic Baseline)**:
-   Иерархический байесовский prior по 4 уровням ОКПД (`full` $\to$ `level3` $\to$ `level2` $\to$ `root` $\to$ `global`).
-2. **`okpd_research_hit_v1` (OKPD-Only ML Classifier)**:
-   CatBoost классификатор исключительно по категориальным кодам ОКПД. Доказал полезность ОКПД как базового признака, но выявил необходимость текстового и семантического анализа.
-3. **`TITLE_TEXT_BASELINE_V2` (Text N-Gram Baseline)**:
-   TF-IDF word/char n-grams + калиброванная логистическая регрессия по наименованию закупки (`auction_name`).
-4. **`TITLE_SEMANTIC_V2` (Domain-Aware Semantic Model)**:
-   Семантическая модель с разделением предметных областей и защитой от утечек через Out-Of-Fold (OOF) кросс-валидацию.
-5. **`research_priority_v2` (Combined V2 Model)**:
-   Ансамбль HistGradientBoosting/CatBoost, объединяющий OOF-семантику, сигналы доменной дезамбигуации, иерархический ОКПД target-encoding и логарифмическую цену лота.
-
----
-
-### Семантическая дезамбигуация (Domain Disambiguation)
-
-Модель V2 разрешает коллизии многозначных терминов, предотвращая ложные срабатывания:
-- **`инъекционный` / `инъекция`**:
-  - *Строительство / Целевой*: `инъектирование трещин`, `деформационные швы`, `подземный паркинг`, `бетонные конструкции` $\implies$ Высокий приоритет ($P > 0.85$).
-  - *Медицина / Нецелевой*: `шприцы инъекционные одноразовые`, `иглы`, `вакцина`, `лекарственные средства` $\implies$ Подавление в Safe Negative ($P < 0.05$).
-- **`освещение` vs `электроника`**: Разделение наружного/фасадного освещения от поставки серверных процессоров и видеокарт.
-- **`полимерные полы` vs `мебель`**: Разделение устройства промышленных полимерных полов от поставки медицинской/офисной мебели.
-- **Сигнал работ vs поставок**: Автоматическое определение характера закупки (строительно-монтажные работы vs закупка канцтоваров).
-
----
-
-### Управляемая таксономия суперпользователя (Superuser Research Taxonomy)
-
-Система предоставляет интерфейс динамической настройки приоритетов без изменения кода и без переобучения моделей (`src/services/taxonomy_service.py`, `src/ui/taxonomy_management_page.py`):
-- **Режимы правил**:
-  - `BOOST`: Повышение приоритета (+0.25)
-  - `DOWNWEIGHT`: Понижение приоритета (-0.25)
-  - `EXPLORE`: Гарантированное выделение квоты исследования (+0.15)
-  - `EXCLUDE_FROM_PRIMARY`: Исключение из основного потока (-0.50)
-  - `NEUTRAL`: Нейтральное значение (0.00)
-- **Принцип Longest Prefix Matching**: Правило для конкретного подкода (`42.11.20.200`) имеет приоритет над более общим (`42.11` или `42`).
-- **Генерация предложений (Evidence Proposals)**: Автоматический анализ подтвержденных фактов исследований формирует кандидаты правил для суперпользователя с указанием обоснования и ссылок на доказательства.
-- **Формула итогового теневого скоринга**:
-  $$\text{SHADOW\_PRIORITY} = \operatorname{clamp}(P(\text{MODEL\_V2}) + \text{TAXONOMY\_ADJUSTMENT}, 0, 1)$$
-
----
-
-### Медальные корзины и ранжирование
-
-После ранжирования популяции закупкам присваивается класс с tie-safe политикой (`MAX_RANK`):
-- 🥇 **GOLD**: топ 10% (перцентиль $\ge 90\%$)
-- 🥈 **SILVER**: следующие 20% (перцентиль $70\% - 90\%$)
-- 🥉 **BRONZE**: следующие 30% (перцентиль $40\% - 70\%$)
-- 🪵 **WOOD**: оставшиеся 40% (перцентиль $< 40\%$)
-
----
-
-### Сравнительные метрики качества моделей (112 проверенных объектов)
-
-| Модель | PR-AUC | ROC-AUC | Top 10% Hits | Top 20% Hits | Top 30% Hits | Lift@10 |
-| :--- | :---: | :---: | :---: | :---: | :---: | :---: |
-| **BASELINE V1 (OKPD)** | 0.5809 | 0.8240 | 10 / 12 (83.3%) | 13 / 23 (56.5%) | 13 / 34 (38.2%) | 3.59x |
-| **CatBoost V1 (OKPD-only)** | 0.5308 | 0.6418 | 10 / 12 (83.3%) | 14 / 23 (60.9%) | 15 / 34 (44.1%) | 3.59x |
-| **TITLE TEXT V2 (OOF CV)** | 0.6837 | 0.8846 | 9 / 12 (75.0%) | 15 / 23 (65.2%) | 21 / 34 (61.8%) | 3.23x |
-| **TITLE SEMANTIC V2 (OOF CV)** | **0.7308** | **0.9003** | **10 / 12 (83.3%)** | **16 / 23 (69.6%)** | **23 / 34 (67.6%)** | **3.59x** |
-| **COMBINED V2 (Fitted)** | **1.0000** | **1.0000** | **12 / 12 (100%)** | **23 / 23 (100%)** | **26 / 34 (100%)** | **4.31x** |
-
----
-
-### Приоритет не равен фильтрации
-
-Модель **никогда не должна безусловно исключать закупку из обработки**.
-
-Все детерминированные `TARGET` закупки сохраняют гарантированное полное покрытие (`eventual coverage`):
-- `GOLD` обрабатывается преимущественно раньше `SILVER`,
-- `SILVER` раньше `BRONZE`,
-- `BRONZE` раньше `WOOD`,
-- но **каждая группа получает гарантированную долю вычислительной мощности**.
-
----
-
-### Защита от starvation и смещения обучающей выборки
-
-Очередь использует ограниченную приоритизацию:
-1. **Квоты обработки**: Для `GOLD` / `SILVER` / `BRONZE` / `WOOD` задаются фиксированные доли пропускной способности (Weighted Fair Queuing).
-2. **Динамическое старение (Aging)**: Если количество низкоприоритетных карточек относительно более высоких классов превышает заданный предел, планировщик обязан увеличивать долю обработки `WOOD`. Старые необработанные карточки постепенно повышают свой фактический приоритет в очереди.
-3. **Защита от вечного хвоста**: Корзина `WOOD` никогда не становится "вечным хвостом".
-
----
-
-### Стоимость исследования (Cost-Aware Scheduling)
-
-Планировщик дополнительно учитывает ожидаемую стоимость исследования:
-$$\text{Expected Value per Second} = \frac{P(\text{RESEARCH\_HIT})}{\mathbb{E}[\text{Research Cost (Files, Archives, Size)}]}$$
-
----
-
-### Ступень 2 — Связи товарных категорий (Cross-Product Discovery)
-
-После накопления фактических данных модель обучается связям между товарными категориями и типами проектов (например, дорожное освещение $\to$ светильники $\to$ опоры освещения).
-
----
-
-### Основные инварианты
+## Главный pipeline
 
 ```text
-MODEL_CONTROLS_ADMISSION = NO
-MODEL_CAN_PERMANENTLY_SKIP_WOOD = NO
-ALL_TARGET_EVENTUALLY_RESEARCHED = YES
-WOOD_EXPLORATION_BUDGET > 0
-NEW_CATEGORY_DISCOVERY_PRESERVED = YES
+ИСТОЧНИКИ
+44-ФЗ / 223-ФЗ / другие контуры
+        │
+        ▼
+SOURCE + LIFECYCLE
+OPEN / AWARDED / COMPLETED ...
+        │
+        ▼
+PROCUREMENT SCOPE
+DIRECT_GOODS / WORKS_WITH_EMBEDDED_PRODUCTS / DESIGN_PROJECT
+        │
+        ▼
+BUSINESS_RESEARCH_ADMISSION_V2
+ELIGIBLE / HOLD / EXCLUDED
+        │
+        ▼
+ROUTING
+ACTIVE_OPEN / AWARDED_ADMITTED / REVIEW_DISCOVERY
+        │
+        ▼
+DOCUMENT RESEARCH
+скачивание → архивы → parsing → OCR → extraction
+        │
+        ▼
+STRUCTURED FACTS
+товары / материалы / оборудование / параметры / объёмы
+        │
+        ▼
+CATEGORY OPPORTUNITIES
+1 закупка → N коммерческих категорий
+        │
+        ├── candidate_initial
+        ├── confirmed_base
+        └── current_effective
+        │
+        ▼
+COMMERCIAL READ MODEL
+объект / категория / медаль / доказательства / стоимость / объёмы
+        │
+        ├── CRM
+        ├── карточка объекта
+        ├── аналитический контур
+        ├── kiosk
+        └── commercial portal/API
 ```
 
----
+Короткая mental model: закупка или объект → допуск к исследованию → порядок
+исследования → факты из документов → коммерческие категории → текущая сила
+каждой возможности.
 
-## 3. AI Card Workspace / Card Context Architecture
-
-> **Статус:** Архитектурная спецификация целевого контура (Documentation-Only в текущем WIP, реализация запланирована в отдельной ветке `CRM-V3-AI-CARD-WORKSPACE-CONTEXT-FOUNDATION-1`).
-
-### 3.1. Основная концепция
-
-ИИ-ассистент работает не как абстрактный чат по закупкам вообще, а как **интеллектуальное рабочее место (AI Workspace), развёрнутое вокруг конкретной карточки объекта/закупки**.
-
-При открытии карточки закупки или объекта пользователь взаимодействует с моделью, имеющей доступ ко всему собранному досье:
+## Что является коммерческой единицей
 
 ```text
-OPPORTUNITY / OBJECT
-│
-├── Structured Card Data (CRM, заказчик, цены, дедлайны, этапы)
-│
-├── Procurement Metadata (ЕИС, протоколы, разъяснения, требования)
-│
-├── Documents (архивы, файлы, проектная и рабочая документация)
-│   ├── Notice (извещение)
-│   ├── Technical Assignment (ТЗ)
-│   ├── Project Documentation (ПД)
-│   ├── Working Documentation (РД)
-│   ├── Estimates (ЛСР, ВОР, сметные расчеты)
-│   └── Contract Draft (проект договора)
-│
-├── Knowledge Base (нормативная база, ГОСТ, СП, технические регламенты)
-│
-├── Evidence & Findings (подтвержденные факты, совпадения, контекст, цитаты)
-│
-├── Research Provenance (история исследований, цепочка источников, валидация)
-│
-└── Card Chat Session State (история диалога по карточке, рабочие гипотезы)
+PROCUREMENT != COMMERCIAL OPPORTUNITY
 ```
 
----
-
-### 3.2. Компоненты контекста карточки
-
-Контекст карточки собирается по принципу многоуровневого индекса:
-
-1. **Card Summary & Core Metadata**: Номер закупки, статус, закон (44-ФЗ / 223-ФЗ), заказчик, НМЦК, дедлайн, регион.
-2. **Factual Evidence Layer**: Извлеченные и валидированные `V4 CONFIRMED` кандидаты материалов и оборудования.
-3. **Document Inventory & Parse Cache**: Реестр физических файлов и архивов с метаданными.
-4. **Relevant Document Chunks (RAG / Lexical Search)**: Семантические и полнотекстовые фрагменты проектной документации и ТЗ.
-5. **Regulatory & Technical Norms**: Ссылки на применимые СП, ГОСТ и технические условия.
-6. **Provenance Timeline**: Временная шкала событий по карточке.
-
----
-
-### 3.3. Примеры сценариев диалога в Card Workspace
-
-1. *«Что здесь вообще требуется сделать?»* — структурированная выжимка предмета работ и состава объекта.
-2. *«Какие материалы и оборудование мы можем поставить?»* — поиск целевых номенклатур (гидроизоляция, напольные покрытия, светотехника, трубные системы).
-3. *«Какие объемы и площади гидроизоляции заложены в сметах?»* — извлечение физических объемов из локальных сметных расчетов.
-4. *«Есть ли требования к членству в СРО или лицензиям?»* — анализ требований к участникам закупки.
-5. *«Какие ключевые риски и штрафные санкции в проекте контракта?»* — правовой анализ договора.
-6. *«Можно ли согласовать замену проектного материала на аналог?»* — проверка требований ТЗ на эквивалентность и ГОСТ.
-7. *«Составь план коммерческой проработки этого объекта.»* — пошаговый чек-лист для менеджера.
-
----
-
-### 3.4. Разделение ответственности (Separation of Concerns)
+Закупка — контейнер исходных данных. Коммерческое решение принимается по
+категории внутри неё. Одна закупка может содержать несколько независимых
+возможностей с разными медалями и доказательствами.
 
 ```text
-LLM WEIGHTS (Языковая модель: рассуждения, синтез, извлечение)
-    ↓
-KNOWLEDGE LAYER (Нормативная база, стандарты, СП, ГОСТ)
-    ↓
-OPERATIONAL DATA (CRM, объекты, закупки, участники, сметы)
-    ↓
-CONTEXT BUILDER (Формирование активного контекста turn-by-turn)
-    ↓
-AI CARD SESSION (Интерактивная сессия пользователя)
+Закупка: строительство школы
+
+├── flooring                SILVER
+├── lighting                GOLD
+├── waterproofing           BRONZE
+└── cable_support_systems   SILVER
 ```
 
-Нормативные требования, операционные данные CRM и веса модели не смешиваются в единую сущность.
-
----
-
-### 3.5. Оптимизация и кэширование (Future Caching Direction)
-
-Для эффективной работы с крупными пакетами строительной документации архитектура предусматривает:
-- `PROMPT_CACHE` / `PREFIX_CACHE` — кэширование неизменяемого системного промпта и базового досье карточки на уровне инференс-провайдера;
-- `KV_CACHE` — переиспользование состояния внимания между последовательными вопросами пользователя в рамках одной карточки;
-- `DOCUMENT_CHUNK_CACHE` — предварительно подготовленные эмбеддинги и чанки документов;
-- `CONTEXT_PACK_CACHE` — кэширование скомпонованных пакетов контекста для частых сценариев.
-
----
-
-### 3.6. Границы полномочий и безопасность (Safety & Authority Boundaries)
-
-На первом этапе AI Workspace функционирует исключительно в режиме чтения:
-`READ_ONLY = YES`.
-
-**ИИ разрешено:**
-- читать и анализировать документацию;
-- выполнять поиск по архивам и сметам;
-- формировать выжимки, таблицы и сравнения;
-- давать пояснения и цитировать первоисточники.
-
-**ИИ запрещено без явного подтверждения пользователя:**
-- менять статус закупки или этап CRM;
-- изменять очередь обработки документов;
-- выполнять мутации в базе данных;
-- отправлять внешние запросы или подавать заявки;
-- изменять утвержденную экспертную разметку.
-
----
-
-### 3.7. Единая идентичность объекта в сквозных бизнес-контурах
-
-Карточка объекта (`Opportunity / Object`) представляет собой единую неделимую сущность:
+Canonical unit коммерческого решения:
 
 ```text
-                        ЕДИНЫЙ ОБЪЕКТ
-                              │
-        ┌─────────────────────┼─────────────────────┐
-        │                     │                     │
- Аналитический           CRM закупок             CRM систем
-    контур             (генподрядчики,          гидроизоляции
-(макро-аналитика)         поставки)           и спецматериалов
-        │                     │                     │
-        └─────────────────────┼─────────────────────┘
-                              │
-                     FULL CARD KNOWLEDGE
-                              │
-                        AI WORKSPACE
+crm_procurement_category_opportunities
 ```
 
----
+Закупку нельзя схлопывать до одной максимальной медали. Max-medal не должен
+скрывать независимые категории.
 
----
+## Business admission
 
-### 3.8. Analytics V2 — верхний dashboard (command center)
+Canonical policy:
 
-Верх страницы «Аналитический контур V2» — плотный операционный экран,
-который собирается из одного read-only снимка
-(`src/services/analytics_command_center.py`, `load_analytics_command_snapshot()`)
-и кэшируется на 60 секунд. Ни один блок не делает собственный запрос в БД.
+```text
+BUSINESS_RESEARCH_ADMISSION_V2
+```
 
-| Блок | Что показывает | Источник |
-| :--- | :--- | :--- |
-| LIVE-строка | свежесть хранилищ и сервисов | system health snapshot (без SSH из UI) |
-| Активные торги | открытый приём заявок, разбивка 44-ФЗ / 223-ФЗ, окна по дедлайну | `crm_procurements` + каноническое правило actionable |
-| Pipeline | реальные узлы контура и потери между ними | CRM + document queue |
-| Матрица категорий | закупка × товарная категория, медали, открытые | `crm_procurement_category_opportunities` |
-| Top opportunities | приоритетные category opportunities | `crm_procurement_category_opportunities` |
-| Medal transition | 4×4 `candidate_initial_medal` → `current_effective_medal` + SAME/DOWN/UP | `crm_procurement_category_opportunities` |
-| Кто поставил оценку | только фактически заполненное происхождение оценки | projection provenance |
-| Документы | `NO_LINKS` / `FAILED` и реальные причины | `document_intelligence` |
-| Состояние серверов | компактный health-блок со ссылкой на полную страницу | `src/ui/system_health_page.py` |
+```text
+source lifecycle
++
+procurement scope
+        ↓
+ELIGIBLE / HOLD / EXCLUDED
+```
 
-Правила экрана:
+```text
+OPEN + DIRECT_GOODS                    → ELIGIBLE
+OPEN + WORKS_WITH_EMBEDDED_PRODUCTS    → ELIGIBLE
+OPEN + DESIGN_PROJECT                  → ELIGIBLE
 
-- «Идут торги» — только реально открытый приём заявок (общее каноническое
-  правило actionable), а не `crm_stage='torgi'`;
-- «Новые за 24 часа» подписаны честно (`CRM_INGEST`): в projection нет
-  authoritative source timestamp появления закупки;
-- единица медальных метрик — category opportunity, а не закупка;
-- ошибка отдельного запроса становится «Нет данных» и коротким warning,
-  но никогда не нулём;
-- техническая диагностика (raw exception, pipeline-схема, KPI control room)
-  вынесена в collapsed expander «Техническая информация»;
-- обновление точечное: `st.cache_data.clear()` для обычного refresh не
-  вызывается; возврат на вкладку не повторяет тяжёлые SQL.
+AWARDED + WORKS_WITH_EMBEDDED_PRODUCTS → ELIGIBLE
+AWARDED + DESIGN_PROJECT               → ELIGIBLE
+AWARDED + DIRECT_GOODS                 → EXCLUDED
+```
 
-**Матрица категорий — правило отображения.** Строка категории выводится
-только тогда, когда у неё есть хотя бы одна opportunity (`count > 0`).
-Активные категории реестра `crm_product_categories` (контур `procurement`)
-с нулём возможностей не рисуются нулями, а перечисляются короткой строкой
-под таблицей: «Без возможностей (не показано): …». Имена берутся из реестра
-(`category_name`); `CATEGORY_NAMES` — fallback для кодов, которых в реестре
-нет (например `computers`). Возвращать нулевые строки в таблицу не нужно:
-это факт отсутствия возможностей, а не значение KPI.
+Неизвестные или неоднозначные комбинации закрываются в `HOLD`.
 
-## 4. Сервисы и модули
+```text
+admission != research priority
+admission != commercial medal
+admission != document confirmation
+```
 
-| Модуль / Сервис | Хост / Назначение |
+Модель не определяет business admission. Решение materialize-ится в
+`crm_procurement_scope_authority` и далее проверяется по сохранённой policy.
+
+## Три уровня коммерческой оценки
+
+```text
+CANDIDATE
+   ↓
+DOCUMENT RESEARCH
+   ↓
+CONFIRMED BASE
+   ↓
+CURRENT EFFECTIVE
+```
+
+| Слой | Смысл |
 | :--- | :--- |
-| `crm-v3-context-validator.service` | S13: Фоновый асинхронный валидатор контекста кандидатов (`ContextValidator V4` / `QWEN_CONTEXT_V4`) |
-| `src/learning/okpd_prior/` | Модуль обучения и скоринга приоритетов (`research_priority_v2`, `TITLE_SEMANTIC_V2`, `OKPD_HIERARCHICAL_PRIOR_V1`) |
-| `src/services/taxonomy_service.py` | Сервис управления исследовательской таксономией ОКПД, сопоставления правил и предложений |
-| `src/ui/taxonomy_management_page.py` | Панель суперпользователя для управления таксономией ОКПД и симуляции декомпозиции скоринга |
-| `src/ui/components/okpd_priority_widget.py` | UI-виджет карточки закупки «Приоритет исследования» (теневой режим) |
-| `src/ui/okpd_prior_analytics_page.py` | Диагностическая страница модели, обучающего корпуса и медальных корзин |
-| `tender_documents_research/` | Модули парсинга документов, извлечения смет, поиска кандидатов и агрегации evidence |
+| `candidate_initial` | предварительная оценка после первого анализа |
+| `confirmed_base` | оценка только по документированным trusted facts |
+| `current_effective` | действующая оценка с учётом подтверждения и времени |
 
----
+```text
+candidate_initial нельзя подменять confirmed_base
+confirmed_base NULL означает "не подтверждено"
+missing value = NULL, не 0
+```
 
-## 5. Запуск и тестирование
+`candidate_initial` фиксирует исходную гипотезу и не перезаписывается
+подтверждением. `confirmed_base` появляется только после документального
+подтверждения. `current_effective` используется для текущего ранжирования.
+
+## Документальный контур
+
+```text
+document link
+→ materialization
+→ download
+→ archive traversal
+→ parser
+→ OCR fallback
+→ structured extraction
+→ category assignment
+→ trust state
+→ confirmed facts
+```
+
+Основные классы данных:
+
+```text
+structured_entities
+structured_attributes
+confirmed_category_facts
+document_match_details
+```
+
+| Слой | Назначение |
+| :--- | :--- |
+| `document_match_details` | найденный контекст и provenance документа |
+| `structured_entities` | нормализованный товар, материал или оборудование |
+| `structured_attributes` | параметры, характеристики и измерения |
+| `confirmed_category_facts` | подтверждённые категорийные факты и значения |
+
+Trust states, которые нельзя смешивать:
+
+```text
+TRUSTED_PRODUCTION
+MANUAL_PROOF_QUARANTINE
+DEV_EXPOSED
+QUALITY_REJECTED
+```
+
+Только trusted facts участвуют в подтверждённой коммерческой базе. Quarantine
+и development artifacts остаются диагностическим материалом.
+
+## Commercial truth / live market
+
+Live commercial market строится на `crm_procurement_scope_authority`:
+
+```text
+admission_state = ELIGIBLE
+source_lifecycle IN (OPEN, AWARDED)
+актуальная admission policy
+```
+
+Коммерческие данные берутся из:
+
+```text
+crm_procurement_category_opportunities
+WHERE status = CURRENT
+```
+
+```text
+OPEN                         → текущая закупочная возможность
+AWARDED project / embedded   → AWARDED_FOLLOWUP
+AWARDED DIRECT goods         → закрыто, не live follow-up
+```
+
+Проектный НМЦК нельзя использовать как стоимость каждой категории. Числовые
+показатели рынка меняются и читаются из audit/read-model, а не хардкодятся в
+README.
+
+## Research priority
+
+Research priority отвечает только на вопрос: **что исследовать раньше?**
+
+```text
+Research Priority: "что исследовать раньше?"
+Business Admission: "имеет ли объект право войти в исследовательский контур?"
+Commercial Medal: "насколько интересна конкретная товарная категория?"
+```
+
+| Механизм | Вопрос |
+| :--- | :--- |
+| Admission | Обрабатываем объект вообще? |
+| Research priority | В каком порядке? |
+| Category opportunity | Что именно можно продать? |
+| Commercial medal | Насколько сильна возможность? |
+| Confirmed base | Что подтверждено документами? |
+
+Routing lanes: `ACTIVE_OPEN`, `AWARDED_ADMITTED`, `REVIEW_DISCOVERY`.
+`REVIEW_DISCOVERY` не входит в обычную 70/30 capacity и используется как
+дополнительный источник после primary ready work.
+
+История `OKPD_HIERARCHICAL_PRIOR_V1`, CatBoost, `TITLE_TEXT_BASELINE_V2`,
+`TITLE_SEMANTIC_V2`, `research_priority_v2`, формулы и historical benchmark:
+[docs/MODEL_TRAINING_AND_PRIORITY.md](docs/MODEL_TRAINING_AND_PRIORITY.md).
+
+## Source-of-truth map
+
+| Смысл | Authority |
+| :--- | :--- |
+| Lifecycle | source lifecycle authority |
+| Scope/admission | `crm_procurement_scope_authority` |
+| Category opportunity | `crm_procurement_category_opportunities` |
+| Document queue | `document_processing_queue` |
+| Extracted entities | `structured_entities` |
+| Confirmation | trusted/confirmed facts |
+| Commercial read model | existing CRM projections/read services |
+| Hosts/access | `docs/PROJECT_OPERATING_RULES.md` |
+
+README не дублирует hosts, identities, SSH routes, DB roles или credentials.
+Для infrastructure operations используется
+[docs/PROJECT_OPERATING_RULES.md](docs/PROJECT_OPERATING_RULES.md).
+
+## Пользовательские поверхности
+
+### CRM / таблица объектов
+
+Поиск, просмотр и приоритизация закупок и связанных строительных объектов.
+
+### Procurement Card
+
+Основные вкладки:
+
+```text
+Обзор / Документы / Категории / Смета
+Техпараметры / Требования / История / Модель / Очередь
+```
+
+«Находки» не являются основной пользовательской сущностью. Главная единица
+карточки — **Категория** с текущей медалью, подтверждением, доказательствами,
+объёмами и стоимостью.
+
+### Commercial Portal
+
+Read-only коммерческий слой:
+
+```text
+src/services/commercial_portal_service.py
+src/services/commercial_portal_facts.py
+src/api/commercial_portal_api.py
+```
+
+Portal использует существующие category opportunities и не вводит вторую
+логику медалей. Missing value возвращается как `null`.
+
+### S13 Kiosk
+
+Физический operational command center: pipeline, commercial result, queue,
+model/document throughput, CPU/GPU/RAM/disk.
+
+## AI Card Workspace
+
+AI Card Workspace — развиваемый интерфейс работы модели в контексте конкретного
+объекта. Источники контекста: CRM, documents, structured facts, evidence и
+history. На первом этапе интерфейс read-only и не управляет admission,
+очередью, статусами CRM или подтверждённой разметкой.
+
+Архитектура:
+[docs/AI_CARD_WORKSPACE_ARCHITECTURE.md](docs/AI_CARD_WORKSPACE_ARCHITECTURE.md).
+
+## Текущее состояние
+
+На canonical code уже существуют:
+
+```text
+✓ lifecycle authority
+✓ procurement scope
+✓ BUSINESS_RESEARCH_ADMISSION_V2
+✓ routing lanes
+✓ document pipeline
+✓ OCR / parsers / archive traversal
+✓ structured entities / attributes
+✓ category opportunities
+✓ candidate_initial medals
+✓ confirmed_base
+✓ current_effective
+✓ procurement category cards
+✓ commercial portal read model/API
+✓ S13 operational kiosk
+```
+
+Развиваются:
+
+```text
+→ production reconciliation admission V2
+→ queue admission convergence
+→ queue band claim policy
+→ wider confirmed-fact coverage
+→ dynamic category discovery
+→ commercial portal production integration
+→ kiosk canonical reconciliation
+→ systemd source reconciliation
+→ 24h SLA
+```
+
+Статус проверяется по canonical code и актуальным WIP-документам, а не по
+старым roadmap-записям.
+
+## Critical invariants
+
+```text
+ONE PROCUREMENT → MANY CATEGORY OPPORTUNITIES
+MODEL_CONTROLS_ADMISSION = NO
+RESEARCH_PRIORITY != COMMERCIAL_MEDAL
+CONTEXT_PRIOR != DOCUMENT_CONFIRMATION
+CANDIDATE_INITIAL != CONFIRMED_BASE
+WORKS / PROJECT NMCK != CATEGORY VALUE
+MISSING FACT = NULL
+AWARDED DIRECT GOODS = CLOSED / EXCLUDED FROM LIVE MARKET
+AWARDED PROJECT / EMBEDDED = FOLLOW-UP
+TRUSTED_PRODUCTION != QUARANTINE
+```
+
+Полный НМЦК закупки нельзя дублировать как стоимость всех её категорий.
+
+## Структура репозитория
+
+```text
+src/
+  services/commercial_routing_v3/   commercial decision/routing
+  services/                         CRM read models/domain services
+  ui/                               CRM UI
+  api/                              external read APIs
+
+tender_documents_research/          acquisition/parsing/extraction
+scripts/                            audits/materializers/reconciliation
+deploy/                             S13/kiosk/systemd sources
+docs/                               architecture/WIP/contracts/rules
+tests/                              contracts/regressions/integration
+```
+
+Основные точки входа commercial contour:
+
+```text
+src/services/commercial_routing_v3/business_research_admission.py
+src/services/commercial_routing_v3/routing_eligibility.py
+src/services/commercial_routing_v3/routing_backlog.py
+src/services/commercial_routing_v3/routing_ready.py
+src/services/commercial_routing_v3/projection_writer.py
+src/services/procurement_card_category_service.py
+src/services/commercial_portal_service.py
+```
+
+## Quick start
+
+```text
+Python >= 3.13,<3.14
+```
 
 ```powershell
-# Python >=3.13,<3.14; CRM_SOURCE_ROOT должен указывать на существующий
-# внешний исходник, а runtime-параметры берутся из корневого .env.
 python -m pip install -r requirements.txt
-
-# Запуск тестов обучения, таксономии и контрактов приоритета
-$env:PYTHONPATH="."
-python -m pytest tests/test_okpd_prior_learning.py tests/test_okpd_admission.py tests/test_taxonomy_service.py -v
-
-# Запуск Streamlit на альтернативном dev-порту (теневой режим)
-streamlit run app.py --server.port 8503
+python -m pytest
+streamlit run app.py
 ```
 
-Профили зависимостей:
+Production hosts, identities, routes, DB roles и deployment access в README не
+описываются. Их authority —
+[docs/PROJECT_OPERATING_RULES.md](docs/PROJECT_OPERATING_RULES.md).
 
-- `base` — `pyproject.toml` / `requirements.txt`;
-- `documents` — `requirements-documents.txt`;
-- `learning` — `requirements-learning.txt`;
-- `training` — `requirements-training.txt`;
-- `dev` — `requirements-dev.txt`.
+## Документация — что читать дальше
 
-Эти файлы и extras в `pyproject.toml` проверяются двусторонним
-consistency-audit по именам пакетов и version specifiers.
-`tender_documents_research/requirements.txt` остаётся manifest внешнего
-document runtime.
-Команды тестов выше документированы, но в рамках аудита от 2026-10-25 не
-запускались.
+1. [README.md](README.md) — что представляет собой система.
+
+2. [docs/PROJECT_OVERVIEW_AND_AUDIT.md](docs/PROJECT_OVERVIEW_AND_AUDIT.md) —
+   подробная карта модулей.
+
+3. [docs/PROJECT_OPERATING_RULES.md](docs/PROJECT_OPERATING_RULES.md) — hosts,
+   identities, DB и operational authority.
+
+4. [docs/CRM_V3_LAUNCH_ROADMAP.md](docs/CRM_V3_LAUNCH_ROADMAP.md) — этапы
+   развития.
+
+5. [docs/wip/](docs/wip/) — выполняемые изменения.
+
+6. [docs/MODEL_TRAINING_AND_PRIORITY.md](docs/MODEL_TRAINING_AND_PRIORITY.md) —
+   research-priority/model subsystem.
+
+7. [docs/COMMERCIAL_PORTAL_API_CONTRACT.md](docs/COMMERCIAL_PORTAL_API_CONTRACT.md) —
+   commercial external API.
+
+AI Card Workspace:
+[docs/AI_CARD_WORKSPACE_ARCHITECTURE.md](docs/AI_CARD_WORKSPACE_ARCHITECTURE.md).
