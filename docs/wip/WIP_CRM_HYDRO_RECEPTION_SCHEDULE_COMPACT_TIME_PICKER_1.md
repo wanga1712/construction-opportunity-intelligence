@@ -28,7 +28,7 @@ UNPARSEABLE_LEGACY_PRESERVED=YES
 READONLY_COMPACT_VIEW=YES
 EDITOR_APPROX_HEIGHT_PX=ABOUT_400
 COMMITS=78acf3f281d711dcb4268d472304332ddd940d0a
-TESTS=38 focused Hydro tests PASS; includes company schedule JSONB write, contact create/update schedule+note writes, and immediate picker enablement contract
+TESTS=39 focused Hydro tests PASS; includes company schedule JSONB write, contact create/update schedule+note writes, immediate picker enablement, and multi-instance component rendering
 BROWSER_ACCEPTANCE=BLOCKED_BROWSER_ACCESS_HOST_UNAVAILABLE
 SCREENSHOT=NOT_CAPTURED
 DB_SCHEMA_CHANGED=NO
@@ -40,8 +40,12 @@ OVERLAY_STRUCTURE_CHANGED=NO
 CRM_PID_AFTER=4147425
 BACKUP=/opt/CRM_Streamlit/backups/hydro_reception_picker_fix_20261116_214943
 FOLLOWUP_COMMIT=857f50ed121071a064892bda937a4147e895b785
+MULTI_INSTANCE_BUTTON_KEY_FIX=e57743a5b3ac65f65eb9de8232c2f8ceb13ad889
 WEEKEND_EDITOR_ROWS=NONE
 TIME_PICKERS_OUTSIDE_FORMS=YES
+DUPLICATE_ELEMENT_ID=FIXED_WITH_PREFIX_KEY
+LATEST_CRM_PID=4167214
+LATEST_BACKUP=/opt/CRM_Streamlit/backups/hydro_schedule_button_key_20261116_220138
 ```
 
 ## Production files
