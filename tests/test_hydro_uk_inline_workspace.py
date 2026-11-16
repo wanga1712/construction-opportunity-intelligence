@@ -39,7 +39,7 @@ def test_live_schema_audit_has_no_writes():
 
 def test_contact_role_is_not_hardcoded():
     source = (ROOT / "src" / "ui" / "hydro_inline_workspace_tabs.py").read_text(encoding="utf-8")
-    assert 'st.text_input("Должность / роль"' in source
+    assert '"Должность / роль"' in source
     assert "ROLE_OPTIONS" not in source
     assert "role in" not in source
 

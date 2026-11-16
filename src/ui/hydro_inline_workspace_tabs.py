@@ -90,92 +90,126 @@ def _render_contact_form(repo: Any, company: Mapping[str, Any], contact: Mapping
     cid = int(company["id"])
     contact_id = int(contact["id"])
     with st.expander(f"Редактировать · {contact.get('full_name') or 'Контакт'}", expanded=False):
-        with st.form(f"hydro_contact_edit_{cid}_{contact_id}"):
-            full_name = st.text_input("ФИО", value=str(contact.get("full_name") or ""))
-            role = st.text_input("Должность / роль", value=str(contact.get("role") or ""),
-                                 placeholder="Например: главный инженер, начальник эксплуатации")
-            left, right = st.columns(2)
-            email = left.text_input("Email", value=str(contact.get("email") or ""))
-            primary = right.checkbox("Основной контакт", value=bool(contact.get("is_primary")))
-            phone_rows = _contact_phones(contact)
-            for idx, number in enumerate(phone_rows, start=1):
-                extension = f" доб. {number.get('extension')}" if number.get("extension") else ""
-                st.caption(f"Телефон {idx}: {number.get('phone') or '—'}{extension} · {number.get('label') or number.get('phone_type') or ''}")
-                _render_phone_edit(repo, cid, number, contact_id, f"contact_{contact_id}_{idx}")
-            reception_type, reception_schedule, schedule_error, shortcut_applied = render_reception_schedule_editor(
-                f"hydro_contact_reception_{contact_id}", contact.get("reception_type"),
-                contact.get("reception_schedule"),
-            )
-            reception_note = st.text_input(
-                "Комментарий к приёму", value=str(contact.get("reception_note") or ""),
-                key=f"hydro_contact_reception_note_{contact_id}",
-            )
-            comment = st.text_area("Заметка о контакте", value=str(contact.get("comment") or ""))
-            save_contact = st.form_submit_button("Сохранить контакт")
-            if shortcut_applied:
+        full_name = st.text_input(
+            "ФИО", value=str(contact.get("full_name") or ""),
+            key=f"hydro_contact_name_{contact_id}",
+        )
+        role = st.text_input(
+            "Должность / роль", value=str(contact.get("role") or ""),
+            placeholder="Например: главный инженер, начальник эксплуатации",
+            key=f"hydro_contact_role_{contact_id}",
+        )
+        left, right = st.columns(2)
+        email = left.text_input("Email", value=str(contact.get("email") or ""),
+                                key=f"hydro_contact_email_{contact_id}")
+        primary = right.checkbox("Основной контакт", value=bool(contact.get("is_primary")),
+                                 key=f"hydro_contact_primary_{contact_id}")
+        phone_rows = _contact_phones(contact)
+        comment = st.text_area("Заметка о контакте", value=str(contact.get("comment") or ""),
+                               key=f"hydro_contact_comment_{contact_id}")
+        if st.button("Сохранить контакт", key=f"hydro_contact_save_{contact_id}"):
+            try:
+                ok = repo.update_contact(contact_id, {
+                    "company_id": cid, "full_name": full_name, "role": role,
+                    "email": email, "is_primary": primary, "comment": comment,
+                    "phone": (phone_rows[0].get("phone") if phone_rows else contact.get("phone")),
+                    "phone_ext": (phone_rows[0].get("extension") if phone_rows else contact.get("phone_ext")),
+                    "reception_type": contact.get("reception_type"),
+                    "reception_schedule": contact.get("reception_schedule"),
+                    "reception_note": contact.get("reception_note"),
+                })
+            except Exception as exc:
+                st.error(f"Контакт не сохранён: проверьте применение миграции полей приёма и телефонов ({type(exc).__name__}).")
                 return
-            if save_contact:
-                if schedule_error:
-                    st.error(schedule_error)
-                    return
-                try:
-                    ok = repo.update_contact(contact_id, {
-                        "company_id": cid, "full_name": full_name, "role": role,
-                        "email": email, "is_primary": primary, "comment": comment,
-                        "phone": (phone_rows[0].get("phone") if phone_rows else contact.get("phone")),
-                        "phone_ext": (phone_rows[0].get("extension") if phone_rows else contact.get("phone_ext")),
-                        "reception_type": reception_type or None,
-                        "reception_schedule": reception_schedule,
-                        "reception_note": reception_note,
-                    })
-                except Exception as exc:
-                    st.error(f"Контакт не сохранён: проверьте применение миграции полей приёма и телефонов ({type(exc).__name__}).")
-                    return
-                if ok:
-                    st.rerun()
-                st.error("Не удалось сохранить контакт.")
+            if ok:
+                st.rerun()
+            st.error("Не удалось сохранить контакт.")
+        for idx, number in enumerate(phone_rows, start=1):
+            extension = f" доб. {number.get('extension')}" if number.get("extension") else ""
+            st.caption(f"Телефон {idx}: {number.get('phone') or '—'}{extension} · {number.get('label') or number.get('phone_type') or ''}")
+            _render_phone_edit(repo, cid, number, contact_id, f"contact_{contact_id}_{idx}")
+
+        reception_type, reception_schedule, schedule_error, shortcut_applied = render_reception_schedule_editor(
+            f"hydro_contact_reception_{contact_id}", contact.get("reception_type"),
+            contact.get("reception_schedule"),
+        )
+        reception_note = st.text_input(
+            "Комментарий к приёму", value=str(contact.get("reception_note") or ""),
+            key=f"hydro_contact_reception_note_{contact_id}",
+        )
+        if shortcut_applied:
+            return
+        if st.button("Сохранить график приёма", key=f"hydro_contact_save_reception_{contact_id}"):
+            if schedule_error:
+                st.error(schedule_error)
+                return
+            try:
+                ok = repo.update_contact(contact_id, {
+                    "company_id": cid,
+                    "full_name": contact.get("full_name") or "",
+                    "role": contact.get("role") or "",
+                    "phone": contact.get("phone") or "",
+                    "phone_ext": contact.get("phone_ext") or "",
+                    "email": contact.get("email") or "",
+                    "is_primary": contact.get("is_primary", False),
+                    "comment": contact.get("comment") or "",
+                    "reception_type": reception_type,
+                    "reception_schedule": reception_schedule,
+                    "reception_note": reception_note,
+                })
+            except Exception as exc:
+                st.error(f"График не сохранён ({type(exc).__name__}).")
+                return
+            if ok:
+                st.rerun()
+            st.error("Не удалось сохранить график приёма.")
 
 
 def _render_contact_add(repo: Any, company: Mapping[str, Any], contacts: list[dict[str, Any]]) -> None:
     cid = int(company["id"])
     with st.expander("+ Добавить контакт", expanded=False):
-        with st.form(f"hydro_contact_add_{cid}"):
-            full_name = st.text_input("ФИО")
-            role = st.text_input("Должность / роль", placeholder="Главный инженер · начальник эксплуатации · секретарь · диспетчер")
-            left, right = st.columns(2)
-            phone = left.text_input("Телефон")
-            extension = right.text_input("Добавочный")
-            email = st.text_input("Email")
-            reception_type, reception_schedule, schedule_error, shortcut_applied = render_reception_schedule_editor(
-                f"hydro_contact_add_reception_{cid}", None, None,
-            )
-            reception_note = st.text_input("Комментарий к приёму")
-            primary = st.checkbox("Основной контакт", value=not contacts)
-            add_contact = st.form_submit_button("Добавить контакт")
-            if shortcut_applied:
+        reception_type, reception_schedule, schedule_error, shortcut_applied = render_reception_schedule_editor(
+            f"hydro_contact_add_reception_{cid}", None, None,
+        )
+        reception_note = st.text_input(
+            "Комментарий к приёму", key=f"hydro_contact_add_note_{cid}",
+        )
+        if shortcut_applied:
+            return
+        full_name = st.text_input("ФИО", key=f"hydro_contact_add_name_{cid}")
+        role = st.text_input(
+            "Должность / роль",
+            placeholder="Главный инженер · начальник эксплуатации · секретарь · диспетчер",
+            key=f"hydro_contact_add_role_{cid}",
+        )
+        left, right = st.columns(2)
+        phone = left.text_input("Телефон", key=f"hydro_contact_add_phone_{cid}")
+        extension = right.text_input("Добавочный", key=f"hydro_contact_add_ext_{cid}")
+        email = st.text_input("Email", key=f"hydro_contact_add_email_{cid}")
+        primary = st.checkbox("Основной контакт", value=not contacts,
+                              key=f"hydro_contact_add_primary_{cid}")
+        if st.button("Добавить контакт", key=f"hydro_contact_add_submit_{cid}"):
+            if schedule_error:
+                st.error(schedule_error)
                 return
-            if add_contact:
-                if schedule_error:
-                    st.error(schedule_error)
-                    return
-                if not full_name.strip() or not role.strip():
-                    st.error("Укажите ФИО и роль.")
+            if not full_name.strip() or not role.strip():
+                st.error("Укажите ФИО и роль.")
+            else:
+                phone_list = ([{"phone": phone, "extension": extension,
+                                "phone_type": "work", "label": "Основной", "is_primary": True}]
+                              if phone.strip() else [])
+                try:
+                    repo.add_contact(cid, {
+                        "full_name": full_name, "role": role, "phone": phone,
+                        "phone_ext": extension, "email": email, "is_primary": primary,
+                        "phones": phone_list, "reception_schedule": reception_schedule,
+                        "reception_type": reception_type or None,
+                        "reception_note": reception_note,
+                    })
+                except Exception as exc:
+                    st.error(f"Контакт не сохранён: проверьте применение миграции полей приёма и телефонов ({type(exc).__name__}).")
                 else:
-                    phone_list = ([{"phone": phone, "extension": extension,
-                                    "phone_type": "work", "label": "Основной", "is_primary": True}]
-                                  if phone.strip() else [])
-                    try:
-                        repo.add_contact(cid, {
-                            "full_name": full_name, "role": role, "phone": phone,
-                            "phone_ext": extension, "email": email, "is_primary": primary,
-                            "phones": phone_list, "reception_schedule": reception_schedule,
-                            "reception_type": reception_type or None,
-                            "reception_note": reception_note,
-                        })
-                    except Exception as exc:
-                        st.error(f"Контакт не сохранён: проверьте применение миграции полей приёма и телефонов ({type(exc).__name__}).")
-                    else:
-                        st.rerun()
+                    st.rerun()
 
 
 def _render_add_phone(repo: Any, company: Mapping[str, Any], contacts: list[dict[str, Any]]) -> None:
@@ -218,26 +252,31 @@ def render_contacts(repo: Any, company: Mapping[str, Any], card: Mapping[str, An
     st.markdown("**График приёма УК**")
     render_reception_schedule_summary(company.get("reception_type"), company.get("reception_schedule"))
     with st.expander("Изменить данные УК", expanded=False):
-        with st.form(f"hydro_company_contacts_{cid}"):
-            website_value = st.text_input("Сайт УК", value=website, placeholder="https://…")
-            phone_value = st.text_input("Общий телефон", value=phone)
-            reception_type, reception_schedule, schedule_error, shortcut_applied = render_reception_schedule_editor(
-                f"hydro_company_reception_{cid}", company.get("reception_type"),
-                company.get("reception_schedule"),
-            )
-            save_company = st.form_submit_button("Сохранить данные УК")
-            if shortcut_applied:
-                return
-            if save_company:
-                if schedule_error:
-                    st.error(schedule_error)
-                else:
-                    repo.save_params(cid, {
-                        "website": website_value, "phone": phone_value,
-                        "reception_type": reception_type,
-                        "reception_schedule": reception_schedule,
-                    })
-                    st.rerun()
+        reception_type, reception_schedule, schedule_error, shortcut_applied = render_reception_schedule_editor(
+            f"hydro_company_reception_{cid}", company.get("reception_type"),
+            company.get("reception_schedule"),
+        )
+        if shortcut_applied:
+            return
+        if st.button("Сохранить график УК", key=f"hydro_company_save_reception_{cid}"):
+            if schedule_error:
+                st.error(schedule_error)
+            else:
+                repo.save_params(cid, {
+                    "reception_type": reception_type,
+                    "reception_schedule": reception_schedule,
+                })
+                st.rerun()
+        website_value = st.text_input(
+            "Сайт УК", value=website, placeholder="https://…",
+            key=f"hydro_company_website_{cid}",
+        )
+        phone_value = st.text_input(
+            "Общий телефон", value=phone, key=f"hydro_company_phone_{cid}",
+        )
+        if st.button("Сохранить сайт и телефон", key=f"hydro_company_save_fields_{cid}"):
+            repo.save_params(cid, {"website": website_value, "phone": phone_value})
+            st.rerun()
     try:
         company_phones = repo.list_company_phones(cid)
     except Exception:

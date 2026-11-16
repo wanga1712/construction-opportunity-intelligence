@@ -15,8 +15,10 @@ DAYS = (
     ("wed", "Ср", ("wed", "wednesday", "ср", "среда")),
     ("thu", "Чт", ("thu", "thur", "thurs", "thursday", "чт", "четверг")),
     ("fri", "Пт", ("fri", "friday", "пт", "пятница")),
-    ("sat", "Сб", ("sat", "saturday", "сб", "суббота")),
-    ("sun", "Вс", ("sun", "sunday", "вс", "воскресенье")),
+)
+_LEGACY_WEEKEND_DAYS = (
+    ("sat", ("sat", "saturday", "сб", "суббота")),
+    ("sun", ("sun", "sunday", "вс", "воскресенье")),
 )
 DAY_LABELS = {key: label for key, label, _ in DAYS}
 _TIME_RANGE = re.compile(r"^\s*(\d{1,2}:\d{2})\s*[-–—]\s*(\d{1,2}:\d{2})\s*$")
@@ -40,6 +42,7 @@ def normalize_weekly_schedule(raw: Any) -> tuple[dict[str, Any], str | None]:
     schedule: dict[str, Any] = {}
     legacy_parts: list[str] = []
     aliases = {alias: key for key, _, names in DAYS for alias in names}
+    aliases.update({alias: key for key, names in _LEGACY_WEEKEND_DAYS for alias in names})
 
     def add(day_name: Any, slot: Any) -> None:
         day = aliases.get(str(day_name).strip().casefold())
@@ -89,12 +92,13 @@ def reception_type_label(value: Any) -> str:
 
 def format_compact_schedule(raw: Any, reception_type: Any = "daily") -> str:
     schedule, legacy = normalize_weekly_schedule(raw)
-    if legacy and not schedule:
+    weekday_keys = [key for key, _, _ in DAYS]
+    if legacy and not any(schedule.get(day) for day in weekday_keys):
         return f"Старый график: {legacy}"
-    if not schedule:
+    if not any(schedule.get(day) for day in weekday_keys):
         return "График не задан"
     rows = []
-    day_order = [key for key, _, _ in DAYS]
+    day_order = weekday_keys
     index = 0
     while index < len(day_order):
         day = day_order[index]
@@ -126,7 +130,7 @@ def validate_weekly_schedule(schedule: Mapping[str, Any]) -> str | None:
 
 
 def apply_weekday_shortcut(schedule: Mapping[str, Any], start: Any, end: Any) -> dict[str, Any]:
-    """Apply a selected interval to Monday-Friday while preserving weekends."""
+    """Apply a selected interval to Monday-Friday while preserving hidden legacy data."""
     start_text = start.strftime("%H:%M") if hasattr(start, "strftime") else _valid_time(start)
     end_text = end.strftime("%H:%M") if hasattr(end, "strftime") else _valid_time(end)
     result = dict(schedule)
@@ -166,7 +170,7 @@ def render_reception_schedule_editor(
             st.session_state[f"{prefix}_{key}_from"] = time.fromisoformat(filled[key]["from"])
             st.session_state[f"{prefix}_{key}_to"] = time.fromisoformat(filled[key]["to"])
 
-    applied = apply.form_submit_button("Применить Пн–Пт", on_click=apply_weekdays)
+    applied = apply.button("Применить Пн–Пт", on_click=apply_weekdays)
     if applied:
         st.info("График будней заполнен. Проверьте время и сохраните изменения.")
     result: dict[str, Any] = dict(schedule)
