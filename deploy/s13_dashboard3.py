@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 # PHYSICAL_KISOK_DASHBOARD_UPGRADE_V1
 import json, os, re, socket, subprocess, sys, threading, time
+from datetime import datetime, timezone
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 # System health probes — единый источник CPU/temp (read-only, без выдуманных нулей).
@@ -201,12 +202,53 @@ def disks():
     return res
 
 CACHE={"data":{},"ts":0}
+RUNTIME={"data":{},"ts":0}
+CONTOUR_CACHE={"data":None,"ts":0}
+NORMALIZATION_CACHE={"data":None,"ts":0}
+API_CACHE={"data":None,"ts":0}
+API_CACHE_LOCK=threading.Lock()
 RATE_WINDOW_MIN=60
 ETA_OK_MAX_HOURS=12
 ETA_EDGE_MAX_HOURS=24
 ADMISSION_POLICY="BUSINESS_RESEARCH_ADMISSION_V2"
 MAX_ROUTING_ATTEMPTS=int(os.environ.get("CRM_V3_ROUTING_MAX_ATTEMPTS","3"))
 DAY_START_MAX_AGE_SECONDS=36*60*60
+
+def parse_gpu_compute_apps(output, by_pid, unit_lookup):
+    result=[]
+    for line in output.splitlines():
+        p=[x.strip() for x in line.split(",",2)]
+        if len(p)==3 and p[0].isdigit():
+            pid=int(p[0]); owner=by_pid.get(pid,{})
+            result.append({"pid":pid,"process":p[1],"memory":p[2],"unit":unit_lookup(pid),"parent":by_pid.get(owner.get("ppid"),{}).get("cmd")})
+    return result
+
+def parse_current_assessment(lines):
+    current=None
+    for line in lines:
+        m=re.search(r"Processing CRM ID (\d+)",line)
+        if m: current=int(m.group(1))
+        if current and re.search(r"persisted .*procurement_id=%d"%current,line): current=None
+    return current
+
+def document_runtime_counts(ready, processing, active_workers):
+    return {"ready":ready,"processing":processing,"stale":processing if not active_workers else 0,
+            "state":"STALE_PROCESSING" if processing and not active_workers else ("RUNNING" if processing else ("READY" if ready else "IDLE"))}
+
+def classify_service_runtime(active_state, main_pid, has_work):
+    if active_state=="failed": return "FAILED"
+    if active_state!="active" or not main_pid: return "STOPPED"
+    return "RUNNING" if has_work else "IDLE"
+
+def normalization_runtime_state(implemented, running):
+    return "RUNNING" if running else ("OFF" if implemented else "NOT_FOUND")
+
+def parse_runtime_events(lines, limit=20):
+    result=[]
+    for line in lines[-limit:]:
+        idm=re.search(r"(?:CRM ID|procurement_id=)(\d+)",line)
+        result.append({"time":line[:25],"stage":"assessment" if "assessment" in line.lower() else ("feeder" if "feeder" in line.lower() else "documents"),"event":line[-180:],"procurement":idm.group(1) if idm else "—"})
+    return result
 
 def daily_kpis():
     """Bounded daily funnel/awards + real rolling throughput."""
@@ -882,6 +924,125 @@ def loop():
         try: heavy()
         except Exception as e: CACHE["data"]={"err":str(e)}
         time.sleep(90)
+
+def normalization_runtime_metrics(running=False, unit_name=None):
+    if NORMALIZATION_CACHE["data"] is None or time.time()-NORMALIZATION_CACHE["ts"]>=60:
+        sql=("WITH latest AS (SELECT DISTINCT ON (procurement_id) status,updated_at "
+             "FROM estimate_row_normalization_procurements "
+             "ORDER BY procurement_id,updated_at DESC,run_id DESC) "
+             "SELECT count(*) FILTER (WHERE status<>'COMPLETED'), "
+             "max(updated_at) FILTER (WHERE status='COMPLETED'), "
+             "count(*) FILTER (WHERE status='COMPLETED' AND updated_at>=now()-interval '1 hour'), "
+             "count(*) FILTER (WHERE status='COMPLETED' AND updated_at>=now()-interval '24 hours') FROM latest")
+        try:
+            r=rows(pq("document_intelligence",sql,8)); v=r[0] if r else []
+            data={"pending":i(v[0]) if len(v)>0 else None,"last_success":v[1] if len(v)>1 else None,
+                  "normalized_procurements_last_1h":i(v[2]) if len(v)>2 else None,
+                  "normalized_procurements_last_24h":i(v[3]) if len(v)>3 else None}
+        except Exception:
+            data={"pending":None,"last_success":None,"normalized_procurements_last_1h":None,
+                  "normalized_procurements_last_24h":None}
+        NORMALIZATION_CACHE.update({"data":data,"ts":time.time()})
+    return {"implemented":True,"running":running,"state":"RUNNING" if running else "OFF","unit":unit_name,**NORMALIZATION_CACHE["data"]}
+
+def runtime_snapshot():
+    """Bounded live process/service attribution; no business-state writes."""
+    try:
+        proc=subprocess.run(["ps","-eo","pid=,ppid=,pcpu=,etimes=,args=","--sort=-pcpu"],capture_output=True,text=True,timeout=3).stdout
+        procs=[]
+        for line in proc.splitlines():
+            p=line.strip().split(None,4)
+            if len(p)==5:
+                try: procs.append({"pid":int(p[0]),"ppid":int(p[1]),"cpu":float(p[2]),"elapsed":int(p[3]),"cmd":p[4]})
+                except ValueError: pass
+        by_pid={p["pid"]:p for p in procs}
+        def unit(pid):
+            try:
+                cg=open("/proc/%d/cgroup"%pid).read()
+                m=re.search(r"([^/]+\.service)",cg)
+                return m.group(1) if m else None
+            except Exception: return None
+        units=subprocess.run(["systemctl","list-units","--all","--type=service","--no-legend"],capture_output=True,text=True,timeout=4).stdout
+        names=[x.split()[0] for x in units.splitlines() if re.search(r"document|tender-docs|normaliz",x,re.I)]
+        relevant=["crm-ai-assessment-runner.service","crm-v3-factual-feeder.service","crm-v3-autonomous-worker.service","crm-procurement-sync.service","postgresql@17-main.service","ollama.service"]+names
+        states={}
+        for name in dict.fromkeys(relevant):
+            s=subprocess.run(["systemctl","show",name,"-p","ActiveState","-p","MainPID","--value"],capture_output=True,text=True,timeout=2).stdout.splitlines()
+            states[name]={"state":s[0] if s else "unknown","pid":int(s[1]) if len(s)>1 and s[1].isdigit() else None}
+        gpu_out=subprocess.run(["nvidia-smi","--query-compute-apps=pid,process_name,used_gpu_memory","--format=csv,noheader"],capture_output=True,text=True,timeout=4).stdout
+        model_out=subprocess.run(["ollama","ps"],capture_output=True,text=True,timeout=3).stdout.splitlines()
+        gpu_model=subprocess.run(["nvidia-smi","--query-gpu=name","--format=csv,noheader"],capture_output=True,text=True,timeout=3).stdout.strip().splitlines()
+        gpu_procs=parse_gpu_compute_apps(gpu_out,by_pid,unit)
+        for item in gpu_procs:
+            item["elapsed"]=by_pid.get(item["pid"],{}).get("elapsed")
+            item["cpu"]=by_pid.get(item["pid"],{}).get("cpu")
+        aj=subprocess.run(["journalctl","-u","crm-ai-assessment-runner.service","-n","40","--no-pager","-o","short-unix"],capture_output=True,text=True,timeout=5).stdout.splitlines()
+        current=parse_current_assessment(aj)
+        started_epoch=None
+        for log_line in aj:
+            start_match=re.search(r"^(\d+(?:\.\d+)?)\s+.*Processing CRM ID (\d+)",log_line)
+            if start_match and int(start_match.group(2))==current: started_epoch=float(start_match.group(1))
+            if current and re.search(r"persisted .*procurement_id=%d"%current,log_line): started_epoch=None
+        job_elapsed=max(0,int(time.time()-started_epoch)) if started_epoch else None
+        assessment=states.get("crm-ai-assessment-runner.service",{})
+        apid=assessment.get("pid")
+        if apid:
+            child=next((p for p in procs if p["ppid"]==apid and "crm_ai_assessment_runner.py" in p["cmd"]),None)
+            if child: apid=child["pid"]
+        contract=None
+        if current is not None:
+            r=rows(pq("crm","SELECT contract_number FROM crm_procurements WHERE id=%d"%current,4))
+            contract=r[0][0] if r and r[0] else None
+        feeder_log=subprocess.run(["journalctl","-u","crm-v3-factual-feeder.service","-n","1","--no-pager","-o","cat"],capture_output=True,text=True,timeout=3).stdout.strip()
+        docs=states.get("crm-ai-assessment-runner.service")
+        doc_units=[(k,v) for k,v in states.items() if re.search(r"document|tender-docs",k,re.I) and not re.search(r"sweeper|retention|probe",k,re.I)]
+        running_docs=sum(v["state"]=="active" and v["pid"] not in (None,0) for _,v in doc_units)
+        docqueue=((CACHE.get("data") or {}).get("command") or {}).get("documents",{})
+        docstate=document_runtime_counts(docqueue.get("waiting"),docqueue.get("working"),running_docs)
+        top=[dict(p,unit=unit(p["pid"])) for p in procs[:8]]
+        events=[]
+        journal_units=["-u","crm-ai-assessment-runner.service","-u","crm-v3-factual-feeder.service"]
+        for name,_ in doc_units: journal_units += ["-u",name]
+        ev=subprocess.run(["journalctl",*journal_units,"-n","60","--since","20 minutes ago","--no-pager","-o","short-iso"],capture_output=True,text=True,timeout=6).stdout.splitlines()
+        for line in ev[-20:]:
+            idm=re.search(r"(?:CRM ID|procurement_id=)(\d+)",line)
+            stage="assessment" if "assessment" in line.lower() or "crm-ai-assessment" in line.lower() else ("feeder" if "feeder" in line.lower() else "documents")
+            events.append({"time":line[:25],"stage":stage,"event":line[-180:],"procurement":idm.group(1) if idm else "—"})
+        arbiter={}
+        try:
+            with open("/var/lib/crm-v3-canary/gpu_arbiter/state.json") as fh: arbiter=json.load(fh)
+        except Exception: pass
+        arbiter_age=None
+        try: arbiter_age=max(0,int((datetime.now(timezone.utc)-datetime.fromisoformat(arbiter["updated_at"])).total_seconds()))
+        except Exception: pass
+        for e in events:
+            e["result"]="FAILED" if re.search(r"failed|error|exception",e["event"],re.I) else ("DONE" if re.search(r"persisted|completed|success",e["event"],re.I) else "EVENT")
+            e["duration"]=(re.search(r"(\d+(?:\.\d+)?s)",e["event"]) or [None,None])[1]
+        failed_by_procurement={}
+        for event in events:
+            if event["result"]=="FAILED" and event["procurement"] not in ("?", "-"):
+                failed_by_procurement[event["procurement"]]=failed_by_procurement.get(event["procurement"],0)+1
+        failed_loop_detected=any(count>1 for count in failed_by_procurement.values())
+        assessment_consecutive_failures=0
+        for event in reversed(events):
+            if event["stage"]!="assessment": continue
+            if event["result"]=="FAILED": assessment_consecutive_failures+=1
+            elif event["result"]=="DONE": break
+        current_stage="MODEL_INFERENCE" if current else ("IDLE" if assessment.get("state")=="active" else assessment.get("state","UNKNOWN").upper())
+        normalization_unit=next((k for k in states if "normaliz" in k.lower()),None)
+        normalization=normalization_runtime_metrics(bool(normalization_unit and states[normalization_unit]["state"]=="active"),normalization_unit)
+        gpu_caller=unit(i(arbiter.get("holder_pid"))) if arbiter_age is not None and arbiter_age<=30 and arbiter.get("holder_pid") else None
+        if not gpu_caller and gpu_procs: gpu_caller=gpu_procs[0].get("unit")
+        return {"cpu_top":top,"gpu_processes":gpu_procs,"gpu_model":gpu_model[0] if gpu_model else None,"gpu_active_model":model_out[1].strip() if len(model_out)>1 else None,"gpu_owner_unknown":bool(gpu_procs and not gpu_caller),"gpu_caller":gpu_caller,"services":states,"commercial":{"state":states.get("crm-procurement-sync.service",{}).get("state","unknown"),"unit":"crm-procurement-sync.service","pid":states.get("crm-procurement-sync.service",{}).get("pid")},"assessment":{"state":assessment.get("state"),"pid":apid,"procurement_id":current,"contract":contract,"elapsed":job_elapsed,"stage":current_stage,"batch_size":None,"batch_progress":None,"last_success":None,"last_failure":None,"consecutive_failures":assessment_consecutive_failures},"failed_loop_detected":failed_loop_detected,"feeder":{"state":states.get("crm-v3-factual-feeder.service",{}).get("state"),"last_event":feeder_log[-220:]},"documents":{"workers_running":running_docs,"workers_total":len(doc_units),"queue_working":docstate["processing"],"queue_ready":docstate["ready"],"stale":docstate["stale"],"state":docstate["state"]},"normalization":normalization,"autonomous":states.get("crm-v3-autonomous-worker.service",{}),"active_jobs":[{"stage":"ASSESSMENT","procurement_id":current,"contract":contract,"action":current_stage,"progress":None,"elapsed":job_elapsed,"started_at":time.strftime("%Y-%m-%d %H:%M:%S",time.localtime(started_epoch)) if started_epoch else None,"pid":apid,"cpu":next((p["cpu"] for p in procs if p["pid"]==apid),None),"gpu":bool(gpu_procs)}] if current else [],"feeder_metrics":{"last_cycle":feeder_log[-220:],"duration":None,"current_commercial_seen":None,"actionable":None,"admitted":None,"already_done":None,"no_documents":None,"lifecycle_closed":None},"events":events,"load":list(os.getloadavg()) if hasattr(os,"getloadavg") else [],"sampled_at":time.strftime("%Y-%m-%d %H:%M:%S")}
+    except Exception as e:
+        return {"error":str(e),"sampled_at":time.strftime("%Y-%m-%d %H:%M:%S")}
+
+def runtime_loop():
+    while True:
+        started=time.monotonic()
+        RUNTIME["data"]=runtime_snapshot()
+        RUNTIME["data"]["collector_ms"]=round((time.monotonic()-started)*1000)
+        RUNTIME["ts"]=time.time(); time.sleep(10)
 def problems():
     d=CACHE["data"]; pr=[]; f=d.get("flow",{})
     if f.get("production")!="active":
@@ -1032,6 +1193,12 @@ def daily_work_contract(command, contour_data):
     }
     return daily_work,contour_total
 
+def cached_contour():
+    if CONTOUR_CACHE["data"] is None or time.time()-CONTOUR_CACHE["ts"]>=45:
+        CONTOUR_CACHE["data"]=contour()
+        CONTOUR_CACHE["ts"]=time.time()
+    return CONTOUR_CACHE["data"]
+
 def snapshot():
     d=json.loads(json.dumps(CACHE["data"]))
     cpu=cpu_metrics()
@@ -1039,7 +1206,7 @@ def snapshot():
     gpu_data=gpu()
     disk_data=disks()
     pr=problems()
-    contour_data=contour()
+    contour_data=cached_contour()
     daily_work,contour_total=daily_work_contract(d.get("command") or {},contour_data)
     if temps.get("status")=="CRITICAL":
         pr.append(["CRITICAL","Перегрев CPU: %sC" % temps.get("display"),temps.get("source") or "source unknown"])
@@ -1064,19 +1231,20 @@ def snapshot():
               "host":socket.gethostname(),"time":time.strftime("%Y-%m-%d %H:%M:%S"),"load":open("/proc/loadavg").read().split()[:3],
               "problems":pr,"cache_ts":d.get("ts"),"contour":contour_data,
               "daily_work":daily_work,"contour_total":contour_total,
-              "system_status":sys_status})
+              "system_status":sys_status,"runtime":RUNTIME.get("data") or {},
+              "runtime_age_sec":round(time.time()-RUNTIME.get("ts",0)) if RUNTIME.get("ts") else None})
     return d
 
 PAGE=r"""<!doctype html><html><head><meta charset="utf-8"><title>S13 procurement</title><style>
-*{box-sizing:border-box}html,body{height:100%}body{margin:0;background:#0d1117;color:#e6edf3;font-family:system-ui,Segoe UI,Arial;font-size:16px;overflow:hidden}
+*{box-sizing:border-box}html,body{height:100%}body{margin:0;background:#0d1117;color:#e6edf3;font-family:system-ui,Segoe UI,Arial;font-size:16px;overflow:auto}
 header{height:42px;padding:6px 14px;background:#161b22;border-bottom:2px solid #30363d;display:flex;gap:18px;align-items:center}
 .brand{margin:0;font-size:22px;color:#58a6ff;font-weight:700}.header-right{margin-left:auto;display:flex;gap:18px;align-items:center}
 .system{padding:3px 10px;border-radius:14px;font-weight:700;border:1px solid #30363d}
 .sys-ok{color:#3fb950;background:#0d2818}.sys-warn{color:#d29922;background:#2d220b}.sys-bad{color:#ff7b72;background:#3d1418}.sys-unknown{color:#8b949e;background:#21262d}
-.grid{height:calc(100vh - 42px);display:grid;grid-template-columns:repeat(4,minmax(0,1fr));grid-template-rows:190px minmax(0,1fr) 60px 230px 80px;gap:8px;padding:8px}
+.grid{min-height:calc(100vh - 42px);display:grid;grid-template-columns:repeat(4,minmax(0,1fr));grid-auto-rows:min-content;gap:8px;padding:8px}
 .card{background:#161b22;border:1px solid #30363d;border-radius:10px;padding:5px 8px;min-width:0}
 .span4{grid-column:span 4}.span2{grid-column:span 2}.card h2{margin:0 0 4px;font-size:13px;color:#8b949e;text-transform:uppercase;letter-spacing:1px}
-.topcmd{display:grid;grid-template-columns:minmax(0,2.35fr) minmax(360px,.9fr);gap:10px;height:100%}.topsec{background:#0d1117;border:1px solid #30363d;border-radius:8px;padding:7px 9px;min-width:0;overflow:hidden}
+.topcmd{display:grid;grid-template-columns:minmax(0,2.35fr) minmax(360px,.9fr);gap:8px;height:100%}.topsec{background:#0d1117;border:1px solid #30363d;border-radius:8px;padding:7px 9px;min-width:0;overflow:hidden}
 .topsec h2{color:#58a6ff}.tech-link{color:#58a6ff;text-decoration:none;border:1px solid #30363d;border-radius:6px;padding:2px 8px;font-size:13px}
 .card h2.sub{margin-top:7px;color:#58a6ff}.bar{height:14px;background:#21262d;border-radius:5px;overflow:hidden}.bar>span{display:block;height:100%}
 .g{background:#2ea043}.y{background:#d29922}.r{background:#da3633}.big{font-size:22px;font-weight:700}.row{display:flex;justify-content:space-between;gap:10px;margin:3px 0}
@@ -1093,9 +1261,11 @@ header{height:42px;padding:6px 14px;background:#161b22;border-bottom:2px solid #
 .status-ok{color:#3fb950}.status-warn{color:#d29922}.status-bad{color:#ff7b72}.status-unknown{color:#8b949e}.fans{display:flex;gap:12px;align-items:center}.blades{width:32px;height:32px;animation:spin linear infinite}
 .problems-card{min-height:0;overflow:hidden}.problem{padding:4px 9px;border-radius:6px;margin:3px 0;font-size:14px}.problem-critical{background:#3d1418}.problem-warning{background:#2d220b}.problem-info{background:#12233d}
 @keyframes spin{from{transform:rotate(0)}to{transform:rotate(360deg)}}
+.runtime-grid{display:grid;grid-template-columns:1.3fr 1.1fr 1fr 1.4fr;gap:8px}.runtime-box{background:#0d1117;border:1px solid #30363d;border-radius:8px;padding:8px;min-width:0}.runtime-box h3{margin:0 0 6px;color:#58a6ff;font-size:13px}.runtime-hero{font-size:22px;font-weight:750}.runtime-jobs,.runtime-events{max-height:155px;overflow:auto}.runtime-events{font:12px ui-monospace,Consolas,monospace}.rt-row{padding:3px 0;border-bottom:1px solid #21262d}.rt-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:5px}.rt-stage{border:1px solid #30363d;border-radius:6px;padding:5px;font-size:12px}.rt-green{color:#3fb950}.rt-blue{color:#58a6ff}.rt-orange{color:#d29922}.rt-red{color:#ff7b72}.rt-gray{color:#8b949e}.gpu-owner-warning{color:#ff7b72;font-weight:800}
 </style></head><body>
 <header><div class="brand">S13 • АНАЛИТИЧЕСКИЙ КОНТУР</div><div class="header-right"><a class="tech-link" href="/tech">TECH</a><div id="clock" class="small"></div><div id="cache" class="small"></div><div id="system" class="system sys-unknown">СОСТОЯНИЕ НЕ ОПРЕДЕЛЕНО</div></div></header>
 <div class="grid">
+ <div class="card span4"><h2>NOW - LIVE RUNTIME CONSOLE <span id="runtime_age" class="tiny"></span></h2><div class="runtime-grid"><section class="runtime-box"><h3>RESOURCES / TOP CPU / GPU OWNER</h3><div id="runtime_resources"></div></section><section class="runtime-box"><h3>PIPELINE STATUS</h3><div id="pipeline_stages" class="rt-grid"></div></section><section class="runtime-box"><h3>ACTIVE JOBS</h3><div id="runtime_jobs" class="runtime-jobs"></div></section><section class="runtime-box"><h3>LAST EVENTS / 20</h3><div id="runtime_events" class="runtime-events"></div></section></div><h2 class="sub">PROBLEMS / ACTIONABLE</h2><div id="problems"></div></div>
  <div class="card span4"><div class="topcmd"><div class="topsec"><h2>СЕГОДНЯШНИЙ ПОТОК <span class="tiny">все значения — закупки</span></h2><div id="daily_work"></div></div><div class="topsec"><h2>АКТИВНОСТЬ ЗА СЕГОДНЯ</h2><div id="activity" class="activity-grid"></div></div></div></div>
  <div class="card span2"><h2>ОЧЕРЕДЬ ОБРАБОТКИ · ЗАДАЧИ</h2><div id="docpipe"></div><h2 class="sub">МОДЕЛЬ · КАНДИДАТЫ</h2><div id="modelpipe"></div></div>
  <div class="card span2"><h2>LIVE COMMERCIAL · OPEN + AWARDED</h2><div id="commercial"></div></div>
@@ -1120,12 +1290,13 @@ const dur=v=>Math.max(.15,2.1-1.9*Math.min(1,Math.max(0,v)));
 const fanSvg=(d,c)=>`<svg class="blades" style="animation-duration:${d}s" viewBox="0 0 100 100"><g fill="${c}"><path d="M50 50 L49 6 A44 44 0 0 1 80 20 Z"/><path d="M50 50 L94 49 A44 44 0 0 1 80 80 Z"/><path d="M50 50 L51 94 A44 44 0 0 1 20 80 Z"/><path d="M50 50 L6 51 A44 44 0 0 1 20 20 Z"/></g><circle cx="50" cy="50" r="9" fill="#e6edf3"/></svg>`;
 const medal=(name,obj)=>{const colors={GOLD:'#d4a017',SILVER:'#a8b3bd',BRONZE:'#b06a2b',WOOD:'#6e4b2a',UNSCORED:'#8b949e'};return Object.entries(obj||{}).sort((a,b)=>['GOLD','SILVER','BRONZE','WOOD','UNSCORED'].indexOf(a[0])-['GOLD','SILVER','BRONZE','WOOD','UNSCORED'].indexOf(b[0])).map(([k,v])=>`<span class="medal" style="color:${colors[k]}">${k} ${nn(v)}</span>`).join(' · ');};
 const fmtEta=h=>h==null?'н/д':(h<1?Math.max(1,Math.round(h*60))+' мин':Math.floor(h)+' ч '+Math.round((h-Math.floor(h))*60)+' мин');
+function renderRuntime(r,m){r=r||{};const esc=x=>String(x==null?'-':x).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));const state=(x)=>String(x||'UNKNOWN').toUpperCase();const serviceState=(x,inactive='STOPPED')=>state(x)==='ACTIVE'?'RUNNING':state(x)==='INACTIVE'?inactive:state(x);const tone=x=>['ACTIVE','RUNNING'].includes(state(x))?'rt-green':['IDLE'].includes(state(x))?'rt-blue':['INACTIVE','STOPPED'].includes(state(x))?'rt-orange':['FAILED','STUCK'].includes(state(x))?'rt-red':'rt-gray';const services=r.services||{},commercial=r.commercial||{},a=r.assessment||{},f=r.feeder||{},d=r.documents||{},n=r.normalization||{},w=r.autonomous||{},gpu=(r.gpu_processes||[])[0],top=(r.cpu_top||[])[0];$('runtime_age').textContent='sample '+esc(r.sampled_at)+' | collector '+esc(r.collector_ms)+' ms | API '+esc(m.kiosk_query_duration_ms)+' ms | refresh 5s';let gpuText=gpu?`<b>${esc(gpu.process)}</b> PID ${esc(gpu.pid)} | ${esc(r.gpu_active_model||r.gpu_model)}<br>VRAM ${esc(gpu.memory)} | caller ${esc(r.gpu_caller||'UNKNOWN')} | ${esc(gpu.unit||'unit unknown')}<br>procurement ${esc(a.procurement_id)} | ${esc(a.stage)} | ${a.elapsed==null?'-':esc(a.elapsed)+'s'}`:'GPU idle';if(gpu&&r.gpu_owner_unknown)gpuText+=`<br><span class="gpu-owner-warning">GPU OWNER UNKNOWN</span>`;const load=(r.load||[]).map(x=>Number(x).toFixed(2)).join(' / ')||'-';$('runtime_resources').innerHTML=`<div class="runtime-hero">CPU ${esc((m.cpu_detail||{}).busy_pct)}% | GPU ${esc((m.gpu||{}).util)}%</div>${line('RAM',esc((m.mem||{}).used)+' / '+esc((m.mem||{}).total)+' GB')}${line('LOAD AVG',esc(load))}${line('TOP CPU',top?`${esc(top.cmd)} | PID ${esc(top.pid)} | ${esc(top.cpu)}%`: '-')}${line('CPU UNIT',top?esc(top.unit||'-'):'-')}${line('ASSESSMENT RATE',(m.daily||{}).speed_per_hour==null?'?':num1((m.daily||{}).speed_per_hour)+' procurement/hour')}${line('DOCUMENT RATE',(m.command||{}).documents?.throughput_per_hour==null?'?':num1(m.command.documents.throughput_per_hour)+' files/hour')}<div class="rt-row">${gpuText}</div>`;const stage=(name,st,unit,pid,item)=>`<div class="rt-stage"><b>${name}</b><br><span class="${tone(st)}">${esc(state(st))}</span><br>${esc(unit||'-')}<br>PID ${esc(pid||'-')} | ${esc(item||'-')}</div>`;const docState=d.workers_running>0?'RUNNING':'STOPPED';const assessState=a.procurement_id?'RUNNING':(state(a.state)=='ACTIVE'?'IDLE':state(a.state));$('pipeline_stages').innerHTML=[stage('COMMERCIAL',serviceState(services['crm-procurement-sync.service']?.state,'IDLE'),'crm-procurement-sync.service',services['crm-procurement-sync.service']?.pid,'-'),stage('ASSESSMENT',assessState,a.unit,a.pid,a.procurement_id),stage('FEEDER',serviceState(f.state,'IDLE'),'crm-v3-factual-feeder.service',services['crm-v3-factual-feeder.service']?.pid,f.last_event),stage('DOCUMENTS',docState,`${d.workers_running||0}/${d.workers_total||0} workers`,null,`ready ${d.queue_ready??'-'} | stale ${d.stale??'-'}`),stage('NORMALIZATION',n.running?'RUNNING':'OFF',n.unit,null,`pending ${n.pending??'-'} | last ${n.last_success??'-'} | done procurements 1h/24h ${n.normalized_procurements_last_1h??'-'}/${n.normalized_procurements_last_24h??'-'}`),stage('AUTONOMOUS',serviceState(w.state||'inactive','STOPPED'),'crm-v3-autonomous-worker.service',w.pid,'-')].join('');const jobs=r.active_jobs||[];$('runtime_jobs').innerHTML=jobs.length?jobs.map(j=>`<div class="rt-row"><b>${esc(j.stage)}</b> | procurement ${esc(j.procurement_id)} | ${esc(j.contract)}<br>${esc(j.action)} | ${esc(j.progress)} | ${esc(j.elapsed)}s | PID ${esc(j.pid)} | CPU ${esc(j.cpu)}% | GPU ${j.gpu?'YES':'NO'}</div>`).join(''):'<span class="rt-blue">NO ACTIVE JOBS</span>';$('runtime_events').innerHTML=(r.events||[]).slice(-20).reverse().map(e=>`<div class="rt-row">${esc(e.time)} ${esc(e.stage)} ${esc(e.result||e.event)} | ${esc(e.procurement)} | ${esc(e.duration)}</div>`).join('')||'NO RECENT EVENTS';}
 async function tick(){try{const m=await (await fetch('/api/metrics')).json(),cmd=m.command||{},t=cmd.today||{},d=cmd.documents||{},mo=cmd.model||{},co=cmd.commercial||{},rates=cmd.rates||{},ct=m.contour||{},dw=m.daily_work||{},ctTotal=m.contour_total||{},prev=dw.previous_day||{},dk=m.daily||{};
- $('clock').textContent=m.time||'';$('cache').textContent='данные '+(m.cache_ts||'н/д');
+ renderRuntime(m.runtime,m);$('clock').textContent=m.time||'';$('cache').textContent='данные '+(m.cache_ts||'н/д');
  const ss=m.system_status||{state:'UNKNOWN',label:'СОСТОЯНИЕ НЕ ОПРЕДЕЛЕНО'};$('system').textContent=(ss.state==='OK'?'● ':ss.state==='WARNING'?'⚠ ':ss.state==='CRITICAL'?'✕ ':'? ')+ss.label;$('system').className='system '+(ss.state==='OK'?'sys-ok':ss.state==='WARNING'?'sys-warn':ss.state==='CRITICAL'?'sys-bad':'sys-unknown');
- const dt=dk.today||{},age=ctTotal.snapshot_age_sec==null?null:Math.round(ctTotal.snapshot_age_sec/60),dailyPct=dw.daily_progress_pct,barWidth=dailyPct==null?0:Math.max(0,Math.min(100,dailyPct)),tail=dw.remaining_from_day_work_set,tailText=tail==null?'н/д':(tail>0?'осталось '+nn(tail):'✓ очередь дня закрыта'),tailCls=tail==null?'':tail>0?'daily-tail-warn':'daily-tail-ok';
+ const dt=dk.today||{},age=ctTotal.snapshot_age_sec==null?null:Math.round(ctTotal.snapshot_age_sec/60);
  const metric=(label,value,note)=>`<div class="daily-kpi"><div class="label">${label}</div><div class="value">${nn(value)}</div><div class="note">${note||''}</div></div>`;
- $('daily_work').innerHTML=`<div class="daily-kpis">${metric('Сегодня поступило',dw.received_today,delta(dw.received_today-prev.received||0))}${metric('С первичным сигналом',dw.with_initial_signal,'приоритет HIGH')}${metric('Без первичного сигнала',dw.without_initial_signal,'приоритет LOW')}${metric('Обработано',dw.processed_from_day_work_set,'та же сегодняшняя когорта')}${metric('В обработке',dw.in_progress_from_day_work_set,'сейчас в пайплайне')}${metric('Осталось',dw.remaining_from_day_work_set,'researchable − processed')}</div><div class="daily-progress"><div><div class="track"><span style="width:${barWidth}%"></span></div><div class="daily-meta"><span class="small">Прогресс исследования сегодняшней когорты</span><span class="daily-tail ${tailCls}">${tailText}</span></div></div><div class="pct">${dailyPct==null?'н/д':num1(dailyPct)+'%'}</div></div><div class="contour-note">Операционно · Routing backlog ${nn(dw.routing_backlog)} · Document queue pending ${nn(dw.document_queue_pending)}</div><div class="contour-note">Общий накопленный контур: ${nn(ctTotal.processed_total)} / ${nn(ctTotal.eligible_total)} · ${ctTotal.progress_pct==null?'н/д':num1(ctTotal.progress_pct)+'%'} · осталось ${nn(ctTotal.remaining_total)} · срез ${age==null?'н/д':age+' мин'} · ${ct.delta_source||'н/д'}</div>`;
+ $('daily_work').innerHTML=`<div class="daily-kpis">${metric('Received today',dw.received_today,delta(dw.received_today-prev.received||0))}${metric('Initial signal',dw.with_initial_signal,'Priority HIGH')}${metric('No initial signal',dw.without_initial_signal,'Priority LOW')}${metric('Classified',dw.processed_from_day_work_set,`${nn(dw.processed_from_day_work_set)} / ${nn(dw.researchable_today)} in cohort`)}${metric('In progress',dw.in_progress_from_day_work_set,'currently in pipeline')}${metric('Remaining',dw.remaining_from_day_work_set,'researchable minus processed')}</div><div class="contour-note">Routing backlog ${nn(dw.routing_backlog)} | Document queue pending ${nn(dw.document_queue_pending)}</div><div class="contour-note">All time processed: ${nn(ctTotal.processed_total)} / ${nn(ctTotal.eligible_total)} | snapshot age ${age==null?'-':age+' min'}</div>`;
  const acts=[['Задачи документов завершены',dt.processed,'procurements'],['AI assessed',t.model_processed,'procurements'],['Validated match details',mo.raw_done_today,'match details'],['Commercial results',co.result_today,'procurements']];
  $('activity').innerHTML=acts.map(a=>`<div class="activity"><b>${nn(a[1])}</b><span>${a[0]} · ${a[2]}</span></div>`).join('');
  const docRate=d.throughput_per_hour,docEta=(docRate>0&&d.waiting>0)?d.waiting/docRate:null;
@@ -1152,9 +1323,9 @@ async function tick(){try{const m=await (await fetch('/api/metrics')).json(),cmd
  if(g){$('gpu').textContent=g.util==null?'н/д':num1(g.util)+'% busy';setb($('gpub'),g.util);$('gpu_power').textContent=`draw ${g.power==null?'н/д':g.power+' W'} / cap ${g.limit==null?'н/д':g.limit+' W'} · до cap ${g.headroom_w==null?'н/д':g.headroom_w+' W'}`;$('gpu_cap').textContent=`default ${g.default_limit==null?'н/д':g.default_limit+' W'} · cap ${g.power_cap_pct==null?'н/д':g.power_cap_pct+'%'} · locked ${g.locked_w==null?'н/д':g.locked_w+' W'}`;$('gpu_state').innerHTML=`<span class="${g.power_state==='POWER_LIMIT'?'status-warn':'status-ok'}">${g.power_state==='POWER_LIMIT'?'POWER LIMIT':g.power_state==='NEAR_POWER_CAP'?'БЛИЗКО К POWER CAP':'НЕ УПИРАЕТСЯ В CAP'}</span>${g.throttle_reasons&&g.throttle_reasons.length?' · '+g.throttle_reasons.join(', '):''}`;$('gput').textContent=`VRAM ${g.vram_used==null?'н/д':(g.vram_used/1024).toFixed(1)+'/'+(g.vram_total/1024).toFixed(1)+' GB'} · ${g.temp==null?'н/д':g.temp+'°C'}`;}else{$('gpu').textContent='н/д';setb($('gpub'),null);$('gpu_power').textContent='GPU данные н/д';$('gpu_cap').textContent='';$('gpu_state').textContent='';$('gput').textContent='';}
  $('disks').innerHTML=(m.disks||[]).map(x=>`<div class="small"><b>${x.dev}</b> ${x.mount} ${x.pct==null?'н/д':x.pct+'%'} ${x.temp?x.temp+'C':''} ${x.health}</div>`).join('');
  const fans=(m.cooling&&m.cooling.fans||[]).map(x=>`<span class="small">${x.rpm} RPM</span>`).join(' · ');$('cool').innerHTML=`<div class="small" style="margin-top:4px">FAN ${fans||'н/д'}${g&&g.fan!=null?' · GPU '+g.fan+'%':''}</div>`;
- $('problems').innerHTML=(m.problems||[]).length?(m.problems||[]).slice(0,3).map(p=>`<div class="problem problem-${String(p[0]||'INFO').toLowerCase()}"><b>${p[0]}:</b> ${p[1]} <span class="tiny">${p[2]||''}</span></div>`).join(''):'<div class="status-ok">✓ ПРОБЛЕМ НЕТ</div>';
+ const liveProblems=[],activeJobs=(m.runtime&&m.runtime.active_jobs)||[],topCpu=(m.runtime&&m.runtime.cpu_top&&m.runtime.cpu_top[0]);if(m.gpu&&m.gpu.util>=85&&!activeJobs.length)liveProblems.push(['WARNING','GPU_HIGH_WITHOUT_ACTIVE_JOB',`util=${m.gpu.util}%`]);if(topCpu&&topCpu.cpu>=85&&!activeJobs.length)liveProblems.push(['WARNING','CPU_HIGH_WITHOUT_ACTIVE_JOB',`${topCpu.cmd} ${topCpu.cpu}%`]);if(m.runtime&&m.runtime.failed_loop_detected)liveProblems.push(['WARNING','FAILED_LOOP_DETECTED','same procurement has repeated failure events']);if(m.runtime&&m.runtime.assessment&&m.runtime.assessment.consecutive_failures>0)liveProblems.push(['WARNING','ASSESSMENT_CONSECUTIVE_FAILURES',String(m.runtime.assessment.consecutive_failures)]);if(m.runtime&&m.runtime.failed_loop_detected)liveProblems.push(['WARNING','FAILED LOOP WARNING','same procurement is failing repeatedly']);if(m.runtime&&m.runtime.gpu_owner_unknown)liveProblems.push(['WARNING','GPU OWNER UNKNOWN','GPU process is active but caller attribution is missing']);if(m.runtime&&m.runtime.documents&&m.runtime.documents.workers_running===0&&(m.runtime.documents.queue_ready>0||m.runtime.documents.stale>0))liveProblems.push(['WARNING','PROCESSING_ROWS_WITHOUT_WORKER',`ready=${m.runtime.documents.queue_ready||0} stale=${m.runtime.documents.stale||0}`]);if(m.runtime&&m.runtime.normalization&&!m.runtime.normalization.running)liveProblems.push([m.runtime.normalization.pending>0?'WARNING':'INFO',m.runtime.normalization.pending>0?'NORMALIZATION_OFF_WITH_PENDING_ROWS':'NORMALIZATION_OFF',`pending=${m.runtime.normalization.pending??'unknown'}`]);if(m.runtime&&m.runtime.autonomous&&m.runtime.autonomous.state!=='active')liveProblems.push(['INFO','AUTONOMOUS WORKER STOPPED','']);$('problems').innerHTML=liveProblems.length?liveProblems.map(p=>`<div class="problem problem-${p[0].toLowerCase()}"><b>${p[0]}:</b> ${p[1]} <span class="tiny">${p[2]}</span></div>`).join(''):'<span class="rt-blue">NO ACTIONABLE PROBLEMS</span>';
 }catch(e){$('clock').textContent='ошибка '+e;}}
-tick();setInterval(tick,3000);
+tick();setInterval(tick,5000);
 </script></body></html>"""
 
 TECH_PAGE=r"""<!doctype html><html><head><meta charset="utf-8"><title>S13 TECH</title><style>
@@ -1174,10 +1345,16 @@ tick();setInterval(tick,10000);
 class H(BaseHTTPRequestHandler):
     def log_message(self,*a): pass
     def do_GET(self):
-        if self.path.startswith("/api/metrics"): body=json.dumps(snapshot()).encode(); ct="application/json"
+        if self.path.startswith("/api/metrics"):
+            with API_CACHE_LOCK:
+                if API_CACHE["data"] is None or time.time()-API_CACHE["ts"]>=5:
+                    started=time.monotonic(); API_CACHE["data"]=snapshot(); API_CACHE["data"]["kiosk_query_duration_ms"]=round((time.monotonic()-started)*1000); API_CACHE["ts"]=time.time()
+                body=json.dumps(API_CACHE["data"]).encode()
+            ct="application/json"
         elif self.path.startswith("/tech"): body=TECH_PAGE.encode(); ct="text/html; charset=utf-8"
         else: body=PAGE.encode(); ct="text/html; charset=utf-8"
         self.send_response(200); self.send_header("Content-Type",ct); self.send_header("Content-Length",str(len(body))); self.end_headers(); self.wfile.write(body)
 if __name__=="__main__":
     threading.Thread(target=loop,daemon=True).start()
+    threading.Thread(target=runtime_loop,daemon=True).start()
     ThreadingHTTPServer(("127.0.0.1",8897),H).serve_forever()
