@@ -263,22 +263,26 @@ def read_uk_matches(db: Any, uk_key: str, year: int) -> list[dict[str, Any]]:
 
 
 def read_uk_contract_rows(db: Any, uk_key: str, *, now: datetime | None = None) -> dict[str, Any]:
-    """Read the CRM-side address match and contract detail in one bounded query."""
+    """Read sync freshness and all matched contracts for a UK in one query."""
     try:
-        ensure_store_ready(db)
-        state = read_state(db)
-        status, message = freshness(state, now)
         rows = _rows(db, """
-            SELECT a.address_key, a.address_text, a.match_method AS address_match_method,
+            SELECT to_jsonb(s) AS sync_state, a.address_key, a.address_text,
+                   a.match_method AS address_match_method,
                    a.match_score AS address_match_score, l.contract_id, l.contract_number,
                    l.contract_date, l.contract_year, l.amount, l.is_waterproofing,
                    l.match_method, l.match_score
-              FROM crm_waterproofing_615_uk_address a
+              FROM (SELECT 1) AS seed
+              LEFT JOIN crm_waterproofing_615_sync_state s
+                ON s.source = %(source)s
+              LEFT JOIN crm_waterproofing_615_uk_address a
+                ON a.uk_key = %(uk_key)s
               LEFT JOIN crm_waterproofing_615_uk_link l
                 ON l.uk_key = a.uk_key AND l.address_key = a.address_key
-             WHERE a.uk_key = %(uk_key)s
              ORDER BY a.address_text, l.contract_date DESC NULLS LAST, l.contract_id
-        """, {"uk_key": str(uk_key)})
+        """, {"source": SYNC_SOURCE, "uk_key": str(uk_key)})
+        state = (rows[0].get("sync_state") or {}) if rows else {}
+        status, message = freshness(state, now)
+        rows = [row for row in rows if row.get("address_key")]
         return {"available": True, "status": status, "message": message,
                 "state": state, "rows": rows}
     except StoreUnavailable as error:

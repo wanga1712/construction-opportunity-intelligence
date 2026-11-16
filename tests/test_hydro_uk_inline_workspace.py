@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import date
+from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 from types import ModuleType
 
@@ -154,6 +154,39 @@ def test_stale_615_object_indicator_is_unknown_not_zero(monkeypatch):
 
     assert any("неизвестно" in line for line in rendered)
     assert not any("не найдено" in line for line in rendered)
+
+
+def test_615_detail_read_batches_freshness_and_contracts():
+    import sys
+
+    for name in ("modules", "modules.crm", "modules.crm.analytics"):
+        package = ModuleType(name)
+        package.__path__ = []
+        sys.modules.setdefault(name, package)
+    tender_utils = ModuleType("modules.crm.analytics.tender_row_utils")
+    tender_utils.query_dicts = lambda *args, **kwargs: []
+    sys.modules.setdefault("modules.crm.analytics.tender_row_utils", tender_utils)
+    from src.services.waterproofing_615_store import read_uk_contract_rows
+
+    class DB:
+        def __init__(self):
+            self.calls = []
+
+        def execute_query(self, sql, params):
+            self.calls.append((sql, params))
+            return [{"sync_state": {
+                "status": "SUCCESS",
+                "last_success_at": datetime.now(timezone.utc) - timedelta(hours=40),
+            }, "address_key": None, "contract_id": None}]
+
+    db = DB()
+    payload = read_uk_contract_rows(db, "uk-1")
+    assert len(db.calls) == 1
+    assert "crm_waterproofing_615_sync_state" in db.calls[0][0]
+    assert "crm_waterproofing_615_uk_address" in db.calls[0][0]
+    assert "crm_waterproofing_615_uk_link" in db.calls[0][0]
+    assert payload["status"] == "stale"
+    assert payload["rows"] == []
 
 
 def test_general_phone_falls_back_to_card_without_contact_rows():

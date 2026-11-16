@@ -50,7 +50,7 @@ def _metric_summary(company: Mapping[str, Any], objects: list[dict[str, Any]], c
     parking_count = int(card.get("parking_count") or sum(int(row.get("parking_spaces") or 0) for row in objects))
     floor_count = int(card.get("total_underground_floors") or sum(int(row.get("floors_underground") or 0) for row in objects))
     parts = [f"{object_count} объектов"]
-    if objects:
+    if object_count:
         parts.append(f"{parking_count} паркингов")
         parts.append(f"{floor_count} подземных этажей")
     priority = card.get("medal_label") or card.get("medal") or card.get("medal_name") or card.get("priority")

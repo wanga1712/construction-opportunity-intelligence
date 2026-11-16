@@ -434,7 +434,7 @@ def render_kanban_tab(service: ObjectsService) -> None:
         render_inline_sidecar(
             selected_card,
             getattr(service, "crm_db", None),
-            object_rows,
+            [],
             move_stage=lambda target: _move_overlay_stage(selected_card, target),
         )
     elif sidecar_open:
