@@ -15,7 +15,7 @@ from src.services.hydro.company_repository import (
     RECEPTION_TYPES,
     schedule_text,
 )
-from src.services.waterproofing_funnel import ACCOUNT_STAGES, STAGE_LABELS, STAGE_DEFAULT_ACTIONS
+from src.services.waterproofing_crm import CRM_STAGES, STAGE_DEFAULT_ACTIONS, normalize_stage
 
 STATUS_FRESH = "fresh"
 STATUS_STALE = "stale"
@@ -437,8 +437,8 @@ def render_actions(
     card: Mapping[str, Any],
     move_stage: Callable[[str], Mapping[str, Any]],
 ) -> None:
-    current = str(card.get("stage") or "new")
-    current_label = STAGE_LABELS.get(current, current)
+    current = normalize_stage(card.get("stage"))
+    current_label = current
     st.markdown(f"**Текущий этап:** {current_label}")
     st.markdown(f"**Следующий шаг:** {card.get('next_action') or STAGE_DEFAULT_ACTIONS.get(current, '—')}")
     try:
@@ -449,11 +449,11 @@ def render_actions(
     for contact in contacts:
         if str(contact.get("role") or "").strip().casefold() in key_roles and contact.get("reception_schedule"):
             st.caption(f"Приём · {contact.get('role')}: {schedule_text(contact.get('reception_schedule'))}")
-    stage_ids = [stage.id for stage in ACCOUNT_STAGES]
+    stage_ids = list(CRM_STAGES)
     selected_stage = st.selectbox(
         "Перевести на этап", stage_ids,
         index=stage_ids.index(current) if current in stage_ids else 0,
-        format_func=lambda key: STAGE_LABELS.get(key, key),
+        format_func=lambda key: key,
         key=f"hydro_overlay_stage_{card.get('key')}",
     )
     if st.button("Сохранить этап", key=f"hydro_overlay_stage_save_{card.get('key')}",

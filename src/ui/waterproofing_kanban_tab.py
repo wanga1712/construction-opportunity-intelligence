@@ -31,6 +31,7 @@ from src.services.waterproofing_board import (
 )
 from src.services.waterproofing_contour import (
     contour_key,
+    latest_contour_state,
     load_contour_states,
     merge_contour_state,
 )
@@ -39,6 +40,7 @@ from src.services.waterproofing_crm import (
     STAGE_DEFAULT_ACTIONS,
     board_kpis,
     build_card,
+    normalize_stage as normalize_crm_stage,
     next_touch_default,
 )
 from src.services.waterproofing_deals import (
@@ -133,6 +135,25 @@ def _account_cards(
         if contour_key(row) not in states
     ]
     return cards
+
+
+def _move_overlay_stage(card: dict[str, Any], target: str) -> dict[str, Any]:
+    """Persist an inline stage move while inheriting the full contour journal row."""
+    key = str(card.get("key") or "")
+    current = normalize_crm_stage(card.get("stage"))
+    actual = normalize_crm_stage(latest_contour_state(key).get("stage"))
+    if target not in CRM_STAGES:
+        return {"moved": False, "reason": "INVALID_STAGE"}
+    if actual != current:
+        return {"moved": False, "reason": "STALE_STAGE_MOVE", "actual_stage": actual}
+    if target == current:
+        return {"moved": False, "reason": "NOOP"}
+    merge_contour_state(key, {
+        "stage": target,
+        "next_action": STAGE_DEFAULT_ACTIONS.get(target, ""),
+        "next_action_date": next_touch_default(target),
+    })
+    return {"moved": True, "from_stage": current, "to_stage": target}
 
 
 def _deal_cards(
@@ -414,12 +435,7 @@ def render_kanban_tab(service: ObjectsService) -> None:
             selected_card,
             getattr(service, "crm_db", None),
             object_rows,
-            move_stage=lambda target: move_card_stage(
-                card_key=str(selected_card.get("key") or ""),
-                funnel=FUNNEL_ACCOUNT,
-                from_stage=str(selected_card.get("stage") or ""),
-                to_stage=str(target),
-            ),
+            move_stage=lambda target: _move_overlay_stage(selected_card, target),
         )
     elif sidecar_open:
         st.session_state[SIDECAR_SELECTED_KEY] = None

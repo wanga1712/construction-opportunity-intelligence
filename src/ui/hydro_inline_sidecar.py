@@ -8,7 +8,7 @@ from typing import Any, Callable
 import streamlit as st
 
 from src.services.hydro.company_repository import HydroCompanyRepository
-from src.services.waterproofing_funnel import STAGE_LABELS
+from src.services.waterproofing_crm import CRM_STAGES
 from src.ui.hydro_inline_workspace_tabs import (
     dispatch_workspace_tab,
     render_615,
@@ -106,7 +106,7 @@ def render_inline_sidecar(
             if company:
                 st.caption(_metric_summary(company, objects, card))
             stage = str(card.get("stage") or "")
-            stage_label = STAGE_LABELS.get(stage, card.get("stage_label") or stage or "—")
+            stage_label = stage if stage in CRM_STAGES else card.get("stage_label") or stage or "—"
             next_step = str(card.get("next_action") or "Следующий шаг не задан")
             st.markdown(f"**Этап:** {stage_label}　 **Следующий шаг:** {next_step}")
         with close_col:

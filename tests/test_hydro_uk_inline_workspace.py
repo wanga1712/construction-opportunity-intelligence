@@ -205,7 +205,11 @@ def test_615_stale_state_not_rendered_as_zero():
 
 def test_stage_moves_inside_overlay():
     kanban = (ROOT / "src" / "ui" / "waterproofing_kanban_tab.py").read_text(encoding="utf-8")
-    assert "move_stage=lambda target: move_card_stage" in kanban
+    assert "move_stage=lambda target: _move_overlay_stage(selected_card, target)" in kanban
+    move_helper = kanban.split("def _move_overlay_stage(", 1)[1].split("\ndef ", 1)[0]
+    assert "merge_contour_state(key" in move_helper
+    assert '"stage": target' in move_helper
+    assert '"next_action": STAGE_DEFAULT_ACTIONS.get(target, "")' in move_helper
     assert "result = move_stage(selected_stage)" in (ROOT / "src" / "ui" / "hydro_inline_workspace_tabs.py").read_text(encoding="utf-8")
 
 
@@ -214,4 +218,4 @@ def test_tabs_lazy_load_heavy_data():
     calls = []
     handlers = {label: (lambda value=label: calls.append(value)) for label in labels}
     tabs.dispatch_workspace_tab(labels[2], labels, handlers)
-    assert calls == [labels[2]]\n
+    assert calls == [labels[2]]
