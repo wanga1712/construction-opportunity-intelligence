@@ -7374,5 +7374,9 @@ radio choices, weekday toggles, separate start/end time pickers, validation and
 a weekday quick-fill callback. Persisted values retain daily/scheduled types
 and use nested JSONB day intervals; legacy text and flat JSON are normalized,
 while unparseable data is carried under `_legacy` and shown for review. Read-only
-company/contact views compact equal ranges. Focused unit tests pass locally;
-production release and browser acceptance are pending.
+company/contact views compact equal ranges. Focused Hydro suites pass (34
+tests); production files were released atomically with preimage backup
+`/opt/CRM_Streamlit/backups/hydro_reception_schedule_compact_20261116_213332`.
+The existing live reception-type CHECK permits only `daily` and `scheduled`,
+and the UI keeps those values. CRM runtime import and HTTP health pass; browser
+acceptance remains pending because the browser access host is unavailable.
