@@ -104,15 +104,39 @@ def test_editor_contains_weekdays_only_and_summary_hides_weekend():
 def test_time_controls_rerun_outside_forms():
     editor = (ROOT / "src/ui/reception_schedule_editor.py").read_text(encoding="utf-8")
     workspace = (ROOT / "src/ui/hydro_inline_workspace_tabs.py").read_text(encoding="utf-8")
-    assert "apply.button(\"Применить Пн–Пт\"" in editor
+    assert '"Применить Пн–Пт", key=f"{prefix}_apply_weekdays"' in editor
     assert "disabled=not enabled" in editor
     assert "st.form_submit_button(\"Сохранить график" not in workspace
+
+
+def test_shared_component_can_render_multiple_instances():
+    from streamlit.testing.v1 import AppTest
+
+    app = AppTest.from_string('''
+from src.ui.reception_schedule_editor import render_reception_schedule_editor
+render_reception_schedule_editor("company", "daily", None)
+render_reception_schedule_editor("contact_engineer", "scheduled", None)
+render_reception_schedule_editor("contact_operations", "daily", None)
+''').run()
+    assert not app.exception
+
+
+def test_shared_component_can_render_multiple_instances():
+    from streamlit.testing.v1 import AppTest
+
+    app = AppTest.from_string('''
+from src.ui.reception_schedule_editor import render_reception_schedule_editor
+render_reception_schedule_editor("company", "daily", None)
+render_reception_schedule_editor("contact_engineer", "scheduled", None)
+render_reception_schedule_editor("contact_operations", "daily", None)
+''').run()
+    assert not app.exception
 
 
 def test_time_controls_rerun_outside_forms():
     editor = (ROOT / "src/ui/reception_schedule_editor.py").read_text(encoding="utf-8")
     workspace = (ROOT / "src/ui/hydro_inline_workspace_tabs.py").read_text(encoding="utf-8")
-    assert "apply.button(\"Применить Пн–Пт\"" in editor
+    assert '"Применить Пн–Пт", key=f"{prefix}_apply_weekdays"' in editor
     assert "disabled=not enabled" in editor
     assert "st.form_submit_button(\"Сохранить график" not in workspace
 

@@ -170,7 +170,9 @@ def render_reception_schedule_editor(
             st.session_state[f"{prefix}_{key}_from"] = time.fromisoformat(filled[key]["from"])
             st.session_state[f"{prefix}_{key}_to"] = time.fromisoformat(filled[key]["to"])
 
-    applied = apply.button("Применить Пн–Пт", on_click=apply_weekdays)
+    applied = apply.button(
+        "Применить Пн–Пт", key=f"{prefix}_apply_weekdays", on_click=apply_weekdays,
+    )
     if applied:
         st.info("График будней заполнен. Проверьте время и сохраните изменения.")
     result: dict[str, Any] = dict(schedule)
