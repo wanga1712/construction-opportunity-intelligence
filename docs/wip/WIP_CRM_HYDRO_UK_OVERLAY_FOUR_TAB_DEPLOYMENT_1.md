@@ -39,22 +39,36 @@ company-scoped composite FK. Do not run DDL or DML in this deployment WIP.
   inside the overlay.
 - Verify tab-specific lazy loading, no N+1 queries, no full-card navigation,
   and kanban stage context remains visible.
-- Browser acceptance on the connected runtime: desktop and narrow viewport;
-  capture screenshots for the four tabs and stage movement.
+- Browser acceptance on the production CRM at 1920×1080; capture header,
+  Contacts, Objects, 615-ПП, and Actions screenshots. Do not save fictional data
+  or change production stage during acceptance.
 - Stage reviewed runtime bytes, preserve preimages, compile/import with the
-  runtime interpreter, deploy only the reviewed file inventory, perform no
-  restart unless the approved release plan requires it, and check the CRM
-  health endpoint.
+  runtime interpreter, deploy only the reviewed six-file inventory, restart
+  only `crm-streamlit.service` once, and check the CRM health endpoint.
 
 ## Status
 
-STATUS: LOCAL_ACCEPTANCE_IN_PROGRESS
+STATUS: PRE_DEPLOY_GATE
 SCHEMA_MIGRATION: COMPLETE (see `WIP_CRM_HYDRO_UK_CONTACT_SCHEMA_PRODUCTION_MIGRATION_1`)
 OVERLAY_DEPLOYED=NO
 BROWSER_ACCEPTANCE=PENDING
 SCREENSHOTS=NOT CAPTURED
 PRODUCTION_RELEASE_AUTHORITY=AUTHORIZED BY CURRENT USER WIP
-COMMITS=NONE
+COMMITS=6a09ef3,36e9f55,b64c884,3dafa8c,821a1e2,410256f,096b52e
+
+BRANCH=CRM-ANALYTICS-V2-UI-REBUILD-1
+START_HEAD=98655240f77ab195aa68f5e3a0bd00ab816a03e1
+END_HEAD=096b52ec0def4b23bdbfea326a5ea8f1ab434b88
+PRODUCTION_HEAD_BEFORE=b5d46b8f2713b7a1533a6037b461cca6eed7231e
+PRODUCTION_DIRTY_BEFORE=738 entries; target production preimages captured
+CRM_PID_BEFORE=2642954
+FOCUSED_TESTS=131 PASS (checkout-only tender helper import shim)
+GIT_DIFF_CHECK=PASS
+NEW_DDL=NO
+PRODUCTION_DB_SCHEMA_CHANGED=NO
+MODEL_CHANGED=NO
+PARSER_CHANGED=NO
+ANALYTICS_V2_CHANGED=NO
 
 2026-11-16 local acceptance update: added batched per-object 615-ПП indicators
 that report unknown when the last snapshot is stale/unavailable, and exposed
