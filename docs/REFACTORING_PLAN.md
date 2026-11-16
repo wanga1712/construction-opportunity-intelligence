@@ -48,10 +48,11 @@ next deployment WIP.
 
 2026-11-16 Hydro UK inline overlay deployment phase: kept the manager workspace
 inside the Kanban overlay and added batched per-object 615-ПП status plus key
-contact reception hours in Actions. Focused inline/call/stage tests pass (30).
-Two broader test modules cannot collect in this Windows checkout because
-`modules.crm.analytics.tender_row_utils` is absent. Production release/browser
-acceptance remain pending; no production files changed in this phase yet. See
+contact reception hours in Actions. All six focused Hydro suites pass (131
+tests), using an in-memory shim for the checkout-missing
+`modules.crm.analytics.tender_row_utils` import and a task-specific pytest temp
+directory. Production release/browser acceptance remain pending; no production
+files changed in this phase yet. See
 `docs/wip/WIP_CRM_HYDRO_UK_OVERLAY_FOUR_TAB_DEPLOYMENT_1.md`.
 
 The 488-line `hydro_inline_workspace_tabs.py` is deliberately cohesive for this

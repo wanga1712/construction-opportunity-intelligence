@@ -103,7 +103,7 @@ def test_build_deal_card_merges_object_uk_and_state():
             "key": "77:01:0001001:1001",
             "stage": "proposal",
             "next_action": "Защитить техрешение",
-            "next_action_date": "2026-10-08",
+            "next_action_date": (date.today() + timedelta(days=3)).isoformat(),
             "responsible": "Петров",
             "priority": "Gold",
             "potential_amount": "2,4 млн",
@@ -127,7 +127,7 @@ def test_build_deal_card_merges_object_uk_and_state():
     assert card["priority"] == "Gold"
     assert card["priority_icon"] == "🥇"
     assert card["next_action"] == "Защитить техрешение"
-    assert card["next_action_date"] == "2026-10-08"
+    assert card["next_action_date"] == (date.today() + timedelta(days=3)).isoformat()
     assert card["responsible"] == "Петров"
     assert card["in_work"] is True
     assert card["overdue"] is False

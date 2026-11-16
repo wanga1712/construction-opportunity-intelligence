@@ -63,6 +63,7 @@ from `manual_overrides.phone` with the factual Kanban card phone as fallback;
 contact rows are not required. Six runtime files are in release scope. The
 production Kanban already selects a card and opens its inline sidecar, so the
 local-only `hydro_cards.py` change is not part of the production release.
-Compilation and the inline/call/stage focused tests passed (30 tests). The wider
-615-store and UK-CRM suites fail collection in this Windows checkout because
-`modules.crm.analytics.tender_row_utils` is absent. No production files changed.
+Compilation and all six focused Hydro suites passed (131 tests), using an
+in-memory import shim for the checkout-missing `modules.crm.analytics.tender_row_utils`
+helper and a task-specific pytest temp directory. One date-fixed test now uses
+a relative future date. No production files changed yet.
