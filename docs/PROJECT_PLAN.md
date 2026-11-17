@@ -749,3 +749,15 @@ remained stable for 60 seconds. Chromium layout checks passed at three sizes;
 physical screenshots and hashes are in
 `docs/wip/WIP_CRM_V3_KIOSK_PHYSICAL_LAYOUT_REPAIR_2SCREEN_1.md`. Kiosk only;
 no business logic, DB, or CRM changes.
+
+
+## 2026-11-17 S13 kiosk single-screen consolidation
+
+`CRM-V3-KIOSK-ONE-SCREEN-ONLY-1` supersedes the two-screen presentation: the
+physical kiosk has one persistent `screen-main`, with no navigation or screen
+switching. The 1920x1080 physical Firefox viewport and X root geometry were
+unchanged; in-place refresh produced `DOC 1920x1080`, `OUTSIDE 0`, and pipeline
+order `01234`. Chromium checks passed at three viewport sizes; physical
+screenshot and detailed evidence are in
+`docs/wip/WIP_CRM_V3_KIOSK_ONE_SCREEN_ONLY_1.md`. Only kiosk HTML/presentation
+changed; no collector, business logic, DB, or CRM changes.
