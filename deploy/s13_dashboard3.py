@@ -8,6 +8,10 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 CRM_ROOT = "/opt/CRM_Streamlit"
 if CRM_ROOT not in sys.path:
     sys.path.insert(0, CRM_ROOT)
+KIOSK_SOURCE_DIR = os.path.dirname(os.path.abspath(__file__))
+if KIOSK_SOURCE_DIR not in sys.path:
+    sys.path.insert(0, KIOSK_SOURCE_DIR)
+from s13_kiosk_truth import collect_today_truth
 
 try:
     from src.services.match_source_filter import (
@@ -27,6 +31,12 @@ def sh(c,t=10):
     except Exception: return ""
 def pq(db,q,t=20):
     return sh("runuser -u postgres -- psql -d %s -At -F'|' -c \"%s\"" % (db,q),t)
+def truth_pq(db,q,t=20):
+    readonly_sql="BEGIN READ ONLY;\n%s;\nCOMMIT;" % q.rstrip().rstrip(";")
+    proc=subprocess.run(["runuser","-u","postgres","--","psql","-X","-q","-A","-t","-F","|","-d",db,"-v","ON_ERROR_STOP=1","-c",readonly_sql],capture_output=True,text=True,timeout=t)
+    if proc.returncode:
+        raise RuntimeError("read-only kiosk truth query failed (%s): %s"%(db,(proc.stderr or "").strip()[:180]))
+    return proc.stdout
 def svc(n): return subprocess.run(["systemctl","is-active",n],capture_output=True,text=True).stdout.strip() or "?"
 def svc_label(state):
     return {"active":"РАБОТАЕТ","activating":"ЗАПУСКАЕТСЯ",
@@ -37,6 +47,20 @@ def rows(out):
     for l in out.splitlines():
         if "|" in l: r.append(l.split("|"))
     return r
+
+def current_research_authority_ids():
+    """Snapshot the same CURRENT category-opportunity set used by consumers."""
+    sql = """SELECT DISTINCT procurement_id
+      FROM crm_procurement_category_opportunities
+     WHERE status='CURRENT'
+       AND research_action IN ('LIGHT_RESEARCH','PRIORITY_DOCS','DEEP_RESEARCH')
+       AND upper(coalesce(nullif(current_effective_medal,''),candidate_medal,'')) IN ('GOLD','SILVER')
+       AND upper(coalesce(opportunity_track,'')) NOT IN ('','UNKNOWN','NO_COMMERCIAL_ENTRY')
+       AND upper(coalesce(commercial_state,'')) NOT IN
+           ('NO_COMMERCIAL_ENTRY','CLOSED','CLOSED_DIRECT_SUPPLY',
+            'COMMERCIAL_WINDOW_CLOSED','WAITING_SOURCE_OUTCOME','SUPPRESSED')"""
+    output = pq("crm", sql, 30)
+    return sorted({int(line.strip()) for line in output.splitlines() if line.strip().isdigit()})
 def i(x):
     try: return int(str(x).strip())
     except Exception: return None
@@ -54,14 +78,19 @@ def routing_backlog_count():
     try:
         with open(ROUTING_STATUS_PATH) as fh:
             payload=json.load(fh)
+        # During drain, TOTAL_ELIGIBLE_BACKLOG is only the live batch lanes.
+        # The selector also reports review/discovery candidates separately.
         backlog=payload.get("backlog") or {}
+        # New backlog contract already includes discovery in TOTAL_ROUTING_ELIGIBLE_BACKLOG.
         full=backlog.get("TOTAL_ROUTING_ELIGIBLE_BACKLOG")
         if full is not None:
             return int(full or 0)
+        # Backward-compatible fallback for older status payloads.
         live=payload.get("TOTAL_ELIGIBLE_BACKLOG")
         discovery=backlog.get("OTHER_SELECTABLE_LANES")
         if backlog and (live is not None or discovery is not None):
             return int(live or 0) + int(discovery or 0)
+        # A completed canonical selector may persist its full selected count.
         if payload.get("queue_count_selected") is not None:
             value=payload.get("TOTAL_ELIGIBLE_BACKLOG")
             return int(value) if value is not None else None
@@ -205,6 +234,7 @@ CACHE={"data":{},"ts":0}
 RUNTIME={"data":{},"ts":0}
 CONTOUR_CACHE={"data":None,"ts":0}
 NORMALIZATION_CACHE={"data":None,"ts":0}
+TODAY_TRUTH_CACHE={"data":None,"ts":0}
 API_CACHE={"data":None,"ts":0}
 API_CACHE_LOCK=threading.Lock()
 RATE_WINDOW_MIN=60
@@ -283,7 +313,9 @@ def daily_kpis():
             if day:
                 out[day].update({"received":i(r[1]),"direct":i(r[2]),
                                  "object":i(r[3]),"unknown":i(r[4])})
-        qsql=("""
+        current_ids = current_research_authority_ids()
+        current_array = "ARRAY[" + ",".join(str(pid) for pid in current_ids) + "]::bigint[]"
+        qsql=f"""
         SELECT count(DISTINCT procurement_id) FILTER (WHERE completed_at>=current_date),
                count(DISTINCT procurement_id) FILTER
                  (WHERE completed_at>=current_date-interval '1 day' AND completed_at<current_date),
@@ -291,7 +323,10 @@ def daily_kpis():
                  (WHERE completed_at>=now()-interval '60 minutes')
           FROM document_processing_queue
          WHERE status='COMPLETED' AND pipeline_generation='S13_V4_EXHAUSTIVE_CONTEXT'
-        """)
+           AND procurement_id=ANY({current_array})
+           AND category_context->>'commercial_authority_version'='CURRENT_CATEGORY_OPPORTUNITY_V1'
+           AND category_context->>'current_research_eligible'='true'
+        """
         qr=rows(pq("document_intelligence",qsql,20))
         if qr:
             out["today"]["processed"]=i(qr[0][0])
@@ -521,7 +556,13 @@ def command_center_metrics():
          "commercial":{"objects":None,"with_commerce":None,"document_confirmed":None,
                        "category_opportunities":None,"result_today":None,
                        "result_yesterday":None,"open":{},"awarded":{}},
-         "rates":{"arrivals_per_hour":None,"processed_per_hour":None}}
+         "rates":{"arrivals_per_hour":None,"processed_per_hour":None},
+         "rolling_5d":{"available":False,"window_days":5,"arrivals":None,
+                       "processed":None,"avg_arrivals_per_day":None,
+                       "avg_processed_per_day":None,"coverage_pct":None,
+                       "balance_pct":None,"state":"UNKNOWN",
+                       "arrival_days":0,"processed_days":0,
+                       "warming_up":True}}
     try:
         funnel_sql=f"""
         WITH pids AS (
@@ -623,11 +664,11 @@ def command_center_metrics():
           SELECT *,
                  admitted AND (
                    has_prior OR has_current
-                   OR coalesce(ai_assessed_at>=current_date,false)
+                   OR COALESCE(ai_assessed_at>=current_date,false)
                  ) AS with_initial_signal,
                  admitted AND NOT (
                    has_prior OR has_current
-                   OR coalesce(ai_assessed_at>=current_date,false)
+                   OR COALESCE(ai_assessed_at>=current_date,false)
                  ) AS without_initial_signal
             FROM recv
         )
@@ -837,14 +878,71 @@ def command_center_metrics():
         ar=rows(pq("crm",arrivals_sql,20))
         a_n=i(ar[0][0]) if ar else None
         out["rates"]["arrivals_per_hour"]=float(a_n) if a_n else None
-        proc_sql="""
+        current_ids = current_research_authority_ids()
+        current_array = "ARRAY[" + ",".join(str(pid) for pid in current_ids) + "]::bigint[]"
+        proc_sql=f"""
         SELECT count(DISTINCT procurement_id) FROM document_processing_queue
          WHERE status='COMPLETED' AND completed_at>=now()-interval '60 minutes'
            AND pipeline_generation='S13_V4_EXHAUSTIVE_CONTEXT'
+           AND procurement_id=ANY({current_array})
+           AND category_context->>'commercial_authority_version'='CURRENT_CATEGORY_OPPORTUNITY_V1'
+           AND category_context->>'current_research_eligible'='true'
         """
         pr=rows(pq("document_intelligence",proc_sql,20))
         p_n=i(pr[0][0]) if pr else None
         out["rates"]["processed_per_hour"]=float(p_n) if p_n else None
+
+        rolling_sql=f"""
+        SELECT
+          (SELECT count(DISTINCT p.id) FROM crm_procurements p
+            WHERE p.crm_created_at>=current_date-interval '5 days'
+              AND p.crm_created_at<current_date
+              AND EXISTS (SELECT 1 FROM crm_procurement_scope_authority a
+                 WHERE a.procurement_id=p.id AND a.admission_state='ELIGIBLE'
+                   AND a.admission_policy_version='{ADMISSION_POLICY}')),
+          (SELECT count(DISTINCT p.id) FROM crm_procurements p
+            WHERE p.ai_assessed_at>=current_date-interval '5 days'
+              AND p.ai_assessed_at<current_date
+              AND EXISTS (SELECT 1 FROM crm_procurement_scope_authority a
+                 WHERE a.procurement_id=p.id AND a.admission_state='ELIGIBLE'
+                   AND a.admission_policy_version='{ADMISSION_POLICY}')
+              AND (upper(coalesce(p.ai_assessment_status,'')) IN ('COMPLETED','NEEDS_REVIEW')
+                   OR (upper(coalesce(p.ai_assessment_status,''))='FAILED'
+                       AND coalesce(p.ai_routing_attempt_count,0)>={MAX_ROUTING_ATTEMPTS}))),
+          (SELECT count(DISTINCT p.crm_created_at::date) FROM crm_procurements p
+            WHERE p.crm_created_at>=current_date-interval '5 days'
+              AND p.crm_created_at<current_date
+              AND EXISTS (SELECT 1 FROM crm_procurement_scope_authority a
+                 WHERE a.procurement_id=p.id AND a.admission_state='ELIGIBLE'
+                   AND a.admission_policy_version='{ADMISSION_POLICY}')),
+          (SELECT count(DISTINCT p.ai_assessed_at::date) FROM crm_procurements p
+            WHERE p.ai_assessed_at>=current_date-interval '5 days'
+              AND p.ai_assessed_at<current_date
+              AND EXISTS (SELECT 1 FROM crm_procurement_scope_authority a
+                 WHERE a.procurement_id=p.id AND a.admission_state='ELIGIBLE'
+                   AND a.admission_policy_version='{ADMISSION_POLICY}')
+              AND (upper(coalesce(p.ai_assessment_status,'')) IN ('COMPLETED','NEEDS_REVIEW')
+                   OR (upper(coalesce(p.ai_assessment_status,''))='FAILED'
+                       AND coalesce(p.ai_routing_attempt_count,0)>={MAX_ROUTING_ATTEMPTS})))
+        """
+        rr=rows(pq("crm",rolling_sql,40))
+        if rr:
+            arrivals=i(rr[0][0]) or 0
+            processed=i(rr[0][1]) or 0
+            arrival_days=i(rr[0][2]) or 0
+            processed_days=i(rr[0][3]) or 0
+            coverage=round(100.0*processed/arrivals,1) if arrivals else None
+            balance=round(100.0*(processed-arrivals)/arrivals,1) if arrivals else None
+            out["rolling_5d"]={
+                "available":arrivals>0,"window_days":5,
+                "arrivals":arrivals,"processed":processed,
+                "avg_arrivals_per_day":round(arrivals/5.0,1),
+                "avg_processed_per_day":round(processed/5.0,1),
+                "coverage_pct":coverage,"balance_pct":balance,
+                "state":"GREEN" if arrivals and processed>=arrivals else ("RED" if arrivals else "UNKNOWN"),
+                "arrival_days":arrival_days,"processed_days":processed_days,
+                "warming_up":arrival_days<5 or processed_days<5,
+            }
 
         for k in ("received","admitted","processed","result_today"):
             if k=="result_today":
@@ -867,15 +965,53 @@ def heavy():
     med={}
     for r in rows(pq("crm","SELECT a.source_lifecycle, COALESCE(o.current_effective_medal,'UNSCORED'), count(DISTINCT a.procurement_id) FROM crm_procurement_scope_authority a LEFT JOIN crm_procurement_category_opportunities o ON o.procurement_id=a.procurement_id WHERE a.source_lifecycle IN ('OPEN','AWARDED') AND a.admission_state='ELIGIBLE' GROUP BY 1,2",30)):
         med.setdefault(r[0],{})[r[1]]=int(r[2])
-    # QUEUE NOW (distinct procurement_id)
+    # Queue totals use the same current authority and generation marker as consumers.
+    eligible_ids = current_research_authority_ids()
+    eligible_array = "ARRAY[" + ",".join(str(pid) for pid in eligible_ids) + "]::bigint[]"
+    current_commercial_count = i(pq(
+        "crm",
+        "SELECT count(DISTINCT procurement_id) FROM crm_procurement_category_opportunities WHERE status='CURRENT'",
+        30,
+    ))
+    current_queue_scope = f"""pipeline_generation='S13_V4_EXHAUSTIVE_CONTEXT'
+       AND procurement_id=ANY({eligible_array})
+       AND category_context->>'commercial_authority_version'='CURRENT_CATEGORY_OPPORTUNITY_V1'
+       AND category_context->>'current_research_eligible'='true'"""
     q={}
-    for r in rows(pq("document_intelligence","SELECT status, count(DISTINCT procurement_id) FROM document_processing_queue WHERE status IN ('PENDING','PRE_RESEARCH_WAITING','PROCESSING') GROUP BY 1")):
+    for r in rows(pq("document_intelligence",f"""SELECT status, count(DISTINCT procurement_id)
+      FROM document_processing_queue
+     WHERE status IN ('PENDING','PRE_RESEARCH_WAITING','PROCESSING')
+       AND {current_queue_scope}
+     GROUP BY 1""")):
         q[r[0]]=int(r[1])
     adm={}
-    for r in rows(pq("document_intelligence","SELECT COALESCE(category_context->>'admission_state','-'), count(DISTINCT procurement_id) FROM document_processing_queue WHERE status IN ('PENDING','PRE_RESEARCH_WAITING') GROUP BY 1")):
+    for r in rows(pq("document_intelligence",f"""SELECT COALESCE(category_context->>'admission_state','-'), count(DISTINCT procurement_id)
+      FROM document_processing_queue
+     WHERE status IN ('PENDING','PRE_RESEARCH_WAITING')
+       AND {current_queue_scope}
+     GROUP BY 1""")):
         adm[r[0]]=int(r[1])
     cl=[]
-    for r in rows(pq("document_intelligence","SELECT COALESCE(research_prior_band,'UNSCORED'), count(DISTINCT procurement_id) FROM document_processing_queue WHERE status IN ('PENDING','PRE_RESEARCH_WAITING') AND category_context->>'admission_state'='ELIGIBLE' GROUP BY 1 ORDER BY 1")):
+    claimable_sql = f"""SELECT COALESCE(research_prior_band,'UNSCORED'), count(DISTINCT procurement_id)
+      FROM document_processing_queue q
+     WHERE q.status IN ('PENDING','PRE_RESEARCH_WAITING')
+       AND q.pipeline_generation='S13_V4_EXHAUSTIVE_CONTEXT'
+       AND q.procurement_id=ANY({eligible_array})
+       AND q.category_context->>'commercial_authority_version'='CURRENT_CATEGORY_OPPORTUNITY_V1'
+       AND q.category_context->>'current_research_eligible'='true'
+       AND q.selected_documents IS NOT NULL
+       AND jsonb_typeof(q.selected_documents)='array'
+       AND q.selected_documents <> '[]'::jsonb
+       AND (q.research_action='FACTUAL_FEEDER_ADMITTED'
+         OR q.category_context->>'AI_QUEUE_ADMISSION_GATE'='YES'
+         OR (q.plan_version='queue_v2'
+             AND q.research_action_v2 IN ('DOCUMENT_RESEARCH_REQUIRED','DOCUMENT_CONFIRMATION_REQUIRED')
+             AND q.category_context->>'admission_state'='ELIGIBLE'))
+       AND coalesce(q.category_context->>'legacy_revalidation_status','') NOT IN ('REQUIRED','LEGACY_HOLD')
+       AND (q.plan_version IS DISTINCT FROM 'queue_v2'
+            OR coalesce(q.research_action_v2,'') IN ('DOCUMENT_RESEARCH_REQUIRED','DOCUMENT_CONFIRMATION_REQUIRED'))
+     GROUP BY 1 ORDER BY 1"""
+    for r in rows(pq("document_intelligence",claimable_sql,30)):
         cl.append({"band":r[0],"count":int(r[1])})
     # FLOW TODAY
     slice_sql="SELECT count(*), count(*) FILTER (WHERE source_table='reestr_contract_44_fz'), count(*) FILTER (WHERE source_table='reestr_contract_223_fz'), count(*) FILTER (WHERE crm_stage='torgi'), count(*) FILTER (WHERE crm_stage='razygranye') FROM crm_procurements WHERE id > (SELECT max(id)-20000 FROM crm_procurements) AND crm_created_at >= current_date"
@@ -885,15 +1021,15 @@ def heavy():
     cat_all=pq("crm","SELECT count(DISTINCT procurement_id) FROM crm_procurement_category_opportunities",30)
     medal_ch=pq("crm","SELECT count(DISTINCT procurement_id) FROM crm_category_opportunity_medal_history WHERE evaluated_at >= current_date AND previous_effective_medal IS DISTINCT FROM new_effective_medal",30)
     medal_new=pq("crm","SELECT count(DISTINCT procurement_id) FROM crm_category_opportunity_medal_history WHERE evaluated_at >= current_date AND previous_effective_medal IS NULL AND new_effective_medal IS NOT NULL",30)
-    queued=pq("document_intelligence","SELECT count(DISTINCT procurement_id) FROM document_processing_queue WHERE created_at >= current_date",30)
+    queued=pq("document_intelligence",f"SELECT count(DISTINCT procurement_id) FROM document_processing_queue WHERE created_at >= current_date AND {current_queue_scope}",30)
     model=pq("crm","SELECT count(DISTINCT id) FROM crm_procurements WHERE id > (SELECT max(id)-20000 FROM crm_procurements) AND ai_assessed_at >= current_date",30)
     # PHYSICAL_KISOK_DASHBOARD_UPGRADE_V1: компактная read-only аналитика.
     # Тяжёлые all-time COUNT не делаем: validator — только за сегодня (29ms),
     # очередь/ошибки — по ограниченным выборкам.
     docstats={}
-    for r in rows(pq("document_intelligence","SELECT status, count(*) FROM document_processing_queue WHERE status IN ('PENDING','PRE_RESEARCH_WAITING','PROCESSING') GROUP BY 1")):
+    for r in rows(pq("document_intelligence",f"SELECT status, count(*) FROM document_processing_queue WHERE status IN ('PENDING','PRE_RESEARCH_WAITING','PROCESSING') AND {current_queue_scope} GROUP BY 1")):
         docstats[r[0]]=i(r[1])
-    for r in rows(pq("document_intelligence","SELECT status, count(*) FROM document_processing_queue WHERE status IN ('COMPLETED','FAILED') AND completed_at >= current_date GROUP BY 1")):
+    for r in rows(pq("document_intelligence",f"SELECT status, count(DISTINCT procurement_id) FROM document_processing_queue WHERE status IN ('COMPLETED','FAILED') AND completed_at >= current_date AND {current_queue_scope} GROUP BY 1")):
         docstats['TODAY_'+r[0]]=i(r[1])
     validator={}
     for r in rows(pq("document_intelligence","SELECT CASE WHEN upper(coalesce(d.validation_status,'')) IN ('UNKNOWN','RAW','PENDING') AND d.validated_at IS NULL THEN 'PENDING' ELSE upper(coalesce(d.validation_status,'UNKNOWN')) END AS st, count(*) FROM document_match_details d JOIN document_matches m ON m.id=d.match_id WHERE m.created_at >= current_date GROUP BY 1")):
@@ -904,7 +1040,7 @@ def heavy():
     for r in rows(pq("document_intelligence","SELECT CASE WHEN file_name ILIKE '%.rtf' THEN 'RTF' WHEN file_name ILIKE '%.xls' THEN 'XLS' WHEN file_name ILIKE '%.doc' THEN 'DOC' ELSE 'OTHER' END, count(*) FROM document_files WHERE error_message ILIKE 'Unsupported format%' GROUP BY 1")):
         recovery['UNSUPPORTED_'+r[0]]=i(r[1])
     errors=[]
-    for r in rows(pq("document_intelligence","SELECT id, procurement_id, coalesce(last_error,'') FROM document_processing_queue WHERE status='FAILED' ORDER BY id DESC LIMIT 5")):
+    for r in rows(pq("document_intelligence",f"SELECT id, procurement_id, coalesce(last_error,'') FROM document_processing_queue WHERE status='FAILED' AND {current_queue_scope} ORDER BY id DESC LIMIT 5")):
         errors.append({"id":i(r[0]),"pid":i(r[1]),"err":(r[2] or "")[:160]})
     cc=pq("crm","SELECT count(*), count(*) FILTER (WHERE confirmed_base_medal IS NOT NULL) FROM crm_procurement_category_opportunities WHERE status='CURRENT'")
     cat_conf=[i(x.strip()) for x in cc.split("|")] if "|" in cc else [None,None]
@@ -913,6 +1049,8 @@ def heavy():
     flow={"received":rec,"category_today":i(cat),"category_total":i(cat_all),"medal_new":i(medal_new),"medal_changed":i(medal_ch),"queued_today":i(queued),"model_processed":i(model),
           "production":prod_state,"production_label":svc_label(prod_state),
           "shadow":shadow_state,"shadow_label":svc_label(shadow_state)}
+    q["current_commercial_procurements"] = current_commercial_count
+    q["current_research_eligible_procurements"] = len(eligible_ids)
     CACHE["data"]={"scope":scope,"medals":med,"queue":q,"admission":adm,"claimable":cl,"claimable_total":sum(x['count'] for x in cl),
                    "flow":flow,"docstats":docstats,"validator":validator,"recovery":recovery,
                    "errors":errors,"cat_conf":cat_conf,"daily":daily_kpis(),
@@ -924,7 +1062,6 @@ def loop():
         try: heavy()
         except Exception as e: CACHE["data"]={"err":str(e)}
         time.sleep(90)
-
 def normalization_runtime_metrics(running=False, unit_name=None):
     if NORMALIZATION_CACHE["data"] is None or time.time()-NORMALIZATION_CACHE["ts"]>=60:
         sql=("WITH latest AS (SELECT DISTINCT ON (procurement_id) status,updated_at "
@@ -967,8 +1104,10 @@ def runtime_snapshot():
         relevant=["crm-ai-assessment-runner.service","crm-v3-factual-feeder.service","crm-v3-autonomous-worker.service","crm-procurement-sync.service","postgresql@17-main.service","ollama.service"]+names
         states={}
         for name in dict.fromkeys(relevant):
-            s=subprocess.run(["systemctl","show",name,"-p","ActiveState","-p","MainPID","--value"],capture_output=True,text=True,timeout=2).stdout.splitlines()
-            states[name]={"state":s[0] if s else "unknown","pid":int(s[1]) if len(s)>1 and s[1].isdigit() else None}
+            output=subprocess.run(["systemctl","show",name,"-p","ActiveState","-p","MainPID"],capture_output=True,text=True,timeout=2).stdout
+            fields=dict(line.split("=",1) for line in output.splitlines() if "=" in line)
+            main_pid=i(fields.get("MainPID"))
+            states[name]={"state":fields.get("ActiveState","unknown"),"pid":main_pid if main_pid else None}
         gpu_out=subprocess.run(["nvidia-smi","--query-compute-apps=pid,process_name,used_gpu_memory","--format=csv,noheader"],capture_output=True,text=True,timeout=4).stdout
         model_out=subprocess.run(["ollama","ps"],capture_output=True,text=True,timeout=3).stdout.splitlines()
         gpu_model=subprocess.run(["nvidia-smi","--query-gpu=name","--format=csv,noheader"],capture_output=True,text=True,timeout=3).stdout.strip().splitlines()
@@ -999,7 +1138,7 @@ def runtime_snapshot():
         running_docs=sum(v["state"]=="active" and v["pid"] not in (None,0) for _,v in doc_units)
         docqueue=((CACHE.get("data") or {}).get("command") or {}).get("documents",{})
         docstate=document_runtime_counts(docqueue.get("waiting"),docqueue.get("working"),running_docs)
-        top=[dict(p,unit=unit(p["pid"])) for p in procs[:8]]
+        top=[dict(p,unit=unit(p["pid"])) for p in procs if not p["cmd"].lstrip().startswith("ps -eo")][:8]
         events=[]
         journal_units=["-u","crm-ai-assessment-runner.service","-u","crm-v3-factual-feeder.service"]
         for name,_ in doc_units: journal_units += ["-u",name]
@@ -1043,6 +1182,7 @@ def runtime_loop():
         RUNTIME["data"]=runtime_snapshot()
         RUNTIME["data"]["collector_ms"]=round((time.monotonic()-started)*1000)
         RUNTIME["ts"]=time.time(); time.sleep(10)
+
 def problems():
     d=CACHE["data"]; pr=[]; f=d.get("flow",{})
     if f.get("production")!="active":
@@ -1051,7 +1191,11 @@ def problems():
                    "production assessments сейчас не материализуются"])
     if f.get("category_today")==0: pr.append(["WARNING","Сегодня нет материализованных категорий","0 возможностей создано сегодня"])
     if f.get("received",{}) and f["received"].get("total")==0: pr.append(["CRITICAL","Сегодня нет новых закупок","остановился приём?"])
-    pr.append(["INFO","Доступно в очереди: %s" % d.get("claimable_total",0),"только eligible"])
+    pr.append(["INFO","Текущих коммерческих закупок: %s" % (d.get("queue",{}).get("current_commercial_procurements") or 0),"CURRENT opportunities"])
+    pr.append(["INFO","Требуют исследования: %s" % (d.get("queue",{}).get("current_research_eligible_procurements") or 0),"текущая research authority"])
+    pr.append(["INFO","Задач доступно для claim: %s" % d.get("claimable_total",0),"точный consumer predicate"])
+    pr.append(["INFO","Задач в работе: %s" % (d.get("queue",{}).get("PROCESSING") or 0),"только текущая authority"])
+    pr.append(["INFO","Завершено сегодня, закупок: %s" % (d.get("docstats",{}).get("TODAY_COMPLETED") or 0),"distinct procurement_id"])
     return pr
 
 CONTOUR_COLS=("captured_at,eligible_total,processed_total,remaining_total,in_progress,"
@@ -1199,6 +1343,18 @@ def cached_contour():
         CONTOUR_CACHE["ts"]=time.time()
     return CONTOUR_CACHE["data"]
 
+def cached_today_truth(live_document_workers=0):
+    if TODAY_TRUTH_CACHE["data"] is None or time.time()-TODAY_TRUTH_CACHE["ts"]>=45:
+        try:
+            TODAY_TRUTH_CACHE["data"]=collect_today_truth(
+                truth_pq,parse_rows_fn=rows,live_document_workers=live_document_workers,
+                captured_at=time.strftime("%Y-%m-%d %H:%M:%S %Z"),
+            )
+        except Exception as exc:
+            TODAY_TRUTH_CACHE["data"]={"available":False,"error":str(exc)}
+        TODAY_TRUTH_CACHE["ts"]=time.time()
+    return TODAY_TRUTH_CACHE["data"]
+
 def snapshot():
     d=json.loads(json.dumps(CACHE["data"]))
     cpu=cpu_metrics()
@@ -1208,6 +1364,8 @@ def snapshot():
     pr=problems()
     contour_data=cached_contour()
     daily_work,contour_total=daily_work_contract(d.get("command") or {},contour_data)
+    runtime=RUNTIME.get("data") or {}
+    truth=cached_today_truth((runtime.get("documents") or {}).get("workers_running",0))
     if temps.get("status")=="CRITICAL":
         pr.append(["CRITICAL","Перегрев CPU: %sC" % temps.get("display"),temps.get("source") or "source unknown"])
     elif temps.get("status")=="WARNING":
@@ -1231,117 +1389,18 @@ def snapshot():
               "host":socket.gethostname(),"time":time.strftime("%Y-%m-%d %H:%M:%S"),"load":open("/proc/loadavg").read().split()[:3],
               "problems":pr,"cache_ts":d.get("ts"),"contour":contour_data,
               "daily_work":daily_work,"contour_total":contour_total,
-              "system_status":sys_status,"runtime":RUNTIME.get("data") or {},
-              "runtime_age_sec":round(time.time()-RUNTIME.get("ts",0)) if RUNTIME.get("ts") else None})
+              "system_status":sys_status,"today_truth":truth})
+    d.update({"runtime":runtime,"runtime_age_sec":round(time.time()-RUNTIME.get("ts",0)) if RUNTIME.get("ts") else None})
     return d
 
-PAGE=r"""<!doctype html><html><head><meta charset="utf-8"><title>S13 procurement</title><style>
-*{box-sizing:border-box}html,body{height:100%}body{margin:0;background:#0d1117;color:#e6edf3;font-family:system-ui,Segoe UI,Arial;font-size:16px;overflow:auto}
-header{height:42px;padding:6px 14px;background:#161b22;border-bottom:2px solid #30363d;display:flex;gap:18px;align-items:center}
-.brand{margin:0;font-size:22px;color:#58a6ff;font-weight:700}.header-right{margin-left:auto;display:flex;gap:18px;align-items:center}
-.system{padding:3px 10px;border-radius:14px;font-weight:700;border:1px solid #30363d}
-.sys-ok{color:#3fb950;background:#0d2818}.sys-warn{color:#d29922;background:#2d220b}.sys-bad{color:#ff7b72;background:#3d1418}.sys-unknown{color:#8b949e;background:#21262d}
-.grid{min-height:calc(100vh - 42px);display:grid;grid-template-columns:repeat(4,minmax(0,1fr));grid-auto-rows:min-content;gap:8px;padding:8px}
-.card{background:#161b22;border:1px solid #30363d;border-radius:10px;padding:5px 8px;min-width:0}
-.span4{grid-column:span 4}.span2{grid-column:span 2}.card h2{margin:0 0 4px;font-size:13px;color:#8b949e;text-transform:uppercase;letter-spacing:1px}
-.topcmd{display:grid;grid-template-columns:minmax(0,2.35fr) minmax(360px,.9fr);gap:8px;height:100%}.topsec{background:#0d1117;border:1px solid #30363d;border-radius:8px;padding:7px 9px;min-width:0;overflow:hidden}
-.topsec h2{color:#58a6ff}.tech-link{color:#58a6ff;text-decoration:none;border:1px solid #30363d;border-radius:6px;padding:2px 8px;font-size:13px}
-.card h2.sub{margin-top:7px;color:#58a6ff}.bar{height:14px;background:#21262d;border-radius:5px;overflow:hidden}.bar>span{display:block;height:100%}
-.g{background:#2ea043}.y{background:#d29922}.r{background:#da3633}.big{font-size:22px;font-weight:700}.row{display:flex;justify-content:space-between;gap:10px;margin:3px 0}
-.small{color:#8b949e;font-size:13px}.tiny{color:#8b949e;font-size:11px}.chip{border:1px solid #30363d;border-radius:20px;padding:1px 8px;font-size:13px;margin:0 5px 5px 0;display:inline-block}
-.funnel{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:6px;align-items:stretch;height:calc(100% - 22px)}.stage{background:#161b22;border:1px solid #30363d;border-radius:8px;padding:8px 10px;min-height:0;display:flex;flex-direction:column;justify-content:center}
-.stage .label{font-size:12px;color:#8b949e;text-transform:uppercase}.stage .value{font-size:30px;font-weight:750;line-height:1.1}.stage .unit{font-size:12px;color:#8b949e}.arrow{text-align:center;color:#58a6ff;font-size:28px}
-.delta-up{color:#3fb950}.delta-down{color:#ff7b72}.split-grid{display:grid;grid-template-columns:1fr 1fr;gap:18px}.inner-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px}
-.metric-pair{display:flex;justify-content:space-between;border-bottom:1px solid #21262d;padding:2px 0;line-height:1.22}.medals{display:flex;gap:8px;flex-wrap:wrap}.medal{font-weight:700}.flow-line{display:flex;gap:24px;align-items:baseline}.flow-state-ok{color:#3fb950}.flow-state-warn{color:#d29922}.flow-state-bad{color:#ff7b72}.flow-state-unknown{color:#8b949e}
-.resources{display:grid;grid-template-columns:2.1fr 2.1fr 1.2fr 1.3fr;gap:8px;height:calc(100% - 20px)}.resbox{background:#0d1117;border:1px solid #30363d;border-radius:8px;padding:7px 9px;min-height:0;overflow:hidden}.activity-grid{display:grid;grid-template-columns:1fr 1fr;gap:5px}.activity{background:#161b22;border:1px solid #30363d;border-radius:7px;padding:4px 6px;min-height:0}.activity b{display:block;font-size:20px;line-height:1.05}.activity span{font-size:10px;line-height:1.1;color:#8b949e}
-.daily-kpis{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:5px}.daily-kpi{background:#161b22;border:1px solid #30363d;border-radius:7px;padding:4px 7px;min-width:0}.daily-kpi .label{font-size:10px;color:#8b949e;text-transform:uppercase;white-space:nowrap}.daily-kpi .value{font-size:23px;font-weight:750;line-height:1.08}.daily-kpi .note{font-size:10px;color:#8b949e;white-space:nowrap}
-.daily-progress{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:6px 12px;margin-top:6px;align-items:end}.daily-progress .track{height:19px;background:#21262d;border-radius:5px;overflow:hidden}.daily-progress .track>span{display:block;height:100%;background:#2ea043}.daily-progress .pct{font-size:27px;font-weight:750;line-height:1}.daily-meta{display:flex;justify-content:space-between;gap:12px;margin-top:3px}.daily-tail{font-weight:700}.daily-tail-ok{color:#3fb950}.daily-tail-warn{color:#d29922}.contour-note{margin-top:4px;color:#8b949e;font-size:10px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.resbox h3{margin:0 0 4px;font-size:13px;color:#58a6ff}.cores{display:grid;grid-template-columns:repeat(8,1fr);gap:2px;margin-top:4px}.core{height:12px;background:#21262d;border-radius:2px;overflow:hidden;position:relative}
-.core>span{display:block;position:absolute;bottom:0;width:100%}.core>i{position:absolute;top:0;left:1px;font-style:normal;font-size:9px;color:#8b949e}.temp{padding:1px 7px;border-radius:6px;display:inline-block}
-.status-ok{color:#3fb950}.status-warn{color:#d29922}.status-bad{color:#ff7b72}.status-unknown{color:#8b949e}.fans{display:flex;gap:12px;align-items:center}.blades{width:32px;height:32px;animation:spin linear infinite}
-.problems-card{min-height:0;overflow:hidden}.problem{padding:4px 9px;border-radius:6px;margin:3px 0;font-size:14px}.problem-critical{background:#3d1418}.problem-warning{background:#2d220b}.problem-info{background:#12233d}
-@keyframes spin{from{transform:rotate(0)}to{transform:rotate(360deg)}}
-.runtime-grid{display:grid;grid-template-columns:1.3fr 1.1fr 1fr 1.4fr;gap:8px}.runtime-box{background:#0d1117;border:1px solid #30363d;border-radius:8px;padding:8px;min-width:0}.runtime-box h3{margin:0 0 6px;color:#58a6ff;font-size:13px}.runtime-hero{font-size:22px;font-weight:750}.runtime-jobs,.runtime-events{max-height:155px;overflow:auto}.runtime-events{font:12px ui-monospace,Consolas,monospace}.rt-row{padding:3px 0;border-bottom:1px solid #21262d}.rt-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:5px}.rt-stage{border:1px solid #30363d;border-radius:6px;padding:5px;font-size:12px}.rt-green{color:#3fb950}.rt-blue{color:#58a6ff}.rt-orange{color:#d29922}.rt-red{color:#ff7b72}.rt-gray{color:#8b949e}.gpu-owner-warning{color:#ff7b72;font-weight:800}
-</style></head><body>
-<header><div class="brand">S13 • АНАЛИТИЧЕСКИЙ КОНТУР</div><div class="header-right"><a class="tech-link" href="/tech">TECH</a><div id="clock" class="small"></div><div id="cache" class="small"></div><div id="system" class="system sys-unknown">СОСТОЯНИЕ НЕ ОПРЕДЕЛЕНО</div></div></header>
-<div class="grid">
- <div class="card span4"><h2>NOW - LIVE RUNTIME CONSOLE <span id="runtime_age" class="tiny"></span></h2><div class="runtime-grid"><section class="runtime-box"><h3>RESOURCES / TOP CPU / GPU OWNER</h3><div id="runtime_resources"></div></section><section class="runtime-box"><h3>PIPELINE STATUS</h3><div id="pipeline_stages" class="rt-grid"></div></section><section class="runtime-box"><h3>ACTIVE JOBS</h3><div id="runtime_jobs" class="runtime-jobs"></div></section><section class="runtime-box"><h3>LAST EVENTS / 20</h3><div id="runtime_events" class="runtime-events"></div></section></div><h2 class="sub">PROBLEMS / ACTIONABLE</h2><div id="problems"></div></div>
- <div class="card span4"><div class="topcmd"><div class="topsec"><h2>СЕГОДНЯШНИЙ ПОТОК <span class="tiny">все значения — закупки</span></h2><div id="daily_work"></div></div><div class="topsec"><h2>АКТИВНОСТЬ ЗА СЕГОДНЯ</h2><div id="activity" class="activity-grid"></div></div></div></div>
- <div class="card span2"><h2>ОЧЕРЕДЬ ОБРАБОТКИ · ЗАДАЧИ</h2><div id="docpipe"></div><h2 class="sub">МОДЕЛЬ · КАНДИДАТЫ</h2><div id="modelpipe"></div></div>
- <div class="card span2"><h2>LIVE COMMERCIAL · OPEN + AWARDED</h2><div id="commercial"></div></div>
- <div class="card span4"><h2>СОСТОЯНИЕ ПОТОКА</h2><div id="flowstate"></div></div>
- <div class="card span4"><h2>РЕСУРСЫ S13 <span id="load" class="small"></span></h2><div class="resources">
-  <div class="resbox"><h3>CPU <span id="cput" class="small"></span></h3><div class="big" id="cpu">-</div><div class="bar"><span id="cpub"></span></div><div class="small" id="cpu_cap"></div><div class="small" id="cpu_freq"></div><div class="cores" id="cores"></div></div>
-  <div class="resbox"><h3>GPU</h3><div class="big" id="gpu">-</div><div class="bar"><span id="gpub"></span></div><div class="small" id="gpu_power"></div><div class="small" id="gpu_cap"></div><div class="small" id="gpu_state"></div><div class="small" id="gput"></div></div>
-  <div class="resbox"><h3>ПАМЯТЬ / НАГРУЗКА</h3><div class="big" id="ram">-</div><div class="bar"><span id="ramb"></span></div><div class="small" id="ramt"></div><div class="small" id="coresum"></div><div class="small" id="temp"></div><div class="small" id="tempsrc"></div></div>
-  <div class="resbox"><h3>ДИСКИ / ОХЛАЖДЕНИЕ</h3><div id="disks"></div><div id="cool"></div></div>
- </div></div>
- <div class="card span4 problems-card"><h2>ПРОБЛЕМЫ</h2><div id="problems"></div></div>
-</div>
-<script>
-const $=i=>document.getElementById(i),cls=p=>p>=85?'r':p>=70?'y':'g';
-const setb=(e,p)=>{e.className=p==null?'':cls(p);e.style.width=p==null?'0':Math.min(100,p)+'%';};
-const nn=v=>v==null?'н/д':Number(v).toLocaleString('ru-RU');
-const num1=v=>v==null?'н/д':Number(v).toLocaleString('ru-RU',{maximumFractionDigits:1});
-const line=(a,b)=>`<div class="metric-pair"><span>${a}</span><b>${b}</b></div>`;
-const sumMedals=o=>['GOLD','SILVER','BRONZE','WOOD','UNSCORED'].reduce((n,k)=>n+Number((o||{})[k]||0),0);
-const delta=(v,unit='')=>v==null?'':` <span class="${v>=0?'delta-up':'delta-down'}">${v>=0?'↑':'↓'}${nn(Math.abs(v))}${unit}</span>`;
-const dur=v=>Math.max(.15,2.1-1.9*Math.min(1,Math.max(0,v)));
-const fanSvg=(d,c)=>`<svg class="blades" style="animation-duration:${d}s" viewBox="0 0 100 100"><g fill="${c}"><path d="M50 50 L49 6 A44 44 0 0 1 80 20 Z"/><path d="M50 50 L94 49 A44 44 0 0 1 80 80 Z"/><path d="M50 50 L51 94 A44 44 0 0 1 20 80 Z"/><path d="M50 50 L6 51 A44 44 0 0 1 20 20 Z"/></g><circle cx="50" cy="50" r="9" fill="#e6edf3"/></svg>`;
-const medal=(name,obj)=>{const colors={GOLD:'#d4a017',SILVER:'#a8b3bd',BRONZE:'#b06a2b',WOOD:'#6e4b2a',UNSCORED:'#8b949e'};return Object.entries(obj||{}).sort((a,b)=>['GOLD','SILVER','BRONZE','WOOD','UNSCORED'].indexOf(a[0])-['GOLD','SILVER','BRONZE','WOOD','UNSCORED'].indexOf(b[0])).map(([k,v])=>`<span class="medal" style="color:${colors[k]}">${k} ${nn(v)}</span>`).join(' · ');};
-const fmtEta=h=>h==null?'н/д':(h<1?Math.max(1,Math.round(h*60))+' мин':Math.floor(h)+' ч '+Math.round((h-Math.floor(h))*60)+' мин');
-function renderRuntime(r,m){r=r||{};const esc=x=>String(x==null?'-':x).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));const state=(x)=>String(x||'UNKNOWN').toUpperCase();const serviceState=(x,inactive='STOPPED')=>state(x)==='ACTIVE'?'RUNNING':state(x)==='INACTIVE'?inactive:state(x);const tone=x=>['ACTIVE','RUNNING'].includes(state(x))?'rt-green':['IDLE'].includes(state(x))?'rt-blue':['INACTIVE','STOPPED'].includes(state(x))?'rt-orange':['FAILED','STUCK'].includes(state(x))?'rt-red':'rt-gray';const services=r.services||{},commercial=r.commercial||{},a=r.assessment||{},f=r.feeder||{},d=r.documents||{},n=r.normalization||{},w=r.autonomous||{},gpu=(r.gpu_processes||[])[0],top=(r.cpu_top||[])[0];$('runtime_age').textContent='sample '+esc(r.sampled_at)+' | collector '+esc(r.collector_ms)+' ms | API '+esc(m.kiosk_query_duration_ms)+' ms | refresh 5s';let gpuText=gpu?`<b>${esc(gpu.process)}</b> PID ${esc(gpu.pid)} | ${esc(r.gpu_active_model||r.gpu_model)}<br>VRAM ${esc(gpu.memory)} | caller ${esc(r.gpu_caller||'UNKNOWN')} | ${esc(gpu.unit||'unit unknown')}<br>procurement ${esc(a.procurement_id)} | ${esc(a.stage)} | ${a.elapsed==null?'-':esc(a.elapsed)+'s'}`:'GPU idle';if(gpu&&r.gpu_owner_unknown)gpuText+=`<br><span class="gpu-owner-warning">GPU OWNER UNKNOWN</span>`;const load=(r.load||[]).map(x=>Number(x).toFixed(2)).join(' / ')||'-';$('runtime_resources').innerHTML=`<div class="runtime-hero">CPU ${esc((m.cpu_detail||{}).busy_pct)}% | GPU ${esc((m.gpu||{}).util)}%</div>${line('RAM',esc((m.mem||{}).used)+' / '+esc((m.mem||{}).total)+' GB')}${line('LOAD AVG',esc(load))}${line('TOP CPU',top?`${esc(top.cmd)} | PID ${esc(top.pid)} | ${esc(top.cpu)}%`: '-')}${line('CPU UNIT',top?esc(top.unit||'-'):'-')}${line('ASSESSMENT RATE',(m.daily||{}).speed_per_hour==null?'?':num1((m.daily||{}).speed_per_hour)+' procurement/hour')}${line('DOCUMENT RATE',(m.command||{}).documents?.throughput_per_hour==null?'?':num1(m.command.documents.throughput_per_hour)+' files/hour')}<div class="rt-row">${gpuText}</div>`;const stage=(name,st,unit,pid,item)=>`<div class="rt-stage"><b>${name}</b><br><span class="${tone(st)}">${esc(state(st))}</span><br>${esc(unit||'-')}<br>PID ${esc(pid||'-')} | ${esc(item||'-')}</div>`;const docState=d.workers_running>0?'RUNNING':'STOPPED';const assessState=a.procurement_id?'RUNNING':(state(a.state)=='ACTIVE'?'IDLE':state(a.state));$('pipeline_stages').innerHTML=[stage('COMMERCIAL',serviceState(services['crm-procurement-sync.service']?.state,'IDLE'),'crm-procurement-sync.service',services['crm-procurement-sync.service']?.pid,'-'),stage('ASSESSMENT',assessState,a.unit,a.pid,a.procurement_id),stage('FEEDER',serviceState(f.state,'IDLE'),'crm-v3-factual-feeder.service',services['crm-v3-factual-feeder.service']?.pid,f.last_event),stage('DOCUMENTS',docState,`${d.workers_running||0}/${d.workers_total||0} workers`,null,`ready ${d.queue_ready??'-'} | stale ${d.stale??'-'}`),stage('NORMALIZATION',n.running?'RUNNING':'OFF',n.unit,null,`pending ${n.pending??'-'} | last ${n.last_success??'-'} | done procurements 1h/24h ${n.normalized_procurements_last_1h??'-'}/${n.normalized_procurements_last_24h??'-'}`),stage('AUTONOMOUS',serviceState(w.state||'inactive','STOPPED'),'crm-v3-autonomous-worker.service',w.pid,'-')].join('');const jobs=r.active_jobs||[];$('runtime_jobs').innerHTML=jobs.length?jobs.map(j=>`<div class="rt-row"><b>${esc(j.stage)}</b> | procurement ${esc(j.procurement_id)} | ${esc(j.contract)}<br>${esc(j.action)} | ${esc(j.progress)} | ${esc(j.elapsed)}s | PID ${esc(j.pid)} | CPU ${esc(j.cpu)}% | GPU ${j.gpu?'YES':'NO'}</div>`).join(''):'<span class="rt-blue">NO ACTIVE JOBS</span>';$('runtime_events').innerHTML=(r.events||[]).slice(-20).reverse().map(e=>`<div class="rt-row">${esc(e.time)} ${esc(e.stage)} ${esc(e.result||e.event)} | ${esc(e.procurement)} | ${esc(e.duration)}</div>`).join('')||'NO RECENT EVENTS';}
-async function tick(){try{const m=await (await fetch('/api/metrics')).json(),cmd=m.command||{},t=cmd.today||{},d=cmd.documents||{},mo=cmd.model||{},co=cmd.commercial||{},rates=cmd.rates||{},ct=m.contour||{},dw=m.daily_work||{},ctTotal=m.contour_total||{},prev=dw.previous_day||{},dk=m.daily||{};
- renderRuntime(m.runtime,m);$('clock').textContent=m.time||'';$('cache').textContent='данные '+(m.cache_ts||'н/д');
- const ss=m.system_status||{state:'UNKNOWN',label:'СОСТОЯНИЕ НЕ ОПРЕДЕЛЕНО'};$('system').textContent=(ss.state==='OK'?'● ':ss.state==='WARNING'?'⚠ ':ss.state==='CRITICAL'?'✕ ':'? ')+ss.label;$('system').className='system '+(ss.state==='OK'?'sys-ok':ss.state==='WARNING'?'sys-warn':ss.state==='CRITICAL'?'sys-bad':'sys-unknown');
- const dt=dk.today||{},age=ctTotal.snapshot_age_sec==null?null:Math.round(ctTotal.snapshot_age_sec/60);
- const metric=(label,value,note)=>`<div class="daily-kpi"><div class="label">${label}</div><div class="value">${nn(value)}</div><div class="note">${note||''}</div></div>`;
- $('daily_work').innerHTML=`<div class="daily-kpis">${metric('Received today',dw.received_today,delta(dw.received_today-prev.received||0))}${metric('Initial signal',dw.with_initial_signal,'Priority HIGH')}${metric('No initial signal',dw.without_initial_signal,'Priority LOW')}${metric('Classified',dw.processed_from_day_work_set,`${nn(dw.processed_from_day_work_set)} / ${nn(dw.researchable_today)} in cohort`)}${metric('In progress',dw.in_progress_from_day_work_set,'currently in pipeline')}${metric('Remaining',dw.remaining_from_day_work_set,'researchable minus processed')}</div><div class="contour-note">Routing backlog ${nn(dw.routing_backlog)} | Document queue pending ${nn(dw.document_queue_pending)}</div><div class="contour-note">All time processed: ${nn(ctTotal.processed_total)} / ${nn(ctTotal.eligible_total)} | snapshot age ${age==null?'-':age+' min'}</div>`;
- const acts=[['Задачи документов завершены',dt.processed,'procurements'],['AI assessed',t.model_processed,'procurements'],['Validated match details',mo.raw_done_today,'match details'],['Commercial results',co.result_today,'procurements']];
- $('activity').innerHTML=acts.map(a=>`<div class="activity"><b>${nn(a[1])}</b><span>${a[0]} · ${a[2]}</span></div>`).join('');
- const docRate=d.throughput_per_hour,docEta=(docRate>0&&d.waiting>0)?d.waiting/docRate:null;
- $('docpipe').innerHTML=`<div class="tiny">файлы: document_processing_results · задачи: queue jobs</div>`+line('Распарсено файлов сегодня',nn(d.parsed_today))+line('Очередь задач завершено',nn(d.done_today))+line('Задач ожидают',nn(d.waiting))+line('Задач в работе',nn(d.working))+line('Ошибок в backlog',nn(d.errors))+line('Скорость',docRate==null?'н/д':num1(docRate)+' задач/час')+line('Хвост',fmtEta(docEta))+`<div class="tiny">скорость: последние 30 завершённых задач; нет данных за окно → н/д</div>`;
- $('modelpipe').innerHTML=`<div class="tiny">кандидатов (procurement × category) · current opportunities ${nn(mo.current_opportunity_pairs)}</div>`+line('Кандидатов ожидают',nn(mo.waiting))+line('Сейчас в работе',nn(mo.working))+line('Ушло в модель сегодня',nn(mo.sent_today))+line('Подтверждено сегодня',nn(mo.confirmed_today))+line('Отклонено сегодня',nn(mo.rejected_today))+line('Не определено сегодня',nn(mo.unknown_today))+line('Скорость',mo.throughput_per_hour==null?'н/д':num1(mo.throughput_per_hour)+' кандидатов/час')+`<div class="tiny">source=RESEARCHABLE · GOODS only · raw backlog → <a class="tech-link" href="/tech">TECH</a></div>`;
- const aw=dk.awarded_today||{};
- const live=co.live_total,excluded=co.excluded_count,excludedLink=excluded?` · вне live cohort ${nn(excluded)} → <a class="tech-link" href="/tech">TECH</a>`:'';
- $('commercial').innerHTML=`<div class="inner-grid"><div>${line('LIVE COMMERCIAL',nn(live))}${line('Документально подтверждено',nn(co.document_confirmed_live))}${line('Категорийные возможности',nn(co.category_opportunities_live))}</div><div>${line('Идут торги',nn(sumMedals(co.open)))}${line('Разыгранные',nn(sumMedals(co.awarded)))}<div class="tiny">CURRENT + ELIGIBLE + OPEN/AWARDED</div></div></div><div class="split-grid"><div><div class="small">ИДУТ ТОРГИ</div><div class="medals">${medal('OPEN',co.open)}</div></div><div><div class="small">РАЗЫГРАННЫЕ</div><div class="medals">${medal('AWARDED',co.awarded)}</div></div></div><div class="tiny">${excludedLink} · medal invariant ${co.medal_invariant_ok?'OK':'FAIL'} · сегодня разыграно: direct ${nn(aw.direct||0)} / объекты ${nn(aw.object||0)}</div>`;
- const arrive=rates.arrivals_per_hour,proc=rates.processed_per_hour,balance=(arrive!=null&&proc!=null)?arrive-proc:null,qchg=(ct.delta_1h||{}).remaining_total;
- let fs='СКОРОСТЬ ПОКА НЕ ОПРЕДЕЛЕНА',fcls='flow-state-unknown';
- if(arrive!=null&&proc!=null){if(qchg!=null&&qchg>0&&balance>0){fs='⚠ ОЧЕРЕДЬ РАСТЁТ';fcls='flow-state-warn';}else if(qchg!=null&&qchg<0){fs='● ПОТОК СТАБИЛЕН · ОЧЕРЕДЬ СОКРАЩАЕТСЯ';fcls='flow-state-ok';}else{fs=balance>0?'⚠ ПРИТОК ВЫШЕ ОБРАБОТКИ':'● ПОТОК СТАБИЛЕН';fcls=balance>0?'flow-state-warn':'flow-state-ok';}}
- $('flowstate').innerHTML=`<div class="flow-line"><b class="${fcls}" style="font-size:20px">${fs}</b><span>приходит: <b>${arrive==null?'н/д':num1(arrive)+'/час'}</b></span><span>обрабатываем: <b>${proc==null?'н/д':num1(proc)+'/час'}</b></span><span>баланс: <b>${balance==null?'н/д':(balance>0?'+':'')+num1(balance)+'/час'}</b></span><span>очередь за час: <b>${qchg==null?'н/д':(qchg>0?'+':'')+num1(qchg)}</b></span></div>`;
- const cv=m.cpu_detail||{},cap=cv.cap||{},cp=cv.busy_pct??cv.total,per=cv.per||[],g=m.gpu,tp=m.temperatures||{},tempC=tp.display;
- $('cpu').textContent=cp==null?'н/д':num1(cp)+'% busy';setb($('cpub'),cp);
- $('cput').textContent=cv.status&&cv.status!=='OK'?'('+cv.status+')':'';
- $('cpu_cap').innerHTML=`CAP ${cap.cap_pct==null?'н/д':cap.cap_pct+'%'} · ~${cv.approx_hw_pct==null?'н/д':num1(cv.approx_hw_pct)+'% hw-equiv'} · свободно внутри cap ${cv.free_inside_cap_pct==null?'н/д':num1(cv.free_inside_cap_pct)+'%'}`;
- $('cpu_freq').textContent=`${cap.cur_mhz==null?'н/д':cap.cur_mhz.toFixed(2)+' GHz'} / ${cap.scaling_max_mhz==null?'н/д':cap.scaling_max_mhz.toFixed(2)+' GHz'} · turbo ${cap.no_turbo===false?'ON':cap.no_turbo===true?'OFF':'н/д'} · ${cap.governor||'governor н/д'}`;
- $('coresum').textContent=per.length?`ядра ${Math.min(...per).toFixed(1)}…${Math.max(...per).toFixed(1)}% · ${per.length}`:'ядра н/д';
- $('cores').innerHTML=per.map((v,n)=>`<div class="core" title="core ${n}: ${v}%"><span class="${cls(v)}" style="height:${Math.min(100,v)}%"></span><i>${n}</i></div>`).join('');
- $('load').textContent='нагрузка '+(m.load||[]).join(' ');
- $('temp').innerHTML=tempC==null?'CPU temp н/д':`CPU <span class="temp" style="background:${tp.status==='CRITICAL'?'#3d1418':tp.status==='WARNING'?'#2d220b':'#12233d'}">${tempC}°C ✓</span>`;
- $('tempsrc').textContent='temp: '+(tp.source||'н/д')+' · '+(tp.status||'UNKNOWN');
- $('ram').textContent=m.mem.pct+'%';setb($('ramb'),m.mem.pct);$('ramt').textContent=`${m.mem.used}/${m.mem.total} GB · swap ${m.mem.swap} GB`;
- if(g){$('gpu').textContent=g.util==null?'н/д':num1(g.util)+'% busy';setb($('gpub'),g.util);$('gpu_power').textContent=`draw ${g.power==null?'н/д':g.power+' W'} / cap ${g.limit==null?'н/д':g.limit+' W'} · до cap ${g.headroom_w==null?'н/д':g.headroom_w+' W'}`;$('gpu_cap').textContent=`default ${g.default_limit==null?'н/д':g.default_limit+' W'} · cap ${g.power_cap_pct==null?'н/д':g.power_cap_pct+'%'} · locked ${g.locked_w==null?'н/д':g.locked_w+' W'}`;$('gpu_state').innerHTML=`<span class="${g.power_state==='POWER_LIMIT'?'status-warn':'status-ok'}">${g.power_state==='POWER_LIMIT'?'POWER LIMIT':g.power_state==='NEAR_POWER_CAP'?'БЛИЗКО К POWER CAP':'НЕ УПИРАЕТСЯ В CAP'}</span>${g.throttle_reasons&&g.throttle_reasons.length?' · '+g.throttle_reasons.join(', '):''}`;$('gput').textContent=`VRAM ${g.vram_used==null?'н/д':(g.vram_used/1024).toFixed(1)+'/'+(g.vram_total/1024).toFixed(1)+' GB'} · ${g.temp==null?'н/д':g.temp+'°C'}`;}else{$('gpu').textContent='н/д';setb($('gpub'),null);$('gpu_power').textContent='GPU данные н/д';$('gpu_cap').textContent='';$('gpu_state').textContent='';$('gput').textContent='';}
- $('disks').innerHTML=(m.disks||[]).map(x=>`<div class="small"><b>${x.dev}</b> ${x.mount} ${x.pct==null?'н/д':x.pct+'%'} ${x.temp?x.temp+'C':''} ${x.health}</div>`).join('');
- const fans=(m.cooling&&m.cooling.fans||[]).map(x=>`<span class="small">${x.rpm} RPM</span>`).join(' · ');$('cool').innerHTML=`<div class="small" style="margin-top:4px">FAN ${fans||'н/д'}${g&&g.fan!=null?' · GPU '+g.fan+'%':''}</div>`;
- const liveProblems=[],activeJobs=(m.runtime&&m.runtime.active_jobs)||[],topCpu=(m.runtime&&m.runtime.cpu_top&&m.runtime.cpu_top[0]);if(m.gpu&&m.gpu.util>=85&&!activeJobs.length)liveProblems.push(['WARNING','GPU_HIGH_WITHOUT_ACTIVE_JOB',`util=${m.gpu.util}%`]);if(topCpu&&topCpu.cpu>=85&&!activeJobs.length)liveProblems.push(['WARNING','CPU_HIGH_WITHOUT_ACTIVE_JOB',`${topCpu.cmd} ${topCpu.cpu}%`]);if(m.runtime&&m.runtime.failed_loop_detected)liveProblems.push(['WARNING','FAILED_LOOP_DETECTED','same procurement has repeated failure events']);if(m.runtime&&m.runtime.assessment&&m.runtime.assessment.consecutive_failures>0)liveProblems.push(['WARNING','ASSESSMENT_CONSECUTIVE_FAILURES',String(m.runtime.assessment.consecutive_failures)]);if(m.runtime&&m.runtime.failed_loop_detected)liveProblems.push(['WARNING','FAILED LOOP WARNING','same procurement is failing repeatedly']);if(m.runtime&&m.runtime.gpu_owner_unknown)liveProblems.push(['WARNING','GPU OWNER UNKNOWN','GPU process is active but caller attribution is missing']);if(m.runtime&&m.runtime.documents&&m.runtime.documents.workers_running===0&&(m.runtime.documents.queue_ready>0||m.runtime.documents.stale>0))liveProblems.push(['WARNING','PROCESSING_ROWS_WITHOUT_WORKER',`ready=${m.runtime.documents.queue_ready||0} stale=${m.runtime.documents.stale||0}`]);if(m.runtime&&m.runtime.normalization&&!m.runtime.normalization.running)liveProblems.push([m.runtime.normalization.pending>0?'WARNING':'INFO',m.runtime.normalization.pending>0?'NORMALIZATION_OFF_WITH_PENDING_ROWS':'NORMALIZATION_OFF',`pending=${m.runtime.normalization.pending??'unknown'}`]);if(m.runtime&&m.runtime.autonomous&&m.runtime.autonomous.state!=='active')liveProblems.push(['INFO','AUTONOMOUS WORKER STOPPED','']);$('problems').innerHTML=liveProblems.length?liveProblems.map(p=>`<div class="problem problem-${p[0].toLowerCase()}"><b>${p[0]}:</b> ${p[1]} <span class="tiny">${p[2]}</span></div>`).join(''):'<span class="rt-blue">NO ACTIONABLE PROBLEMS</span>';
-}catch(e){$('clock').textContent='ошибка '+e;}}
-tick();setInterval(tick,5000);
-</script></body></html>"""
+def load_kiosk_page(name):
+    with open(os.path.join(KIOSK_SOURCE_DIR,name),encoding="utf-8") as f:
+        return f.read()
 
-TECH_PAGE=r"""<!doctype html><html><head><meta charset="utf-8"><title>S13 TECH</title><style>
-body{margin:0;background:#0d1117;color:#e6edf3;font-family:system-ui,Segoe UI,Arial;font-size:15px;padding:18px}
-h1{color:#58a6ff;margin:0 0 8px}.card{background:#161b22;border:1px solid #30363d;border-radius:10px;padding:12px;margin:10px 0}
-table{width:100%;border-collapse:collapse}th,td{text-align:left;padding:7px 8px;border-bottom:1px solid #30363d}th{color:#8b949e}
-.small{color:#8b949e}a{color:#58a6ff}
-</style></head><body><h1>S13 · TECH / metric semantics</h1><div><a href="/">← Command Center</a></div><div class="card"><h2>Model candidate pool diagnostics</h2><div class="small">Сырой validator backlog не является бизнес-счётом киоска.</div><p id="modelpool"></p></div><div class="card"><h2>Current opportunities вне live cohort</h2><div class="small">CURRENT opportunity, но не CURRENT + ELIGIBLE + OPEN/AWARDED. В main totals не входят.</div><table><thead><tr><th>source_lifecycle</th><th>admission_state</th><th>commercial_state</th><th>opportunity_track</th><th>procurements</th></tr></thead><tbody id="excluded"></tbody></table><p id="total"></p></div>
-<script>
-const $=i=>document.getElementById(i);
-async function tick(){const m=await (await fetch('/api/metrics')).json(),cmd=m.command||{},c=cmd.commercial||{},mo=cmd.model||{},rows=c.excluded_breakdown||[];
-$('modelpool').textContent=`CURRENT_OPPORTUNITY_PAIRS=${mo.current_opportunity_pairs??'н/д'} · CANDIDATE_POOL_PAIRS=${mo.waiting??'н/д'} · COMMERCIAL_STATES=${(mo.commercial_states||[]).join(',')} · SOURCE_FILTER=${mo.source_filter??'н/д'} · GOODS_ONLY=${mo.goods_only?'YES':'NO'} · RAW_PENDING_MATCH_DETAILS=${mo.raw_waiting_rows??'н/д'} · RAW_WORKING=${mo.raw_working_rows??'н/д'} · WORKING_PAIRS=${mo.working??'н/д'}`;
-$('excluded').innerHTML=rows.map(r=>`<tr><td>${r.source_lifecycle}</td><td>${r.admission_state}</td><td>${r.commercial_state}</td><td>${r.opportunity_track}</td><td>${r.procurements}</td></tr>`).join('');
-$('total').textContent=`UNEXPLAINED_ACTIVE=${c.excluded_count??'н/д'} · LIVE_COMMERCIAL=${c.live_total??'н/д'} · MEDAL_INVARIANT=${c.medal_invariant_ok?'OK':'FAIL'}`;}
-tick();setInterval(tick,10000);
-</script></body></html>"""
+PAGE=load_kiosk_page("s13_kiosk_main.html")
+TECH_PAGE=load_kiosk_page("s13_kiosk_tech.html")
+
+
 class H(BaseHTTPRequestHandler):
     def log_message(self,*a): pass
     def do_GET(self):
