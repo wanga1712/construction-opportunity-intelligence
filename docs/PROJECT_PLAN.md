@@ -736,3 +736,16 @@ all three final screenshots show clipping/misalignment; mark WIP FAIL and do not
 close it. Investigate Firefox computed layout and viewport bounds before the
 next kiosk-only presentation iteration. Evidence, hashes and screenshots are in
 `docs/WIP/WIP_CRM_V3_KIOSK_MULTI_SCREEN_COMMAND_CENTER_1.md`.
+
+
+## 2026-11-17 S13 physical kiosk layout repair
+
+`CRM-V3-KIOSK-PHYSICAL-LAYOUT-REPAIR-2SCREEN-1` closes the clipping/layout
+follow-up: the deployed kiosk has two manual screens, no rotation, external
+HTML, and an Xrandr-aware Firefox start script. The physical 1920x1080 S13
+session reports LTR direction throughout, pipeline order `01234`, document
+bounds 1920x1080, and zero marked elements outside the viewport. Both screens
+remained stable for 60 seconds. Chromium layout checks passed at three sizes;
+physical screenshots and hashes are in
+`docs/wip/WIP_CRM_V3_KIOSK_PHYSICAL_LAYOUT_REPAIR_2SCREEN_1.md`. Kiosk only;
+no business logic, DB, or CRM changes.
