@@ -725,3 +725,14 @@ from the active queue.
   change.
 - Use only canonical hosts and identities from `docs/PROJECT_OPERATING_RULES.md`;
   never guess an alternate route.
+
+
+## 2026-11-17 S13 three-screen kiosk command center
+
+`CRM-V3-KIOSK-MULTI-SCREEN-COMMAND-CENTER-1`: isolated kiosk-only rebuild is
+deployed and committed; 24 focused tests and runtime compile/import/API checks
+pass. No business or DB logic changed. Physical S13 title switching works, but
+all three final screenshots show clipping/misalignment; mark WIP FAIL and do not
+close it. Investigate Firefox computed layout and viewport bounds before the
+next kiosk-only presentation iteration. Evidence, hashes and screenshots are in
+`docs/WIP/WIP_CRM_V3_KIOSK_MULTI_SCREEN_COMMAND_CENTER_1.md`.
