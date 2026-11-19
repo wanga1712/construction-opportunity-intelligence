@@ -31,6 +31,8 @@ FIXTURE = {
             {"time": "2026-11-17T17:03:00", "stage": "documents", "result": "DONE", "procurement": "?"},
             {"time": "2026-11-17T17:02:00", "stage": "assessment", "result": "DONE", "procurement": 61048},
             {"time": "2026-11-17T17:01:00", "stage": "feeder", "result": "DONE", "procurement": "?"},
+            {"time": "2026-11-17T17:00:00", "stage": "assessment", "result": "DONE", "procurement": 61047},
+            {"time": "2026-11-17T16:59:00", "stage": "documents", "result": "DONE", "procurement": 61046},
         ],
     },
     "cpu_detail": {"busy_pct": 14, "per": [0, 0, 31, 0, 100, 0, 0, 0], "cap": {"cap_pct": 84, "min_pct": 42, "cur_mhz": 3110, "scaling_max_mhz": 3192, "hw_max_mhz": 3400, "no_turbo": True, "governor": "schedutil"}},
@@ -103,6 +105,19 @@ def test_physical_layout_audit_contract():
     assert "getBoundingClientRect()" in PAGE and "OUTSIDE " in PAGE
 
 
+def test_visual_density_contract():
+    assert "grid-template-rows:205px 245px 82px minmax(0,1fr)" in PAGE
+    assert ".panel{background:var(--panel);border:1px solid var(--panel-line);border-radius:10px}" in PAGE
+    assert 'class="current-job panel"' in PAGE
+    assert 'class="hardware-summary panel"' in PAGE
+    assert 'class="pipeline panel"' in PAGE
+    assert 'class="attention panel"' in PAGE
+    assert 'class="events panel"' in PAGE and 'class="commerce panel"' in PAGE
+    assert "grid-template-columns:repeat(4,minmax(0,1fr));gap:4px" in PAGE
+    assert ".flow:before{content:\"\"" in PAGE
+    assert ".stage:not(:last-child):after" not in PAGE
+
+
 @pytest.mark.parametrize("width,height", [(1920, 1080), (1366, 768), (1280, 720)])
 def test_browser_single_screen_contains_all_required_information(width, height):
     with sync_playwright() as playwright:
@@ -121,15 +136,39 @@ def test_browser_single_screen_contains_all_required_information(width, height):
         assert page.locator("#cpuLead").inner_text()
         assert page.locator("#cpuCapSummary").inner_text()
         assert page.locator("#gpuLead").inner_text()
+        assert page.locator("#gpuPower").inner_text()
         assert page.locator("#gpuVram").inner_text()
         assert page.locator("#ramLead").inner_text()
         assert page.locator("#todayPipeline .stage").count() == 5
         assert page.locator("#attentionList .att-item").count() == 3
-        assert page.locator("#eventList .event").count() == 3
+        assert page.locator("#eventList .event").count() == 5
         assert page.locator("#commercialTotal").inner_text().replace(chr(0xa0), " ") == "1 742"
         assert page.locator("#openTotal").inner_text().replace(chr(0xa0), " ") == "284"
         assert page.locator("#awardedTotal").inner_text().replace(chr(0xa0), " ") == "1 458"
-        assert page.locator("#commercialMedals .medal-group").count() == 2
+        assert page.locator("#commercialMedals .medal-values").count() == 2
+        assert page.locator("#commercialMedals .medal-head span").all_text_contents() == ["GOLD", "SILVER", "BRONZE", "WOOD"]
+        assert page.locator(".panel").count() == 6
+        assert page.locator(".cpu-block").is_visible() and page.locator(".gpu-block").is_visible()
+        assert len(set(round(x) for x in page.locator("#coreSummary .core-value").evaluate_all("els => els.map(e => e.getBoundingClientRect().y)"))) == 2
+        if width == 1920 and height == 1080:
+            rows = page.locator("#screen-main").evaluate("e => getComputedStyle(e).gridTemplateRows.split(' ').slice(0,3)")
+            assert rows == ["205px", "245px", "82px"], rows
+            density = page.evaluate("""() => {
+              const height = s => document.querySelector(s).getBoundingClientRect().height;
+              const occupied = (panel, items) => {
+                const p = document.querySelector(panel).getBoundingClientRect();
+                const rs = [...document.querySelectorAll(items)].map(e => e.getBoundingClientRect());
+                return rs.length ? (Math.max(...rs.map(r => r.bottom)) - Math.min(...rs.map(r => r.top))) / p.height : 0;
+              };
+              return {
+                current: occupied('.current-job', '.current-job > *'),
+                hardware: occupied('.hardware-summary', '.hardware-summary .hardware-title,.hardware-grid'),
+                pipeline: occupied('.pipeline', '.pipeline .section-head,#todayPipeline .stage-value,#todayPipeline .stage-label,#todayPipeline .stage-sub,#todayPipeline .split'),
+                attention: occupied('.attention', '.attention .section-head,.att-item'),
+                commercial: occupied('.commerce', '.commerce-title,.commerce-total,.commerce-counts,.medal-group')
+              };
+            }""")
+            assert all(v >= .55 for v in density.values()), density
         assert "WARNING" in page.locator("#systemState").get_attribute("class")
         assert chr(0xfffd) not in page.locator("body").inner_text()
         browser.close()

@@ -761,3 +761,17 @@ order `01234`. Chromium checks passed at three viewport sizes; physical
 screenshot and detailed evidence are in
 `docs/wip/WIP_CRM_V3_KIOSK_ONE_SCREEN_ONLY_1.md`. Only kiosk HTML/presentation
 changed; no collector, business logic, DB, or CRM changes.
+
+## 2026-11-19 S13 one-screen visual density rebuild
+
+`CRM-V3-KIOSK-ONE-SCREEN-VISUAL-DENSITY-REBUILD-1` is the active presentation
+follow-up to the accepted one-screen kiosk. It keeps the existing data
+semantics and API, replaces stretched proportional rows with compact fixed
+sections, distinguishes the current-job and hardware panels, strengthens the
+pipeline line and commercial medal table, and shows five recent events. Local
+focused browser tests pass (9 tests) at the physical 1920x1080 viewport and
+two smaller sizes, including a 55% content-occupancy contract. Production
+visual acceptance and physical screenshot are blocked: this WIP explicitly
+forbids interacting with Firefox, and the currently loaded browser document
+cannot display changed HTML until it is refreshed. Production HTML was not
+deployed. No business, collector, DB, CRM, Xrandr, or Firefox changes were made.
